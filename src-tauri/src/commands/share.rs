@@ -75,10 +75,7 @@ pub async fn get_ticket(state: State<'_, AppState>, hash: String) -> Result<Stri
         return Err("Shared content is no longer available locally".into());
     }
 
-    let node_addr = node
-        .ticket_addr()
-        .await
-        .map_err(|err| err.to_string())?;
+    let node_addr = node.ticket_addr().await.map_err(|err| err.to_string())?;
     BlobTicket::new(node_addr, hash, BlobFormat::HashSeq)
         .map(|ticket| ticket.to_string())
         .map_err(|err| err.to_string())
@@ -112,8 +109,10 @@ fn describe_path(path: PathBuf) -> crate::error::Result<SharePathInfo> {
 }
 
 fn display_name(path: &Path) -> String {
-    path.file_name()
-        .map_or_else(|| path.to_string_lossy().to_string(), |name| name.to_string_lossy().to_string())
+    path.file_name().map_or_else(
+        || path.to_string_lossy().to_string(),
+        |name| name.to_string_lossy().to_string(),
+    )
 }
 
 fn path_size(path: &Path) -> crate::error::Result<u64> {

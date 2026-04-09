@@ -3,7 +3,10 @@
 use crate::error::{FastDropError, Result};
 use crate::node::FastDropNode;
 use crate::storage::history::{self, TransferRecord};
-use crate::transfer::progress::{EventReporter, TransferDirection};
+use crate::transfer::progress::{
+    EventReporter, ProgressHandle, ProgressSampler, TransferDirection,
+};
+use futures_util::stream;
 use futures_util::StreamExt;
 use iroh_blobs::format::collection::Collection;
 use iroh_blobs::provider::AddProgress;
@@ -18,6 +21,9 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::Window;
 
+const MAX_IMPORT_PARALLELISM: usize = 16;
+const MIN_IMPORT_PARALLELISM: usize = 4;
+
 struct SharePlan {
     sources: Vec<DataSource>,
     label: String,
@@ -28,7 +34,11 @@ struct ImportedSource {
     name: String,
     hash: Hash,
     tag: Tag,
-    size: u64,
+}
+
+struct IndexedImport {
+    index: usize,
+    source: ImportedSource,
 }
 
 /// Fully prepared share state returned by the core send flow.
@@ -44,83 +54,41 @@ pub struct ShareOutcome {
     pub total_size: u64,
 }
 
-trait ShareObserver {
-    fn started(&mut self, total_size: u64) -> Result<()>;
-    fn progress(&mut self, bytes: u64, total_size: u64) -> Result<()>;
-    fn completed(&mut self, hash: Hash, total_size: u64) -> Result<()>;
-    fn failed(&mut self, error: &FastDropError) -> Result<()>;
-}
-
-struct NoopShareObserver;
-
-impl ShareObserver for NoopShareObserver {
-    fn started(&mut self, _total_size: u64) -> Result<()> {
-        Ok(())
-    }
-
-    fn progress(&mut self, _bytes: u64, _total_size: u64) -> Result<()> {
-        Ok(())
-    }
-
-    fn completed(&mut self, _hash: Hash, _total_size: u64) -> Result<()> {
-        Ok(())
-    }
-
-    fn failed(&mut self, _error: &FastDropError) -> Result<()> {
-        Ok(())
-    }
-}
-
-struct WindowShareObserver {
-    reporter: EventReporter,
-}
-
-impl WindowShareObserver {
-    fn new(window: Window, label: String) -> Self {
-        Self {
-            reporter: EventReporter::new(window, "share".into(), TransferDirection::Send, label, None),
-        }
-    }
-}
-
-impl ShareObserver for WindowShareObserver {
-    fn started(&mut self, total_size: u64) -> Result<()> {
-        self.reporter.emit_started(total_size)
-    }
-
-    fn progress(&mut self, bytes: u64, total_size: u64) -> Result<()> {
-        if let Some(update) = self.reporter.progress_update(bytes, total_size) {
-            self.reporter.emit_progress(update)?;
-        }
-        Ok(())
-    }
-
-    fn completed(&mut self, hash: Hash, total_size: u64) -> Result<()> {
-        self.reporter.emit_completed(hash.to_string(), total_size)
-    }
-
-    fn failed(&mut self, error: &FastDropError) -> Result<()> {
-        self.reporter.emit_failed(&error.to_string())
-    }
-}
-
 /// Adds files or directories to the local blob store and returns a share ticket.
 ///
 /// # Errors
 ///
 /// Returns `FastDropError` if the paths are invalid, the add operation fails,
 /// or the ticket cannot be generated.
-pub async fn send_files(node: &FastDropNode, window: Window, paths: Vec<PathBuf>) -> Result<String> {
+pub async fn send_files(
+    node: &FastDropNode,
+    window: Window,
+    paths: Vec<PathBuf>,
+) -> Result<String> {
     let plan = build_share_plan(paths)?;
-    let mut observer = WindowShareObserver::new(window, plan.label.clone());
-    let result = create_share_with_plan(node, plan, &mut observer).await;
+    let reporter = EventReporter::new(
+        window,
+        "share".into(),
+        TransferDirection::Send,
+        plan.label.clone(),
+        None,
+    );
+    reporter.emit_started(plan.total_size)?;
+    let sampler = ProgressSampler::spawn(reporter.clone(), None);
+    let progress = sampler.handle();
+
+    let result = create_share_with_plan(node, plan, Some(progress.clone())).await;
     match result {
         Ok(outcome) => {
+            progress.set(outcome.total_size, outcome.total_size);
+            sampler.finish().await?;
+            reporter.emit_completed(outcome.hash.to_string(), outcome.total_size)?;
             save_send_record(node, &outcome)?;
             Ok(outcome.ticket.to_string())
         }
         Err(error) => {
-            let _ = observer.failed(&error);
+            let _ = sampler.finish().await;
+            let _ = reporter.emit_failed(&error.to_string());
             Err(error)
         }
     }
@@ -134,20 +102,17 @@ pub async fn send_files(node: &FastDropNode, window: Window, paths: Vec<PathBuf>
 /// or the ticket cannot be generated.
 pub async fn create_share(node: &FastDropNode, paths: Vec<PathBuf>) -> Result<ShareOutcome> {
     let plan = build_share_plan(paths)?;
-    let mut observer = NoopShareObserver;
-    create_share_with_plan(node, plan, &mut observer).await
+    create_share_with_plan(node, plan, None).await
 }
 
-async fn create_share_with_plan<O: ShareObserver>(
+async fn create_share_with_plan(
     node: &FastDropNode,
     plan: SharePlan,
-    observer: &mut O,
+    progress: Option<ProgressHandle>,
 ) -> Result<ShareOutcome> {
-    observer.started(plan.total_size)?;
-    let imported = import_sources(node.blobs_client(), &plan, observer).await?;
+    let imported = import_sources(node.blobs_client().clone(), &plan, progress).await?;
     let hash = persist_collection(node.blobs_client(), imported).await?;
     let ticket = build_ticket(node, hash).await?;
-    observer.completed(hash, plan.total_size)?;
     tracing::info!(ticket = %ticket, hash = %hash, "FastDrop share ticket created");
     Ok(ShareOutcome {
         hash,
@@ -186,7 +151,9 @@ fn collect_sources(paths: &[PathBuf]) -> Result<Vec<DataSource>> {
         sources.append(&mut scanned);
     }
     if sources.is_empty() {
-        return Err(FastDropError::Other("Cannot share an empty directory".into()));
+        return Err(FastDropError::Other(
+            "Cannot share an empty directory".into(),
+        ));
     }
     ensure_unique_names(&sources)?;
     Ok(sources)
@@ -197,14 +164,18 @@ fn ensure_unique_names(sources: &[DataSource]) -> Result<()> {
     for source in sources {
         let name = source.name().into_owned();
         if !names.insert(name.clone()) {
-            return Err(FastDropError::Other(format!("Duplicate share path name: {name}")));
+            return Err(FastDropError::Other(format!(
+                "Duplicate share path name: {name}"
+            )));
         }
     }
     Ok(())
 }
 
 fn total_size(sources: &[DataSource]) -> Result<u64> {
-    sources.iter().try_fold(0, |total, source| Ok(total + file_size(source.path())?))
+    sources
+        .iter()
+        .try_fold(0, |total, source| Ok(total + file_size(source.path())?))
 }
 
 fn file_size(path: &Path) -> Result<u64> {
@@ -214,7 +185,14 @@ fn file_size(path: &Path) -> Result<u64> {
 fn summarize_sources(sources: &[DataSource]) -> String {
     let mut roots = sources
         .iter()
-        .map(|source| source.name().split('/').next().unwrap_or_default().to_string())
+        .map(|source| {
+            source
+                .name()
+                .split('/')
+                .next()
+                .unwrap_or_default()
+                .to_string()
+        })
         .collect::<Vec<_>>();
     roots.sort();
     roots.dedup();
@@ -224,30 +202,55 @@ fn summarize_sources(sources: &[DataSource]) -> String {
     }
 }
 
-async fn import_sources<O: ShareObserver>(
-    client: &MemClient,
+async fn import_sources(
+    client: MemClient,
     plan: &SharePlan,
-    observer: &mut O,
+    progress: Option<ProgressHandle>,
 ) -> Result<Vec<ImportedSource>> {
+    let tasks = plan
+        .sources
+        .iter()
+        .cloned()
+        .enumerate()
+        .map(|(index, source)| {
+            import_task(&client, source, index, plan.total_size, progress.clone())
+        });
+    let mut pending = stream::iter(tasks).buffer_unordered(import_parallelism(plan.sources.len()));
     let mut imported = Vec::with_capacity(plan.sources.len());
-    let mut completed = 0u64;
 
-    for source in &plan.sources {
-        let item = import_source(client, source, completed, plan.total_size, observer).await?;
-        completed += item.size;
-        imported.push(item);
+    while let Some(item) = pending.next().await {
+        imported.push(item?);
     }
 
-    Ok(imported)
+    imported.sort_by_key(|item| item.index);
+    Ok(imported.into_iter().map(|item| item.source).collect())
 }
 
-async fn import_source<O: ShareObserver>(
+fn import_task(
     client: &MemClient,
-    source: &DataSource,
-    completed_before: u64,
+    source: DataSource,
+    index: usize,
     total_size: u64,
-    observer: &mut O,
-) -> Result<ImportedSource> {
+    progress: Option<ProgressHandle>,
+) -> impl std::future::Future<Output = Result<IndexedImport>> {
+    let client = client.clone();
+    async move { import_source(client, source, index, total_size, progress).await }
+}
+
+fn import_parallelism(source_count: usize) -> usize {
+    let cores = std::thread::available_parallelism().map_or(MIN_IMPORT_PARALLELISM, usize::from);
+    source_count.min(cores.clamp(MIN_IMPORT_PARALLELISM, MAX_IMPORT_PARALLELISM))
+}
+
+async fn import_source(
+    client: MemClient,
+    source: DataSource,
+    index: usize,
+    total_size: u64,
+    progress: Option<ProgressHandle>,
+) -> Result<IndexedImport> {
+    let size = file_size(source.path())?;
+    let mut last_offset = 0u64;
     let mut stream = client
         .add_from_path(
             source.path().to_path_buf(),
@@ -258,52 +261,66 @@ async fn import_source<O: ShareObserver>(
         .await
         .map_err(|err| blob_error(&err))?;
 
-    let mut imported = None;
     while let Some(event) = stream.next().await {
         let event = event.map_err(|err| blob_error(&err))?;
-        imported = apply_add_progress(
-            observer,
-            source,
-            completed_before,
-            total_size,
-            imported,
+        if let Some(imported) = handle_add_progress(
             event,
-        )?;
+            &source,
+            size,
+            total_size,
+            progress.as_ref(),
+            &mut last_offset,
+        )? {
+            return Ok(IndexedImport {
+                index,
+                source: imported,
+            });
+        }
     }
 
-    imported.ok_or_else(|| FastDropError::Blob("Import stream ended before completion".into()))
+    Err(FastDropError::Blob(
+        "Import stream ended before completion".into(),
+    ))
 }
 
-fn apply_add_progress<O: ShareObserver>(
-    observer: &mut O,
-    source: &DataSource,
-    completed_before: u64,
-    total_size: u64,
-    imported: Option<ImportedSource>,
+fn handle_add_progress(
     event: AddProgress,
+    source: &DataSource,
+    size: u64,
+    total_size: u64,
+    progress: Option<&ProgressHandle>,
+    last_offset: &mut u64,
 ) -> Result<Option<ImportedSource>> {
     match event {
-        AddProgress::Found { .. } | AddProgress::Done { .. } => Ok(imported),
+        AddProgress::Found { .. } | AddProgress::Done { .. } => Ok(None),
         AddProgress::Progress { offset, .. } => {
-            observer.progress(completed_before + offset, total_size)?;
-            Ok(imported)
+            advance_progress(progress, offset.saturating_sub(*last_offset), total_size);
+            *last_offset = offset;
+            Ok(None)
         }
         AddProgress::AllDone { hash, tag, .. } => {
-            let size = file_size(source.path())?;
-            observer.progress(completed_before + size, total_size)?;
+            advance_progress(progress, size.saturating_sub(*last_offset), total_size);
             Ok(Some(ImportedSource {
                 name: source.name().into_owned(),
                 hash,
                 tag,
-                size,
             }))
         }
         AddProgress::Abort(error) => Err(FastDropError::Blob(error.to_string())),
     }
 }
 
+fn advance_progress(progress: Option<&ProgressHandle>, bytes_delta: u64, total_size: u64) {
+    if let Some(progress) = progress {
+        progress.advance(bytes_delta, total_size);
+    }
+}
+
 async fn persist_collection(client: &MemClient, imported: Vec<ImportedSource>) -> Result<Hash> {
-    let tags = imported.iter().map(|item| item.tag.clone()).collect::<Vec<_>>();
+    let tags = imported
+        .iter()
+        .map(|item| item.tag.clone())
+        .collect::<Vec<_>>();
     let collection = imported
         .into_iter()
         .map(|item| (item.name, item.hash))
@@ -316,8 +333,12 @@ async fn persist_collection(client: &MemClient, imported: Vec<ImportedSource>) -
 }
 
 async fn build_ticket(node: &FastDropNode, hash: Hash) -> Result<BlobTicket> {
-    BlobTicket::new(node.ticket_addr().await?, hash, iroh_blobs::BlobFormat::HashSeq)
-        .map_err(|err| blob_error(&err))
+    BlobTicket::new(
+        node.ticket_addr().await?,
+        hash,
+        iroh_blobs::BlobFormat::HashSeq,
+    )
+    .map_err(|err| blob_error(&err))
 }
 
 fn save_send_record(node: &FastDropNode, outcome: &ShareOutcome) -> Result<()> {
@@ -371,5 +392,11 @@ mod tests {
         ];
         let err = ensure_unique_names(&sources).expect_err("duplicates should fail");
         assert!(err.to_string().contains("Duplicate share path name"));
+    }
+
+    #[test]
+    fn parallelism_is_bounded() {
+        assert_eq!(import_parallelism(1), 1);
+        assert!(import_parallelism(128) <= MAX_IMPORT_PARALLELISM);
     }
 }

@@ -1,9 +1,14 @@
 //! Transfer event payloads and throttled event emission helpers.
 
 use crate::error::{FastDropError, Result};
+use crate::transfer::queue::TransferQueue;
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{Emitter, Window};
+use tokio::sync::oneshot;
+use tokio::time::MissedTickBehavior;
 
 const MAX_PROGRESS_INTERVAL: Duration = Duration::from_millis(100);
 
@@ -109,8 +114,6 @@ pub struct EventReporter {
     direction: TransferDirection,
     name: String,
     peer: Option<String>,
-    started_at: Instant,
-    last_progress_emit: Option<Instant>,
 }
 
 impl EventReporter {
@@ -129,8 +132,6 @@ impl EventReporter {
             direction,
             name,
             peer,
-            started_at: Instant::now(),
-            last_progress_emit: None,
         }
     }
 
@@ -146,20 +147,6 @@ impl EventReporter {
             name: self.name.clone(),
             peer: self.peer.clone(),
             total,
-        })
-    }
-
-    /// Returns a throttled progress update sample when it should be emitted.
-    pub fn progress_update(&mut self, bytes: u64, total: u64) -> Option<ProgressUpdate> {
-        let now = Instant::now();
-        if !should_emit_progress(self.last_progress_emit, now, bytes, total) {
-            return None;
-        }
-        self.last_progress_emit = Some(now);
-        Some(ProgressUpdate {
-            bytes,
-            total,
-            speed_bps: calculate_speed(bytes, now.saturating_duration_since(self.started_at)),
         })
     }
 
@@ -213,13 +200,160 @@ impl EventReporter {
     }
 }
 
-fn should_emit_progress(last_emit: Option<Instant>, now: Instant, bytes: u64, total: u64) -> bool {
-    if total != 0 && bytes >= total {
-        return true;
+/// Mirrored transfer queue target for live progress samples.
+#[derive(Debug, Clone)]
+pub struct QueueProgressTarget {
+    queue: TransferQueue,
+    transfer_id: String,
+}
+
+impl QueueProgressTarget {
+    /// Creates a queue sink for a transfer sampler.
+    #[must_use]
+    pub fn new(queue: TransferQueue, transfer_id: String) -> Self {
+        Self { queue, transfer_id }
     }
-    match last_emit {
-        Some(previous) => now.saturating_duration_since(previous) >= MAX_PROGRESS_INTERVAL,
-        None => true,
+
+    async fn update(&self, update: ProgressUpdate) {
+        self.queue
+            .update_progress(
+                &self.transfer_id,
+                update.bytes,
+                update.total,
+                update.speed_bps,
+            )
+            .await;
+    }
+}
+
+/// Atomic progress counters updated from hot transfer paths.
+#[derive(Debug, Clone, Default)]
+pub struct ProgressHandle {
+    bytes: Arc<AtomicU64>,
+    total: Arc<AtomicU64>,
+}
+
+impl ProgressHandle {
+    /// Stores the latest transfer position.
+    pub fn set(&self, bytes: u64, total: u64) {
+        self.bytes.store(bytes, Ordering::Relaxed);
+        self.total.store(total, Ordering::Relaxed);
+    }
+
+    /// Adds bytes to the current transfer position and updates the total.
+    pub fn advance(&self, bytes_delta: u64, total: u64) {
+        self.bytes.fetch_add(bytes_delta, Ordering::Relaxed);
+        self.total.store(total, Ordering::Relaxed);
+    }
+
+    fn snapshot(&self) -> (u64, u64) {
+        (
+            self.bytes.load(Ordering::Relaxed),
+            self.total.load(Ordering::Relaxed),
+        )
+    }
+}
+
+/// Background sampler that emits progress at most 10 times per second.
+#[derive(Debug)]
+pub struct ProgressSampler {
+    handle: ProgressHandle,
+    stop_tx: Option<oneshot::Sender<()>>,
+    task: tauri::async_runtime::JoinHandle<Result<()>>,
+}
+
+impl ProgressSampler {
+    /// Spawns a progress sampler for the provided transfer reporter.
+    #[must_use]
+    pub fn spawn(reporter: EventReporter, queue_target: Option<QueueProgressTarget>) -> Self {
+        let handle = ProgressHandle::default();
+        let sampler_handle = handle.clone();
+        let (stop_tx, stop_rx) = oneshot::channel();
+        let task = tauri::async_runtime::spawn(async move {
+            run_progress_sampler(reporter, sampler_handle, queue_target, stop_rx).await
+        });
+        Self {
+            handle,
+            stop_tx: Some(stop_tx),
+            task,
+        }
+    }
+
+    /// Returns the atomic progress handle used by the transfer task.
+    #[must_use]
+    pub fn handle(&self) -> ProgressHandle {
+        self.handle.clone()
+    }
+
+    /// Stops the sampler and waits for the last progress sample to be emitted.
+    ///
+    /// # Errors
+    ///
+    /// Returns `FastDropError` if the sampler task fails.
+    pub async fn finish(mut self) -> Result<()> {
+        if let Some(stop_tx) = self.stop_tx.take() {
+            let _ = stop_tx.send(());
+        }
+        self.task
+            .await
+            .map_err(|error| FastDropError::Other(error.to_string()))?
+    }
+}
+
+async fn run_progress_sampler(
+    reporter: EventReporter,
+    handle: ProgressHandle,
+    queue_target: Option<QueueProgressTarget>,
+    mut stop_rx: oneshot::Receiver<()>,
+) -> Result<()> {
+    let mut interval = tokio::time::interval(MAX_PROGRESS_INTERVAL);
+    interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
+    let mut last_bytes = 0;
+    let mut last_sample_at = Instant::now();
+
+    loop {
+        let stopping = tokio::select! {
+            _ = interval.tick() => false,
+            _ = &mut stop_rx => true,
+        };
+        let now = Instant::now();
+        let update = sample_progress(&handle, last_bytes, last_sample_at, now);
+        last_bytes = update.bytes;
+        last_sample_at = now;
+
+        if update.bytes > 0 || update.total > 0 || stopping {
+            emit_sample(&reporter, queue_target.as_ref(), update).await?;
+        }
+
+        if stopping {
+            return Ok(());
+        }
+    }
+}
+
+async fn emit_sample(
+    reporter: &EventReporter,
+    queue_target: Option<&QueueProgressTarget>,
+    update: ProgressUpdate,
+) -> Result<()> {
+    if let Some(queue_target) = queue_target {
+        queue_target.update(update).await;
+    }
+    reporter.emit_progress(update)
+}
+
+fn sample_progress(
+    handle: &ProgressHandle,
+    last_bytes: u64,
+    last_sample_at: Instant,
+    now: Instant,
+) -> ProgressUpdate {
+    let (bytes, total) = handle.snapshot();
+    let bytes_delta = bytes.saturating_sub(last_bytes);
+    ProgressUpdate {
+        bytes,
+        total,
+        speed_bps: calculate_speed(bytes_delta, now.saturating_duration_since(last_sample_at)),
     }
 }
 
@@ -263,12 +397,29 @@ mod tests {
     }
 
     #[test]
-    fn progress_emission_is_throttled() {
-        let now = Instant::now();
-        let previous = now
-            .checked_sub(Duration::from_millis(50))
-            .expect("subtraction should succeed");
-        assert!(!should_emit_progress(Some(previous), now, 10, 100));
-        assert!(should_emit_progress(Some(previous), now, 100, 100));
+    fn progress_handle_tracks_updates() {
+        let handle = ProgressHandle::default();
+        handle.advance(64, 128);
+        handle.advance(32, 128);
+        assert_eq!(handle.snapshot(), (96, 128));
+        handle.set(128, 128);
+        assert_eq!(handle.snapshot(), (128, 128));
+    }
+
+    #[test]
+    fn sample_progress_uses_delta_bytes() {
+        let handle = ProgressHandle::default();
+        handle.set(512, 1024);
+        let update = sample_progress(
+            &handle,
+            256,
+            Instant::now()
+                .checked_sub(Duration::from_millis(100))
+                .expect("subtraction should succeed"),
+            Instant::now(),
+        );
+        assert_eq!(update.bytes, 512);
+        assert_eq!(update.total, 1024);
+        assert!(update.speed_bps >= 2_000);
     }
 }

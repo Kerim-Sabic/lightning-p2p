@@ -4,23 +4,25 @@ use crate::error::{FastDropError, Result};
 use crate::node::FastDropNode;
 use crate::storage::history::{self, TransferRecord};
 use crate::storage::peers::{self, PeerRecord};
-use crate::transfer::progress::{EventReporter, TransferDirection};
+use crate::transfer::export;
+use crate::transfer::progress::{
+    EventReporter, ProgressHandle, ProgressSampler, QueueProgressTarget, TransferDirection,
+};
 use crate::transfer::queue::TransferQueue;
 use futures_util::StreamExt;
 use iroh_blobs::get::db::DownloadProgress;
 use iroh_blobs::get::progress::{BlobProgress, BlobState, TransferState};
-use iroh_blobs::rpc::client::blobs::DownloadProgress as ClientDownloadProgress;
-use iroh_blobs::store::{ExportFormat, ExportMode};
+use iroh_blobs::rpc::client::blobs::{
+    DownloadMode, DownloadOptions, DownloadProgress as ClientDownloadProgress,
+};
 use iroh_blobs::ticket::BlobTicket;
-use iroh_blobs::{BlobFormat, Hash};
-use std::fs;
-use std::path::{Path, PathBuf};
+use iroh_blobs::util::SetTagOption;
+use std::path::PathBuf;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::Window;
 use tokio::sync::watch;
 
 const DOWNLOAD_IDLE_TIMEOUT: Duration = Duration::from_secs(30);
-const TEMP_SUFFIX: &str = ".fastdrop.part";
 
 #[derive(Debug, Clone)]
 struct ReceiveSummary {
@@ -67,7 +69,7 @@ pub async fn receive_blob(
     mut cancel_rx: watch::Receiver<bool>,
 ) -> Result<()> {
     let peer = ticket.node_addr().node_id.to_string();
-    let mut reporter = EventReporter::new(
+    let reporter = EventReporter::new(
         window,
         transfer_id.clone(),
         TransferDirection::Receive,
@@ -76,20 +78,18 @@ pub async fn receive_blob(
     );
     reporter.emit_started(0)?;
 
-    let result = receive_with_events(
-        node,
-        &queue,
-        &mut reporter,
-        &transfer_id,
-        ticket,
-        destination,
-        &mut cancel_rx,
-    )
-    .await;
+    let sampler = ProgressSampler::spawn(
+        reporter.clone(),
+        Some(QueueProgressTarget::new(queue.clone(), transfer_id.clone())),
+    );
+    let progress = sampler.handle();
+    let result = receive_core(node, &ticket, destination, &mut cancel_rx, Some(&progress)).await;
 
     match result {
         Ok(summary) => {
             queue.remove(&transfer_id).await;
+            progress.set(summary.size, summary.size);
+            sampler.finish().await?;
             save_peer(node, &summary.peer)?;
             save_receive_record(node, &summary)?;
             reporter.emit_completed(summary.hash, summary.size)?;
@@ -97,6 +97,7 @@ pub async fn receive_blob(
         }
         Err(error) => {
             queue.remove(&transfer_id).await;
+            let _ = sampler.finish().await;
             let _ = reporter.emit_failed(&error.to_string());
             Err(error)
         }
@@ -114,7 +115,7 @@ pub async fn receive_ticket(
     destination: PathBuf,
 ) -> Result<ReceiveOutcome> {
     let (_cancel_tx, mut cancel_rx) = watch::channel(false);
-    let summary = receive_core(node, &ticket, destination, &mut cancel_rx, &mut |_, _| Ok(())).await?;
+    let summary = receive_core(node, &ticket, destination, &mut cancel_rx, None).await?;
     Ok(ReceiveOutcome {
         hash: summary.hash,
         label: summary.label,
@@ -123,61 +124,29 @@ pub async fn receive_ticket(
     })
 }
 
-async fn receive_with_events(
-    node: &FastDropNode,
-    queue: &TransferQueue,
-    reporter: &mut EventReporter,
-    transfer_id: &str,
-    ticket: BlobTicket,
-    destination: PathBuf,
-    cancel_rx: &mut watch::Receiver<bool>,
-) -> Result<ReceiveSummary> {
-    receive_core(node, &ticket, destination, cancel_rx, &mut |bytes, total| {
-        if let Some(update) = reporter.progress_update(bytes, total) {
-            let queue = queue.clone();
-            let transfer_id = transfer_id.to_string();
-            tauri::async_runtime::spawn(async move {
-                queue
-                    .update_progress(&transfer_id, update.bytes, update.total, update.speed_bps)
-                    .await;
-            });
-            reporter.emit_progress(update)?;
-        }
-        Ok(())
-    })
-    .await
-}
-
-async fn receive_core<F>(
+async fn receive_core(
     node: &FastDropNode,
     ticket: &BlobTicket,
     destination: PathBuf,
     cancel_rx: &mut watch::Receiver<bool>,
-    on_progress: &mut F,
-) -> Result<ReceiveSummary>
-where
-    F: FnMut(u64, u64) -> Result<()>,
-{
-    let _state = download_to_store(node, ticket, cancel_rx, on_progress).await?;
-    export_download(node, ticket, &destination).await?;
-    let size = exported_size(node, ticket, &destination).await?;
+    progress: Option<&ProgressHandle>,
+) -> Result<ReceiveSummary> {
+    let _state = download_to_store(node, ticket, cancel_rx, progress).await?;
+    let size = export::export_ticket(node.blobs_client(), ticket, &destination).await?;
     Ok(ReceiveSummary {
         hash: ticket.hash().to_string(),
-        label: resolve_label(node, ticket).await?,
+        label: export::resolve_label(node.blobs_client(), ticket).await?,
         size,
         peer: ticket.node_addr().node_id.to_string(),
     })
 }
 
-async fn download_to_store<F>(
+async fn download_to_store(
     node: &FastDropNode,
     ticket: &BlobTicket,
     cancel_rx: &mut watch::Receiver<bool>,
-    on_progress: &mut F,
-) -> Result<TransferState>
-where
-    F: FnMut(u64, u64) -> Result<()>,
-{
+    progress: Option<&ProgressHandle>,
+) -> Result<TransferState> {
     let mut stream = start_download(node, ticket).await?;
     let mut state = TransferState::new(ticket.hash());
     let mut lifecycle = DownloadLifecycle::default();
@@ -185,10 +154,10 @@ where
     loop {
         let event = next_event(&mut stream, cancel_rx, lifecycle.contacted_peer).await?;
         let Some(event) = event else {
-            return stream_end_error(lifecycle);
+            return stream_end_error();
         };
         let done = handle_download_event(ticket, &mut state, &mut lifecycle, event)?;
-        on_progress(transferred_bytes(ticket, &state), total_bytes(ticket, &state))?;
+        update_progress(progress, ticket, &state);
         if done {
             drain_download_stream(&mut stream).await?;
             return Ok(state);
@@ -200,18 +169,18 @@ async fn start_download(
     node: &FastDropNode,
     ticket: &BlobTicket,
 ) -> Result<ClientDownloadProgress> {
-    match ticket.format() {
-        BlobFormat::HashSeq => node
-            .blobs_client()
-            .download_hash_seq(ticket.hash(), ticket.node_addr().clone())
-            .await
-            .map_err(|error| blob_error(&error)),
-        BlobFormat::Raw => node
-            .blobs_client()
-            .download(ticket.hash(), ticket.node_addr().clone())
-            .await
-            .map_err(|error| blob_error(&error)),
-    }
+    node.blobs_client()
+        .download_with_opts(
+            ticket.hash(),
+            DownloadOptions {
+                format: ticket.format(),
+                nodes: vec![ticket.node_addr().clone()],
+                tag: SetTagOption::Auto,
+                mode: DownloadMode::Direct,
+            },
+        )
+        .await
+        .map_err(|error| blob_error(&error))
 }
 
 async fn next_event(
@@ -249,7 +218,9 @@ fn handle_download_event(
         | DownloadProgress::FoundHashSeq { .. }
         | DownloadProgress::Progress { .. }
         | DownloadProgress::Done { .. } => lifecycle.contacted_peer = true,
-        DownloadProgress::Abort(error) => return Err(download_abort_error(error.to_string(), *lifecycle)),
+        DownloadProgress::Abort(error) => {
+            return Err(download_abort_error(error.to_string(), *lifecycle));
+        }
         DownloadProgress::AllDone(_) => return Ok(true),
         DownloadProgress::InitialState(_) | DownloadProgress::FoundLocal { .. } => {}
     }
@@ -261,6 +232,19 @@ fn handle_download_event(
     Ok(false)
 }
 
+fn update_progress(progress: Option<&ProgressHandle>, ticket: &BlobTicket, state: &TransferState) {
+    if let Some(progress) = progress {
+        progress.set(transferred_bytes(ticket, state), total_bytes(ticket, state));
+    }
+}
+
+async fn drain_download_stream(stream: &mut ClientDownloadProgress) -> Result<()> {
+    while let Some(event) = stream.next().await {
+        let _event = event.map_err(|error| blob_error(&error))?;
+    }
+    Ok(())
+}
+
 fn timeout_error(contacted_peer: bool) -> FastDropError {
     if contacted_peer {
         FastDropError::Other("Transfer interrupted".into())
@@ -269,9 +253,10 @@ fn timeout_error(contacted_peer: bool) -> FastDropError {
     }
 }
 
-fn stream_end_error(lifecycle: DownloadLifecycle) -> Result<TransferState> {
-    let _ = lifecycle;
-    Err(FastDropError::Blob("Download stream closed unexpectedly".into()))
+fn stream_end_error() -> Result<TransferState> {
+    Err(FastDropError::Blob(
+        "Download stream closed unexpectedly".into(),
+    ))
 }
 
 fn download_abort_error(message: String, lifecycle: DownloadLifecycle) -> FastDropError {
@@ -317,140 +302,6 @@ fn blob_progress_bytes(blob: &BlobState) -> u64 {
     }
 }
 
-async fn export_download(node: &FastDropNode, ticket: &BlobTicket, destination: &Path) -> Result<()> {
-    tokio::fs::create_dir_all(destination).await?;
-    if ticket.recursive() {
-        export_collection_to_destination(node, ticket.hash(), destination).await
-    } else {
-        export_blob_to_destination(node, ticket.hash(), destination).await
-    }
-}
-
-async fn drain_download_stream(stream: &mut ClientDownloadProgress) -> Result<()> {
-    while let Some(event) = stream.next().await {
-        let _event = event.map_err(|error| blob_error(&error))?;
-    }
-    Ok(())
-}
-
-async fn export_blob_to_destination(node: &FastDropNode, hash: Hash, destination: &Path) -> Result<()> {
-    let final_path = destination.join(hash.to_string());
-    let temp_path = destination.join(temp_name(&hash.to_string()));
-    export_path(node, hash, temp_path.clone(), ExportFormat::Blob).await?;
-    tokio::fs::rename(temp_path, final_path).await?;
-    Ok(())
-}
-
-async fn export_collection_to_destination(
-    node: &FastDropNode,
-    hash: Hash,
-    destination: &Path,
-) -> Result<()> {
-    let temp_dir = destination.join(temp_name(&hash.to_string()));
-    let roots = collection_roots(node, hash).await?;
-    export_path(node, hash, temp_dir.clone(), ExportFormat::Collection).await?;
-    move_collection_roots(&temp_dir, destination, &roots).await?;
-    tokio::fs::remove_dir_all(temp_dir).await?;
-    Ok(())
-}
-
-async fn export_path(
-    node: &FastDropNode,
-    hash: Hash,
-    path: PathBuf,
-    format: ExportFormat,
-) -> Result<()> {
-    let export = node
-        .blobs_client()
-        .export(hash, path, format, ExportMode::Copy)
-        .await
-        .map_err(|error| blob_error(&error))?;
-    let _outcome = export.await.map_err(|error| blob_error(&error))?;
-    Ok(())
-}
-
-async fn collection_roots(node: &FastDropNode, hash: Hash) -> Result<Vec<String>> {
-    let collection = node
-        .blobs_client()
-        .get_collection(hash)
-        .await
-        .map_err(|error| blob_error(&error))?;
-    let mut roots = collection
-        .iter()
-        .filter_map(|(name, _hash)| name.split('/').next())
-        .map(str::to_string)
-        .collect::<Vec<_>>();
-    roots.sort();
-    roots.dedup();
-    Ok(roots)
-}
-
-async fn move_collection_roots(temp_dir: &Path, destination: &Path, roots: &[String]) -> Result<()> {
-    for root in roots {
-        let source = temp_dir.join(root);
-        let target = destination.join(root);
-        if tokio::fs::try_exists(&target).await? {
-            return Err(FastDropError::Other(format!(
-                "Destination already contains {root}"
-            )));
-        }
-        tokio::fs::rename(source, target).await?;
-    }
-    Ok(())
-}
-
-fn temp_name(name: &str) -> String {
-    format!("{name}{TEMP_SUFFIX}")
-}
-
-async fn resolve_label(node: &FastDropNode, ticket: &BlobTicket) -> Result<String> {
-    if !ticket.recursive() {
-        return Ok(ticket.hash().to_string());
-    }
-    let collection = node
-        .blobs_client()
-        .get_collection(ticket.hash())
-        .await
-        .map_err(|error| blob_error(&error))?;
-    Ok(summarize_names(collection.iter().map(|(name, _hash)| name.as_str())))
-}
-
-async fn exported_size(node: &FastDropNode, ticket: &BlobTicket, destination: &Path) -> Result<u64> {
-    if ticket.recursive() {
-        let roots = collection_roots(node, ticket.hash()).await?;
-        roots.iter().try_fold(0, |total, root| Ok(total + path_size(&destination.join(root))?))
-    } else {
-        path_size(&destination.join(ticket.hash().to_string()))
-    }
-}
-
-fn summarize_names<'a>(names: impl Iterator<Item = &'a str>) -> String {
-    let mut roots = names
-        .filter_map(|name| name.split('/').next())
-        .map(str::to_string)
-        .collect::<Vec<_>>();
-    roots.sort();
-    roots.dedup();
-    match roots.as_slice() {
-        [single] => single.clone(),
-        [] => "download".into(),
-        _ => format!("{} items", roots.len()),
-    }
-}
-
-fn path_size(path: &Path) -> Result<u64> {
-    let metadata = fs::metadata(path)?;
-    if metadata.is_file() {
-        return Ok(metadata.len());
-    }
-
-    let mut total = 0u64;
-    for entry in fs::read_dir(path)? {
-        total += path_size(&entry?.path())?;
-    }
-    Ok(total)
-}
-
 fn save_peer(node: &FastDropNode, peer: &str) -> Result<()> {
     peers::save_peer(
         &node.db,
@@ -489,18 +340,6 @@ fn unix_timestamp() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn summarize_single_root_name() {
-        let label = summarize_names(["folder/a.txt", "folder/b.txt"].into_iter());
-        assert_eq!(label, "folder");
-    }
-
-    #[test]
-    fn summarize_multiple_root_names() {
-        let label = summarize_names(["one/a.txt", "two/b.txt"].into_iter());
-        assert_eq!(label, "2 items");
-    }
 
     #[test]
     fn timeout_error_is_user_friendly() {

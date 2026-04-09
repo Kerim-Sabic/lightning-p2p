@@ -5,6 +5,7 @@
 
 use crate::error::{FastDropError, Result};
 use crate::storage::db::StorageDb;
+use iroh::endpoint::TransportConfig;
 use iroh::protocol::Router;
 use iroh::{Endpoint, NodeAddr, NodeId};
 use iroh_blobs::net_protocol::Blobs;
@@ -18,6 +19,9 @@ const APP_IDENTIFIER: &str = "com.fastdrop.app";
 const DATA_DIR_ENV: &str = "FASTDROP_DATA_DIR";
 const PROFILE_ENV: &str = "FASTDROP_PROFILE";
 const RELAY_WAIT_TIMEOUT: Duration = Duration::from_secs(30);
+const MAX_CONCURRENT_STREAMS: u32 = 256;
+const CONNECTION_WINDOW_BYTES: u32 = 8_388_608;
+const STREAM_WINDOW_BYTES: u32 = 4_194_304;
 
 /// The running iroh node with blob transfer capability.
 pub struct FastDropNode {
@@ -135,9 +139,21 @@ impl FastDropNode {
 async fn bind_endpoint() -> Result<Endpoint> {
     Endpoint::builder()
         .discovery_n0()
+        .transport_config(tuned_transport_config())
         .bind()
         .await
         .map_err(FastDropError::Network)
+}
+
+fn tuned_transport_config() -> TransportConfig {
+    let mut config = TransportConfig::default();
+    config.keep_alive_interval(Some(Duration::from_secs(1)));
+    config.max_concurrent_bidi_streams(MAX_CONCURRENT_STREAMS.into());
+    config.max_concurrent_uni_streams(MAX_CONCURRENT_STREAMS.into());
+    config.send_window(u64::from(CONNECTION_WINDOW_BYTES));
+    config.receive_window(CONNECTION_WINDOW_BYTES.into());
+    config.stream_receive_window(STREAM_WINDOW_BYTES.into());
+    config
 }
 
 async fn load_blob_store(data_dir: &std::path::Path) -> Result<BlobStore> {
@@ -187,5 +203,13 @@ mod tests {
         let data_dir = PathBuf::from("C:/tmp/fastdrop-test");
         let path = default_download_dir(&data_dir);
         assert!(path.is_absolute() || path.ends_with("downloads"));
+    }
+
+    #[test]
+    fn transport_config_uses_high_bandwidth_windows() {
+        let _config = tuned_transport_config();
+        assert_eq!(MAX_CONCURRENT_STREAMS, 256);
+        assert_eq!(CONNECTION_WINDOW_BYTES, 8_388_608);
+        assert_eq!(STREAM_WINDOW_BYTES, 4_194_304);
     }
 }

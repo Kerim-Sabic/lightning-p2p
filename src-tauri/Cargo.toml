@@ -50,8 +50,10 @@ keyring = "3"
 dirs = "6"
 hex = "0.4"
 qrcode = "0.14"
+socket2 = "0.5"
 
 [dev-dependencies]
+criterion = { version = "0.5", features = ["async_tokio"] }
 sha2 = "0.10"
 tempfile = "3"
 
@@ -62,3 +64,7 @@ windows-sys = { version = "0.59", features = ["Win32_Foundation"] }
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
 cli = ["clap"]
+
+[[bench]]
+name = "transfer_bench"
+harness = false
