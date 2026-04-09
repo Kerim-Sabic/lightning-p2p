@@ -1,0 +1,39 @@
+{
+  "name": "fastdrop",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "build:windows": "pnpm tauri build --target x86_64-pc-windows-msvc",
+    "preview": "vite preview",
+    "lint": "eslint src/",
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write \"src/**/*.{ts,tsx}\"",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.2.0",
+    "@tauri-apps/plugin-shell": "^2.2.0",
+    "framer-motion": "^12.6.0",
+    "lucide-react": "^0.503.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "zustand": "^5.0.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "@tailwindcss/vite": "^4.0.0",
+    "@tauri-apps/cli": "^2.2.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "eslint": "^9.0.0",
+    "prettier": "^3.4.0",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.7.0",
+    "typescript-eslint": "^8.0.0",
+    "vite": "^6.0.0"
+  }
+}

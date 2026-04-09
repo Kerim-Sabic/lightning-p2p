@@ -1,0 +1,64 @@
+[package]
+name = "fastdrop"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.81"
+description = "FastDrop — P2P file sharing at maximum speed"
+
+[lib]
+name = "fastdrop_lib"
+crate-type = ["lib", "staticlib", "cdylib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# Tauri
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+
+# iroh P2P networking
+iroh = "0.32"
+iroh-blobs = { version = "0.32", features = ["rpc"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+futures-util = "0.3"
+
+# Error handling
+anyhow = "1"
+thiserror = "2"
+
+# Local storage
+sled = "0.34"
+
+# CLI (optional)
+clap = { version = "4", features = ["derive"], optional = true }
+
+# Observability
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Secure key storage
+keyring = "3"
+
+# Utilities
+dirs = "6"
+hex = "0.4"
+qrcode = "0.14"
+
+[dev-dependencies]
+sha2 = "0.10"
+tempfile = "3"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_Foundation"] }
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
+cli = ["clap"]

@@ -1,0 +1,10 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nicklimmm/nicklimmm/main/empty.json",
+  "identifier": "default",
+  "description": "Default capabilities for FastDrop",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "shell:allow-open"
+  ]
+}
