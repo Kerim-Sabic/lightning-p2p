@@ -88,48 +88,42 @@ export function HistoryView() {
         ) : (
           <div className="grid gap-3">
             {history.map((record) => (
-              <motion.article
+              <article
                 key={`${record.timestamp}-${record.hash}`}
-                initial={{ opacity: 0, y: 12, scale: 0.985 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                transition={{ type: "spring", stiffness: 260, damping: 24 }}
-                className="glass-panel p-5"
+                className="glass-panel p-4"
               >
-                <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+                <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] uppercase tracking-[0.24em] text-slate-300">
+                    <div className="flex items-center gap-2">
+                      <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] uppercase tracking-[0.24em] text-slate-300">
                         {record.direction}
                       </span>
                       <span className="text-xs text-slate-500">
                         {formatTimestamp(record.timestamp)}
                       </span>
                     </div>
-                    <p className="mt-3 text-base font-medium text-white">
+                    <p className="mt-2 text-base font-medium text-white">
                       {record.filename}
                     </p>
-                    <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-slate-300">
+                    <div className="mt-1.5 flex items-center gap-3 text-sm text-slate-400">
                       <span>{formatBytes(record.size)}</span>
                       {record.peer ? (
-                        <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-400">
+                        <span className="truncate font-mono text-[10px]">
                           {record.peer.slice(0, 16)}...
                         </span>
                       ) : null}
                     </div>
-                    <p className="mt-3 break-all font-mono text-[11px] text-slate-500">
-                      {record.hash}
-                    </p>
                   </div>
 
                   <button
                     onClick={() => void handleReshare(record.hash)}
-                    className="glass-button inline-flex items-center gap-2 self-start px-4 py-2 text-sm text-slate-100"
+                    className="glass-button inline-flex shrink-0 items-center gap-2 px-3 py-1.5 text-sm text-slate-100"
                   >
-                    <RefreshCw className="h-4 w-4" />
+                    <RefreshCw className="h-3.5 w-3.5" />
                     Re-share
                   </button>
                 </div>
-              </motion.article>
+              </article>
             ))}
           </div>
         )}

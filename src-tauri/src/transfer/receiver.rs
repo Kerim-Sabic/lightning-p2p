@@ -90,8 +90,9 @@ pub async fn receive_blob(
             queue.remove(&transfer_id).await;
             progress.set(summary.size, summary.size);
             sampler.finish().await?;
-            save_peer(node, &summary.peer)?;
-            save_receive_record(node, &summary)?;
+            save_peer_no_flush(node, &summary.peer)?;
+            save_receive_record_no_flush(node, &summary)?;
+            node.db.flush()?;
             reporter.emit_completed(summary.hash, summary.size)?;
             Ok(())
         }
@@ -132,7 +133,8 @@ async fn receive_core(
     progress: Option<&ProgressHandle>,
 ) -> Result<ReceiveSummary> {
     let _state = download_to_store(node, ticket, cancel_rx, progress).await?;
-    let size = export::export_ticket(node.blobs_client(), ticket, &destination).await?;
+    let tracked_total = progress.map(|p| p.snapshot().1);
+    let size = export::export_ticket(node.blobs_client(), ticket, &destination, tracked_total).await?;
     Ok(ReceiveSummary {
         hash: ticket.hash().to_string(),
         label: export::resolve_label(node.blobs_client(), ticket).await?,
@@ -302,8 +304,8 @@ fn blob_progress_bytes(blob: &BlobState) -> u64 {
     }
 }
 
-fn save_peer(node: &FastDropNode, peer: &str) -> Result<()> {
-    peers::save_peer(
+fn save_peer_no_flush(node: &FastDropNode, peer: &str) -> Result<()> {
+    peers::save_peer_no_flush(
         &node.db,
         &PeerRecord {
             node_id: peer.to_string(),
@@ -313,8 +315,8 @@ fn save_peer(node: &FastDropNode, peer: &str) -> Result<()> {
     )
 }
 
-fn save_receive_record(node: &FastDropNode, summary: &ReceiveSummary) -> Result<()> {
-    history::save_record(
+fn save_receive_record_no_flush(node: &FastDropNode, summary: &ReceiveSummary) -> Result<()> {
+    history::save_record_no_flush(
         &node.db,
         &TransferRecord {
             hash: summary.hash.clone(),

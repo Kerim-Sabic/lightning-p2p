@@ -69,7 +69,7 @@ export function Sidebar({ currentView, onNavigate }: SidebarProps) {
               >
                 <div className="relative flex items-center gap-3">
                   <div
-                    className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border transition-colors ${
+                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-colors ${
                       active
                         ? "border-sky-400/25 bg-sky-500/12 text-sky-300"
                         : "border-white/10 bg-white/5 text-slate-300"
@@ -106,7 +106,7 @@ export function Sidebar({ currentView, onNavigate }: SidebarProps) {
           <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.06] p-3">
             <div className="flex items-center gap-3">
               <div
-                className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border ${
+                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border ${
                   nodeStatus.online
                     ? "border-emerald-400/20 bg-emerald-500/12 text-emerald-300"
                     : "border-white/10 bg-white/5 text-slate-400"
@@ -116,23 +116,14 @@ export function Sidebar({ currentView, onNavigate }: SidebarProps) {
               </div>
               <div className="min-w-0 opacity-0 transition-opacity duration-200 group-hover/sidebar:opacity-100">
                 <p className="text-sm font-medium text-white">
-                  {nodeStatus.online ? "Node online" : "Booting node"}
+                  {nodeStatus.online ? "Online" : "Booting"}
                 </p>
                 <p className="text-xs text-slate-400">
                   {nodeStatus.online
-                    ? "Ready for direct transfer"
-                    : "Waiting for endpoint"}
+                    ? "Ready for transfers"
+                    : "Starting node"}
                 </p>
               </div>
-            </div>
-
-            <div className="mt-3 hidden rounded-2xl border border-white/10 bg-black/25 p-3 text-[11px] text-slate-400 group-hover/sidebar:block">
-              <p className="mb-2 uppercase tracking-[0.28em] text-slate-500">
-                NodeId
-              </p>
-              <p className="break-all font-mono text-slate-300">
-                {nodeStatus.node_id ?? "Initializing..."}
-              </p>
             </div>
           </div>
         </div>

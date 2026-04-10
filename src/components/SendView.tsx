@@ -160,11 +160,10 @@ export function SendView() {
         </p>
       </header>
 
-      <motion.section
-        layout
+      <section
         className={`glass-panel drop-zone relative overflow-hidden border-2 border-dashed p-8 text-center transition-colors ${
           isDragActive
-            ? "border-sky-400/80 bg-sky-500/12"
+            ? "drop-zone-active border-sky-400/80 bg-sky-500/12"
             : "border-white/15 bg-white/5"
         }`}
       >
@@ -182,7 +181,7 @@ export function SendView() {
             generate a share link.
           </p>
         </div>
-      </motion.section>
+      </section>
 
       <AnimatePresence>
         {shareSelection.length > 0 ? (
@@ -229,11 +228,8 @@ export function SendView() {
               {shareSelection.map((item) => {
                 const Icon = iconForSelection(item.name, item.is_dir);
                 return (
-                  <motion.article
+                  <article
                     key={item.path}
-                    layout
-                    initial={{ opacity: 0, y: 12, scale: 0.985 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
                     className="glass-subtle flex items-start gap-4 p-4"
                   >
                     <div className="glass-icon">
@@ -257,7 +253,7 @@ export function SendView() {
                         {item.path}
                       </p>
                     </div>
-                  </motion.article>
+                  </article>
                 );
               })}
             </div>
@@ -311,26 +307,20 @@ export function SendView() {
                 </div>
               </div>
 
-              <div className="glass-subtle flex min-h-72 flex-col items-center justify-center gap-4 p-5 text-center">
+              <div className="glass-subtle flex flex-col items-center justify-center gap-3 p-5 text-center">
                 {qrSvg ? (
                   <div
-                    className="rounded-[28px] border border-white/10 bg-black/30 p-4 shadow-[0_24px_60px_rgba(0,0,0,0.35)]"
+                    className="rounded-2xl border border-white/10 bg-black/30 p-4"
                     dangerouslySetInnerHTML={{ __html: qrSvg }}
                   />
                 ) : (
-                  <div className="glass-icon h-24 w-24">
-                    <Link2 className="h-9 w-9 text-slate-500" />
+                  <div className="glass-icon">
+                    <Link2 className="h-5 w-5 text-slate-500" />
                   </div>
                 )}
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-white">
-                    Scan to receive
-                  </p>
-                  <p className="text-xs leading-5 text-slate-400">
-                    The QR is rendered by the Rust backend so the desktop app
-                    and native shell stay in sync.
-                  </p>
-                </div>
+                <p className="text-sm font-medium text-white">
+                  Scan to receive
+                </p>
               </div>
             </div>
           </motion.section>

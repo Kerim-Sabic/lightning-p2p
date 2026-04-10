@@ -6,9 +6,7 @@ import {
   HardDriveDownload,
   LoaderCircle,
   RefreshCw,
-  ShieldCheck,
   Sparkles,
-  Wifi,
 } from "lucide-react";
 import { formatBytes } from "../lib/format";
 import { useTransferStore, type UpdateState } from "../stores/transferStore";
@@ -161,178 +159,111 @@ export function SettingsView() {
               Open folder
             </button>
           </div>
-
-          <div className="mt-5 flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
-            <div>
-              <p className="text-sm font-medium text-white">
-                Startup update checks
-              </p>
-              <p className="text-xs text-slate-400">
-                Check GitHub releases automatically when the app launches.
-              </p>
-            </div>
-            <button
-              onClick={() =>
-                void setAutoUpdateEnabled(!settings?.auto_update_enabled)
-              }
-              className={`relative inline-flex h-7 w-12 items-center rounded-full border transition-colors ${
-                settings?.auto_update_enabled
-                  ? "border-sky-400/35 bg-sky-500/20"
-                  : "border-white/10 bg-white/5"
-              }`}
-              aria-pressed={settings?.auto_update_enabled ?? false}
-            >
-              <span
-                className={`inline-block h-5 w-5 rounded-full bg-white transition-transform ${
-                  settings?.auto_update_enabled
-                    ? "translate-x-6"
-                    : "translate-x-1"
-                }`}
-              />
-            </button>
-          </div>
         </article>
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
-        <article className="glass-panel p-6">
-          <div className="flex items-center gap-3">
-            <div className="glass-icon">
-              <Download className="h-5 w-5 text-sky-300" />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-white">Updates</p>
-              <p className="text-xs text-slate-400">
-                Signed releases are delivered through GitHub Releases.
-              </p>
-            </div>
+      <section className="glass-panel p-6">
+        <div className="flex items-center gap-3">
+          <div className="glass-icon">
+            <Download className="h-5 w-5 text-sky-300" />
           </div>
+          <div>
+            <p className="text-sm font-medium text-white">Updates</p>
+            <p className="text-xs text-slate-400">
+              Signed releases delivered through GitHub Releases.
+            </p>
+          </div>
+        </div>
 
-          <div className="mt-5 grid gap-3 md:grid-cols-2">
-            <div className="glass-subtle p-4">
-              <p className="text-xs uppercase tracking-[0.28em] text-slate-500">
-                Current version
-              </p>
-              <p className="mt-2 text-sm text-slate-200">
-                {updateState.currentVersion ?? "Unknown"}
-              </p>
-            </div>
-            <div className="glass-subtle p-4">
-              <p className="text-xs uppercase tracking-[0.28em] text-slate-500">
-                Available version
-              </p>
-              <p className="mt-2 text-sm text-slate-200">
-                {updateState.availableVersion ?? "None"}
-              </p>
-            </div>
+        <div className="mt-5 grid gap-3 md:grid-cols-2">
+          <div className="glass-subtle p-4">
+            <p className="text-[10px] uppercase tracking-[0.3em] text-slate-500">
+              Current version
+            </p>
+            <p className="mt-1.5 text-sm font-medium text-slate-200">
+              {updateState.currentVersion ?? "Unknown"}
+            </p>
           </div>
+          <div className="glass-subtle p-4">
+            <p className="text-[10px] uppercase tracking-[0.3em] text-slate-500">
+              Available version
+            </p>
+            <p className="mt-1.5 text-sm font-medium text-slate-200">
+              {updateState.availableVersion ?? "None"}
+            </p>
+          </div>
+        </div>
 
-          <div className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-4">
-            <div className="flex items-start gap-3">
-              <div className="glass-icon mt-0.5">
-                {updateBusy ? (
-                  <LoaderCircle className="h-4 w-4 animate-spin text-sky-300" />
-                ) : updateState.phase === "restartRequired" ? (
-                  <CheckCircle2 className="h-4 w-4 text-emerald-300" />
-                ) : (
-                  <RefreshCw className="h-4 w-4 text-slate-300" />
-                )}
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-white">Update status</p>
-                <p className="mt-1 text-sm leading-6 text-slate-400">
-                  {updateStatusCopy(updateState)}
-                </p>
-                {updateState.body ? (
-                  <p className="mt-3 rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-sm leading-6 text-slate-300">
-                    {updateState.body}
-                  </p>
-                ) : null}
-                {updateProgressLabel(updateState) ? (
-                  <p className="mt-3 text-xs uppercase tracking-[0.28em] text-slate-500">
-                    {updateProgressLabel(updateState)}
-                  </p>
-                ) : null}
-              </div>
-            </div>
-          </div>
+        <div className="mt-4 flex items-center gap-2 text-sm text-slate-400">
+          {updateBusy ? (
+            <LoaderCircle className="h-4 w-4 animate-spin text-sky-300" />
+          ) : updateState.phase === "restartRequired" ? (
+            <CheckCircle2 className="h-4 w-4 text-emerald-300" />
+          ) : (
+            <RefreshCw className="h-4 w-4 text-slate-400" />
+          )}
+          <span>{updateStatusCopy(updateState)}</span>
+        </div>
 
-          <div className="mt-4 flex flex-wrap gap-3">
-            <button
-              onClick={() => void checkForUpdates()}
-              disabled={updateBusy}
-              className="glass-button inline-flex items-center gap-2 px-4 py-2 text-sm text-slate-100 disabled:cursor-wait disabled:opacity-70"
-            >
-              <RefreshCw
-                className={`h-4 w-4 ${updateBusy ? "animate-spin" : ""}`}
-              />
-              Check for updates
-            </button>
-            <button
-              onClick={() => void installUpdate()}
-              disabled={!canInstall}
-              className="inline-flex items-center gap-2 rounded-xl border border-emerald-400/20 bg-emerald-500/15 px-4 py-2 text-sm font-medium text-emerald-50 shadow-[0_18px_50px_rgba(34,197,94,0.16)] transition-all hover:border-emerald-300/35 hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <Download className="h-4 w-4" />
-              Install update
-            </button>
-          </div>
-        </article>
+        {updateState.body ? (
+          <p className="mt-3 rounded-xl border border-white/10 bg-white/[0.04] p-3 text-sm text-slate-300">
+            {updateState.body}
+          </p>
+        ) : null}
+        {updateProgressLabel(updateState) ? (
+          <p className="mt-2 text-xs tabular-nums text-slate-500">
+            {updateProgressLabel(updateState)}
+          </p>
+        ) : null}
 
-        <article className="glass-panel p-6">
-          <div className="flex items-center gap-3">
-            <div className="glass-icon">
-              <ShieldCheck className="h-5 w-5 text-white" />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-white">
-                Transfer guarantees
-              </p>
-              <p className="text-xs text-slate-400">
-                Verified transfers, persistent history, and native packaged-app
-                defaults.
-              </p>
-            </div>
-          </div>
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <button
+            onClick={() => void checkForUpdates()}
+            disabled={updateBusy}
+            className="glass-button inline-flex items-center gap-2 px-4 py-2 text-sm text-slate-100 disabled:cursor-wait disabled:opacity-70"
+          >
+            <RefreshCw
+              className={`h-4 w-4 ${updateBusy ? "animate-spin" : ""}`}
+            />
+            Check now
+          </button>
+          <button
+            onClick={() => void installUpdate()}
+            disabled={!canInstall}
+            className="inline-flex items-center gap-2 rounded-xl border border-emerald-400/20 bg-emerald-500/15 px-4 py-2 text-sm font-medium text-emerald-50 transition-all hover:border-emerald-300/35 hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Download className="h-4 w-4" />
+            Install update
+          </button>
+        </div>
 
-          <div className="mt-5 grid gap-3">
-            <div className="glass-subtle p-4">
-              <p className="text-xs uppercase tracking-[0.28em] text-slate-500">
-                Network
-              </p>
-              <p className="mt-2 text-sm text-slate-200">
-                iroh QUIC transport only
-              </p>
-            </div>
-            <div className="glass-subtle p-4">
-              <p className="text-xs uppercase tracking-[0.28em] text-slate-500">
-                Integrity
-              </p>
-              <p className="mt-2 text-sm text-slate-200">
-                BLAKE3-verified blob streaming
-              </p>
-            </div>
-            <div className="glass-subtle p-4">
-              <p className="text-xs uppercase tracking-[0.28em] text-slate-500">
-                First run
-              </p>
-              <p className="mt-2 text-sm text-slate-200">
-                {settings?.first_run_complete
-                  ? "Setup completed"
-                  : "Setup pending"}
-              </p>
-            </div>
-            <div className="glass-subtle p-4">
-              <p className="text-xs uppercase tracking-[0.28em] text-slate-500">
-                Transport
-              </p>
-              <div className="mt-2 flex items-center gap-2 text-sm text-slate-200">
-                <Wifi className="h-4 w-4 text-emerald-300" />
-                Relay fallback and direct peer connectivity
-              </div>
-            </div>
+        <div className="mt-5 flex items-center justify-between border-t border-white/10 pt-4">
+          <div>
+            <p className="text-sm font-medium text-white">Auto-check on startup</p>
+            <p className="text-xs text-slate-400">
+              Check GitHub releases when the app launches.
+            </p>
           </div>
-        </article>
+          <button
+            onClick={() =>
+              void setAutoUpdateEnabled(!settings?.auto_update_enabled)
+            }
+            className={`relative inline-flex h-7 w-12 items-center rounded-full border transition-colors ${
+              settings?.auto_update_enabled
+                ? "border-sky-400/35 bg-sky-500/20"
+                : "border-white/10 bg-white/5"
+            }`}
+            aria-pressed={settings?.auto_update_enabled ?? false}
+          >
+            <span
+              className={`inline-block h-5 w-5 rounded-full bg-white transition-transform ${
+                settings?.auto_update_enabled
+                  ? "translate-x-6"
+                  : "translate-x-1"
+              }`}
+            />
+          </button>
+        </div>
       </section>
 
       {error ? (

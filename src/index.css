@@ -27,16 +27,6 @@ body {
     "Segoe UI", sans-serif;
 }
 
-body::before {
-  content: "";
-  pointer-events: none;
-  position: fixed;
-  inset: 0;
-  opacity: 0.08;
-  background-image:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.92' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
-  mix-blend-mode: soft-light;
-}
 
 ::selection {
   background: rgba(59, 130, 246, 0.28);
@@ -91,7 +81,7 @@ body::before {
   }
 
   .glass-icon {
-    @apply flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.06] backdrop-blur-xl;
+    @apply flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.06] backdrop-blur-xl;
   }
 
   .glass-button {
@@ -114,6 +104,7 @@ body::before {
       );
     background-size: 200% 200%;
     animation: border-pan 8s linear infinite;
+    animation-play-state: paused;
     -webkit-mask:
       linear-gradient(#fff 0 0) content-box,
       linear-gradient(#fff 0 0);
@@ -121,6 +112,10 @@ body::before {
     mask-composite: exclude;
     pointer-events: none;
     opacity: 0.85;
+  }
+
+  .drop-zone-active::after {
+    animation-play-state: running;
   }
 
   .shimmer-overlay {

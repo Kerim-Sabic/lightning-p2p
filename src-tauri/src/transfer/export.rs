@@ -8,6 +8,8 @@ use iroh_blobs::Hash;
 
 /// Exports a downloaded ticket to the destination directory and returns its size.
 ///
+/// When `known_size` is provided the expensive per-blob size query is skipped.
+///
 /// # Errors
 ///
 /// Returns `FastDropError` if the ticket cannot be exported to disk.
@@ -15,6 +17,7 @@ pub async fn export_ticket(
     client: &MemClient,
     ticket: &BlobTicket,
     destination: &std::path::Path,
+    known_size: Option<u64>,
 ) -> Result<u64> {
     tokio::fs::create_dir_all(destination).await?;
     let export_path = if ticket.recursive() {
@@ -34,7 +37,10 @@ pub async fn export_ticket(
         .finish()
         .await
         .map_err(|error| blob_error(&error))?;
-    ticket_size(client, ticket).await
+    match known_size {
+        Some(size) if size > 0 => Ok(size),
+        _ => ticket_size(client, ticket).await,
+    }
 }
 
 /// Resolves the user-visible label for a downloaded ticket.

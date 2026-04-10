@@ -10,7 +10,7 @@ use tauri::{Emitter, Window};
 use tokio::sync::oneshot;
 use tokio::time::MissedTickBehavior;
 
-const MAX_PROGRESS_INTERVAL: Duration = Duration::from_millis(100);
+const MAX_PROGRESS_INTERVAL: Duration = Duration::from_millis(200);
 
 /// Direction of a transfer.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -246,7 +246,8 @@ impl ProgressHandle {
         self.total.store(total, Ordering::Relaxed);
     }
 
-    fn snapshot(&self) -> (u64, u64) {
+    /// Returns a snapshot of (bytes, total) using relaxed atomic loads.
+    pub fn snapshot(&self) -> (u64, u64) {
         (
             self.bytes.load(Ordering::Relaxed),
             self.total.load(Ordering::Relaxed),
@@ -254,7 +255,7 @@ impl ProgressHandle {
     }
 }
 
-/// Background sampler that emits progress at most 10 times per second.
+/// Background sampler that emits progress at most 5 times per second.
 #[derive(Debug)]
 pub struct ProgressSampler {
     handle: ProgressHandle,

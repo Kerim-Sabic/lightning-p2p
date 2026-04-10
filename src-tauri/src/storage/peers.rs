@@ -17,16 +17,28 @@ pub struct PeerRecord {
     pub last_seen: u64,
 }
 
-/// Saves or updates a peer record.
+/// Saves or updates a peer record and flushes to disk.
 ///
 /// # Errors
 ///
 /// Returns `FastDropError` if serialization or storage fails.
 pub fn save_peer(db: &StorageDb, peer: &PeerRecord) -> Result<()> {
+    save_peer_no_flush(db, peer)?;
+    db.flush()?;
+    Ok(())
+}
+
+/// Saves or updates a peer record without flushing to disk.
+///
+/// Use this when batching multiple writes before a single flush.
+///
+/// # Errors
+///
+/// Returns `FastDropError` if serialization or storage fails.
+pub fn save_peer_no_flush(db: &StorageDb, peer: &PeerRecord) -> Result<()> {
     let tree = db.tree(TREE_NAME)?;
     let value = serde_json::to_vec(peer)?;
     tree.insert(peer.node_id.as_bytes(), value)?;
-    db.flush()?;
     Ok(())
 }
 

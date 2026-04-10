@@ -43,12 +43,11 @@ export function FirstRunOverlay() {
   return (
     <div className="pointer-events-auto absolute inset-0 z-40 flex items-center justify-center bg-black/55 px-4 backdrop-blur-xl">
       <motion.section
-        initial={{ opacity: 0, y: 16, scale: 0.985 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ type: "spring", stiffness: 220, damping: 24 }}
-        className="glass-panel relative w-full max-w-2xl overflow-hidden p-7"
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.2, ease: "easeOut" }}
+        className="glass-panel relative w-full max-w-2xl overflow-hidden p-6"
       >
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.18),transparent_42%)] opacity-80" />
         <div className="relative space-y-6">
           <header className="space-y-3">
             <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-3 py-1 text-[11px] uppercase tracking-[0.32em] text-slate-400">

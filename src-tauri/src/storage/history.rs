@@ -24,16 +24,28 @@ pub struct TransferRecord {
     pub direction: TransferDirection,
 }
 
-/// Saves a transfer record to history.
+/// Saves a transfer record to history and flushes to disk.
 ///
 /// # Errors
 ///
 /// Returns `FastDropError` if serialization or storage fails.
 pub fn save_record(db: &StorageDb, record: &TransferRecord) -> Result<()> {
+    save_record_no_flush(db, record)?;
+    db.flush()?;
+    Ok(())
+}
+
+/// Saves a transfer record to history without flushing to disk.
+///
+/// Use this when batching multiple writes before a single flush.
+///
+/// # Errors
+///
+/// Returns `FastDropError` if serialization or storage fails.
+pub fn save_record_no_flush(db: &StorageDb, record: &TransferRecord) -> Result<()> {
     let tree = db.tree(TREE_NAME)?;
     let value = serde_json::to_vec(record)?;
     tree.insert(history_key(record), value)?;
-    db.flush()?;
     Ok(())
 }
 

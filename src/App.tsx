@@ -11,9 +11,9 @@ import { useTransfer } from "./hooks/useTransfer";
 export type View = "send" | "receive" | "history" | "settings";
 
 const pageTransition = {
-  initial: { opacity: 0, x: 20, scale: 0.985 },
-  animate: { opacity: 1, x: 0, scale: 1 },
-  exit: { opacity: 0, x: -16, scale: 0.985 },
+  initial: { opacity: 0, x: 20 },
+  animate: { opacity: 1, x: 0 },
+  exit: { opacity: 0, x: -16 },
 };
 
 export function App() {
