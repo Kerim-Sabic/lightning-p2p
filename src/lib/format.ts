@@ -13,9 +13,15 @@ export function formatBytes(bytes: number): string {
 
 export function formatSpeed(speedBps: number): string {
   if (speedBps <= 0) {
-    return "0 MB/s";
+    return "-- MB/s";
   }
-  return `${(speedBps / 1024 ** 2).toFixed(speedBps >= 1024 ** 3 ? 2 : 1)} MB/s`;
+  if (speedBps >= 1024 ** 3) {
+    return `${(speedBps / 1024 ** 3).toFixed(2)} GB/s`;
+  }
+  if (speedBps >= 1024 ** 2) {
+    return `${(speedBps / 1024 ** 2).toFixed(1)} MB/s`;
+  }
+  return `${(speedBps / 1024).toFixed(0)} KB/s`;
 }
 
 export function formatEta(

@@ -2,11 +2,15 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   ArrowUpRight,
   CheckCircle2,
-  Pause,
   StopCircle,
   TimerReset,
 } from "lucide-react";
-import { formatBytes, formatEta, formatSpeed, formatTimestamp } from "../lib/format";
+import {
+  formatBytes,
+  formatEta,
+  formatSpeed,
+  formatTimestamp,
+} from "../lib/format";
 import type { TransferEntry } from "../stores/transferStore";
 
 interface TransferCardProps {
@@ -22,9 +26,13 @@ interface StatProps {
 function statusLabel(transfer: TransferEntry): string {
   switch (transfer.status) {
     case "starting":
-      return transfer.direction === "send" ? "Hashing content" : "Connecting to peer";
+      return transfer.direction === "send"
+        ? "Hashing content"
+        : "Connecting to peer";
     case "running":
-      return transfer.direction === "send" ? "Preparing share" : "Streaming to disk";
+      return transfer.direction === "send"
+        ? "Preparing share"
+        : "Streaming to disk";
     case "completed":
       return transfer.direction === "send" ? "Ticket ready" : "Saved locally";
     case "failed":
@@ -56,31 +64,25 @@ function statusIcon(transfer: TransferEntry) {
 
 function AnimatedMetric({ label, value }: StatProps) {
   return (
-    <div className="glass-subtle p-3">
-      <p className="text-[11px] uppercase tracking-[0.28em] text-slate-500">{label}</p>
-      <div className="mt-2 min-h-6 text-sm font-medium text-white">
-        <AnimatePresence mode="popLayout">
-          <motion.span
-            key={`${label}-${value}`}
-            initial={{ opacity: 0, y: 10, filter: "blur(4px)" }}
-            animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-            exit={{ opacity: 0, y: -8, filter: "blur(4px)" }}
-            transition={{ duration: 0.18, ease: "easeOut" }}
-            className="inline-block"
-          >
-            {value}
-          </motion.span>
-        </AnimatePresence>
-      </div>
+    <div className="glass-subtle px-3.5 py-3">
+      <p className="text-[10px] uppercase tracking-[0.3em] text-slate-500">
+        {label}
+      </p>
+      <p className="mt-1.5 text-sm font-semibold tabular-nums text-white">
+        {value}
+      </p>
     </div>
   );
 }
 
 export function TransferCard({ transfer, onCancel }: TransferCardProps) {
   const hasTotal = transfer.total > 0;
-  const percent = hasTotal ? Math.min((transfer.bytes / transfer.total) * 100, 100) : 0;
+  const percent = hasTotal
+    ? Math.min((transfer.bytes / transfer.total) * 100, 100)
+    : 0;
   const timestamp = formatTimestamp(transfer.timestamp);
-  const isActive = transfer.status === "starting" || transfer.status === "running";
+  const isActive =
+    transfer.status === "starting" || transfer.status === "running";
   const StatusIcon = statusIcon(transfer);
 
   const handleCancel = (): void => {
@@ -88,7 +90,11 @@ export function TransferCard({ transfer, onCancel }: TransferCardProps) {
       return;
     }
 
-    if (window.confirm("Cancel this transfer? Partially downloaded data will stay local.")) {
+    if (
+      window.confirm(
+        "Cancel this transfer? Partially downloaded data will stay local.",
+      )
+    ) {
       onCancel(transfer.transferId);
     }
   };
@@ -96,87 +102,83 @@ export function TransferCard({ transfer, onCancel }: TransferCardProps) {
   return (
     <motion.article
       layout
-      initial={{ opacity: 0, y: 16, scale: 0.985 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, y: -12, scale: 0.985 }}
-      transition={{ type: "spring", stiffness: 280, damping: 24 }}
-      className="glass-panel relative overflow-hidden p-5"
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -8 }}
+      transition={{ duration: 0.2, ease: "easeOut" }}
+      className="glass-panel relative overflow-hidden p-4"
     >
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.1),transparent_28%)]" />
-
-      <div className="relative flex flex-col gap-5">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+      <div className="relative flex flex-col gap-3">
+        <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] uppercase tracking-[0.24em] text-slate-300">
+            <div className="flex items-center gap-2">
+              <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] uppercase tracking-[0.24em] text-slate-300">
                 {transfer.direction}
               </span>
-              <span className="inline-flex items-center gap-2 text-xs text-slate-400">
-                <StatusIcon className="h-3.5 w-3.5 text-sky-300" />
+              <StatusIcon className="h-3.5 w-3.5 text-sky-300" />
+              <span className="text-xs text-slate-400">
                 {statusLabel(transfer)}
               </span>
             </div>
 
-            <p className="mt-3 truncate text-lg font-medium text-white">{transfer.name}</p>
-            {transfer.peer ? (
-              <p className="mt-2 break-all font-mono text-[11px] text-slate-500">
-                {transfer.peer}
-              </p>
-            ) : null}
+            <p className="mt-2 truncate text-base font-medium text-white">
+              {transfer.name}
+            </p>
           </div>
 
           {isActive && onCancel ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                disabled
-                title="Pause requires resume support in the transfer backend."
-                className="glass-button inline-flex cursor-not-allowed items-center gap-2 px-4 py-2 text-sm text-slate-400 opacity-60"
-              >
-                <Pause className="h-4 w-4" />
-                Pause
-              </button>
-              <button
-                onClick={handleCancel}
-                className="inline-flex items-center gap-2 rounded-xl border border-red-400/20 bg-red-500/12 px-4 py-2 text-sm font-medium text-red-100 transition-colors hover:bg-red-500/18"
-              >
-                <StopCircle className="h-4 w-4" />
-                Cancel
-              </button>
-            </div>
+            <button
+              onClick={handleCancel}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-red-400/20 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-200 transition-colors hover:bg-red-500/18"
+            >
+              <StopCircle className="h-3.5 w-3.5" />
+              Cancel
+            </button>
           ) : null}
         </div>
 
-        <div className="space-y-3">
-          <div className="relative h-3 overflow-hidden rounded-full bg-white/[0.08]">
-            <motion.div
-              initial={{ width: 0 }}
-              animate={{ width: hasTotal ? `${percent}%` : "34%" }}
-              transition={{ duration: 0.24, ease: "easeOut" }}
-              className={`absolute inset-y-0 left-0 rounded-full bg-gradient-to-r ${accentClasses(transfer)} shadow-[0_0_30px_rgba(59,130,246,0.35)]`}
-            />
-            <div className="absolute inset-0 bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.22),transparent)] opacity-40" />
+        <div className="space-y-2">
+          <div className="flex items-baseline justify-between text-xs">
+            <span className="font-semibold tabular-nums text-white">
+              {hasTotal
+                ? `${percent.toFixed(percent > 99 ? 0 : 1)}%`
+                : "Preparing"}
+            </span>
+            <span className="tabular-nums text-slate-400">
+              {formatBytes(transfer.bytes)}
+              {hasTotal ? ` / ${formatBytes(transfer.total)}` : ""}
+            </span>
           </div>
-          <div className="flex items-center justify-between text-xs text-slate-400">
-            <span>{hasTotal ? `${percent.toFixed(percent > 99 ? 0 : 1)}%` : "Preparing"}</span>
-            <span>{statusLabel(transfer)}</span>
+          <div className="relative h-2 overflow-hidden rounded-full bg-white/[0.08]">
+            <div
+              style={{ width: hasTotal ? `${percent}%` : "34%" }}
+              className={`absolute inset-y-0 left-0 rounded-full bg-gradient-to-r transition-[width] duration-150 ease-linear ${accentClasses(transfer)}`}
+            />
           </div>
         </div>
 
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-3 gap-2">
           <AnimatedMetric
-            label="Transferred"
-            value={`${formatBytes(transfer.bytes)} / ${
-              hasTotal ? formatBytes(transfer.total) : "Calculating"
-            }`}
+            label="Speed"
+            value={formatSpeed(transfer.speedBps)}
           />
-          <AnimatedMetric label="Speed" value={formatSpeed(transfer.speedBps)} />
           <AnimatedMetric
             label="ETA"
-            value={hasTotal ? formatEta(transfer.bytes, transfer.total, transfer.speedBps) : "--"}
+            value={
+              hasTotal
+                ? formatEta(transfer.bytes, transfer.total, transfer.speedBps)
+                : "--"
+            }
           />
           <AnimatedMetric
             label="Status"
-            value={transfer.status === "completed" ? "Done" : transfer.status === "failed" ? "Error" : "Live"}
+            value={
+              transfer.status === "completed"
+                ? "Done"
+                : transfer.status === "failed"
+                  ? "Error"
+                  : "Live"
+            }
           />
         </div>
 
@@ -193,9 +195,11 @@ export function TransferCard({ transfer, onCancel }: TransferCardProps) {
           ) : null}
         </AnimatePresence>
 
-        <div className="flex flex-col gap-2 text-[11px] text-slate-500 sm:flex-row sm:items-center sm:justify-between">
-          <span className="break-all font-mono">{transfer.hash ?? transfer.transferId}</span>
-          {timestamp ? <span>{timestamp}</span> : null}
+        <div className="flex items-center justify-between text-[10px] text-slate-500">
+          <span className="truncate font-mono">
+            {transfer.hash ?? transfer.transferId}
+          </span>
+          {timestamp ? <span className="shrink-0 ml-3">{timestamp}</span> : null}
         </div>
       </div>
     </motion.article>

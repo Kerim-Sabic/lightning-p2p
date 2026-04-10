@@ -1,15 +1,26 @@
 import { create } from "zustand";
 import type {
   ActiveTransfer,
+  AppSettings,
   NodeStatus,
   SharePathInfo,
   TransferDirection,
   TransferEvent,
   TransferRecord,
+  UpdateCheckResult,
+  UpdateProgress,
 } from "../lib/tauri";
 import * as tauri from "../lib/tauri";
 
 export type TransferStatus = "starting" | "running" | "completed" | "failed";
+export type UpdatePhase =
+  | "idle"
+  | "checking"
+  | "available"
+  | "upToDate"
+  | "downloading"
+  | "restartRequired"
+  | "error";
 
 export interface TransferEntry {
   transferId: string;
@@ -26,9 +37,23 @@ export interface TransferEntry {
   error: string | null;
 }
 
+export interface UpdateState {
+  phase: UpdatePhase;
+  currentVersion: string | null;
+  availableVersion: string | null;
+  body: string | null;
+  date: string | null;
+  downloadedBytes: number;
+  totalBytes: number | null;
+  error: string | null;
+  lastCheckedAt: number | null;
+}
+
 interface TransferStore {
   nodeStatus: NodeStatus;
+  settings: AppSettings | null;
   downloadDir: string | null;
+  updateState: UpdateState;
   transfers: Record<string, TransferEntry>;
   history: TransferRecord[];
   shareSelection: SharePathInfo[];
@@ -39,6 +64,7 @@ interface TransferStore {
   clearError: () => void;
   prepareShareSelection: (paths: string[]) => Promise<void>;
   refreshNodeStatus: () => Promise<void>;
+  refreshSettings: () => Promise<void>;
   refreshDownloadDir: () => Promise<void>;
   refreshActiveTransfers: () => Promise<void>;
   refreshHistory: () => Promise<void>;
@@ -46,12 +72,30 @@ interface TransferStore {
   startReceive: (ticket: string) => Promise<string | null>;
   reshare: (hash: string) => Promise<string | null>;
   cancelTransfer: (transferId: string) => Promise<void>;
+  pickDownloadDir: () => Promise<void>;
+  openDownloadDir: () => Promise<void>;
+  setAutoUpdateEnabled: (enabled: boolean) => Promise<void>;
+  completeFirstRun: () => Promise<void>;
+  checkForUpdates: (silent?: boolean) => Promise<void>;
+  installUpdate: () => Promise<void>;
   applyTransferEvent: (event: TransferEvent) => void;
 }
 
 const defaultNodeStatus: NodeStatus = {
   online: false,
   node_id: null,
+};
+
+const defaultUpdateState: UpdateState = {
+  phase: "idle",
+  currentVersion: null,
+  availableVersion: null,
+  body: null,
+  date: null,
+  downloadedBytes: 0,
+  totalBytes: null,
+  error: null,
+  lastCheckedAt: null,
 };
 
 function toErrorMessage(error: unknown): string {
@@ -110,9 +154,45 @@ function mergeActiveTransfer(
   };
 }
 
+function updateFromResult(result: UpdateCheckResult): UpdateState {
+  return {
+    phase: result.available ? "available" : "upToDate",
+    currentVersion: result.current_version,
+    availableVersion: result.version,
+    body: result.body,
+    date: result.date,
+    downloadedBytes: 0,
+    totalBytes: null,
+    error: null,
+    lastCheckedAt: Date.now(),
+  };
+}
+
+function withSettings(settings: AppSettings) {
+  return {
+    settings,
+    downloadDir: settings.download_dir,
+  };
+}
+
+function updateDownloadProgress(
+  current: UpdateState,
+  progress: UpdateProgress,
+): UpdateState {
+  return {
+    ...current,
+    phase: "downloading",
+    downloadedBytes: progress.downloaded_bytes,
+    totalBytes: progress.total_bytes,
+    error: null,
+  };
+}
+
 export const useTransferStore = create<TransferStore>((set, get) => ({
   nodeStatus: defaultNodeStatus,
+  settings: null,
   downloadDir: null,
+  updateState: defaultUpdateState,
   transfers: {},
   history: [],
   shareSelection: [],
@@ -142,10 +222,28 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
     }
   },
 
+  refreshSettings: async () => {
+    try {
+      const [settings, currentVersion] = await Promise.all([
+        tauri.getAppSettings(),
+        tauri.getAppVersion(),
+      ]);
+      set((state) => ({
+        ...withSettings(settings),
+        updateState: {
+          ...state.updateState,
+          currentVersion,
+        },
+      }));
+    } catch (error) {
+      set({ error: toErrorMessage(error) });
+    }
+  },
+
   refreshDownloadDir: async () => {
     try {
-      const downloadDir = await tauri.getDownloadDir();
-      set({ downloadDir });
+      const settings = await tauri.getAppSettings();
+      set(withSettings(settings));
     } catch (error) {
       const message = toErrorMessage(error);
       if (!isNodePendingError(message)) {
@@ -211,10 +309,11 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
     set({ error: null });
 
     try {
-      let destination = get().downloadDir;
+      let destination = get().settings?.download_dir ?? get().downloadDir;
       if (!destination) {
-        destination = await tauri.getDownloadDir();
-        set({ downloadDir: destination });
+        const settings = await tauri.getAppSettings();
+        destination = settings.download_dir;
+        set(withSettings(settings));
       }
 
       const transferId = await tauri.startReceive(ticket, destination);
@@ -259,6 +358,119 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
     }
   },
 
+  pickDownloadDir: async () => {
+    try {
+      const selected = await tauri.pickDirectory(
+        get().downloadDir ?? undefined,
+      );
+      if (!selected) {
+        return;
+      }
+
+      const settings = await tauri.setDownloadDir(selected);
+      set(withSettings(settings));
+    } catch (error) {
+      set({ error: toErrorMessage(error) });
+    }
+  },
+
+  openDownloadDir: async () => {
+    try {
+      await tauri.openDownloadDir();
+    } catch (error) {
+      set({ error: toErrorMessage(error) });
+    }
+  },
+
+  setAutoUpdateEnabled: async (enabled) => {
+    try {
+      const settings = await tauri.setAutoUpdateEnabled(enabled);
+      set(withSettings(settings));
+    } catch (error) {
+      set({ error: toErrorMessage(error) });
+    }
+  },
+
+  completeFirstRun: async () => {
+    try {
+      const settings = await tauri.completeFirstRun();
+      set(withSettings(settings));
+    } catch (error) {
+      set({ error: toErrorMessage(error) });
+    }
+  },
+
+  checkForUpdates: async (silent = false) => {
+    set((state) => ({
+      updateState: {
+        ...state.updateState,
+        phase: "checking",
+        error: null,
+      },
+    }));
+
+    try {
+      const result = await tauri.checkForAppUpdate();
+      set({ updateState: updateFromResult(result) });
+    } catch (error) {
+      if (silent) {
+        set((state) => ({
+          updateState: {
+            ...state.updateState,
+            phase: "idle",
+            error: null,
+          },
+        }));
+        return;
+      }
+
+      set((state) => ({
+        updateState: {
+          ...state.updateState,
+          phase: "error",
+          error: toErrorMessage(error),
+          lastCheckedAt: Date.now(),
+        },
+      }));
+    }
+  },
+
+  installUpdate: async () => {
+    set((state) => ({
+      updateState: {
+        ...state.updateState,
+        phase: "downloading",
+        error: null,
+      },
+    }));
+
+    try {
+      await tauri.installAppUpdate((progress) => {
+        set((state) => ({
+          updateState: updateDownloadProgress(state.updateState, progress),
+        }));
+      });
+
+      set((state) => ({
+        updateState: {
+          ...state.updateState,
+          phase: "restartRequired",
+          downloadedBytes:
+            state.updateState.totalBytes ?? state.updateState.downloadedBytes,
+          error: null,
+        },
+      }));
+    } catch (error) {
+      set((state) => ({
+        updateState: {
+          ...state.updateState,
+          phase: "error",
+          error: toErrorMessage(error),
+        },
+      }));
+    }
+  },
+
   applyTransferEvent: (event) => {
     set((state) => {
       const transfers = { ...state.transfers };
@@ -281,7 +493,12 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
       } else if (event.type === "progress") {
         const current =
           transfers[event.transfer_id] ??
-          createTransferEntry(event.transfer_id, "receive", event.transfer_id, null);
+          createTransferEntry(
+            event.transfer_id,
+            "receive",
+            event.transfer_id,
+            null,
+          );
         transfers[event.transfer_id] = {
           ...current,
           bytes: event.bytes,
@@ -316,7 +533,12 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
       } else {
         const current =
           transfers[event.transfer_id] ??
-          createTransferEntry(event.transfer_id, "receive", event.transfer_id, null);
+          createTransferEntry(
+            event.transfer_id,
+            "receive",
+            event.transfer_id,
+            null,
+          );
         transfers[event.transfer_id] = {
           ...current,
           status: "failed",

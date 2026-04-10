@@ -1,11 +1,5 @@
 import { motion } from "framer-motion";
-import {
-  ArrowDownToLine,
-  Clock3,
-  Send,
-  Settings2,
-  Wifi,
-} from "lucide-react";
+import { ArrowDownToLine, Clock3, Send, Settings2, Wifi } from "lucide-react";
 import { useMemo } from "react";
 import type { View } from "../App";
 import { useTransferStore } from "../stores/transferStore";
@@ -49,8 +43,12 @@ export function Sidebar({ currentView, onNavigate }: SidebarProps) {
               <Send className="h-5 w-5 text-white" />
             </div>
             <div className="min-w-0 opacity-0 transition-opacity duration-200 group-hover/sidebar:opacity-100">
-              <p className="text-base font-semibold tracking-tight text-white">FastDrop</p>
-              <p className="text-xs text-slate-400">Premium peer-to-peer transfers</p>
+              <p className="text-base font-semibold tracking-tight text-white">
+                FastDrop
+              </p>
+              <p className="text-xs text-slate-400">
+                Premium peer-to-peer transfers
+              </p>
             </div>
           </div>
         </div>
@@ -81,7 +79,9 @@ export function Sidebar({ currentView, onNavigate }: SidebarProps) {
                   </div>
 
                   <div className="flex min-w-0 flex-1 items-center justify-between opacity-0 transition-opacity duration-200 group-hover/sidebar:opacity-100">
-                    <span className="truncate text-sm font-medium">{item.label}</span>
+                    <span className="truncate text-sm font-medium">
+                      {item.label}
+                    </span>
                     {item.id === "receive" && activeTransferCount > 0 ? (
                       <span className="rounded-full border border-sky-400/20 bg-sky-500/12 px-2 py-0.5 text-[11px] text-sky-200">
                         {activeTransferCount}
@@ -119,13 +119,17 @@ export function Sidebar({ currentView, onNavigate }: SidebarProps) {
                   {nodeStatus.online ? "Node online" : "Booting node"}
                 </p>
                 <p className="text-xs text-slate-400">
-                  {nodeStatus.online ? "Ready for direct transfer" : "Waiting for endpoint"}
+                  {nodeStatus.online
+                    ? "Ready for direct transfer"
+                    : "Waiting for endpoint"}
                 </p>
               </div>
             </div>
 
             <div className="mt-3 hidden rounded-2xl border border-white/10 bg-black/25 p-3 text-[11px] text-slate-400 group-hover/sidebar:block">
-              <p className="mb-2 uppercase tracking-[0.28em] text-slate-500">NodeId</p>
+              <p className="mb-2 uppercase tracking-[0.28em] text-slate-500">
+                NodeId
+              </p>
               <p className="break-all font-mono text-slate-300">
                 {nodeStatus.node_id ?? "Initializing..."}
               </p>

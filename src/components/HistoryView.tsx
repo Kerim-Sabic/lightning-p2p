@@ -33,20 +33,17 @@ export function HistoryView() {
 
   return (
     <div className="space-y-6">
-      <header className="space-y-3">
-        <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-3 py-1 text-[11px] uppercase tracking-[0.32em] text-slate-400">
-          <Sparkles className="h-3.5 w-3.5 text-sky-300" />
+      <header className="space-y-2">
+        <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-0.5 text-[10px] uppercase tracking-[0.32em] text-slate-400">
+          <Sparkles className="h-3 w-3 text-sky-300" />
           History
         </div>
-        <div className="space-y-2">
-          <h1 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
-            Completed transfers
-          </h1>
-          <p className="max-w-3xl text-sm leading-6 text-slate-400">
-            Review previous sends and receives, inspect peers, and re-share stored
-            content when it still exists on this device.
-          </p>
-        </div>
+        <h1 className="text-2xl font-semibold tracking-tight text-white">
+          Transfer history
+        </h1>
+        <p className="max-w-2xl text-sm text-slate-400">
+          Review past transfers and re-share stored content.
+        </p>
       </header>
 
       <AnimatePresence>
@@ -59,7 +56,9 @@ export function HistoryView() {
           >
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div className="min-w-0">
-                <p className="text-sm font-medium text-white">Re-share ticket ready</p>
+                <p className="text-sm font-medium text-white">
+                  Re-share ticket ready
+                </p>
                 <p className="mt-2 break-all rounded-2xl border border-white/10 bg-black/30 p-4 font-mono text-xs text-sky-100">
                   {resharedTicket}
                 </p>
@@ -106,7 +105,9 @@ export function HistoryView() {
                         {formatTimestamp(record.timestamp)}
                       </span>
                     </div>
-                    <p className="mt-3 text-base font-medium text-white">{record.filename}</p>
+                    <p className="mt-3 text-base font-medium text-white">
+                      {record.filename}
+                    </p>
                     <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-slate-300">
                       <span>{formatBytes(record.size)}</span>
                       {record.peer ? (

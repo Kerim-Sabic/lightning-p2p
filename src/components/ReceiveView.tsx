@@ -48,20 +48,18 @@ export function ReceiveView() {
 
   return (
     <div className="space-y-6">
-      <header className="space-y-3">
-        <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-3 py-1 text-[11px] uppercase tracking-[0.32em] text-slate-400">
-          <Sparkles className="h-3.5 w-3.5 text-emerald-300" />
+      <header className="space-y-2">
+        <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-0.5 text-[10px] uppercase tracking-[0.32em] text-slate-400">
+          <Sparkles className="h-3 w-3 text-emerald-300" />
           Receive
         </div>
-        <div className="space-y-2">
-          <h1 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
-            Pull a transfer from a peer
-          </h1>
-          <p className="max-w-3xl text-sm leading-6 text-slate-400">
-            Paste a FastDrop ticket, validate it in real time, then stream verified
-            blobs directly into your download directory.
-          </p>
-        </div>
+        <h1 className="text-2xl font-semibold tracking-tight text-white">
+          Receive files
+        </h1>
+        <p className="max-w-2xl text-sm text-slate-400">
+          Paste a FastDrop ticket to stream verified files into your download
+          folder.
+        </p>
       </header>
 
       <section className="glass-panel p-6">
@@ -70,7 +68,8 @@ export function ReceiveView() {
             <div>
               <p className="text-sm font-medium text-white">BlobTicket</p>
               <p className="mt-1 text-sm text-slate-400">
-                FastDrop tickets start with the <span className="font-mono text-slate-200">blob</span> prefix.
+                FastDrop tickets start with the{" "}
+                <span className="font-mono text-slate-200">blob</span> prefix.
               </p>
             </div>
             <button

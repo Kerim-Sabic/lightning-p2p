@@ -28,13 +28,19 @@ function iconForSelection(name: string, isDir: boolean) {
   }
 
   const extension = name.split(".").pop()?.toLowerCase();
-  if (extension && ["png", "jpg", "jpeg", "gif", "webp", "svg"].includes(extension)) {
+  if (
+    extension &&
+    ["png", "jpg", "jpeg", "gif", "webp", "svg"].includes(extension)
+  ) {
     return ImageIcon;
   }
   if (extension && ["mp4", "mov", "mkv", "avi", "webm"].includes(extension)) {
     return Video;
   }
-  if (extension && ["iso", "bin", "dmg", "zip", "tar", "gz"].includes(extension)) {
+  if (
+    extension &&
+    ["iso", "bin", "dmg", "zip", "tar", "gz"].includes(extension)
+  ) {
     return Binary;
   }
   return File;
@@ -47,7 +53,9 @@ export function SendView() {
   const transfers = useTransferStore((state) => state.transfers);
   const error = useTransferStore((state) => state.error);
   const setError = useTransferStore((state) => state.setError);
-  const prepareShareSelection = useTransferStore((state) => state.prepareShareSelection);
+  const prepareShareSelection = useTransferStore(
+    (state) => state.prepareShareSelection,
+  );
   const createShare = useTransferStore((state) => state.createShare);
   const [copied, setCopied] = useState(false);
   const [isDragActive, setIsDragActive] = useState(false);
@@ -88,7 +96,9 @@ export function SendView() {
       })
       .catch((reason: unknown) => {
         const message =
-          reason instanceof Error ? reason.message : "Failed to register drag-and-drop";
+          reason instanceof Error
+            ? reason.message
+            : "Failed to register drag-and-drop";
         setError(message);
       });
 
@@ -136,44 +146,41 @@ export function SendView() {
 
   return (
     <div className="space-y-6">
-      <header className="space-y-3">
-        <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-3 py-1 text-[11px] uppercase tracking-[0.32em] text-slate-400">
-          <Sparkles className="h-3.5 w-3.5 text-sky-300" />
+      <header className="space-y-2">
+        <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-0.5 text-[10px] uppercase tracking-[0.32em] text-slate-400">
+          <Sparkles className="h-3 w-3 text-sky-300" />
           Send
         </div>
-        <div className="space-y-2">
-          <h1 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
-            Build a premium share link
-          </h1>
-          <p className="max-w-3xl text-sm leading-6 text-slate-400">
-            Drop files or folders into the glass zone, review the selection, then
-            generate a FastDrop ticket and QR code for instant peer-to-peer delivery.
-          </p>
-        </div>
+        <h1 className="text-2xl font-semibold tracking-tight text-white">
+          Share files
+        </h1>
+        <p className="max-w-2xl text-sm text-slate-400">
+          Drop files or folders below, then generate a ticket for instant P2P
+          delivery.
+        </p>
       </header>
 
       <motion.section
         layout
-        className={`glass-panel drop-zone relative overflow-hidden border-2 border-dashed p-10 text-center transition-colors ${
+        className={`glass-panel drop-zone relative overflow-hidden border-2 border-dashed p-8 text-center transition-colors ${
           isDragActive
             ? "border-sky-400/80 bg-sky-500/12"
             : "border-white/15 bg-white/5"
         }`}
       >
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.18),transparent_42%)] opacity-80" />
-        <div className="relative space-y-4">
-          <div className="mx-auto flex h-[4.5rem] w-[4.5rem] items-center justify-center rounded-[24px] border border-white/10 bg-white/[0.08] shadow-[0_18px_40px_rgba(59,130,246,0.18)] backdrop-blur-xl">
-            <Send className="h-8 w-8 text-sky-300" />
+        <div className="relative flex flex-col items-center gap-3">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.08]">
+            <Send className="h-6 w-6 text-sky-300" />
           </div>
-          <div className="space-y-2">
-            <p className="text-xl font-semibold text-white">
-              {isDragActive ? "Release to stage this share" : "Drop files or folders here"}
-            </p>
-            <p className="mx-auto max-w-xl text-sm leading-6 text-slate-400">
-              The drop zone is live while this view is open. Selections stay local,
-              and FastDrop preserves full directory structure when you generate the link.
-            </p>
-          </div>
+          <p className="text-lg font-semibold text-white">
+            {isDragActive
+              ? "Release to stage"
+              : "Drop files or folders here"}
+          </p>
+          <p className="max-w-md text-sm text-slate-400">
+            Directory structure is preserved. Files stay local until you
+            generate a share link.
+          </p>
         </div>
       </motion.section>
 
@@ -192,8 +199,9 @@ export function SendView() {
                   Staged selection
                 </p>
                 <p className="mt-1 text-sm text-slate-400">
-                  {shareSelection.length} item{shareSelection.length === 1 ? "" : "s"} ready
-                  to hash and package
+                  {shareSelection.length} item
+                  {shareSelection.length === 1 ? "" : "s"} ready to hash and
+                  package
                 </p>
               </div>
               <div className="flex items-center gap-3 text-sm text-slate-300">
@@ -233,14 +241,18 @@ export function SendView() {
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <p className="truncate text-sm font-medium text-white">{item.name}</p>
+                        <p className="truncate text-sm font-medium text-white">
+                          {item.name}
+                        </p>
                         {item.is_dir ? (
                           <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] uppercase tracking-[0.24em] text-slate-400">
                             Folder
                           </span>
                         ) : null}
                       </div>
-                      <p className="mt-1 text-sm text-slate-300">{formatBytes(item.size)}</p>
+                      <p className="mt-1 text-sm text-slate-300">
+                        {formatBytes(item.size)}
+                      </p>
                       <p className="mt-2 truncate font-mono text-[11px] text-slate-500">
                         {item.path}
                       </p>
@@ -276,7 +288,9 @@ export function SendView() {
               <div className="space-y-4">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-sm font-medium text-white">Share ticket</p>
+                    <p className="text-sm font-medium text-white">
+                      Share ticket
+                    </p>
                     <p className="mt-1 text-sm text-slate-400">
                       Copy the link or scan the QR code on the receiving device.
                     </p>
@@ -309,10 +323,12 @@ export function SendView() {
                   </div>
                 )}
                 <div className="space-y-1">
-                  <p className="text-sm font-medium text-white">Scan to receive</p>
+                  <p className="text-sm font-medium text-white">
+                    Scan to receive
+                  </p>
                   <p className="text-xs leading-5 text-slate-400">
-                    The QR is rendered by the Rust backend so the desktop app and
-                    native shell stay in sync.
+                    The QR is rendered by the Rust backend so the desktop app
+                    and native shell stay in sync.
                   </p>
                 </div>
               </div>

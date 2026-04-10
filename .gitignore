@@ -9,6 +9,7 @@ src-tauri/target/
 # Environment
 .env
 .env.*
+.secrets/
 
 # IDE
 .vscode/

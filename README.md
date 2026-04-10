@@ -275,6 +275,15 @@ Installer output lands in:
 - [`src-tauri/target/release/bundle/nsis`](./src-tauri/target/release/bundle/nsis)
 - [`src-tauri/target/release/bundle/msi`](./src-tauri/target/release/bundle/msi)
 
+### Packaged app defaults
+
+The packaged Windows app now boots with:
+
+- a default receive folder at `Downloads/FastDrop` when that folder can be created
+- persistent packaged-app settings stored under the app data directory
+- a first-run setup surface for confirming the receive folder
+- signed in-app update support through GitHub Releases once release secrets are configured
+
 ## Development Workflow
 
 ### Install dependencies
@@ -302,6 +311,43 @@ cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 
 ```powershell
 cargo bench --manifest-path src-tauri/Cargo.toml --bench transfer_bench -- --noplot
+```
+
+## Release and Updater Secrets
+
+FastDrop now supports signed in-app updates through the Tauri updater plugin.
+
+The public updater verification key is committed in [`src-tauri/tauri.conf.json`](./src-tauri/tauri.conf.json).
+
+The private signing material is intentionally **not** committed. In this working copy it is stored locally under:
+
+- `.secrets/tauri-updater.key`
+- `.secrets/tauri-updater.password`
+
+Before using the GitHub Actions release workflow for updater-enabled releases, configure these GitHub repository secrets:
+
+- `TAURI_SIGNING_PRIVATE_KEY`
+  - the full contents of `.secrets/tauri-updater.key`
+- `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
+  - the full contents of `.secrets/tauri-updater.password`
+
+Optional future Windows code-signing secrets:
+
+- `WINDOWS_CERTIFICATE`
+- `WINDOWS_CERTIFICATE_PASSWORD`
+- `WINDOWS_CERTIFICATE_THUMBPRINT`
+
+The workflow will still build NSIS and MSI installers without updater artifacts if the Tauri signing secrets are not configured.
+
+### Local signed updater build
+
+If you want to generate signed updater metadata locally, enable updater artifacts for the build and point Tauri at the private key:
+
+```powershell
+$env:TAURI_SIGNING_PRIVATE_KEY_PATH = (Resolve-Path ".secrets\tauri-updater.key")
+$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = (Get-Content ".secrets\tauri-updater.password" -Raw).Trim()
+$env:TAURI_CONFIG = '{"bundle":{"createUpdaterArtifacts":true}}'
+pnpm build:windows
 ```
 
 ## Performance Notes

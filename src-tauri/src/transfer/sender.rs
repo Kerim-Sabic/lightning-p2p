@@ -21,7 +21,7 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::Window;
 
-const MAX_IMPORT_PARALLELISM: usize = 16;
+const MAX_IMPORT_PARALLELISM: usize = 32;
 const MIN_IMPORT_PARALLELISM: usize = 4;
 
 struct SharePlan {

@@ -5,19 +5,31 @@ import { useTransferStore } from "../stores/transferStore";
 const NODE_STATUS_POLL_MS = 5000;
 
 export function useTransfer(): void {
-  const refreshNodeStatus = useTransferStore((state) => state.refreshNodeStatus);
-  const refreshDownloadDir = useTransferStore((state) => state.refreshDownloadDir);
+  const refreshNodeStatus = useTransferStore(
+    (state) => state.refreshNodeStatus,
+  );
+  const refreshSettings = useTransferStore((state) => state.refreshSettings);
   const refreshActiveTransfers = useTransferStore(
     (state) => state.refreshActiveTransfers,
   );
   const refreshHistory = useTransferStore((state) => state.refreshHistory);
+  const checkForUpdates = useTransferStore((state) => state.checkForUpdates);
   const setError = useTransferStore((state) => state.setError);
 
   useEffect(() => {
-    void refreshNodeStatus();
-    void refreshDownloadDir();
-    void refreshActiveTransfers();
-    void refreshHistory();
+    void (async () => {
+      await Promise.all([
+        refreshNodeStatus(),
+        refreshSettings(),
+        refreshActiveTransfers(),
+        refreshHistory(),
+      ]);
+
+      const settings = useTransferStore.getState().settings;
+      if (settings?.auto_update_enabled) {
+        await checkForUpdates(true);
+      }
+    })();
 
     const intervalId = window.setInterval(() => {
       void refreshNodeStatus();
@@ -28,9 +40,10 @@ export function useTransfer(): void {
     };
   }, [
     refreshActiveTransfers,
-    refreshDownloadDir,
     refreshHistory,
     refreshNodeStatus,
+    refreshSettings,
+    checkForUpdates,
   ]);
 
   useEffect(() => {
@@ -52,7 +65,9 @@ export function useTransfer(): void {
       })
       .catch((error: unknown) => {
         const message =
-          error instanceof Error ? error.message : "Failed to subscribe to transfers";
+          error instanceof Error
+            ? error.message
+            : "Failed to subscribe to transfers";
         setError(message);
       });
 

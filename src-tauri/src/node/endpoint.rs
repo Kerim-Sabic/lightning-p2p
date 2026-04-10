@@ -5,6 +5,7 @@
 
 use crate::error::{FastDropError, Result};
 use crate::storage::db::StorageDb;
+use crate::storage::settings::{default_download_dir, resolve_app_data_dir};
 use iroh::endpoint::TransportConfig;
 use iroh::protocol::Router;
 use iroh::{Endpoint, NodeAddr, NodeId};
@@ -15,13 +16,10 @@ use std::path::PathBuf;
 use std::time::Duration;
 use tauri::AppHandle;
 
-const APP_IDENTIFIER: &str = "com.fastdrop.app";
-const DATA_DIR_ENV: &str = "FASTDROP_DATA_DIR";
-const PROFILE_ENV: &str = "FASTDROP_PROFILE";
 const RELAY_WAIT_TIMEOUT: Duration = Duration::from_secs(30);
-const MAX_CONCURRENT_STREAMS: u32 = 256;
-const CONNECTION_WINDOW_BYTES: u32 = 8_388_608;
-const STREAM_WINDOW_BYTES: u32 = 4_194_304;
+const MAX_CONCURRENT_STREAMS: u32 = 512;
+const CONNECTION_WINDOW_BYTES: u32 = 134_217_728; // 128 MB
+const STREAM_WINDOW_BYTES: u32 = 33_554_432; // 32 MB
 
 /// The running iroh node with blob transfer capability.
 pub struct FastDropNode {
@@ -30,8 +28,6 @@ pub struct FastDropNode {
     router: Router,
     /// Local sled database.
     pub db: StorageDb,
-    /// Directory where received files are saved.
-    pub download_dir: PathBuf,
 }
 
 impl FastDropNode {
@@ -41,8 +37,8 @@ impl FastDropNode {
     ///
     /// Returns `FastDropError` if endpoint binding, storage creation, or
     /// protocol startup fails.
-    pub async fn start(app_handle: &AppHandle) -> Result<Self> {
-        let data_dir = app_data_dir(app_handle)?;
+    pub async fn start(_app_handle: &AppHandle) -> Result<Self> {
+        let data_dir = resolve_app_data_dir()?;
         let download_dir = default_download_dir(&data_dir);
         Self::start_with_dirs(data_dir, download_dir).await
     }
@@ -77,7 +73,6 @@ impl FastDropNode {
             blobs,
             router,
             db,
-            download_dir,
         })
     }
 
@@ -147,7 +142,7 @@ async fn bind_endpoint() -> Result<Endpoint> {
 
 fn tuned_transport_config() -> TransportConfig {
     let mut config = TransportConfig::default();
-    config.keep_alive_interval(Some(Duration::from_secs(1)));
+    config.keep_alive_interval(Some(Duration::from_secs(5)));
     config.max_concurrent_bidi_streams(MAX_CONCURRENT_STREAMS.into());
     config.max_concurrent_uni_streams(MAX_CONCURRENT_STREAMS.into());
     config.send_window(u64::from(CONNECTION_WINDOW_BYTES));
@@ -170,46 +165,22 @@ async fn wait_for_home_relay(endpoint: &Endpoint) -> Result<iroh::RelayUrl> {
         .map_err(|err| FastDropError::Other(err.to_string()))
 }
 
-fn default_download_dir(data_dir: &std::path::Path) -> PathBuf {
-    match dirs::download_dir() {
-        Some(path) => path,
-        None => data_dir.join("downloads"),
-    }
-}
-
-fn app_data_dir(app_handle: &AppHandle) -> Result<PathBuf> {
-    let _ = app_handle;
-    if let Some(path) = std::env::var_os(DATA_DIR_ENV) {
-        return Ok(PathBuf::from(path));
-    }
-
-    let mut dir = dirs::data_local_dir()
-        .ok_or_else(|| FastDropError::Other("cannot resolve app data dir".into()))?
-        .join(APP_IDENTIFIER);
-    if let Some(profile) = std::env::var_os(PROFILE_ENV) {
-        if !profile.is_empty() {
-            dir = dir.join(profile);
-        }
-    }
-    Ok(dir)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn default_download_dir_uses_fallback_when_missing() {
+    fn default_download_dir_prefers_fastdrop_subdirectory() {
         let data_dir = PathBuf::from("C:/tmp/fastdrop-test");
         let path = default_download_dir(&data_dir);
-        assert!(path.is_absolute() || path.ends_with("downloads"));
+        assert!(path.ends_with("FastDrop") || path.ends_with("downloads"));
     }
 
     #[test]
     fn transport_config_uses_high_bandwidth_windows() {
         let _config = tuned_transport_config();
-        assert_eq!(MAX_CONCURRENT_STREAMS, 256);
-        assert_eq!(CONNECTION_WINDOW_BYTES, 8_388_608);
-        assert_eq!(STREAM_WINDOW_BYTES, 4_194_304);
+        assert_eq!(MAX_CONCURRENT_STREAMS, 512);
+        assert_eq!(CONNECTION_WINDOW_BYTES, 134_217_728);
+        assert_eq!(STREAM_WINDOW_BYTES, 33_554_432);
     }
 }

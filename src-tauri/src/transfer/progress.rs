@@ -300,6 +300,11 @@ impl ProgressSampler {
     }
 }
 
+/// Integer weighting for exponential moving average speed calculation.
+/// Lower update weight = smoother but slower to react.
+const SPEED_EMA_UPDATE_WEIGHT: u64 = 3;
+const SPEED_EMA_TOTAL_WEIGHT: u64 = 10;
+
 async fn run_progress_sampler(
     reporter: EventReporter,
     handle: ProgressHandle,
@@ -310,6 +315,7 @@ async fn run_progress_sampler(
     interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
     let mut last_bytes = 0;
     let mut last_sample_at = Instant::now();
+    let mut smoothed_speed = 0_u64;
 
     loop {
         let stopping = tokio::select! {
@@ -317,9 +323,17 @@ async fn run_progress_sampler(
             _ = &mut stop_rx => true,
         };
         let now = Instant::now();
-        let update = sample_progress(&handle, last_bytes, last_sample_at, now);
+        let mut update = sample_progress(&handle, last_bytes, last_sample_at, now);
         last_bytes = update.bytes;
         last_sample_at = now;
+
+        // Apply exponential moving average to smooth speed readings
+        if smoothed_speed == 0 {
+            smoothed_speed = update.speed_bps;
+        } else {
+            smoothed_speed = smooth_speed(smoothed_speed, update.speed_bps);
+        }
+        update.speed_bps = smoothed_speed;
 
         if update.bytes > 0 || update.total > 0 || stopping {
             emit_sample(&reporter, queue_target.as_ref(), update).await?;
@@ -329,6 +343,15 @@ async fn run_progress_sampler(
             return Ok(());
         }
     }
+}
+
+fn smooth_speed(previous: u64, instant: u64) -> u64 {
+    let retained_weight = u128::from(SPEED_EMA_TOTAL_WEIGHT - SPEED_EMA_UPDATE_WEIGHT);
+    let update_weight = u128::from(SPEED_EMA_UPDATE_WEIGHT);
+    let numerator = u128::from(previous) * retained_weight + u128::from(instant) * update_weight;
+    let denominator = u128::from(SPEED_EMA_TOTAL_WEIGHT);
+    let rounded = (numerator + denominator / 2) / denominator;
+    u64::try_from(rounded).unwrap_or(u64::MAX)
 }
 
 async fn emit_sample(

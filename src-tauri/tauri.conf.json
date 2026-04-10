@@ -25,11 +25,33 @@
   },
   "bundle": {
     "active": true,
+    "publisher": "FastDrop",
+    "homepage": "https://github.com/Kerim-Sabic/lightning-p2p",
+    "shortDescription": "Direct peer-to-peer file transfers with iroh and Tauri.",
+    "longDescription": "FastDrop is a Windows-first desktop app for direct peer-to-peer file transfer with verified iroh-blobs streaming, persistent history, and polished native installers.",
+    "createUpdaterArtifacts": false,
     "targets": ["nsis", "msi"],
     "icon": ["icons/icon.ico"],
     "windows": {
+      "webviewInstallMode": {
+        "type": "embedBootstrapper",
+        "silent": true
+      },
       "nsis": {
-        "installerIcon": "icons/icon.ico"
+        "installerIcon": "icons/icon.ico",
+        "installMode": "currentUser",
+        "startMenuFolder": "FastDrop"
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEU1NUREQzIzRUEwQzc3MUUKUldRZWR3enFJOXhkNVZtUkFFZUZicTgyVitIbXYraERRZUFPS0gvbTJmVGFWbHozRGJMdFhjZDEK",
+      "windows": {
+        "installMode": "passive"
       }
     }
   }

@@ -22,7 +22,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::Window;
 use tokio::sync::watch;
 
-const DOWNLOAD_IDLE_TIMEOUT: Duration = Duration::from_secs(30);
+const DOWNLOAD_IDLE_TIMEOUT: Duration = Duration::from_secs(60);
 
 #[derive(Debug, Clone)]
 struct ReceiveSummary {
