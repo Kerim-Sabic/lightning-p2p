@@ -1,3 +1,10 @@
+#![allow(
+    clippy::used_underscore_binding,
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
+    clippy::ignored_unit_patterns
+)]
+
 use criterion::{criterion_group, criterion_main, Criterion, Throughput};
 use fastdrop_lib::node::FastDropNode;
 use fastdrop_lib::transfer::{receiver, sender};

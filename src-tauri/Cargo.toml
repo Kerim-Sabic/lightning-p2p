@@ -1,6 +1,6 @@
 [package]
 name = "fastdrop"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 rust-version = "1.81"
 description = "FastDrop — P2P file sharing at maximum speed"
@@ -20,7 +20,7 @@ tauri-plugin-shell = "2"
 tauri-plugin-updater = "2"
 
 # iroh P2P networking
-iroh = "0.32"
+iroh = { version = "0.32", features = ["discovery-local-network"] }
 iroh-blobs = { version = "0.32", features = ["rpc"] }
 
 # Serialization

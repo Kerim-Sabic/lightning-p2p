@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { onTransferProgress } from "../lib/tauri";
 import { useTransferStore } from "../stores/transferStore";
 
-const NODE_STATUS_POLL_MS = 5000;
+const NODE_STATUS_POLL_MS = 3000;
 
 export function useTransfer(): void {
   const refreshNodeStatus = useTransferStore(

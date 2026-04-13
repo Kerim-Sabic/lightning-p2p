@@ -5,7 +5,6 @@
 
 use crate::error::{FastDropError, Result};
 use crate::storage::db::StorageDb;
-use crate::storage::settings::{default_download_dir, resolve_app_data_dir};
 use iroh::endpoint::TransportConfig;
 use iroh::protocol::Router;
 use iroh::{Endpoint, NodeAddr, NodeId};
@@ -14,9 +13,8 @@ use iroh_blobs::rpc::client::blobs::MemClient;
 use iroh_blobs::store::fs::Store as BlobStore;
 use std::path::PathBuf;
 use std::time::Duration;
-use tauri::AppHandle;
 
-const RELAY_WAIT_TIMEOUT: Duration = Duration::from_secs(30);
+const RELAY_WAIT_TIMEOUT: Duration = Duration::from_secs(15);
 const MAX_CONCURRENT_STREAMS: u32 = 1024;
 const CONNECTION_WINDOW_BYTES: u32 = 268_435_456; // 256 MB
 const STREAM_WINDOW_BYTES: u32 = 67_108_864; // 64 MB
@@ -31,18 +29,6 @@ pub struct FastDropNode {
 }
 
 impl FastDropNode {
-    /// Starts the iroh node, blob store, and protocol router for the app.
-    ///
-    /// # Errors
-    ///
-    /// Returns `FastDropError` if endpoint binding, storage creation, or
-    /// protocol startup fails.
-    pub async fn start(_app_handle: &AppHandle) -> Result<Self> {
-        let data_dir = resolve_app_data_dir()?;
-        let download_dir = default_download_dir(&data_dir);
-        Self::start_with_dirs(data_dir, download_dir).await
-    }
-
     /// Starts the iroh node using explicit directories.
     ///
     /// This is used by the app and by integration tests that need isolated
@@ -134,6 +120,7 @@ impl FastDropNode {
 async fn bind_endpoint() -> Result<Endpoint> {
     Endpoint::builder()
         .discovery_n0()
+        .discovery_local_network()
         .transport_config(tuned_transport_config())
         .bind()
         .await
@@ -143,11 +130,6 @@ async fn bind_endpoint() -> Result<Endpoint> {
 fn tuned_transport_config() -> TransportConfig {
     let mut config = TransportConfig::default();
     config.keep_alive_interval(Some(Duration::from_secs(5)));
-    config.max_idle_timeout(Some(
-        Duration::from_secs(120)
-            .try_into()
-            .expect("120s fits in IdleTimeout"),
-    ));
     config.max_concurrent_bidi_streams(MAX_CONCURRENT_STREAMS.into());
     config.max_concurrent_uni_streams(MAX_CONCURRENT_STREAMS.into());
     config.send_window(u64::from(CONNECTION_WINDOW_BYTES));
@@ -173,6 +155,7 @@ async fn wait_for_home_relay(endpoint: &Endpoint) -> Result<iroh::RelayUrl> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::storage::settings::default_download_dir;
 
     #[test]
     fn default_download_dir_prefers_fastdrop_subdirectory() {

@@ -55,7 +55,7 @@ export function Sidebar({ currentView, onNavigate }: SidebarProps) {
   );
 
   return (
-    <aside className="group/sidebar relative z-10 m-3 hidden h-[calc(100%-1.5rem)] w-[72px] shrink-0 overflow-hidden rounded-[24px] border border-white/[0.07] bg-black/40 shadow-[0_8px_40px_rgba(0,0,0,0.5)] backdrop-blur-2xl transition-[width] duration-300 ease-out hover:w-64 lg:flex">
+    <aside className="group/sidebar relative z-10 m-3 flex h-[calc(100%-1.5rem)] w-[72px] shrink-0 overflow-hidden rounded-[24px] border border-white/[0.07] bg-black/40 shadow-[0_8px_40px_rgba(0,0,0,0.5)] backdrop-blur-2xl transition-[width] duration-300 ease-out hover:w-64">
       <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),transparent_50%)]" />
       <div className="relative flex h-full w-full flex-col">
         {/* Logo */}

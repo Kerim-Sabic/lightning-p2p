@@ -1,3 +1,8 @@
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::ignored_unit_patterns
+)]
+
 use fastdrop_lib::node::FastDropNode;
 use fastdrop_lib::transfer::{receiver, sender};
 use iroh_blobs::ticket::BlobTicket;
@@ -181,7 +186,7 @@ async fn receive_share(
     fixture: &TransferFixture,
     ticket_string: &str,
 ) -> TestResult<receiver::ReceiveOutcome> {
-    eprintln!("receiving ticket {}", ticket_string);
+    eprintln!("receiving ticket {ticket_string}");
     let parsed_ticket = BlobTicket::from_str(ticket_string)?;
     tokio::time::timeout(
         Duration::from_secs(180),
