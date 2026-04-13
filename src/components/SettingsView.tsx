@@ -1,3 +1,4 @@
+import { motion } from "framer-motion";
 import {
   CheckCircle2,
   Download,
@@ -6,15 +7,15 @@ import {
   HardDriveDownload,
   LoaderCircle,
   RefreshCw,
-  Sparkles,
+  Settings2,
 } from "lucide-react";
 import { formatBytes } from "../lib/format";
 import { useTransferStore, type UpdateState } from "../stores/transferStore";
 
 function statusPill(online: boolean): string {
   return online
-    ? "border-emerald-400/20 bg-emerald-500/12 text-emerald-200"
-    : "border-white/10 bg-white/5 text-slate-300";
+    ? "border-emerald-400/20 bg-emerald-500/10 text-emerald-200"
+    : "border-white/[0.08] bg-white/[0.04] text-slate-400";
 }
 
 function updateStatusCopy(updateState: UpdateState): string {
@@ -68,37 +69,39 @@ export function SettingsView() {
   const canInstall = updateState.phase === "available";
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <header className="space-y-2">
-        <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-0.5 text-[10px] uppercase tracking-[0.32em] text-slate-400">
-          <Sparkles className="h-3 w-3 text-sky-300" />
+        <div className="badge">
+          <Settings2 className="h-3 w-3 text-slate-300" />
           Settings
         </div>
         <h1 className="text-2xl font-semibold tracking-tight text-white">
           Settings
         </h1>
-        <p className="max-w-2xl text-sm text-slate-400">
+        <p className="max-w-xl text-sm leading-relaxed text-slate-400">
           Node identity, download folder, and update management.
         </p>
       </header>
 
-      <section className="grid gap-4 lg:grid-cols-2">
-        <article className="glass-panel p-6">
+      {/* Node + Download dir cards */}
+      <section className="grid gap-3 lg:grid-cols-2">
+        {/* Node identity */}
+        <article className="glass-panel p-5">
           <div className="flex items-center gap-3">
             <div className="glass-icon">
               <Fingerprint className="h-5 w-5 text-sky-300" />
             </div>
             <div>
               <p className="text-sm font-medium text-white">Node identity</p>
-              <p className="text-xs text-slate-400">
-                The node id shown here is what peers connect to.
+              <p className="text-[13px] text-slate-500">
+                Peers connect to this node id.
               </p>
             </div>
           </div>
 
-          <div className="mt-5 flex items-center gap-3">
+          <div className="mt-4 flex items-center gap-3">
             <span
-              className={`rounded-full border px-3 py-1 text-xs ${statusPill(nodeStatus.online)}`}
+              className={`rounded-lg border px-3 py-1 text-xs ${statusPill(nodeStatus.online)}`}
             >
               {nodeStatus.online ? "Online" : "Starting"}
             </span>
@@ -109,17 +112,18 @@ export function SettingsView() {
             </span>
           </div>
 
-          <div className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-4">
-            <p className="mb-2 text-[11px] uppercase tracking-[0.28em] text-slate-500">
+          <div className="mt-3 rounded-xl border border-white/[0.06] bg-black/30 p-3.5">
+            <p className="mb-1.5 text-[10px] uppercase tracking-[0.3em] text-slate-500">
               NodeId
             </p>
-            <p className="break-all font-mono text-sm text-slate-200">
+            <p className="break-all font-mono text-[13px] text-slate-300">
               {nodeStatus.node_id ?? "Initializing node..."}
             </p>
           </div>
         </article>
 
-        <article className="glass-panel p-6">
+        {/* Download directory */}
+        <article className="glass-panel p-5">
           <div className="flex items-center gap-3">
             <div className="glass-icon">
               <HardDriveDownload className="h-5 w-5 text-emerald-300" />
@@ -128,32 +132,32 @@ export function SettingsView() {
               <p className="text-sm font-medium text-white">
                 Download directory
               </p>
-              <p className="text-xs text-slate-400">
-                Incoming transfers land here after verification and export.
+              <p className="text-[13px] text-slate-500">
+                Incoming transfers land here after verification.
               </p>
             </div>
           </div>
 
-          <div className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-4">
-            <p className="mb-2 text-[11px] uppercase tracking-[0.28em] text-slate-500">
+          <div className="mt-3 rounded-xl border border-white/[0.06] bg-black/30 p-3.5">
+            <p className="mb-1.5 text-[10px] uppercase tracking-[0.3em] text-slate-500">
               Save location
             </p>
-            <p className="break-all font-mono text-sm text-slate-200">
+            <p className="break-all font-mono text-[13px] text-slate-300">
               {downloadDir ?? "Resolving download directory..."}
             </p>
           </div>
 
-          <div className="mt-4 flex flex-wrap gap-3">
+          <div className="mt-3 flex flex-wrap gap-2">
             <button
               onClick={() => void pickDownloadDir()}
-              className="glass-button inline-flex items-center gap-2 px-4 py-2 text-sm text-slate-100"
+              className="glass-button inline-flex items-center gap-2 px-3.5 py-2 text-sm text-slate-200"
             >
               <FolderCog className="h-4 w-4" />
               Change folder
             </button>
             <button
               onClick={() => void openDownloadDir()}
-              className="glass-button inline-flex items-center gap-2 px-4 py-2 text-sm text-slate-100"
+              className="glass-button inline-flex items-center gap-2 px-3.5 py-2 text-sm text-slate-200"
             >
               <HardDriveDownload className="h-4 w-4" />
               Open folder
@@ -162,51 +166,52 @@ export function SettingsView() {
         </article>
       </section>
 
-      <section className="glass-panel p-6">
+      {/* Updates */}
+      <section className="glass-panel p-5">
         <div className="flex items-center gap-3">
           <div className="glass-icon">
             <Download className="h-5 w-5 text-sky-300" />
           </div>
           <div>
             <p className="text-sm font-medium text-white">Updates</p>
-            <p className="text-xs text-slate-400">
+            <p className="text-[13px] text-slate-500">
               Signed releases delivered through GitHub Releases.
             </p>
           </div>
         </div>
 
-        <div className="mt-5 grid gap-3 md:grid-cols-2">
-          <div className="glass-subtle p-4">
+        <div className="mt-4 grid gap-2 md:grid-cols-2">
+          <div className="stat-card">
             <p className="text-[10px] uppercase tracking-[0.3em] text-slate-500">
               Current version
             </p>
-            <p className="mt-1.5 text-sm font-medium text-slate-200">
+            <p className="mt-1.5 text-sm font-medium tabular-nums text-slate-200">
               {updateState.currentVersion ?? "Unknown"}
             </p>
           </div>
-          <div className="glass-subtle p-4">
+          <div className="stat-card">
             <p className="text-[10px] uppercase tracking-[0.3em] text-slate-500">
               Available version
             </p>
-            <p className="mt-1.5 text-sm font-medium text-slate-200">
+            <p className="mt-1.5 text-sm font-medium tabular-nums text-slate-200">
               {updateState.availableVersion ?? "None"}
             </p>
           </div>
         </div>
 
-        <div className="mt-4 flex items-center gap-2 text-sm text-slate-400">
+        <div className="mt-3 flex items-center gap-2 text-sm text-slate-400">
           {updateBusy ? (
             <LoaderCircle className="h-4 w-4 animate-spin text-sky-300" />
           ) : updateState.phase === "restartRequired" ? (
             <CheckCircle2 className="h-4 w-4 text-emerald-300" />
           ) : (
-            <RefreshCw className="h-4 w-4 text-slate-400" />
+            <RefreshCw className="h-4 w-4 text-slate-500" />
           )}
-          <span>{updateStatusCopy(updateState)}</span>
+          <span className="text-[13px]">{updateStatusCopy(updateState)}</span>
         </div>
 
         {updateState.body ? (
-          <p className="mt-3 rounded-xl border border-white/10 bg-white/[0.04] p-3 text-sm text-slate-300">
+          <p className="mt-3 rounded-xl border border-white/[0.06] bg-white/[0.03] p-3 text-sm text-slate-300">
             {updateState.body}
           </p>
         ) : null}
@@ -216,11 +221,11 @@ export function SettingsView() {
           </p>
         ) : null}
 
-        <div className="mt-4 flex flex-wrap items-center gap-3">
+        <div className="mt-4 flex flex-wrap items-center gap-2">
           <button
             onClick={() => void checkForUpdates()}
             disabled={updateBusy}
-            className="glass-button inline-flex items-center gap-2 px-4 py-2 text-sm text-slate-100 disabled:cursor-wait disabled:opacity-70"
+            className="glass-button inline-flex items-center gap-2 px-4 py-2 text-sm text-slate-200 disabled:cursor-wait disabled:opacity-60"
           >
             <RefreshCw
               className={`h-4 w-4 ${updateBusy ? "animate-spin" : ""}`}
@@ -230,17 +235,21 @@ export function SettingsView() {
           <button
             onClick={() => void installUpdate()}
             disabled={!canInstall}
-            className="inline-flex items-center gap-2 rounded-xl border border-emerald-400/20 bg-emerald-500/15 px-4 py-2 text-sm font-medium text-emerald-50 transition-all hover:border-emerald-300/35 hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+            className="btn-success"
           >
-            <Download className="h-4 w-4" />
-            Install update
+            <span className="relative inline-flex items-center gap-2">
+              <Download className="h-4 w-4" />
+              Install update
+            </span>
           </button>
         </div>
 
-        <div className="mt-5 flex items-center justify-between border-t border-white/10 pt-4">
+        <div className="mt-4 flex items-center justify-between border-t border-white/[0.06] pt-4">
           <div>
-            <p className="text-sm font-medium text-white">Auto-check on startup</p>
-            <p className="text-xs text-slate-400">
+            <p className="text-sm font-medium text-white">
+              Auto-check on startup
+            </p>
+            <p className="text-[13px] text-slate-500">
               Check GitHub releases when the app launches.
             </p>
           </div>
@@ -248,28 +257,36 @@ export function SettingsView() {
             onClick={() =>
               void setAutoUpdateEnabled(!settings?.auto_update_enabled)
             }
-            className={`relative inline-flex h-7 w-12 items-center rounded-full border transition-colors ${
+            className={`relative inline-flex h-6 w-11 items-center rounded-full border transition-all duration-200 ${
               settings?.auto_update_enabled
-                ? "border-sky-400/35 bg-sky-500/20"
-                : "border-white/10 bg-white/5"
+                ? "border-sky-400/30 bg-sky-500/20"
+                : "border-white/[0.08] bg-white/[0.04]"
             }`}
             aria-pressed={settings?.auto_update_enabled ?? false}
           >
-            <span
-              className={`inline-block h-5 w-5 rounded-full bg-white transition-transform ${
-                settings?.auto_update_enabled
-                  ? "translate-x-6"
-                  : "translate-x-1"
+            <motion.span
+              layout
+              transition={{ type: "spring", stiffness: 500, damping: 30 }}
+              className={`inline-block h-4 w-4 rounded-full shadow-sm transition-colors ${
+                settings?.auto_update_enabled ? "bg-sky-300" : "bg-slate-400"
               }`}
+              style={{
+                marginLeft: settings?.auto_update_enabled ? "22px" : "3px",
+              }}
             />
           </button>
         </div>
       </section>
 
+      {/* Error */}
       {error ? (
-        <div className="glass-panel border-red-500/25 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="glass-panel border-red-500/20 bg-red-500/8 px-4 py-3 text-sm text-red-200"
+        >
           {error}
-        </div>
+        </motion.div>
       ) : null}
     </div>
   );

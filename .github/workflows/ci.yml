@@ -99,7 +99,7 @@ jobs:
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
 
   release-windows:
-    name: Release Windows Installer
+    name: Release Windows
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
     needs: [windows-package]
@@ -155,9 +155,35 @@ jobs:
           tagName: v__VERSION__
           releaseName: FastDrop v__VERSION__
           releaseBody: |
-            Windows installers for FastDrop.
+            ## FastDrop v__VERSION__
 
-            If updater signing secrets are configured, this release also contains signed updater metadata for in-app updates.
+            Direct peer-to-peer file transfer. No cloud. No accounts. No limits.
+
+            ### Downloads
+
+            | File | Description |
+            |------|-------------|
+            | `FastDrop___VERSION___x64-setup.exe` | Windows NSIS installer (recommended) |
+            | `FastDrop___VERSION___x64_en-US.msi` | Windows MSI installer |
+
+            ### What's included
+
+            - End-to-end encrypted transfers via QUIC TLS 1.3
+            - BLAKE3 verified streaming with iroh-blobs
+            - Live progress tracking with speed and ETA
+            - QR code ticket sharing
+            - Transfer history with one-click re-share
+            - Signed auto-update support
+
+            ### Installation
+
+            1. Download the `.exe` installer above
+            2. Run the installer (you may need to click "More info" > "Run anyway" on SmartScreen)
+            3. Launch FastDrop from the Start Menu
+
+            ---
+
+            Full changelog: https://github.com/Kerim-Sabic/lightning-p2p/commits/v__VERSION__
           releaseDraft: false
           prerelease: false
           args: --target x86_64-pc-windows-msvc

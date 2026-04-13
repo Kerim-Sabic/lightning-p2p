@@ -21,8 +21,8 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::Window;
 
-const MAX_IMPORT_PARALLELISM: usize = 32;
-const MIN_IMPORT_PARALLELISM: usize = 4;
+const MAX_IMPORT_PARALLELISM: usize = 64;
+const MIN_IMPORT_PARALLELISM: usize = 8;
 
 struct SharePlan {
     sources: Vec<DataSource>,
@@ -397,6 +397,6 @@ mod tests {
     #[test]
     fn parallelism_is_bounded() {
         assert_eq!(import_parallelism(1), 1);
-        assert!(import_parallelism(128) <= MAX_IMPORT_PARALLELISM);
+        assert!(import_parallelism(256) <= MAX_IMPORT_PARALLELISM);
     }
 }

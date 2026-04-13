@@ -62,9 +62,26 @@ function statusIcon(transfer: TransferEntry) {
   return ArrowUpRight;
 }
 
+function StatusBadge({ transfer }: { transfer: TransferEntry }) {
+  const color =
+    transfer.status === "completed"
+      ? "text-emerald-300 border-emerald-400/15 bg-emerald-500/8"
+      : transfer.status === "failed"
+        ? "text-red-300 border-red-400/15 bg-red-500/8"
+        : "text-sky-300 border-sky-400/15 bg-sky-500/8";
+
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-0.5 text-[10px] uppercase tracking-[0.2em] ${color}`}
+    >
+      {transfer.direction}
+    </span>
+  );
+}
+
 function AnimatedMetric({ label, value }: StatProps) {
   return (
-    <div className="glass-subtle px-3.5 py-3">
+    <div className="stat-card">
       <p className="text-[10px] uppercase tracking-[0.3em] text-slate-500">
         {label}
       </p>
@@ -102,21 +119,20 @@ export function TransferCard({ transfer, onCancel }: TransferCardProps) {
   return (
     <motion.article
       layout
-      initial={{ opacity: 0, y: 12 }}
+      initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -8 }}
+      exit={{ opacity: 0, y: -6 }}
       transition={{ duration: 0.2, ease: "easeOut" }}
       className="glass-panel relative overflow-hidden p-4"
     >
       <div className="relative flex flex-col gap-3">
+        {/* Header */}
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] uppercase tracking-[0.24em] text-slate-300">
-                {transfer.direction}
-              </span>
-              <StatusIcon className="h-3.5 w-3.5 text-sky-300" />
-              <span className="text-xs text-slate-400">
+              <StatusBadge transfer={transfer} />
+              <StatusIcon className="h-3.5 w-3.5 text-slate-400" />
+              <span className="text-xs text-slate-500">
                 {statusLabel(transfer)}
               </span>
             </div>
@@ -129,7 +145,7 @@ export function TransferCard({ transfer, onCancel }: TransferCardProps) {
           {isActive && onCancel ? (
             <button
               onClick={handleCancel}
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-red-400/20 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-200 transition-colors hover:bg-red-500/18"
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-red-400/15 bg-red-500/8 px-3 py-1.5 text-xs font-medium text-red-200/80 transition-all duration-200 hover:bg-red-500/14 hover:text-red-200 active:scale-[0.97]"
             >
               <StopCircle className="h-3.5 w-3.5" />
               Cancel
@@ -137,6 +153,7 @@ export function TransferCard({ transfer, onCancel }: TransferCardProps) {
           ) : null}
         </div>
 
+        {/* Progress bar */}
         <div className="space-y-2">
           <div className="flex items-baseline justify-between text-xs">
             <span className="font-semibold tabular-nums text-white">
@@ -144,19 +161,27 @@ export function TransferCard({ transfer, onCancel }: TransferCardProps) {
                 ? `${percent.toFixed(percent > 99 ? 0 : 1)}%`
                 : "Preparing"}
             </span>
-            <span className="tabular-nums text-slate-400">
+            <span className="tabular-nums text-slate-500">
               {formatBytes(transfer.bytes)}
               {hasTotal ? ` / ${formatBytes(transfer.total)}` : ""}
             </span>
           </div>
-          <div className="relative h-2 overflow-hidden rounded-full bg-white/[0.08]">
-            <div
-              style={{ width: hasTotal ? `${percent}%` : "34%" }}
-              className={`absolute inset-y-0 left-0 rounded-full bg-gradient-to-r transition-[width] duration-150 ease-linear ${accentClasses(transfer)}`}
+          <div className="relative h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{ width: hasTotal ? `${percent}%` : "34%" }}
+              transition={{ duration: 0.3, ease: "easeOut" }}
+              className={`absolute inset-y-0 left-0 rounded-full bg-gradient-to-r ${accentClasses(transfer)}`}
             />
+            {isActive ? (
+              <div className="absolute inset-0 overflow-hidden rounded-full">
+                <div className="shimmer-overlay h-full w-full" />
+              </div>
+            ) : null}
           </div>
         </div>
 
+        {/* Stats */}
         <div className="grid grid-cols-3 gap-2">
           <AnimatedMetric
             label="Speed"
@@ -182,24 +207,28 @@ export function TransferCard({ transfer, onCancel }: TransferCardProps) {
           />
         </div>
 
+        {/* Error */}
         <AnimatePresence>
           {transfer.error ? (
             <motion.p
-              initial={{ opacity: 0, y: 8 }}
+              initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              className="rounded-2xl border border-red-500/25 bg-red-500/10 px-4 py-3 text-sm text-red-200"
+              exit={{ opacity: 0, y: -6 }}
+              className="rounded-xl border border-red-500/20 bg-red-500/8 px-4 py-3 text-sm text-red-200"
             >
               {transfer.error}
             </motion.p>
           ) : null}
         </AnimatePresence>
 
-        <div className="flex items-center justify-between text-[10px] text-slate-500">
+        {/* Footer */}
+        <div className="flex items-center justify-between text-[10px] text-slate-600">
           <span className="truncate font-mono">
             {transfer.hash ?? transfer.transferId}
           </span>
-          {timestamp ? <span className="shrink-0 ml-3">{timestamp}</span> : null}
+          {timestamp ? (
+            <span className="ml-3 shrink-0">{timestamp}</span>
+          ) : null}
         </div>
       </div>
     </motion.article>

@@ -11,9 +11,9 @@ import { useTransfer } from "./hooks/useTransfer";
 export type View = "send" | "receive" | "history" | "settings";
 
 const pageTransition = {
-  initial: { opacity: 0, x: 20 },
-  animate: { opacity: 1, x: 0 },
-  exit: { opacity: 0, x: -16 },
+  initial: { opacity: 0, y: 12, filter: "blur(4px)" },
+  animate: { opacity: 1, y: 0, filter: "blur(0px)" },
+  exit: { opacity: 0, y: -8, filter: "blur(4px)" },
 };
 
 export function App() {
@@ -35,23 +35,23 @@ export function App() {
   }, [view]);
 
   return (
-    <div className="h-screen overflow-hidden bg-[#0a0a0a] text-slate-50">
+    <div className="h-screen overflow-hidden bg-[#060608] text-slate-100">
       <div className="relative flex h-full">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.16),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(34,197,94,0.14),transparent_24%),radial-gradient(circle_at_center,rgba(255,255,255,0.04),transparent_40%)]" />
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_10%_5%,rgba(59,130,246,0.1),transparent),radial-gradient(ellipse_60%_50%_at_92%_90%,rgba(34,197,94,0.08),transparent),radial-gradient(ellipse_40%_30%_at_50%_50%,rgba(139,92,246,0.04),transparent)]" />
         <FirstRunOverlay />
         <Sidebar currentView={view} onNavigate={setView} />
         <main className="relative flex-1 overflow-hidden">
-          <div className="absolute inset-x-0 top-0 h-40 bg-[linear-gradient(180deg,rgba(255,255,255,0.08),transparent)] opacity-20" />
-          <div className="relative h-full overflow-y-auto px-4 py-4 sm:px-6 sm:py-6">
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-32 bg-[linear-gradient(180deg,rgba(255,255,255,0.04),transparent)] opacity-60" />
+          <div className="relative h-full overflow-y-auto px-4 py-5 sm:px-6 sm:py-6">
             <AnimatePresence mode="wait">
               <motion.div
                 key={view}
                 initial="initial"
                 animate="animate"
                 exit="exit"
-                transition={{ duration: 0.15, ease: "easeOut" }}
+                transition={{ duration: 0.2, ease: [0.25, 0.46, 0.45, 0.94] }}
                 variants={pageTransition}
-                className="mx-auto min-h-full max-w-6xl"
+                className="mx-auto min-h-full max-w-5xl"
               >
                 {content}
               </motion.div>

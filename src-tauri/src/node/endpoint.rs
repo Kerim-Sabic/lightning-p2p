@@ -17,9 +17,9 @@ use std::time::Duration;
 use tauri::AppHandle;
 
 const RELAY_WAIT_TIMEOUT: Duration = Duration::from_secs(30);
-const MAX_CONCURRENT_STREAMS: u32 = 512;
-const CONNECTION_WINDOW_BYTES: u32 = 134_217_728; // 128 MB
-const STREAM_WINDOW_BYTES: u32 = 33_554_432; // 32 MB
+const MAX_CONCURRENT_STREAMS: u32 = 1024;
+const CONNECTION_WINDOW_BYTES: u32 = 268_435_456; // 256 MB
+const STREAM_WINDOW_BYTES: u32 = 67_108_864; // 64 MB
 
 /// The running iroh node with blob transfer capability.
 pub struct FastDropNode {
@@ -143,6 +143,11 @@ async fn bind_endpoint() -> Result<Endpoint> {
 fn tuned_transport_config() -> TransportConfig {
     let mut config = TransportConfig::default();
     config.keep_alive_interval(Some(Duration::from_secs(5)));
+    config.max_idle_timeout(Some(
+        Duration::from_secs(120)
+            .try_into()
+            .expect("120s fits in IdleTimeout"),
+    ));
     config.max_concurrent_bidi_streams(MAX_CONCURRENT_STREAMS.into());
     config.max_concurrent_uni_streams(MAX_CONCURRENT_STREAMS.into());
     config.send_window(u64::from(CONNECTION_WINDOW_BYTES));
@@ -179,8 +184,8 @@ mod tests {
     #[test]
     fn transport_config_uses_high_bandwidth_windows() {
         let _config = tuned_transport_config();
-        assert_eq!(MAX_CONCURRENT_STREAMS, 512);
-        assert_eq!(CONNECTION_WINDOW_BYTES, 134_217_728);
-        assert_eq!(STREAM_WINDOW_BYTES, 33_554_432);
+        assert_eq!(MAX_CONCURRENT_STREAMS, 1024);
+        assert_eq!(CONNECTION_WINDOW_BYTES, 268_435_456);
+        assert_eq!(STREAM_WINDOW_BYTES, 67_108_864);
     }
 }

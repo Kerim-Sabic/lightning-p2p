@@ -5,7 +5,7 @@
   font-family:
     -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
     "Segoe UI", sans-serif;
-  background-color: #0a0a0a;
+  background-color: #060608;
 }
 
 html,
@@ -18,18 +18,32 @@ body {
   margin: 0;
   overflow: hidden;
   background:
-    radial-gradient(circle at top left, rgba(59, 130, 246, 0.16), transparent 24%),
-    radial-gradient(circle at bottom right, rgba(34, 197, 94, 0.12), transparent 22%),
-    linear-gradient(180deg, #0f1116 0%, #0a0a0a 38%, #050505 100%);
-  color: #f8fafc;
+    radial-gradient(
+      ellipse 80% 60% at 10% 5%,
+      rgba(59, 130, 246, 0.12),
+      transparent
+    ),
+    radial-gradient(
+      ellipse 70% 50% at 90% 95%,
+      rgba(34, 197, 94, 0.08),
+      transparent
+    ),
+    radial-gradient(
+      ellipse 50% 40% at 50% 50%,
+      rgba(139, 92, 246, 0.04),
+      transparent
+    ),
+    linear-gradient(180deg, #0a0b10 0%, #060608 40%, #040405 100%);
+  color: #f1f5f9;
   font-family:
     -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
     "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-
 ::selection {
-  background: rgba(59, 130, 246, 0.28);
+  background: rgba(59, 130, 246, 0.32);
   color: #eff6ff;
 }
 
@@ -38,8 +52,8 @@ body {
 }
 
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
@@ -49,7 +63,13 @@ body {
 ::-webkit-scrollbar-thumb {
   border-radius: 9999px;
   border: 2px solid transparent;
-  background: rgba(148, 163, 184, 0.18);
+  background: rgba(148, 163, 184, 0.14);
+  background-clip: padding-box;
+  transition: background 0.2s;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.28);
   background-clip: padding-box;
 }
 
@@ -71,21 +91,56 @@ body {
   }
 }
 
+@keyframes pulse-glow {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @layer components {
   .glass-panel {
-    @apply rounded-2xl border border-white/10 bg-white/5 shadow-[0_24px_80px_rgba(0,0,0,0.28)] backdrop-blur-xl;
+    @apply rounded-2xl border border-white/[0.08] bg-white/[0.04] shadow-[0_8px_40px_rgba(0,0,0,0.3),0_0_1px_rgba(255,255,255,0.06)_inset] backdrop-blur-2xl;
   }
 
   .glass-subtle {
-    @apply rounded-2xl border border-white/10 bg-white/[0.04] backdrop-blur-xl;
+    @apply rounded-2xl border border-white/[0.07] bg-white/[0.03] backdrop-blur-xl;
   }
 
   .glass-icon {
-    @apply flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.06] backdrop-blur-xl;
+    @apply flex h-10 w-10 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.05] backdrop-blur-xl;
   }
 
   .glass-button {
-    @apply rounded-xl border border-white/10 bg-white/[0.06] transition-all hover:bg-white/[0.1];
+    @apply rounded-xl border border-white/[0.08] bg-white/[0.05] transition-all duration-200 hover:bg-white/[0.1] hover:border-white/[0.14] active:scale-[0.98];
+  }
+
+  .glass-input {
+    @apply rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-xl outline-none transition-all duration-200 focus:border-white/[0.16] focus:ring-1 focus:ring-white/[0.06];
   }
 
   .drop-zone::after {
@@ -94,14 +149,13 @@ body {
     inset: -1px;
     border-radius: inherit;
     padding: 1px;
-    background:
-      linear-gradient(
-        120deg,
-        rgba(59, 130, 246, 0.05),
-        rgba(255, 255, 255, 0.12),
-        rgba(34, 197, 94, 0.08),
-        rgba(59, 130, 246, 0.05)
-      );
+    background: linear-gradient(
+      120deg,
+      rgba(59, 130, 246, 0.04),
+      rgba(255, 255, 255, 0.1),
+      rgba(34, 197, 94, 0.06),
+      rgba(59, 130, 246, 0.04)
+    );
     background-size: 200% 200%;
     animation: border-pan 8s linear infinite;
     animation-play-state: paused;
@@ -111,21 +165,41 @@ body {
     -webkit-mask-composite: xor;
     mask-composite: exclude;
     pointer-events: none;
-    opacity: 0.85;
+    opacity: 0.7;
   }
 
   .drop-zone-active::after {
     animation-play-state: running;
+    opacity: 1;
   }
 
   .shimmer-overlay {
-    background:
-      linear-gradient(
-        110deg,
-        transparent 20%,
-        rgba(255, 255, 255, 0.22) 48%,
-        transparent 76%
-      );
-    animation: shimmer 1.2s ease-in-out infinite;
+    background: linear-gradient(
+      110deg,
+      transparent 20%,
+      rgba(255, 255, 255, 0.18) 48%,
+      transparent 76%
+    );
+    animation: shimmer 1.4s ease-in-out infinite;
+  }
+
+  .animate-fade-in-up {
+    animation: fade-in-up 0.3s ease-out;
+  }
+
+  .btn-primary {
+    @apply relative inline-flex items-center justify-center overflow-hidden rounded-xl border border-sky-400/20 bg-sky-500/15 px-5 py-3 text-sm font-medium text-sky-50 shadow-[0_0_20px_rgba(59,130,246,0.15)] transition-all duration-200 hover:border-sky-300/30 hover:bg-sky-500/20 hover:shadow-[0_0_30px_rgba(59,130,246,0.2)] active:scale-[0.98] disabled:cursor-wait disabled:opacity-70;
+  }
+
+  .btn-success {
+    @apply relative inline-flex items-center justify-center overflow-hidden rounded-xl border border-emerald-400/20 bg-emerald-500/15 px-5 py-3 text-sm font-medium text-emerald-50 shadow-[0_0_20px_rgba(34,197,94,0.12)] transition-all duration-200 hover:border-emerald-300/30 hover:bg-emerald-500/20 hover:shadow-[0_0_30px_rgba(34,197,94,0.18)] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .badge {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.05] px-2.5 py-0.5 text-[10px] uppercase tracking-[0.3em] text-slate-400;
+  }
+
+  .stat-card {
+    @apply rounded-2xl border border-white/[0.07] bg-white/[0.03] px-3.5 py-3 backdrop-blur-xl transition-colors duration-200;
   }
 }

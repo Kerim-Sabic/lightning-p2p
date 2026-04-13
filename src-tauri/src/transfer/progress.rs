@@ -10,7 +10,7 @@ use tauri::{Emitter, Window};
 use tokio::sync::oneshot;
 use tokio::time::MissedTickBehavior;
 
-const MAX_PROGRESS_INTERVAL: Duration = Duration::from_millis(200);
+const MAX_PROGRESS_INTERVAL: Duration = Duration::from_millis(100);
 
 /// Direction of a transfer.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -247,6 +247,7 @@ impl ProgressHandle {
     }
 
     /// Returns a snapshot of (bytes, total) using relaxed atomic loads.
+    #[must_use]
     pub fn snapshot(&self) -> (u64, u64) {
         (
             self.bytes.load(Ordering::Relaxed),

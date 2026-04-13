@@ -9,7 +9,7 @@ import {
   ImageIcon,
   Link2,
   Send,
-  Sparkles,
+  Upload,
   Video,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -39,7 +39,7 @@ function iconForSelection(name: string, isDir: boolean) {
   }
   if (
     extension &&
-    ["iso", "bin", "dmg", "zip", "tar", "gz"].includes(extension)
+    ["iso", "bin", "dmg", "zip", "tar", "gz", "7z", "rar"].includes(extension)
   ) {
     return Binary;
   }
@@ -145,95 +145,104 @@ export function SendView() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <header className="space-y-2">
-        <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-0.5 text-[10px] uppercase tracking-[0.32em] text-slate-400">
-          <Sparkles className="h-3 w-3 text-sky-300" />
+        <div className="badge">
+          <Send className="h-3 w-3 text-sky-300" />
           Send
         </div>
         <h1 className="text-2xl font-semibold tracking-tight text-white">
           Share files
         </h1>
-        <p className="max-w-2xl text-sm text-slate-400">
+        <p className="max-w-xl text-sm leading-relaxed text-slate-400">
           Drop files or folders below, then generate a ticket for instant P2P
           delivery.
         </p>
       </header>
 
+      {/* Drop zone */}
       <section
-        className={`glass-panel drop-zone relative overflow-hidden border-2 border-dashed p-8 text-center transition-colors ${
+        className={`glass-panel drop-zone relative overflow-hidden border-2 border-dashed p-10 text-center transition-all duration-300 ${
           isDragActive
-            ? "drop-zone-active border-sky-400/80 bg-sky-500/12"
-            : "border-white/15 bg-white/5"
+            ? "drop-zone-active border-sky-400/60 bg-sky-500/8 scale-[1.005]"
+            : "border-white/[0.1] bg-white/[0.02]"
         }`}
       >
-        <div className="relative flex flex-col items-center gap-3">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.08]">
-            <Send className="h-6 w-6 text-sky-300" />
+        <div className="relative flex flex-col items-center gap-4">
+          <motion.div
+            animate={isDragActive ? { scale: 1.1, y: -4 } : { scale: 1, y: 0 }}
+            transition={{ type: "spring", stiffness: 300, damping: 20 }}
+            className="flex h-16 w-16 items-center justify-center rounded-2xl border border-white/[0.08] bg-white/[0.05]"
+          >
+            <Upload
+              className={`h-7 w-7 transition-colors duration-200 ${isDragActive ? "text-sky-300" : "text-slate-400"}`}
+            />
+          </motion.div>
+          <div className="space-y-1.5">
+            <p className="text-lg font-semibold text-white">
+              {isDragActive ? "Release to stage" : "Drop files or folders here"}
+            </p>
+            <p className="max-w-md text-sm text-slate-500">
+              Directory structure is preserved. Files stay local until you
+              generate a share link.
+            </p>
           </div>
-          <p className="text-lg font-semibold text-white">
-            {isDragActive
-              ? "Release to stage"
-              : "Drop files or folders here"}
-          </p>
-          <p className="max-w-md text-sm text-slate-400">
-            Directory structure is preserved. Files stay local until you
-            generate a share link.
-          </p>
         </div>
       </section>
 
+      {/* Selection */}
       <AnimatePresence>
         {shareSelection.length > 0 ? (
           <motion.section
-            initial={{ opacity: 0, y: 18, scale: 0.985 }}
+            initial={{ opacity: 0, y: 16, scale: 0.99 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 12, scale: 0.985 }}
-            transition={{ type: "spring", stiffness: 260, damping: 24 }}
-            className="glass-panel p-6"
+            exit={{ opacity: 0, y: 10, scale: 0.99 }}
+            transition={{ type: "spring", stiffness: 280, damping: 26 }}
+            className="glass-panel p-5"
           >
             <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <p className="text-sm font-medium text-white">
                   Staged selection
                 </p>
-                <p className="mt-1 text-sm text-slate-400">
+                <p className="mt-1 text-sm text-slate-500">
                   {shareSelection.length} item
-                  {shareSelection.length === 1 ? "" : "s"} ready to hash and
-                  package
+                  {shareSelection.length === 1 ? "" : "s"} ready
                 </p>
               </div>
               <div className="flex items-center gap-3 text-sm text-slate-300">
-                <span className="rounded-full border border-white/10 bg-white/[0.06] px-3 py-1">
+                <span className="rounded-lg border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 font-mono text-xs tabular-nums">
                   {formatBytes(selectionSize)}
                 </span>
                 <button
                   onClick={() => void createShare()}
                   disabled={isSharing}
-                  className="group relative inline-flex overflow-hidden rounded-xl border border-sky-400/20 bg-sky-500/15 px-5 py-3 text-sm font-medium text-sky-50 shadow-[0_18px_50px_rgba(59,130,246,0.22)] transition-all hover:border-sky-300/35 hover:bg-sky-500/20 disabled:cursor-wait disabled:opacity-80"
+                  className="btn-primary"
                 >
-                  <span className="absolute inset-0 bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.28),transparent)] opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
                   {isSharing ? (
                     <span className="absolute inset-0 shimmer-overlay" />
                   ) : null}
                   <span className="relative inline-flex items-center gap-2">
                     <Link2 className="h-4 w-4" />
-                    {isSharing ? "Generating Link" : "Generate Link"}
+                    {isSharing ? "Generating..." : "Generate Link"}
                   </span>
                 </button>
               </div>
             </div>
 
-            <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {shareSelection.map((item) => {
+            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+              {shareSelection.map((item, index) => {
                 const Icon = iconForSelection(item.name, item.is_dir);
                 return (
-                  <article
+                  <motion.article
                     key={item.path}
-                    className="glass-subtle flex items-start gap-4 p-4"
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.03, duration: 0.2 }}
+                    className="glass-subtle flex items-start gap-3 p-3"
                   >
-                    <div className="glass-icon">
-                      <Icon className="h-5 w-5 text-sky-200" />
+                    <div className="glass-icon shrink-0">
+                      <Icon className="h-4 w-4 text-sky-200" />
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
@@ -241,19 +250,16 @@ export function SendView() {
                           {item.name}
                         </p>
                         {item.is_dir ? (
-                          <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] uppercase tracking-[0.24em] text-slate-400">
-                            Folder
+                          <span className="rounded-md border border-white/[0.06] bg-white/[0.04] px-1.5 py-0.5 text-[9px] uppercase tracking-[0.2em] text-slate-500">
+                            Dir
                           </span>
                         ) : null}
                       </div>
-                      <p className="mt-1 text-sm text-slate-300">
+                      <p className="mt-0.5 text-xs tabular-nums text-slate-400">
                         {formatBytes(item.size)}
                       </p>
-                      <p className="mt-2 truncate font-mono text-[11px] text-slate-500">
-                        {item.path}
-                      </p>
                     </div>
-                  </article>
+                  </motion.article>
                 );
               })}
             </div>
@@ -261,8 +267,9 @@ export function SendView() {
         ) : null}
       </AnimatePresence>
 
+      {/* Active send transfer */}
       {sendTransfer ? (
-        <section className="space-y-3">
+        <section className="space-y-2">
           <div className="flex items-center gap-2 text-sm font-medium text-slate-300">
             <CheckCircle2 className="h-4 w-4 text-sky-300" />
             Current share
@@ -271,37 +278,42 @@ export function SendView() {
         </section>
       ) : null}
 
+      {/* Share ticket */}
       <AnimatePresence>
         {shareTicket ? (
           <motion.section
-            initial={{ opacity: 0, y: 20, scale: 0.985 }}
+            initial={{ opacity: 0, y: 16, scale: 0.99 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 12, scale: 0.985 }}
-            transition={{ type: "spring", stiffness: 250, damping: 24 }}
-            className="glass-panel p-6"
+            exit={{ opacity: 0, y: 10, scale: 0.99 }}
+            transition={{ type: "spring", stiffness: 280, damping: 26 }}
+            className="glass-panel p-5"
           >
-            <div className="grid gap-6 xl:grid-cols-[1.4fr_0.8fr]">
-              <div className="space-y-4">
+            <div className="grid gap-5 xl:grid-cols-[1.4fr_0.8fr]">
+              <div className="space-y-3">
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className="text-sm font-medium text-white">
                       Share ticket
                     </p>
-                    <p className="mt-1 text-sm text-slate-400">
+                    <p className="mt-1 text-[13px] text-slate-500">
                       Copy the link or scan the QR code on the receiving device.
                     </p>
                   </div>
                   <button
                     onClick={() => void handleCopy()}
-                    className="glass-button inline-flex items-center gap-2 px-4 py-2 text-sm text-slate-100"
+                    className={`glass-button inline-flex items-center gap-2 px-4 py-2 text-sm transition-all duration-200 ${
+                      copied
+                        ? "border-emerald-400/20 bg-emerald-500/10 text-emerald-200"
+                        : "text-slate-200"
+                    }`}
                   >
                     <Copy className="h-4 w-4" />
-                    {copied ? "Copied" : "Copy"}
+                    {copied ? "Copied!" : "Copy"}
                   </button>
                 </div>
 
-                <div className="overflow-hidden rounded-[24px] border border-white/10 bg-black/35 p-4">
-                  <code className="block break-all font-mono text-sm leading-7 text-sky-100">
+                <div className="overflow-hidden rounded-xl border border-white/[0.06] bg-black/40 p-4">
+                  <code className="block break-all font-mono text-[13px] leading-7 text-sky-100/80">
                     {shareTicket}
                   </code>
                 </div>
@@ -310,7 +322,7 @@ export function SendView() {
               <div className="glass-subtle flex flex-col items-center justify-center gap-3 p-5 text-center">
                 {qrSvg ? (
                   <div
-                    className="rounded-2xl border border-white/10 bg-black/30 p-4"
+                    className="rounded-xl border border-white/[0.06] bg-black/30 p-3"
                     dangerouslySetInnerHTML={{ __html: qrSvg }}
                   />
                 ) : (
@@ -318,7 +330,7 @@ export function SendView() {
                     <Link2 className="h-5 w-5 text-slate-500" />
                   </div>
                 )}
-                <p className="text-sm font-medium text-white">
+                <p className="text-sm font-medium text-slate-300">
                   Scan to receive
                 </p>
               </div>
@@ -327,10 +339,15 @@ export function SendView() {
         ) : null}
       </AnimatePresence>
 
+      {/* Error */}
       {error ? (
-        <div className="glass-panel border-red-500/25 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="glass-panel border-red-500/20 bg-red-500/8 px-4 py-3 text-sm text-red-200"
+        >
           {error}
-        </div>
+        </motion.div>
       ) : null}
     </div>
   );

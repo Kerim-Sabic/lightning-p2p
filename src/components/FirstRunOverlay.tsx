@@ -5,6 +5,7 @@ import {
   HardDriveDownload,
   LoaderCircle,
   Wifi,
+  Zap,
 } from "lucide-react";
 import { useState } from "react";
 import { useTransferStore } from "../stores/transferStore";
@@ -41,17 +42,18 @@ export function FirstRunOverlay() {
   };
 
   return (
-    <div className="pointer-events-auto absolute inset-0 z-40 flex items-center justify-center bg-black/55 px-4 backdrop-blur-xl">
+    <div className="pointer-events-auto absolute inset-0 z-40 flex items-center justify-center bg-black/60 px-4 backdrop-blur-2xl">
       <motion.section
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.2, ease: "easeOut" }}
+        initial={{ opacity: 0, y: 20, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
         className="glass-panel relative w-full max-w-2xl overflow-hidden p-6"
       >
-        <div className="relative space-y-6">
+        <div className="relative space-y-5">
+          {/* Header */}
           <header className="space-y-3">
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-3 py-1 text-[11px] uppercase tracking-[0.32em] text-slate-400">
-              <Wifi className="h-3.5 w-3.5 text-sky-300" />
+            <div className="badge">
+              <Zap className="h-3.5 w-3.5 text-sky-300" />
               First Run
             </div>
             <div className="space-y-2">
@@ -60,13 +62,14 @@ export function FirstRunOverlay() {
               </h2>
               <p className="text-sm leading-6 text-slate-400">
                 Confirm where verified receives should land, wait for the local
-                node to come online, and the packaged app is ready for daily
-                use.
+                node to come online, and you are ready to go.
               </p>
             </div>
           </header>
 
-          <div className="grid gap-4 md:grid-cols-2">
+          {/* Cards */}
+          <div className="grid gap-3 md:grid-cols-2">
+            {/* Node status */}
             <article className="glass-subtle p-4">
               <div className="flex items-center gap-3">
                 <div className="glass-icon">
@@ -80,22 +83,23 @@ export function FirstRunOverlay() {
                   <p className="text-sm font-medium text-white">
                     {statusLabel(nodeStatus.online)}
                   </p>
-                  <p className="text-xs text-slate-400">
+                  <p className="text-[13px] text-slate-500">
                     {statusCopy(nodeStatus.online)}
                   </p>
                 </div>
               </div>
 
-              <div className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-4">
-                <p className="mb-2 text-[11px] uppercase tracking-[0.28em] text-slate-500">
+              <div className="mt-3 rounded-xl border border-white/[0.06] bg-black/30 p-3.5">
+                <p className="mb-1.5 text-[10px] uppercase tracking-[0.3em] text-slate-500">
                   NodeId
                 </p>
-                <p className="break-all font-mono text-sm text-slate-200">
+                <p className="break-all font-mono text-[13px] text-slate-300">
                   {nodeStatus.node_id ?? "Initializing node..."}
                 </p>
               </div>
             </article>
 
+            {/* Download dir */}
             <article className="glass-subtle p-4">
               <div className="flex items-center gap-3">
                 <div className="glass-icon">
@@ -105,32 +109,32 @@ export function FirstRunOverlay() {
                   <p className="text-sm font-medium text-white">
                     Default receive folder
                   </p>
-                  <p className="text-xs text-slate-400">
-                    Verified downloads are exported here by default.
+                  <p className="text-[13px] text-slate-500">
+                    Verified downloads are exported here.
                   </p>
                 </div>
               </div>
 
-              <div className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-4">
-                <p className="mb-2 text-[11px] uppercase tracking-[0.28em] text-slate-500">
+              <div className="mt-3 rounded-xl border border-white/[0.06] bg-black/30 p-3.5">
+                <p className="mb-1.5 text-[10px] uppercase tracking-[0.3em] text-slate-500">
                   Save location
                 </p>
-                <p className="break-all font-mono text-sm text-slate-200">
+                <p className="break-all font-mono text-[13px] text-slate-300">
                   {settings.download_dir}
                 </p>
               </div>
 
-              <div className="mt-4 flex flex-wrap gap-3">
+              <div className="mt-3 flex flex-wrap gap-2">
                 <button
                   onClick={() => void pickDownloadDir()}
-                  className="glass-button inline-flex items-center gap-2 px-4 py-2 text-sm text-slate-100"
+                  className="glass-button inline-flex items-center gap-2 px-3.5 py-2 text-sm text-slate-200"
                 >
                   <FolderCog className="h-4 w-4" />
                   Change folder
                 </button>
                 <button
                   onClick={() => void openDownloadDir()}
-                  className="glass-button inline-flex items-center gap-2 px-4 py-2 text-sm text-slate-100"
+                  className="glass-button inline-flex items-center gap-2 px-3.5 py-2 text-sm text-slate-200"
                 >
                   <HardDriveDownload className="h-4 w-4" />
                   Open folder
@@ -139,21 +143,24 @@ export function FirstRunOverlay() {
             </article>
           </div>
 
-          <div className="flex flex-col gap-3 border-t border-white/10 pt-5 sm:flex-row sm:items-center sm:justify-between">
+          {/* Footer */}
+          <div className="flex flex-col gap-3 border-t border-white/[0.06] pt-4 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-xs leading-5 text-slate-500">
               You can change these settings later from the Settings view.
             </p>
             <button
               onClick={() => void handleContinue()}
               disabled={isSaving}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-sky-400/20 bg-sky-500/15 px-5 py-3 text-sm font-medium text-sky-50 shadow-[0_18px_50px_rgba(59,130,246,0.22)] transition-all hover:border-sky-300/35 hover:bg-sky-500/20 disabled:cursor-wait disabled:opacity-70"
+              className="btn-primary"
             >
-              {isSaving ? (
-                <LoaderCircle className="h-4 w-4 animate-spin" />
-              ) : (
-                <ArrowRight className="h-4 w-4" />
-              )}
-              Continue
+              <span className="relative inline-flex items-center gap-2">
+                {isSaving ? (
+                  <LoaderCircle className="h-4 w-4 animate-spin" />
+                ) : (
+                  <ArrowRight className="h-4 w-4" />
+                )}
+                Continue
+              </span>
             </button>
           </div>
         </div>
