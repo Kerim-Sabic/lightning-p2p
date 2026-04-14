@@ -1,6 +1,6 @@
 //! Commands for persisted application settings and packaged-app actions.
 
-use crate::storage::settings::AppSettings;
+use crate::storage::settings::{AppSettings, RelayModeSetting};
 use crate::AppState;
 use serde::Serialize;
 use std::path::Path;
@@ -15,6 +15,10 @@ pub struct SettingsPayload {
     pub auto_update_enabled: bool,
     /// Whether the first-run setup experience has been completed.
     pub first_run_complete: bool,
+    /// Relay configuration mode.
+    pub relay_mode: RelayModeSetting,
+    /// Custom relay URL used when relay mode is set to `custom`.
+    pub custom_relay_url: Option<String>,
 }
 
 impl From<AppSettings> for SettingsPayload {
@@ -23,6 +27,8 @@ impl From<AppSettings> for SettingsPayload {
             download_dir: settings.download_dir.to_string_lossy().to_string(),
             auto_update_enabled: settings.auto_update_enabled,
             first_run_complete: settings.first_run_complete,
+            relay_mode: settings.relay_mode,
+            custom_relay_url: settings.custom_relay_url,
         }
     }
 }
@@ -100,6 +106,42 @@ pub async fn complete_first_run(state: State<'_, AppState>) -> Result<SettingsPa
     state
         .settings
         .mark_first_run_complete()
+        .await
+        .map(SettingsPayload::from)
+        .map_err(String::from)
+}
+
+/// Updates the relay mode used for WAN connectivity.
+///
+/// # Errors
+///
+/// Returns an error string if custom relay mode is selected without a valid URL.
+#[tauri::command]
+pub async fn set_relay_mode(
+    state: State<'_, AppState>,
+    relay_mode: RelayModeSetting,
+) -> Result<SettingsPayload, String> {
+    state
+        .settings
+        .set_relay_mode(relay_mode)
+        .await
+        .map(SettingsPayload::from)
+        .map_err(String::from)
+}
+
+/// Updates the custom relay URL used when custom relay mode is enabled.
+///
+/// # Errors
+///
+/// Returns an error string if the URL is invalid.
+#[tauri::command]
+pub async fn set_custom_relay_url(
+    state: State<'_, AppState>,
+    relay_url: Option<String>,
+) -> Result<SettingsPayload, String> {
+    state
+        .settings
+        .set_custom_relay_url(relay_url)
         .await
         .map(SettingsPayload::from)
         .map_err(String::from)

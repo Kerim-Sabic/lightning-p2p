@@ -1,6 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/crates/tauri-cli/schema.json",
-  "productName": "FastDrop",
+  "productName": "Lightning P2P",
   "version": "0.2.0",
   "identifier": "com.fastdrop.app",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "FastDrop",
+        "title": "Lightning P2P",
         "width": 1024,
         "height": 720,
         "minWidth": 1024,
@@ -25,10 +25,10 @@
   },
   "bundle": {
     "active": true,
-    "publisher": "FastDrop",
+    "publisher": "Lightning P2P",
     "homepage": "https://github.com/Kerim-Sabic/lightning-p2p",
     "shortDescription": "Direct peer-to-peer file transfers with iroh and Tauri.",
-    "longDescription": "FastDrop is a Windows-first desktop app for direct peer-to-peer file transfer with verified iroh-blobs streaming, persistent history, and polished native installers.",
+    "longDescription": "Lightning P2P is a Windows-first desktop app for direct peer-to-peer file transfer with verified iroh-blobs streaming, relay-aware WAN reachability, and polished native installers.",
     "createUpdaterArtifacts": false,
     "targets": ["nsis", "msi"],
     "icon": ["icons/icon.ico"],
@@ -40,7 +40,7 @@
       "nsis": {
         "installerIcon": "icons/icon.ico",
         "installMode": "currentUser",
-        "startMenuFolder": "FastDrop"
+        "startMenuFolder": "Lightning P2P"
       }
     }
   },

@@ -3,6 +3,7 @@
 use crate::error::{FastDropError, Result};
 use crate::node::FastDropNode;
 use crate::storage::history::{self, TransferRecord};
+use crate::transfer::metrics::{RouteKind, TransferMetrics};
 use crate::transfer::progress::{
     EventReporter, ProgressHandle, ProgressSampler, TransferDirection,
 };
@@ -18,7 +19,7 @@ use iroh_blobs::Hash;
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use tauri::Window;
 
 const MAX_IMPORT_PARALLELISM: usize = 64;
@@ -65,6 +66,7 @@ pub async fn send_files(
     window: Window,
     paths: Vec<PathBuf>,
 ) -> Result<String> {
+    let started_at = Instant::now();
     let plan = build_share_plan(paths)?;
     let reporter = EventReporter::new(
         window,
@@ -73,22 +75,29 @@ pub async fn send_files(
         plan.label.clone(),
         None,
     );
-    reporter.emit_started(plan.total_size)?;
+    reporter.emit_started(plan.total_size, TransferMetrics::default())?;
     let sampler = ProgressSampler::spawn(reporter.clone(), None);
     let progress = sampler.handle();
 
     let result = create_share_with_plan(node, plan, Some(progress.clone())).await;
     match result {
         Ok(outcome) => {
+            let metrics = TransferMetrics {
+                route_kind: RouteKind::Unknown,
+                connect_ms: elapsed_ms(started_at.elapsed()),
+                download_ms: 0,
+                export_ms: 0,
+            };
             progress.set(outcome.total_size, outcome.total_size);
+            progress.set_metrics(metrics);
             sampler.finish().await?;
-            reporter.emit_completed(outcome.hash.to_string(), outcome.total_size)?;
+            reporter.emit_completed(outcome.hash.to_string(), outcome.total_size, metrics)?;
             save_send_record(node, &outcome)?;
             Ok(outcome.ticket.to_string())
         }
         Err(error) => {
             let _ = sampler.finish().await;
-            let _ = reporter.emit_failed(&error.to_string());
+            let _ = reporter.emit_failed(&error.to_string(), progress.metrics_snapshot().route_kind);
             Err(error)
         }
     }
@@ -363,6 +372,10 @@ fn unix_timestamp() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |duration| duration.as_secs())
+}
+
+fn elapsed_ms(duration: std::time::Duration) -> u64 {
+    u64::try_from(duration.as_millis()).unwrap_or(u64::MAX)
 }
 
 #[cfg(test)]

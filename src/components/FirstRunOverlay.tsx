@@ -4,20 +4,41 @@ import {
   FolderCog,
   HardDriveDownload,
   LoaderCircle,
-  Wifi,
-  Zap,
+  Waypoints,
 } from "lucide-react";
 import { useState } from "react";
 import { useTransferStore } from "../stores/transferStore";
 
-function statusLabel(online: boolean): string {
-  return online ? "Node online" : "Booting node";
+function statusLabel(onlineState: string): string {
+  switch (onlineState) {
+    case "direct_ready":
+      return "Direct path ready";
+    case "relay_ready":
+      return "Relay ready";
+    case "degraded":
+      return "Node degraded";
+    case "offline":
+      return "Node offline";
+    case "starting":
+    default:
+      return "Booting node";
+  }
 }
 
-function statusCopy(online: boolean): string {
-  return online
-    ? "FastDrop is ready to send and receive directly."
-    : "The iroh endpoint is starting in the background.";
+function statusCopy(onlineState: string): string {
+  switch (onlineState) {
+    case "direct_ready":
+      return "Lightning P2P is ready for direct send and receive traffic.";
+    case "relay_ready":
+      return "Relay fallback is ready while direct addresses continue warming up.";
+    case "degraded":
+      return "The node is online, but no route is ready yet.";
+    case "offline":
+      return "Startup failed. Review settings or restart the app.";
+    case "starting":
+    default:
+      return "The iroh endpoint is starting in the background.";
+  }
 }
 
 export function FirstRunOverlay() {
@@ -53,12 +74,12 @@ export function FirstRunOverlay() {
           {/* Header */}
           <header className="space-y-3">
             <div className="badge">
-              <Zap className="h-3.5 w-3.5 text-sky-300" />
+              <Waypoints className="h-3.5 w-3.5 text-sky-300" />
               First Run
             </div>
             <div className="space-y-2">
               <h2 className="text-2xl font-semibold tracking-tight text-white sm:text-3xl">
-                FastDrop is almost ready
+                Lightning P2P is almost ready
               </h2>
               <p className="text-sm leading-6 text-slate-400">
                 Confirm where verified receives should land, wait for the local
@@ -74,17 +95,17 @@ export function FirstRunOverlay() {
               <div className="flex items-center gap-3">
                 <div className="glass-icon">
                   {nodeStatus.online ? (
-                    <Wifi className="h-5 w-5 text-emerald-300" />
+                    <Waypoints className="h-5 w-5 text-emerald-300" />
                   ) : (
                     <LoaderCircle className="h-5 w-5 animate-spin text-sky-300" />
                   )}
                 </div>
                 <div>
                   <p className="text-sm font-medium text-white">
-                    {statusLabel(nodeStatus.online)}
+                    {statusLabel(nodeStatus.online_state)}
                   </p>
                   <p className="text-[13px] text-slate-500">
-                    {statusCopy(nodeStatus.online)}
+                    {statusCopy(nodeStatus.online_state)}
                   </p>
                 </div>
               </div>

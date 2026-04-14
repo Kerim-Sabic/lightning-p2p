@@ -4,18 +4,67 @@ import {
   Download,
   Fingerprint,
   FolderCog,
+  Globe,
   HardDriveDownload,
   LoaderCircle,
   RefreshCw,
   Settings2,
+  Waypoints,
 } from "lucide-react";
-import { formatBytes } from "../lib/format";
+import { useEffect, useState } from "react";
+import type { NodeStatus, RelayMode } from "../lib/tauri";
 import { useTransferStore, type UpdateState } from "../stores/transferStore";
 
-function statusPill(online: boolean): string {
-  return online
-    ? "border-emerald-400/20 bg-emerald-500/10 text-emerald-200"
-    : "border-white/[0.08] bg-white/[0.04] text-slate-400";
+function statusPill(onlineState: NodeStatus["online_state"]): string {
+  switch (onlineState) {
+    case "direct_ready":
+      return "border-emerald-400/20 bg-emerald-500/10 text-emerald-200";
+    case "relay_ready":
+      return "border-sky-400/20 bg-sky-500/10 text-sky-200";
+    case "degraded":
+      return "border-amber-400/20 bg-amber-500/10 text-amber-200";
+    case "offline":
+      return "border-red-400/20 bg-red-500/10 text-red-200";
+    case "starting":
+    default:
+      return "border-white/[0.08] bg-white/[0.04] text-slate-400";
+  }
+}
+
+function onlineStateLabel(onlineState: NodeStatus["online_state"]): string {
+  switch (onlineState) {
+    case "direct_ready":
+      return "Direct ready";
+    case "relay_ready":
+      return "Relay ready";
+    case "degraded":
+      return "Degraded";
+    case "offline":
+      return "Offline";
+    case "starting":
+    default:
+      return "Starting";
+  }
+}
+
+function onlineStateCopy(nodeStatus: NodeStatus): string {
+  switch (nodeStatus.online_state) {
+    case "direct_ready":
+      return "Direct addresses are available for the fastest peer path.";
+    case "relay_ready":
+      return "Relay fallback is online. Direct addresses are still warming up.";
+    case "degraded":
+      return "The node is running, but neither a direct route nor relay is ready yet.";
+    case "offline":
+      return "Node startup failed. Check relay settings and restart Lightning P2P.";
+    case "starting":
+    default:
+      return "The iroh endpoint is still coming online.";
+  }
+}
+
+function relayModeLabel(relayMode: RelayMode): string {
+  return relayMode === "custom" ? "Custom relay" : "Public relay";
 }
 
 function updateStatusCopy(updateState: UpdateState): string {
@@ -29,7 +78,7 @@ function updateStatusCopy(updateState: UpdateState): string {
     case "downloading":
       return "Downloading and staging the update package.";
     case "restartRequired":
-      return "Update installed. Restart FastDrop to launch the new build.";
+      return "Update installed. Restart Lightning P2P to launch the new build.";
     case "error":
       return updateState.error ?? "Update check failed.";
     case "idle":
@@ -44,10 +93,16 @@ function updateProgressLabel(updateState: UpdateState): string | null {
   }
 
   if (updateState.totalBytes) {
-    return `${formatBytes(updateState.downloadedBytes)} / ${formatBytes(updateState.totalBytes)}`;
+    return `${updateState.downloadedBytes.toLocaleString()} / ${updateState.totalBytes.toLocaleString()} bytes`;
   }
 
-  return `${formatBytes(updateState.downloadedBytes)} downloaded`;
+  return `${updateState.downloadedBytes.toLocaleString()} bytes downloaded`;
+}
+
+function relayModeButtonClass(active: boolean): string {
+  return active
+    ? "border-sky-400/30 bg-sky-500/14 text-sky-200"
+    : "border-white/[0.08] bg-white/[0.04] text-slate-400";
 }
 
 export function SettingsView() {
@@ -61,12 +116,32 @@ export function SettingsView() {
   const setAutoUpdateEnabled = useTransferStore(
     (state) => state.setAutoUpdateEnabled,
   );
+  const setRelayMode = useTransferStore((state) => state.setRelayMode);
+  const setCustomRelayUrl = useTransferStore(
+    (state) => state.setCustomRelayUrl,
+  );
   const checkForUpdates = useTransferStore((state) => state.checkForUpdates);
   const installUpdate = useTransferStore((state) => state.installUpdate);
+  const [customRelayUrl, setCustomRelayUrlInput] = useState("");
+
+  useEffect(() => {
+    setCustomRelayUrlInput(settings?.custom_relay_url ?? "");
+  }, [settings?.custom_relay_url]);
 
   const updateBusy =
     updateState.phase === "checking" || updateState.phase === "downloading";
   const canInstall = updateState.phase === "available";
+
+  const saveCustomRelay = async (): Promise<void> => {
+    await setCustomRelayUrl(customRelayUrl.trim() || null);
+  };
+
+  const enableCustomRelay = async (): Promise<void> => {
+    if (customRelayUrl.trim()) {
+      await setCustomRelayUrl(customRelayUrl.trim());
+    }
+    await setRelayMode("custom");
+  };
 
   return (
     <div className="space-y-5">
@@ -76,16 +151,15 @@ export function SettingsView() {
           Settings
         </div>
         <h1 className="text-2xl font-semibold tracking-tight text-white">
-          Settings
+          Lightning P2P settings
         </h1>
-        <p className="max-w-xl text-sm leading-relaxed text-slate-400">
-          Node identity, download folder, and update management.
+        <p className="max-w-2xl text-sm leading-relaxed text-slate-400">
+          Inspect node reachability, control relay behavior, choose where
+          verified files land, and manage signed updates.
         </p>
       </header>
 
-      {/* Node + Download dir cards */}
       <section className="grid gap-3 lg:grid-cols-2">
-        {/* Node identity */}
         <article className="glass-panel p-5">
           <div className="flex items-center gap-3">
             <div className="glass-icon">
@@ -94,21 +168,19 @@ export function SettingsView() {
             <div>
               <p className="text-sm font-medium text-white">Node identity</p>
               <p className="text-[13px] text-slate-500">
-                Peers connect to this node id.
+                Live reachability for this Lightning P2P node.
               </p>
             </div>
           </div>
 
-          <div className="mt-4 flex items-center gap-3">
+          <div className="mt-4 flex flex-wrap items-center gap-3">
             <span
-              className={`rounded-lg border px-3 py-1 text-xs ${statusPill(nodeStatus.online)}`}
+              className={`rounded-lg border px-3 py-1 text-xs ${statusPill(nodeStatus.online_state)}`}
             >
-              {nodeStatus.online ? "Online" : "Starting"}
+              {onlineStateLabel(nodeStatus.online_state)}
             </span>
             <span className="text-xs text-slate-500">
-              {nodeStatus.online
-                ? "Ready to send and receive"
-                : "Waiting for iroh"}
+              {onlineStateCopy(nodeStatus)}
             </span>
           </div>
 
@@ -120,9 +192,36 @@ export function SettingsView() {
               {nodeStatus.node_id ?? "Initializing node..."}
             </p>
           </div>
+
+          <div className="mt-3 grid gap-2 md:grid-cols-2">
+            <div className="stat-card">
+              <p className="text-[10px] uppercase tracking-[0.3em] text-slate-500">
+                Direct addresses
+              </p>
+              <p className="mt-1.5 text-sm font-medium text-slate-200">
+                {nodeStatus.direct_address_count}
+              </p>
+            </div>
+            <div className="stat-card">
+              <p className="text-[10px] uppercase tracking-[0.3em] text-slate-500">
+                Relay mode
+              </p>
+              <p className="mt-1.5 text-sm font-medium text-slate-200">
+                {relayModeLabel(settings?.relay_mode ?? "public")}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-3 rounded-xl border border-white/[0.06] bg-black/30 p-3.5">
+            <p className="mb-1.5 text-[10px] uppercase tracking-[0.3em] text-slate-500">
+              Active relay
+            </p>
+            <p className="break-all font-mono text-[13px] text-slate-300">
+              {nodeStatus.relay_url ?? "Relay not connected yet"}
+            </p>
+          </div>
         </article>
 
-        {/* Download directory */}
         <article className="glass-panel p-5">
           <div className="flex items-center gap-3">
             <div className="glass-icon">
@@ -133,7 +232,7 @@ export function SettingsView() {
                 Download directory
               </p>
               <p className="text-[13px] text-slate-500">
-                Incoming transfers land here after verification.
+                Verified receives are exported here after integrity checks.
               </p>
             </div>
           </div>
@@ -166,7 +265,67 @@ export function SettingsView() {
         </article>
       </section>
 
-      {/* Updates */}
+      <section className="glass-panel p-5">
+        <div className="flex items-center gap-3">
+          <div className="glass-icon">
+            <Waypoints className="h-5 w-5 text-sky-300" />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-white">Internet routing</p>
+            <p className="text-[13px] text-slate-500">
+              Lightning P2P already works over the internet through iroh
+              discovery plus relay fallback. Relay changes apply on next app
+              launch.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button
+            onClick={() => void setRelayMode("public")}
+            className={`rounded-xl border px-4 py-2 text-sm transition-all ${relayModeButtonClass(
+              (settings?.relay_mode ?? "public") === "public",
+            )}`}
+          >
+            Public relay
+          </button>
+          <button
+            onClick={() => void enableCustomRelay()}
+            className={`rounded-xl border px-4 py-2 text-sm transition-all ${relayModeButtonClass(
+              settings?.relay_mode === "custom",
+            )}`}
+          >
+            Custom relay
+          </button>
+        </div>
+
+        <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_auto] lg:items-end">
+          <label className="space-y-2">
+            <span className="text-[10px] uppercase tracking-[0.3em] text-slate-500">
+              Custom relay URL
+            </span>
+            <input
+              value={customRelayUrl}
+              onChange={(event) => setCustomRelayUrlInput(event.target.value)}
+              placeholder="https://relay.example.com"
+              className="glass-input w-full rounded-xl px-4 py-3 text-sm text-slate-100 placeholder:text-slate-600"
+            />
+          </label>
+          <button
+            onClick={() => void saveCustomRelay()}
+            className="glass-button inline-flex items-center justify-center gap-2 px-4 py-3 text-sm text-slate-200"
+          >
+            <Globe className="h-4 w-4" />
+            Save relay URL
+          </button>
+        </div>
+
+        <p className="mt-3 text-xs leading-5 text-slate-500">
+          Use public relay mode for the default network. Switch to custom only
+          when you control the relay endpoint and want stricter routing.
+        </p>
+      </section>
+
       <section className="glass-panel p-5">
         <div className="flex items-center gap-3">
           <div className="glass-icon">
@@ -175,7 +334,7 @@ export function SettingsView() {
           <div>
             <p className="text-sm font-medium text-white">Updates</p>
             <p className="text-[13px] text-slate-500">
-              Signed releases delivered through GitHub Releases.
+              Signed releases are distributed through GitHub Releases.
             </p>
           </div>
         </div>
@@ -250,7 +409,7 @@ export function SettingsView() {
               Auto-check on startup
             </p>
             <p className="text-[13px] text-slate-500">
-              Check GitHub releases when the app launches.
+              Check GitHub releases when Lightning P2P launches.
             </p>
           </div>
           <button
@@ -278,7 +437,6 @@ export function SettingsView() {
         </div>
       </section>
 
-      {/* Error */}
       {error ? (
         <motion.div
           initial={{ opacity: 0, y: 8 }}

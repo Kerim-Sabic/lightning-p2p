@@ -54,6 +54,24 @@ export function formatTimestamp(timestamp: number | null): string | null {
   return new Date(timestamp * 1000).toLocaleString();
 }
 
+export function formatDurationMs(durationMs: number): string {
+  if (durationMs <= 0) {
+    return "--";
+  }
+  if (durationMs < 1000) {
+    return `${durationMs} ms`;
+  }
+
+  const seconds = durationMs / 1000;
+  if (seconds < 60) {
+    return `${seconds.toFixed(seconds >= 10 ? 1 : 2)} s`;
+  }
+
+  const minutes = Math.floor(seconds / 60);
+  const remainderSeconds = Math.round(seconds % 60);
+  return `${minutes}m ${remainderSeconds}s`;
+}
+
 export function isProbablyBlobTicket(ticket: string): boolean {
   const value = ticket.trim();
   return /^blob[a-z0-9]+$/i.test(value) && value.length > 24;

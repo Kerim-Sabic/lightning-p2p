@@ -105,7 +105,7 @@ jobs:
       - name: Upload Windows bundle artifact
         uses: actions/upload-artifact@v4
         with:
-          name: fastdrop-windows-smoke-bundle
+          name: lightning-p2p-windows-smoke-bundle
           path: |
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
@@ -165,23 +165,26 @@ jobs:
         with:
           tauriScript: pnpm tauri
           tagName: v__VERSION__
-          releaseName: FastDrop v__VERSION__
+          releaseName: Lightning P2P v__VERSION__
           releaseBody: |
-            ## FastDrop v__VERSION__
+            ## Lightning P2P v__VERSION__
 
-            Direct peer-to-peer file transfer. No cloud. No accounts. No limits.
+            Direct peer-to-peer file transfer. No cloud. No accounts. No limits. Works across LAN and the public internet through iroh relay fallback.
 
             ### Downloads
 
             | File | Description |
             |------|-------------|
-            | `FastDrop___VERSION___x64-setup.exe` | Windows NSIS installer (recommended) |
-            | `FastDrop___VERSION___x64_en-US.msi` | Windows MSI installer |
+            | `LightningP2P___VERSION___x64-setup.exe` | Windows NSIS installer (recommended) |
+            | `LightningP2P___VERSION___x64_en-US.msi` | Windows MSI installer |
+
+            SHA256 checksums are published alongside the installers.
 
             ### What's included
 
             - End-to-end encrypted transfers via QUIC TLS 1.3
             - BLAKE3 verified streaming with iroh-blobs
+            - WAN reachability with direct and relay-assisted connectivity
             - Live progress tracking with speed and ETA
             - QR code ticket sharing
             - Transfer history with one-click re-share
@@ -191,7 +194,7 @@ jobs:
 
             1. Download the `.exe` installer above
             2. Run the installer (you may need to click "More info" > "Run anyway" on SmartScreen)
-            3. Launch FastDrop from the Start Menu
+            3. Launch Lightning P2P from the Start Menu
 
             ---
 
@@ -200,12 +203,37 @@ jobs:
           prerelease: false
           args: --target x86_64-pc-windows-msvc
 
+      - name: Generate SHA256 checksums
+        shell: pwsh
+        run: |
+          $bundleRoot = "src-tauri/target/x86_64-pc-windows-msvc/release/bundle"
+          $files = Get-ChildItem -Path $bundleRoot -Recurse -File -Include *.exe, *.msi
+          if (-not $files) {
+            throw "No installer files found for checksum generation."
+          }
+
+          $lines = foreach ($file in $files) {
+            $hash = (Get-FileHash -Path $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $($file.Name)"
+          }
+
+          $checksumPath = Join-Path $bundleRoot "SHA256SUMS.txt"
+          $lines | Set-Content -Path $checksumPath -Encoding utf8
+          Write-Host "Checksums written to $checksumPath"
+
+      - name: Upload release checksums
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v__VERSION__
+          files: src-tauri/target/x86_64-pc-windows-msvc/release/bundle/SHA256SUMS.txt
+
       - name: Upload release bundle artifact
         uses: actions/upload-artifact@v4
         with:
-          name: fastdrop-windows-release-bundle
+          name: lightning-p2p-windows-release-bundle
           path: |
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
+            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/SHA256SUMS.txt
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/**/*.sig
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/**/latest*.json

@@ -1,6 +1,6 @@
 ---
 name: Feature Request
-about: Suggest an idea for FastDrop
+about: Suggest an idea for Lightning P2P
 title: "[Feature] "
 labels: enhancement
 assignees: ''

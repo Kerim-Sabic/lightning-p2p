@@ -2,5 +2,7 @@
 
 mod discovery;
 mod endpoint;
+mod status;
 
 pub use endpoint::FastDropNode;
+pub use status::{NodeOnlineState, NodeRuntimeStatus};

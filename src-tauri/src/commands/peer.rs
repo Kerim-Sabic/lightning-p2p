@@ -1,17 +1,8 @@
 //! Commands for querying node/peer information.
 
+use crate::node::NodeRuntimeStatus;
 use crate::AppState;
-use serde::Serialize;
 use tauri::State;
-
-/// Status information about the local iroh node.
-#[derive(Debug, Serialize)]
-pub struct NodeStatus {
-    /// Whether the node is fully initialized.
-    pub online: bool,
-    /// The node's unique Ed25519 `NodeId`, if available.
-    pub node_id: Option<String>,
-}
 
 /// Returns this node's `NodeId` as a string.
 ///
@@ -30,16 +21,10 @@ pub async fn get_node_id(state: State<'_, AppState>) -> Result<String, String> {
 ///
 /// Returns an error string if application state access fails.
 #[tauri::command]
-pub async fn get_node_status(state: State<'_, AppState>) -> Result<NodeStatus, String> {
+pub async fn get_node_status(state: State<'_, AppState>) -> Result<NodeRuntimeStatus, String> {
     let guard = state.node.read().await;
     match guard.as_ref() {
-        Some(node) => Ok(NodeStatus {
-            online: true,
-            node_id: Some(node.node_id().to_string()),
-        }),
-        None => Ok(NodeStatus {
-            online: false,
-            node_id: None,
-        }),
+        Some(node) => Ok(node.runtime_status()),
+        None => Ok(state.node_runtime.read().await.clone()),
     }
 }

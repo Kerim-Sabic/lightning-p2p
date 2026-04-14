@@ -5,7 +5,7 @@
     clippy::ignored_unit_patterns
 )]
 
-use criterion::{criterion_group, criterion_main, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use fastdrop_lib::node::FastDropNode;
 use fastdrop_lib::transfer::{receiver, sender};
 use iroh::endpoint::{RelayMode, TransportConfig};
@@ -25,6 +25,8 @@ use std::time::{Duration, Instant};
 
 const BENCH_SIZE: u64 = 100 * 1024 * 1024;
 const CHUNK_BYTES: usize = 1024 * 1024;
+const DIRECTORY_FILE_COUNT: usize = 256;
+const DIRECTORY_FILE_SIZE: u64 = 512 * 1024;
 const MAX_CONCURRENT_STREAMS: u32 = 256;
 const CONNECTION_WINDOW_BYTES: u32 = 8_388_608;
 const STREAM_WINDOW_BYTES: u32 = 4_194_304;
@@ -46,6 +48,13 @@ struct MemoryFixture {
     _sender: MemoryNode,
     receiver: MemoryNode,
     ticket: BlobTicket,
+}
+
+#[derive(Clone, Copy)]
+struct ReceivePhaseMetrics {
+    total: Duration,
+    download: Duration,
+    export: Duration,
 }
 
 impl AppFixture {
@@ -157,33 +166,84 @@ fn transfer_benchmark(c: &mut Criterion) {
     let runtime = tokio::runtime::Runtime::new().expect("benchmark runtime");
     let payload = benchmark_payload();
 
-    let app_warmup = runtime.block_on(run_app_receive_transfer(BENCH_SIZE));
+    let share_warmup = runtime.block_on(run_share_preparation(BENCH_SIZE));
+    let receive_warmup = runtime.block_on(run_app_receive_phases(BENCH_SIZE));
     let memory_warmup = runtime.block_on(run_memory_transport_transfer(payload));
+    let directory_warmup =
+        runtime.block_on(run_directory_share_preparation(DIRECTORY_FILE_COUNT, DIRECTORY_FILE_SIZE));
     eprintln!(
-        "App receive 100MB: {:.2} MB/s in {:.2?}",
-        mb_per_second(BENCH_SIZE, app_warmup),
-        app_warmup
+        "Sender prep 100MB: {:.2} MB/s in {:.2?}",
+        mb_per_second(BENCH_SIZE, share_warmup),
+        share_warmup
+    );
+    eprintln!(
+        "Receive download 100MB: {:.2} MB/s in {:.2?}",
+        mb_per_second(BENCH_SIZE, receive_warmup.download),
+        receive_warmup.download
+    );
+    eprintln!(
+        "Receive export 100MB: {:.2} MB/s in {:.2?}",
+        mb_per_second(BENCH_SIZE, receive_warmup.export),
+        receive_warmup.export
+    );
+    eprintln!(
+        "App receive total 100MB: {:.2} MB/s in {:.2?}",
+        mb_per_second(BENCH_SIZE, receive_warmup.total),
+        receive_warmup.total
     );
     eprintln!(
         "Memory transport 100MB: {:.2} MB/s in {:.2?}",
         mb_per_second(BENCH_SIZE, memory_warmup),
         memory_warmup
     );
+    eprintln!(
+        "Directory prep {}x{}KB: {:.2?}",
+        DIRECTORY_FILE_COUNT,
+        DIRECTORY_FILE_SIZE / 1024,
+        directory_warmup
+    );
 
-    let mut group = c.benchmark_group("fastdrop_transfer");
-    group.sample_size(10);
-    group.measurement_time(Duration::from_secs(20));
-    group.throughput(Throughput::Bytes(BENCH_SIZE));
-    group.bench_function("app_receive_100mb", |b| {
+    let mut throughput_group = c.benchmark_group("lightning_p2p_100mb");
+    throughput_group.sample_size(10);
+    throughput_group.measurement_time(Duration::from_secs(20));
+    throughput_group.throughput(Throughput::Bytes(BENCH_SIZE));
+    throughput_group.bench_function("sender_share_prep", |b| {
         b.to_async(&runtime).iter_custom(|iters| async move {
             let mut total = Duration::ZERO;
             for _ in 0..iters {
-                total += run_app_receive_transfer(BENCH_SIZE).await;
+                total += run_share_preparation(BENCH_SIZE).await;
             }
             total
         });
     });
-    group.bench_function("memory_transport_100mb", |b| {
+    throughput_group.bench_function("receive_download_phase", |b| {
+        b.to_async(&runtime).iter_custom(|iters| async move {
+            let mut total = Duration::ZERO;
+            for _ in 0..iters {
+                total += run_app_receive_phases(BENCH_SIZE).await.download;
+            }
+            total
+        });
+    });
+    throughput_group.bench_function("receive_export_phase", |b| {
+        b.to_async(&runtime).iter_custom(|iters| async move {
+            let mut total = Duration::ZERO;
+            for _ in 0..iters {
+                total += run_app_receive_phases(BENCH_SIZE).await.export;
+            }
+            total
+        });
+    });
+    throughput_group.bench_function("receive_total", |b| {
+        b.to_async(&runtime).iter_custom(|iters| async move {
+            let mut total = Duration::ZERO;
+            for _ in 0..iters {
+                total += run_app_receive_phases(BENCH_SIZE).await.total;
+            }
+            total
+        });
+    });
+    throughput_group.bench_function("memory_transport", |b| {
         let payload = payload.to_vec();
         b.to_async(&runtime).iter_custom(move |iters| {
             let payload = payload.clone();
@@ -196,22 +256,88 @@ fn transfer_benchmark(c: &mut Criterion) {
             }
         });
     });
-    group.finish();
+    throughput_group.finish();
+
+    let mut directory_group = c.benchmark_group("lightning_p2p_directory_prep");
+    directory_group.sample_size(10);
+    directory_group.measurement_time(Duration::from_secs(20));
+    let directory_total_bytes = DIRECTORY_FILE_COUNT as u64 * DIRECTORY_FILE_SIZE;
+    directory_group.throughput(Throughput::Bytes(directory_total_bytes));
+    directory_group.bench_with_input(
+        BenchmarkId::new("sender_share_directory", DIRECTORY_FILE_COUNT),
+        &DIRECTORY_FILE_COUNT,
+        |b, &file_count| {
+            b.to_async(&runtime).iter_custom(move |iters| async move {
+                let mut total = Duration::ZERO;
+                for _ in 0..iters {
+                    total += run_directory_share_preparation(file_count, DIRECTORY_FILE_SIZE).await;
+                }
+                total
+            });
+        },
+    );
+    directory_group.finish();
 }
 
-async fn run_app_receive_transfer(size: u64) -> Duration {
+async fn run_share_preparation(size: u64) -> Duration {
+    let root = tempfile::tempdir().expect("share prep tempdir");
+    let source_dir = root.path().join("source");
+    fs::create_dir_all(&source_dir).expect("source dir");
+    let source_file = source_dir.join("payload.bin");
+    create_pattern_file(&source_file, size).expect("source file");
+
+    let sender_node = FastDropNode::start_with_dirs(
+        root.path().join("sender-data"),
+        root.path().join("sender-downloads"),
+    )
+    .await
+    .expect("sender node");
+    let started = Instant::now();
+    let _share = sender::create_share(&sender_node, vec![source_file])
+        .await
+        .expect("share creation");
+    let elapsed = started.elapsed();
+    sender_node.shutdown().await.expect("sender shutdown");
+    elapsed
+}
+
+async fn run_directory_share_preparation(file_count: usize, file_size: u64) -> Duration {
+    let root = tempfile::tempdir().expect("directory tempdir");
+    let source_dir = root.path().join("source-tree");
+    create_pattern_directory(&source_dir, file_count, file_size).expect("source tree");
+
+    let sender_node = FastDropNode::start_with_dirs(
+        root.path().join("sender-data"),
+        root.path().join("sender-downloads"),
+    )
+    .await
+    .expect("sender node");
+    let started = Instant::now();
+    let _share = sender::create_share(&sender_node, vec![source_dir])
+        .await
+        .expect("directory share creation");
+    let elapsed = started.elapsed();
+    sender_node.shutdown().await.expect("sender shutdown");
+    elapsed
+}
+
+async fn run_app_receive_phases(size: u64) -> ReceivePhaseMetrics {
     let fixture = AppFixture::new(size).await;
     let started = Instant::now();
-    receiver::receive_ticket(
+    let outcome = receiver::receive_ticket(
         &fixture.receiver_node,
         fixture.ticket.clone(),
         fixture.receive_dir.clone(),
     )
     .await
     .expect("app receive");
-    let elapsed = started.elapsed();
+    let metrics = ReceivePhaseMetrics {
+        total: started.elapsed(),
+        download: Duration::from_millis(outcome.download_ms),
+        export: Duration::from_millis(outcome.export_ms),
+    };
     fixture.shutdown().await;
-    elapsed
+    metrics
 }
 
 async fn run_memory_transport_transfer(payload: &[u8]) -> Duration {
@@ -267,6 +393,16 @@ fn benchmark_payload() -> &'static [u8] {
         fill_pattern(&mut payload, &mut state);
         payload
     })
+}
+
+fn create_pattern_directory(root: &Path, file_count: usize, file_size: u64) -> std::io::Result<()> {
+    fs::create_dir_all(root)?;
+    for index in 0..file_count {
+        let subdir = root.join(format!("batch-{:02}", index / 32));
+        fs::create_dir_all(&subdir)?;
+        create_pattern_file(&subdir.join(format!("payload-{index:03}.bin")), file_size)?;
+    }
+    Ok(())
 }
 
 fn create_pattern_file(path: &Path, size: u64) -> std::io::Result<()> {

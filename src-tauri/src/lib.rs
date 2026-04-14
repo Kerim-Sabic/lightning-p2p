@@ -15,7 +15,7 @@ pub mod telemetry;
 pub mod transfer;
 
 use error::{FastDropError, Result};
-use node::FastDropNode;
+use node::{FastDropNode, NodeRuntimeStatus};
 use std::sync::Arc;
 use storage::settings::{resolve_app_data_dir, SettingsState};
 use tauri::Manager;
@@ -28,6 +28,8 @@ pub struct AppState {
     pub data_dir: std::path::PathBuf,
     /// The iroh-backed P2P node.
     pub node: Arc<RwLock<Option<Arc<FastDropNode>>>>,
+    /// Last known node startup or reachability status.
+    pub node_runtime: Arc<RwLock<NodeRuntimeStatus>>,
     /// Persisted user settings shared across sessions.
     pub settings: SettingsState,
     /// In-memory registry of active transfers.
@@ -41,6 +43,7 @@ impl AppState {
         Self {
             data_dir,
             node: Arc::new(RwLock::new(None)),
+            node_runtime: Arc::new(RwLock::new(NodeRuntimeStatus::starting())),
             settings,
             transfers: TransferQueue::new(),
         }
@@ -95,6 +98,8 @@ pub fn run() {
             commands::settings::set_download_dir,
             commands::settings::set_auto_update_enabled,
             commands::settings::complete_first_run,
+            commands::settings::set_relay_mode,
+            commands::settings::set_custom_relay_url,
             commands::settings::open_download_dir,
         ])
         .setup(|app| {
@@ -102,15 +107,38 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 let state = handle.state::<AppState>();
                 let data_dir = state.data_dir.clone();
-                let download_dir = state.settings.snapshot().await.download_dir;
+                let settings = state.settings.snapshot().await;
+                let download_dir = settings.download_dir.clone();
 
-                match node::FastDropNode::start_with_dirs(data_dir, download_dir).await {
+                {
+                    let mut runtime = state.node_runtime.write().await;
+                    *runtime = NodeRuntimeStatus::starting();
+                }
+
+                let relay_url = match settings.resolved_custom_relay_url() {
+                    Ok(relay_url) => relay_url,
+                    Err(error) => {
+                        tracing::error!("Invalid relay configuration: {error}");
+                        let mut runtime = state.node_runtime.write().await;
+                        *runtime = NodeRuntimeStatus::offline();
+                        return;
+                    }
+                };
+
+                match node::FastDropNode::start_with_dirs_and_relay(data_dir, download_dir, relay_url)
+                    .await
+                {
                     Ok(node) => {
+                        let runtime_status = node.runtime_status();
                         let mut guard = state.node.write().await;
                         *guard = Some(Arc::new(node));
+                        let mut runtime = state.node_runtime.write().await;
+                        *runtime = runtime_status;
                         tracing::info!("iroh node started successfully");
                     }
                     Err(e) => {
+                        let mut runtime = state.node_runtime.write().await;
+                        *runtime = NodeRuntimeStatus::offline();
                         tracing::error!("Failed to start iroh node: {e}");
                     }
                 }

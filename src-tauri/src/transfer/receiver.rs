@@ -5,6 +5,7 @@ use crate::node::FastDropNode;
 use crate::storage::history::{self, TransferRecord};
 use crate::storage::peers::{self, PeerRecord};
 use crate::transfer::export;
+use crate::transfer::metrics::{RouteKind, TransferMetrics};
 use crate::transfer::progress::{
     EventReporter, ProgressHandle, ProgressSampler, QueueProgressTarget, TransferDirection,
 };
@@ -18,7 +19,7 @@ use iroh_blobs::rpc::client::blobs::{
 use iroh_blobs::ticket::BlobTicket;
 use iroh_blobs::util::SetTagOption;
 use std::path::PathBuf;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::Window;
 use tokio::sync::watch;
 
@@ -30,11 +31,19 @@ struct ReceiveSummary {
     label: String,
     size: u64,
     peer: String,
+    metrics: TransferMetrics,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
 struct DownloadLifecycle {
     contacted_peer: bool,
+    route_kind: RouteKind,
+    connect_ms: u64,
+}
+
+#[derive(Debug)]
+struct DownloadSummary {
+    metrics: TransferMetrics,
 }
 
 /// Outcome of a completed receive flow.
@@ -48,6 +57,14 @@ pub struct ReceiveOutcome {
     pub size: u64,
     /// Remote peer node id.
     pub peer: String,
+    /// Best-known route used for the transfer.
+    pub route_kind: RouteKind,
+    /// Time to first successful peer contact.
+    pub connect_ms: u64,
+    /// Time spent downloading data into the local blob store.
+    pub download_ms: u64,
+    /// Time spent exporting verified data to disk.
+    pub export_ms: u64,
 }
 
 /// Downloads the content addressed by a ticket and exports it to disk.
@@ -76,7 +93,7 @@ pub async fn receive_blob(
         ticket.hash().to_string(),
         Some(peer.clone()),
     );
-    reporter.emit_started(0)?;
+    reporter.emit_started(0, TransferMetrics::default())?;
 
     let sampler = ProgressSampler::spawn(
         reporter.clone(),
@@ -89,17 +106,19 @@ pub async fn receive_blob(
         Ok(summary) => {
             queue.remove(&transfer_id).await;
             progress.set(summary.size, summary.size);
+            progress.set_metrics(summary.metrics);
             sampler.finish().await?;
             save_peer_no_flush(node, &summary.peer)?;
             save_receive_record_no_flush(node, &summary)?;
             node.db.flush()?;
-            reporter.emit_completed(summary.hash, summary.size)?;
+            reporter.emit_completed(summary.hash, summary.size, summary.metrics)?;
             Ok(())
         }
         Err(error) => {
             queue.remove(&transfer_id).await;
+            let route_kind = progress.metrics_snapshot().route_kind;
             let _ = sampler.finish().await;
-            let _ = reporter.emit_failed(&error.to_string());
+            let _ = reporter.emit_failed(&error.to_string(), route_kind);
             Err(error)
         }
     }
@@ -122,6 +141,10 @@ pub async fn receive_ticket(
         label: summary.label,
         size: summary.size,
         peer: summary.peer,
+        route_kind: summary.metrics.route_kind,
+        connect_ms: summary.metrics.connect_ms,
+        download_ms: summary.metrics.download_ms,
+        export_ms: summary.metrics.export_ms,
     })
 }
 
@@ -132,14 +155,29 @@ async fn receive_core(
     cancel_rx: &mut watch::Receiver<bool>,
     progress: Option<&ProgressHandle>,
 ) -> Result<ReceiveSummary> {
-    let _state = download_to_store(node, ticket, cancel_rx, progress).await?;
+    let download_started_at = Instant::now();
+    let download = download_to_store(node, ticket, cancel_rx, progress).await?;
+    let download_ms = elapsed_ms(download_started_at.elapsed());
     let tracked_total = progress.map(|p| p.snapshot().1);
-    let size = export::export_ticket(node.blobs_client(), ticket, &destination, tracked_total).await?;
+    let export_started_at = Instant::now();
+    let size =
+        export::export_ticket(node.blobs_client(), ticket, &destination, tracked_total).await?;
+    let export_ms = elapsed_ms(export_started_at.elapsed());
+    let metrics = TransferMetrics {
+        route_kind: download.metrics.route_kind,
+        connect_ms: download.metrics.connect_ms,
+        download_ms,
+        export_ms,
+    };
+    if let Some(progress) = progress {
+        progress.set_metrics(metrics);
+    }
     Ok(ReceiveSummary {
         hash: ticket.hash().to_string(),
         label: export::resolve_label(node.blobs_client(), ticket).await?,
         size,
         peer: ticket.node_addr().node_id.to_string(),
+        metrics,
     })
 }
 
@@ -148,21 +186,29 @@ async fn download_to_store(
     ticket: &BlobTicket,
     cancel_rx: &mut watch::Receiver<bool>,
     progress: Option<&ProgressHandle>,
-) -> Result<TransferState> {
+) -> Result<DownloadSummary> {
     let mut stream = start_download(node, ticket).await?;
     let mut state = TransferState::new(ticket.hash());
     let mut lifecycle = DownloadLifecycle::default();
+    let started_at = Instant::now();
 
     loop {
         let event = next_event(&mut stream, cancel_rx, lifecycle.contacted_peer).await?;
         let Some(event) = event else {
             return stream_end_error();
         };
-        let done = handle_download_event(ticket, &mut state, &mut lifecycle, event)?;
-        update_progress(progress, ticket, &state);
+        let done = handle_download_event(node, ticket, &mut state, &mut lifecycle, event, started_at)?;
+        update_progress(progress, ticket, &state, lifecycle);
         if done {
             drain_download_stream(&mut stream).await?;
-            return Ok(state);
+            return Ok(DownloadSummary {
+                metrics: TransferMetrics {
+                    route_kind: lifecycle.route_kind,
+                    connect_ms: lifecycle.connect_ms,
+                    download_ms: 0,
+                    export_ms: 0,
+                },
+            });
         }
     }
 }
@@ -209,17 +255,19 @@ async fn next_event(
 }
 
 fn handle_download_event(
+    node: &FastDropNode,
     ticket: &BlobTicket,
     state: &mut TransferState,
     lifecycle: &mut DownloadLifecycle,
     event: DownloadProgress,
+    started_at: Instant,
 ) -> Result<bool> {
     match &event {
         DownloadProgress::Connected
         | DownloadProgress::Found { .. }
         | DownloadProgress::FoundHashSeq { .. }
         | DownloadProgress::Progress { .. }
-        | DownloadProgress::Done { .. } => lifecycle.contacted_peer = true,
+        | DownloadProgress::Done { .. } => mark_contacted(node, ticket, lifecycle, started_at),
         DownloadProgress::Abort(error) => {
             return Err(download_abort_error(error.to_string(), *lifecycle));
         }
@@ -229,14 +277,52 @@ fn handle_download_event(
 
     state.on_progress(event);
     if transferred_bytes(ticket, state) > 0 {
-        lifecycle.contacted_peer = true;
+        mark_contacted(node, ticket, lifecycle, started_at);
     }
     Ok(false)
 }
 
-fn update_progress(progress: Option<&ProgressHandle>, ticket: &BlobTicket, state: &TransferState) {
+fn update_progress(
+    progress: Option<&ProgressHandle>,
+    ticket: &BlobTicket,
+    state: &TransferState,
+    lifecycle: DownloadLifecycle,
+) {
     if let Some(progress) = progress {
         progress.set(transferred_bytes(ticket, state), total_bytes(ticket, state));
+        progress.set_route_kind(lifecycle.route_kind);
+        progress.set_connect_ms(lifecycle.connect_ms);
+    }
+}
+
+fn mark_contacted(
+    node: &FastDropNode,
+    ticket: &BlobTicket,
+    lifecycle: &mut DownloadLifecycle,
+    started_at: Instant,
+) {
+    lifecycle.contacted_peer = true;
+    if lifecycle.connect_ms == 0 {
+        lifecycle.connect_ms = elapsed_ms(started_at.elapsed());
+    }
+
+    let route_kind = node.route_kind(ticket.node_addr().node_id);
+    lifecycle.route_kind = if route_kind == RouteKind::Unknown {
+        infer_route_kind(ticket)
+    } else {
+        route_kind
+    };
+}
+
+fn infer_route_kind(ticket: &BlobTicket) -> RouteKind {
+    let node_addr = ticket.node_addr();
+    match (
+        node_addr.direct_addresses.is_empty(),
+        node_addr.relay_url().is_some(),
+    ) {
+        (false, false) => RouteKind::Direct,
+        (true, true) => RouteKind::Relay,
+        _ => RouteKind::Unknown,
     }
 }
 
@@ -255,7 +341,7 @@ fn timeout_error(contacted_peer: bool) -> FastDropError {
     }
 }
 
-fn stream_end_error() -> Result<TransferState> {
+fn stream_end_error() -> Result<DownloadSummary> {
     Err(FastDropError::Blob(
         "Download stream closed unexpectedly".into(),
     ))
@@ -333,6 +419,10 @@ fn blob_error(err: &impl ToString) -> FastDropError {
     FastDropError::Blob(err.to_string())
 }
 
+fn elapsed_ms(duration: std::time::Duration) -> u64 {
+    u64::try_from(duration.as_millis()).unwrap_or(u64::MAX)
+}
+
 fn unix_timestamp() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -342,10 +432,35 @@ fn unix_timestamp() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use iroh::{NodeAddr, PublicKey};
+    use iroh_blobs::BlobFormat;
+    use std::str::FromStr;
 
     #[test]
     fn timeout_error_is_user_friendly() {
         assert_eq!(timeout_error(false).to_string(), "Peer not reachable");
         assert_eq!(timeout_error(true).to_string(), "Transfer interrupted");
+    }
+
+    #[test]
+    fn route_is_inferred_from_relay_only_ticket() {
+        let relay_url = "https://relay.example.com"
+            .parse()
+            .expect("relay url should parse");
+        let ticket = BlobTicket::new(
+            NodeAddr::from_parts(
+                PublicKey::from_str(
+                    "ae58ff8833241ac82d6ff7611046ed67b5072d142c588d0063e942d9a75502b6",
+                )
+                .expect("public key should parse"),
+                Some(relay_url),
+                [],
+            ),
+            iroh_blobs::Hash::new(b"hello"),
+            BlobFormat::Raw,
+        )
+        .expect("ticket should build");
+
+        assert_eq!(infer_route_kind(&ticket), RouteKind::Relay);
     }
 }

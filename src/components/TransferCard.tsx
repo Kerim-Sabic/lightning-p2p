@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import {
   formatBytes,
+  formatDurationMs,
   formatEta,
   formatSpeed,
   formatTimestamp,
@@ -27,16 +28,28 @@ function statusLabel(transfer: TransferEntry): string {
   switch (transfer.status) {
     case "starting":
       return transfer.direction === "send"
-        ? "Hashing content"
+        ? "Preparing share ticket"
         : "Connecting to peer";
     case "running":
       return transfer.direction === "send"
-        ? "Preparing share"
-        : "Streaming to disk";
+        ? "Importing content"
+        : "Streaming verified data";
     case "completed":
       return transfer.direction === "send" ? "Ticket ready" : "Saved locally";
     case "failed":
       return "Transfer failed";
+  }
+}
+
+function routeLabel(routeKind: TransferEntry["routeKind"]): string {
+  switch (routeKind) {
+    case "direct":
+      return "Direct";
+    case "relay":
+      return "Relay";
+    case "unknown":
+    default:
+      return "Detecting";
   }
 }
 
@@ -196,15 +209,15 @@ export function TransferCard({ transfer, onCancel }: TransferCardProps) {
             }
           />
           <AnimatedMetric
-            label="Status"
-            value={
-              transfer.status === "completed"
-                ? "Done"
-                : transfer.status === "failed"
-                  ? "Error"
-                  : "Live"
-            }
+            label="Route"
+            value={routeLabel(transfer.routeKind)}
           />
+        </div>
+
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-500">
+          <span>Connect {formatDurationMs(transfer.connectMs)}</span>
+          <span>Download {formatDurationMs(transfer.downloadMs)}</span>
+          <span>Export {formatDurationMs(transfer.exportMs)}</span>
         </div>
 
         {/* Error */}

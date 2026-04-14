@@ -3,11 +3,14 @@
 //! This module boots the iroh QUIC endpoint with n0 discovery and wires up the
 //! iroh-blobs protocol for content-addressed transfers.
 
+use super::status::NodeRuntimeStatus;
 use crate::error::{FastDropError, Result};
 use crate::storage::db::StorageDb;
+use crate::transfer::metrics::RouteKind;
+use iroh::endpoint::ConnectionType;
 use iroh::endpoint::TransportConfig;
 use iroh::protocol::Router;
-use iroh::{Endpoint, NodeAddr, NodeId};
+use iroh::{Endpoint, NodeAddr, NodeId, RelayMap, RelayMode, RelayUrl};
 use iroh_blobs::net_protocol::Blobs;
 use iroh_blobs::rpc::client::blobs::MemClient;
 use iroh_blobs::store::fs::Store as BlobStore;
@@ -39,10 +42,24 @@ impl FastDropNode {
     /// Returns `FastDropError` if endpoint binding, storage creation, or
     /// protocol startup fails.
     pub async fn start_with_dirs(data_dir: PathBuf, download_dir: PathBuf) -> Result<Self> {
+        Self::start_with_dirs_and_relay(data_dir, download_dir, None).await
+    }
+
+    /// Starts the iroh node with an optional custom relay URL.
+    ///
+    /// # Errors
+    ///
+    /// Returns `FastDropError` if endpoint binding, storage creation, or
+    /// protocol startup fails.
+    pub async fn start_with_dirs_and_relay(
+        data_dir: PathBuf,
+        download_dir: PathBuf,
+        relay_url: Option<RelayUrl>,
+    ) -> Result<Self> {
         std::fs::create_dir_all(&data_dir)?;
         std::fs::create_dir_all(&download_dir)?;
 
-        let endpoint = bind_endpoint().await?;
+        let endpoint = bind_endpoint(relay_url).await?;
         tracing::info!("FastDrop node started: {}", endpoint.node_id());
 
         let blob_store = load_blob_store(&data_dir).await?;
@@ -89,6 +106,43 @@ impl FastDropNode {
         ))
     }
 
+    /// Returns a snapshot of the node's current reachability status.
+    #[must_use]
+    pub fn runtime_status(&self) -> NodeRuntimeStatus {
+        let relay_url = self
+            .endpoint
+            .home_relay()
+            .get()
+            .ok()
+            .flatten()
+            .map(|url| url.to_string());
+        let direct_address_count = self
+            .endpoint
+            .direct_addresses()
+            .get()
+            .ok()
+            .flatten()
+            .map_or(0, |addresses| addresses.len());
+
+        NodeRuntimeStatus::from_network(
+            self.node_id().to_string(),
+            relay_url,
+            direct_address_count,
+        )
+    }
+
+    /// Returns the best-known route kind for a remote peer.
+    #[must_use]
+    pub fn route_kind(&self, node_id: NodeId) -> RouteKind {
+        self.endpoint
+            .conn_type(node_id)
+            .ok()
+            .and_then(|watcher| watcher.get().ok())
+            .map_or(RouteKind::Unknown, |connection_type| {
+                map_connection_type(&connection_type)
+            })
+    }
+
     /// Returns a reference to the iroh endpoint.
     #[must_use]
     pub fn endpoint(&self) -> &Endpoint {
@@ -117,10 +171,15 @@ impl FastDropNode {
     }
 }
 
-async fn bind_endpoint() -> Result<Endpoint> {
+async fn bind_endpoint(relay_url: Option<RelayUrl>) -> Result<Endpoint> {
+    let relay_mode = relay_url
+        .map(RelayMap::from_url)
+        .map_or(RelayMode::Default, RelayMode::Custom);
+
     Endpoint::builder()
         .discovery_n0()
         .discovery_local_network()
+        .relay_mode(relay_mode)
         .transport_config(tuned_transport_config())
         .bind()
         .await
@@ -152,6 +211,14 @@ async fn wait_for_home_relay(endpoint: &Endpoint) -> Result<iroh::RelayUrl> {
         .map_err(|err| FastDropError::Other(err.to_string()))
 }
 
+fn map_connection_type(connection_type: &ConnectionType) -> RouteKind {
+    match connection_type {
+        ConnectionType::Direct(_) => RouteKind::Direct,
+        ConnectionType::Relay(_) => RouteKind::Relay,
+        ConnectionType::Mixed(_, _) | ConnectionType::None => RouteKind::Unknown,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -170,5 +237,23 @@ mod tests {
         assert_eq!(MAX_CONCURRENT_STREAMS, 1024);
         assert_eq!(CONNECTION_WINDOW_BYTES, 268_435_456);
         assert_eq!(STREAM_WINDOW_BYTES, 67_108_864);
+    }
+
+    #[test]
+    fn connection_type_maps_to_route_kind() {
+        let relay_url: RelayUrl = "https://relay.example.com".parse().expect("relay url");
+        let direct_addr = "127.0.0.1:4433".parse().expect("direct addr");
+        assert_eq!(
+            map_connection_type(&ConnectionType::Direct(direct_addr)),
+            RouteKind::Direct
+        );
+        assert_eq!(
+            map_connection_type(&ConnectionType::Relay(relay_url.clone())),
+            RouteKind::Relay
+        );
+        assert_eq!(
+            map_connection_type(&ConnectionType::Mixed(direct_addr, relay_url)),
+            RouteKind::Unknown
+        );
     }
 }

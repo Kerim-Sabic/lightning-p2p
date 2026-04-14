@@ -57,8 +57,8 @@ export function ReceiveView() {
           Receive files
         </h1>
         <p className="max-w-xl text-sm leading-relaxed text-slate-400">
-          Paste a FastDrop ticket to stream verified files into your download
-          folder.
+          Paste a Lightning P2P ticket to stream verified files into your
+          download folder.
         </p>
       </header>
 
@@ -69,7 +69,7 @@ export function ReceiveView() {
             <div>
               <p className="text-sm font-medium text-white">BlobTicket</p>
               <p className="mt-1 text-[13px] text-slate-500">
-                FastDrop tickets start with{" "}
+                Lightning P2P tickets start with{" "}
                 <span className="rounded-md border border-white/[0.08] bg-white/[0.04] px-1.5 py-0.5 font-mono text-[11px] text-slate-300">
                   blob
                 </span>

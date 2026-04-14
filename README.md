@@ -14,8 +14,8 @@
 
 ### The fastest way to move files between devices.
 
-**FastDrop** is a desktop peer-to-peer file transfer app built with Rust, iroh, and Tauri v2.<br />
-No cloud. No accounts. No file size limits. Just direct, encrypted, verified transfers.
+**Lightning P2P** is a desktop peer-to-peer file transfer app built with Rust, iroh, and Tauri v2.<br />
+No cloud. No accounts. No file size limits. Just direct, encrypted, verified transfers over LAN or the public internet.
 
 <br />
 
@@ -57,32 +57,144 @@ Most file sharing tools route your data through the cloud, require accounts, or 
 
 ### Windows
 
-Download the latest installer from [**GitHub Releases**](https://github.com/Kerim-Sabic/lightning-p2p/releases).
+Download the latest installer from [**GitHub Releases**](https://github.com/Kerim-Sabic/lightning-p2p/releases). Each release publishes installers, updater artifacts, and SHA256 checksums.
 
 | Installer | Description |
 |-----------|-------------|
-| `FastDrop_x.x.x_x64-setup.exe` | NSIS installer (recommended) |
-| `FastDrop_x.x.x_x64_en-US.msi` | MSI installer |
+| `LightningP2P_x.x.x_x64-setup.exe` | NSIS installer (recommended) |
+| `LightningP2P_x.x.x_x64_en-US.msi` | MSI installer |
+
+Verify the SHA256 checksum from the release notes before installing if you want to confirm the binary you downloaded.
 
 > **Note:** Windows may show a SmartScreen warning on first launch since the app is not yet code-signed. Click "More info" then "Run anyway".
 
 ## Quick Start
 
-### From source
+### Windows from source
 
-```bash
-# 1. Clone
+Lightning P2P is currently documented primarily for Windows development. Tauri needs more than Node packages alone, so make sure the native prerequisites are installed before you run `pnpm tauri dev`.
+
+#### 1. Install the native prerequisites
+
+1. Install **Microsoft C++ Build Tools** and select **Desktop development with C++** during setup.
+2. Make sure **Microsoft Edge WebView2 Runtime** is available.
+   - It is usually already installed on Windows 10 version 1803+ and Windows 11.
+   - If you are unsure, install the Evergreen Bootstrapper from Microsoft anyway.
+3. Install **Rust** with `rustup`.
+   - PowerShell: `winget install --id Rustlang.Rustup`
+   - In the Rust installer, keep the **MSVC** toolchain selected.
+4. Restart PowerShell, Windows Terminal, and VS Code after the Rust install so `cargo` is added to `PATH`.
+5. Ensure the MSVC toolchain is active:
+
+```powershell
+rustup default stable-msvc
+```
+
+#### 2. Install the JavaScript tooling
+
+Install:
+
+- [Node.js 20+](https://nodejs.org/)
+- [pnpm](https://pnpm.io/) or enable it through Corepack:
+
+```powershell
+corepack enable
+```
+
+#### 3. Verify your toolchain
+
+Run these commands in a fresh terminal before cloning or starting the app:
+
+```powershell
+node -v
+pnpm -v
+cargo --version
+rustc -vV
+```
+
+On Windows, `rustc -vV` should report a host triple ending in `windows-msvc`.
+
+#### 4. Clone the repo and install dependencies
+
+```powershell
 git clone https://github.com/Kerim-Sabic/lightning-p2p.git
 cd lightning-p2p
-
-# 2. Install dependencies
 pnpm install
+```
 
-# 3. Run in development mode
+#### 5. Start the app in development mode
+
+```powershell
 pnpm tauri dev
 ```
 
-**Prerequisites:** [Rust 1.81+](https://rustup.rs/), [Node.js 20+](https://nodejs.org/), [pnpm](https://pnpm.io/)
+The first run can take a while because Cargo needs to resolve and compile the Rust dependencies in `src-tauri`.
+
+#### 6. Optional: confirm the Rust side builds cleanly first
+
+If you want to separate Rust setup issues from frontend issues, run:
+
+```powershell
+cargo build --manifest-path src-tauri/Cargo.toml
+```
+
+and then start the app:
+
+```powershell
+pnpm tauri dev
+```
+
+#### Troubleshooting
+
+If you see this error:
+
+```text
+failed to run 'cargo metadata' command to get workspace directory:
+failed to run command cargo metadata --no-deps --format-version 1: program not found
+```
+
+that means `cargo` is not available in the terminal running Tauri. In practice, one of these is usually true:
+
+1. Rust was not installed yet.
+2. Rust was installed, but you did not restart the terminal afterward.
+3. The wrong Windows toolchain is active.
+
+Fix it with:
+
+```powershell
+winget install --id Rustlang.Rustup
+rustup default stable-msvc
+cargo --version
+```
+
+Then close the terminal, open a new one in the project root, and run:
+
+```powershell
+pnpm tauri dev
+```
+
+If `winget` says Rustup is already installed but `rustup` and `cargo` are still "not recognized", the install is usually fine and only `PATH` is stale in the current shell. First close PowerShell completely and open a fresh one.
+
+If you want to verify that directly, check for the default install location:
+
+```powershell
+Test-Path "$env:USERPROFILE\.cargo\bin\rustup.exe"
+Test-Path "$env:USERPROFILE\.cargo\bin\cargo.exe"
+```
+
+If both commands return `True`, temporarily fix the current shell with:
+
+```powershell
+$env:Path = "$env:USERPROFILE\.cargo\bin;$env:Path"
+cargo --version
+rustup default stable-msvc
+pnpm tauri dev
+```
+
+#### Official prerequisite references
+
+- Tauri prerequisites: https://v2.tauri.app/start/prerequisites/
+- Rust installer: https://rustup.rs/
 
 ### Build Windows installers
 
@@ -99,7 +211,7 @@ Lightning P2P uses **iroh** for peer-to-peer networking and **iroh-blobs** for c
 ```
 Sender                              Receiver
   |                                    |
-  |  1. Drop files into FastDrop       |
+  |  1. Drop files into Lightning P2P  |
   |  2. Files hashed with BLAKE3       |
   |  3. Added to local blob store      |
   |  4. Ticket generated               |
@@ -114,6 +226,17 @@ Sender                              Receiver
 ```
 
 **Tickets** contain the sender's node ID, content hash, and relay info -- everything the receiver needs to connect directly and download.
+
+### WAN behavior
+
+Lightning P2P is not LAN-only. If both peers can reach each other directly, transfers stay on the fastest path possible. If a direct path is blocked by NAT or firewall rules, iroh falls back to relay-assisted connectivity so the transfer can still complete across the public internet.
+
+For best speed:
+
+- prefer a direct connection when both peers are reachable
+- allow the app through your firewall on both devices
+- keep both peers on a stable network when sending very large files
+- treat relay fallback as the compatibility path, not the fastest path
 
 ### Performance
 
@@ -156,7 +279,7 @@ lightning-p2p/
 
 | Layer | Technology |
 |-------|-----------|
-| **Networking** | iroh (QUIC, NAT traversal, relay) |
+| **Networking** | iroh (QUIC, NAT traversal, relay, WAN reachability) |
 | **Transfer** | iroh-blobs (BLAKE3 verified streaming) |
 | **Backend** | Rust, Tauri v2, tokio |
 | **Frontend** | React 19, TypeScript (strict), Zustand |
@@ -214,11 +337,13 @@ Contributions that improve transfer reliability, performance, UX, packaging, or 
 
 ### Good first issues
 
-- Linux and macOS packaging support
+- README hero screenshot or GIF
+- GitHub repository topics and social preview image
 - Pause/resume transfers
-- Drag-and-drop between FastDrop instances
-- Richer transfer diagnostics
 - Broader integration test coverage
+- Linux/macOS packaging spikes
+- Relay diagnostics dashboards
+- GitHub Discussions enablement and community docs
 
 ## License
 

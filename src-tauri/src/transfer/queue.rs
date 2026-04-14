@@ -1,5 +1,6 @@
 //! Transfer queue - manages concurrent downloads and their cancellation handles.
 
+use crate::transfer::metrics::TransferMetrics;
 use crate::transfer::progress::TransferInfo;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -40,12 +41,23 @@ impl TransferQueue {
     }
 
     /// Updates the progress snapshot for an active transfer.
-    pub async fn update_progress(&self, transfer_id: &str, bytes: u64, total: u64, speed_bps: u64) {
+    pub async fn update_progress(
+        &self,
+        transfer_id: &str,
+        bytes: u64,
+        total: u64,
+        speed_bps: u64,
+        metrics: TransferMetrics,
+    ) {
         let mut map = self.active.write().await;
         if let Some(entry) = map.get_mut(transfer_id) {
             entry.info.bytes = bytes;
             entry.info.total = total;
             entry.info.speed_bps = speed_bps;
+            entry.info.route_kind = metrics.route_kind;
+            entry.info.connect_ms = metrics.connect_ms;
+            entry.info.download_ms = metrics.download_ms;
+            entry.info.export_ms = metrics.export_ms;
         }
     }
 
@@ -89,6 +101,10 @@ mod tests {
             bytes: 0,
             total: 1000,
             speed_bps: 0,
+            route_kind: crate::transfer::metrics::RouteKind::Unknown,
+            connect_ms: 0,
+            download_ms: 0,
+            export_ms: 0,
         }
     }
 

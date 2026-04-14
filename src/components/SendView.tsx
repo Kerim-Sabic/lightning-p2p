@@ -56,6 +56,8 @@ export function SendView() {
   const prepareShareSelection = useTransferStore(
     (state) => state.prepareShareSelection,
   );
+  const pickShareFiles = useTransferStore((state) => state.pickShareFiles);
+  const pickShareFolder = useTransferStore((state) => state.pickShareFolder);
   const createShare = useTransferStore((state) => state.createShare);
   const [copied, setCopied] = useState(false);
   const [isDragActive, setIsDragActive] = useState(false);
@@ -155,8 +157,8 @@ export function SendView() {
           Share files
         </h1>
         <p className="max-w-xl text-sm leading-relaxed text-slate-400">
-          Drop files or folders below, then generate a ticket for instant P2P
-          delivery.
+          Stage files or folders, then generate a Lightning P2P ticket for
+          direct delivery over LAN or the public internet.
         </p>
       </header>
 
@@ -184,8 +186,24 @@ export function SendView() {
             </p>
             <p className="max-w-md text-sm text-slate-500">
               Directory structure is preserved. Files stay local until you
-              generate a share link.
+              generate a share ticket.
             </p>
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+            <button
+              onClick={() => void pickShareFiles()}
+              className="glass-button inline-flex items-center gap-2 px-4 py-2 text-sm text-slate-200"
+            >
+              <File className="h-4 w-4" />
+              Choose files
+            </button>
+            <button
+              onClick={() => void pickShareFolder()}
+              className="glass-button inline-flex items-center gap-2 px-4 py-2 text-sm text-slate-200"
+            >
+              <Folder className="h-4 w-4" />
+              Choose folder
+            </button>
           </div>
         </div>
       </section>
@@ -224,7 +242,7 @@ export function SendView() {
                   ) : null}
                   <span className="relative inline-flex items-center gap-2">
                     <Link2 className="h-4 w-4" />
-                    {isSharing ? "Generating..." : "Generate Link"}
+                    {isSharing ? "Generating..." : "Generate ticket"}
                   </span>
                 </button>
               </div>
@@ -296,7 +314,8 @@ export function SendView() {
                       Share ticket
                     </p>
                     <p className="mt-1 text-[13px] text-slate-500">
-                      Copy the link or scan the QR code on the receiving device.
+                      Copy the ticket or scan the QR code on the receiving
+                      device.
                     </p>
                   </div>
                   <button

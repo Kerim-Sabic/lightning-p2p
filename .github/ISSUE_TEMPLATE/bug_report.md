@@ -1,6 +1,6 @@
 ---
 name: Bug Report
-about: Report a bug to help us improve FastDrop
+about: Report a bug to help us improve Lightning P2P
 title: "[Bug] "
 labels: bug
 assignees: ''
@@ -23,8 +23,9 @@ If applicable, add screenshots.
 
 **Environment**
 - OS: [e.g. Windows 11]
-- FastDrop version: [e.g. 0.2.0]
+- Lightning P2P version: [e.g. 0.2.0]
 - Network: [LAN / Internet]
+- Route: [Direct / Relay / Unknown]
 
 **Additional context**
 Any other context about the problem.

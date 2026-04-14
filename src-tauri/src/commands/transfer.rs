@@ -1,6 +1,7 @@
 //! Commands for receiving files and querying transfer state.
 
 use crate::storage::history::{self, TransferRecord};
+use crate::transfer::metrics::RouteKind;
 use crate::transfer::progress::{TransferDirection, TransferInfo};
 use crate::AppState;
 use iroh_blobs::ticket::BlobTicket;
@@ -39,6 +40,10 @@ pub async fn start_receive(
                 bytes: 0,
                 total: 0,
                 speed_bps: 0,
+                route_kind: RouteKind::Unknown,
+                connect_ms: 0,
+                download_ms: 0,
+                export_ms: 0,
             },
             Some(cancel_tx),
         )

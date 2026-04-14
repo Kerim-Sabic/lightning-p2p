@@ -9,10 +9,22 @@ import {
 } from "@tauri-apps/plugin-updater";
 
 export type TransferDirection = "send" | "receive";
+export type NodeOnlineState =
+  | "starting"
+  | "direct_ready"
+  | "relay_ready"
+  | "degraded"
+  | "offline";
+export type RouteKind = "unknown" | "direct" | "relay";
+export type RelayMode = "public" | "custom";
 
 export interface NodeStatus {
   online: boolean;
   node_id: string | null;
+  relay_connected: boolean;
+  relay_url: string | null;
+  direct_address_count: number;
+  online_state: NodeOnlineState;
 }
 
 export interface ActiveTransfer {
@@ -23,6 +35,10 @@ export interface ActiveTransfer {
   bytes: number;
   total: number;
   speed_bps: number;
+  route_kind: RouteKind;
+  connect_ms: number;
+  download_ms: number;
+  export_ms: number;
 }
 
 export interface TransferRecord {
@@ -45,6 +61,8 @@ export interface AppSettings {
   download_dir: string;
   auto_update_enabled: boolean;
   first_run_complete: boolean;
+  relay_mode: RelayMode;
+  custom_relay_url: string | null;
 }
 
 export interface UpdateCheckResult {
@@ -68,6 +86,10 @@ export type TransferEvent =
       name: string;
       peer: string | null;
       total: number;
+      route_kind: RouteKind;
+      connect_ms: number;
+      download_ms: number;
+      export_ms: number;
     }
   | {
       type: "progress";
@@ -75,6 +97,10 @@ export type TransferEvent =
       bytes: number;
       total: number;
       speed_bps: number;
+      route_kind: RouteKind;
+      connect_ms: number;
+      download_ms: number;
+      export_ms: number;
     }
   | {
       type: "completed";
@@ -85,11 +111,16 @@ export type TransferEvent =
       size: number;
       peer: string | null;
       timestamp: number;
+      route_kind: RouteKind;
+      connect_ms: number;
+      download_ms: number;
+      export_ms: number;
     }
   | {
       type: "failed";
       transfer_id: string;
       error: string;
+      route_kind: RouteKind;
     };
 
 let pendingUpdate: Update | null = null;
@@ -161,6 +192,16 @@ export async function setAutoUpdateEnabled(
   return invoke<AppSettings>("set_auto_update_enabled", { enabled });
 }
 
+export async function setRelayMode(relayMode: RelayMode): Promise<AppSettings> {
+  return invoke<AppSettings>("set_relay_mode", { relayMode });
+}
+
+export async function setCustomRelayUrl(
+  relayUrl: string | null,
+): Promise<AppSettings> {
+  return invoke<AppSettings>("set_custom_relay_url", { relayUrl });
+}
+
 export async function completeFirstRun(): Promise<AppSettings> {
   return invoke<AppSettings>("complete_first_run");
 }
@@ -178,6 +219,34 @@ export async function pickDirectory(
     defaultPath,
     title: "Choose a download folder",
   });
+  return typeof selected === "string" ? selected : null;
+}
+
+export async function pickShareFiles(defaultPath?: string): Promise<string[]> {
+  const selected = await openDialog({
+    directory: false,
+    multiple: true,
+    defaultPath,
+    title: "Choose files to share",
+  });
+
+  if (typeof selected === "string") {
+    return [selected];
+  }
+
+  return Array.isArray(selected) ? selected : [];
+}
+
+export async function pickShareFolder(
+  defaultPath?: string,
+): Promise<string | null> {
+  const selected = await openDialog({
+    directory: true,
+    multiple: false,
+    defaultPath,
+    title: "Choose a folder to share",
+  });
+
   return typeof selected === "string" ? selected : null;
 }
 

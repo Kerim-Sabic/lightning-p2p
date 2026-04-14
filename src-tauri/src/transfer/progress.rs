@@ -1,9 +1,10 @@
 //! Transfer event payloads and throttled event emission helpers.
 
 use crate::error::{FastDropError, Result};
+use crate::transfer::metrics::{RouteKind, TransferMetrics};
 use crate::transfer::queue::TransferQueue;
 use serde::{Deserialize, Serialize};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{Emitter, Window};
@@ -39,6 +40,14 @@ pub struct TransferInfo {
     pub total: u64,
     /// Current average transfer rate.
     pub speed_bps: u64,
+    /// Best-known route used for this transfer.
+    pub route_kind: RouteKind,
+    /// Time to first peer contact or sender preparation completion.
+    pub connect_ms: u64,
+    /// Time spent downloading data into the local blob store.
+    pub download_ms: u64,
+    /// Time spent exporting data to disk.
+    pub export_ms: u64,
 }
 
 /// Event emitted to the frontend over Tauri IPC.
@@ -57,6 +66,14 @@ pub enum TransferEvent {
         peer: Option<String>,
         /// Total bytes expected if known.
         total: u64,
+        /// Best-known route used for this transfer.
+        route_kind: RouteKind,
+        /// Time to first peer contact or sender preparation completion.
+        connect_ms: u64,
+        /// Time spent downloading data into the local blob store.
+        download_ms: u64,
+        /// Time spent exporting data to disk.
+        export_ms: u64,
     },
     /// Transfer progress update.
     Progress {
@@ -68,6 +85,14 @@ pub enum TransferEvent {
         total: u64,
         /// Current average transfer rate.
         speed_bps: u64,
+        /// Best-known route used for this transfer.
+        route_kind: RouteKind,
+        /// Time to first peer contact or sender preparation completion.
+        connect_ms: u64,
+        /// Time spent downloading data into the local blob store.
+        download_ms: u64,
+        /// Time spent exporting data to disk.
+        export_ms: u64,
     },
     /// Transfer completed successfully.
     Completed {
@@ -85,6 +110,14 @@ pub enum TransferEvent {
         peer: Option<String>,
         /// Completion timestamp in unix seconds.
         timestamp: u64,
+        /// Best-known route used for this transfer.
+        route_kind: RouteKind,
+        /// Time to first peer contact or sender preparation completion.
+        connect_ms: u64,
+        /// Time spent downloading data into the local blob store.
+        download_ms: u64,
+        /// Time spent exporting data to disk.
+        export_ms: u64,
     },
     /// Transfer failed.
     Failed {
@@ -92,6 +125,8 @@ pub enum TransferEvent {
         transfer_id: String,
         /// User-visible failure message.
         error: String,
+        /// Best-known route used for this transfer.
+        route_kind: RouteKind,
     },
 }
 
@@ -104,6 +139,14 @@ pub struct ProgressUpdate {
     pub total: u64,
     /// Current average transfer rate.
     pub speed_bps: u64,
+    /// Best-known route used for this transfer.
+    pub route_kind: RouteKind,
+    /// Time to first peer contact or sender preparation completion.
+    pub connect_ms: u64,
+    /// Time spent downloading data into the local blob store.
+    pub download_ms: u64,
+    /// Time spent exporting data to disk.
+    pub export_ms: u64,
 }
 
 /// Emits transfer events while throttling progress to avoid IPC flooding.
@@ -140,13 +183,17 @@ impl EventReporter {
     /// # Errors
     ///
     /// Returns `FastDropError` if the Tauri event cannot be emitted.
-    pub fn emit_started(&self, total: u64) -> Result<()> {
+    pub fn emit_started(&self, total: u64, metrics: TransferMetrics) -> Result<()> {
         self.emit(TransferEvent::Started {
             transfer_id: self.transfer_id.clone(),
             direction: self.direction,
             name: self.name.clone(),
             peer: self.peer.clone(),
             total,
+            route_kind: metrics.route_kind,
+            connect_ms: metrics.connect_ms,
+            download_ms: metrics.download_ms,
+            export_ms: metrics.export_ms,
         })
     }
 
@@ -161,6 +208,10 @@ impl EventReporter {
             bytes: update.bytes,
             total: update.total,
             speed_bps: update.speed_bps,
+            route_kind: update.route_kind,
+            connect_ms: update.connect_ms,
+            download_ms: update.download_ms,
+            export_ms: update.export_ms,
         })
     }
 
@@ -169,7 +220,7 @@ impl EventReporter {
     /// # Errors
     ///
     /// Returns `FastDropError` if the Tauri event cannot be emitted.
-    pub fn emit_completed(&self, hash: String, size: u64) -> Result<()> {
+    pub fn emit_completed(&self, hash: String, size: u64, metrics: TransferMetrics) -> Result<()> {
         self.emit(TransferEvent::Completed {
             transfer_id: self.transfer_id.clone(),
             direction: self.direction,
@@ -178,6 +229,10 @@ impl EventReporter {
             size,
             peer: self.peer.clone(),
             timestamp: unix_timestamp(),
+            route_kind: metrics.route_kind,
+            connect_ms: metrics.connect_ms,
+            download_ms: metrics.download_ms,
+            export_ms: metrics.export_ms,
         })
     }
 
@@ -186,10 +241,11 @@ impl EventReporter {
     /// # Errors
     ///
     /// Returns `FastDropError` if the Tauri event cannot be emitted.
-    pub fn emit_failed(&self, error: &str) -> Result<()> {
+    pub fn emit_failed(&self, error: &str, route_kind: RouteKind) -> Result<()> {
         self.emit(TransferEvent::Failed {
             transfer_id: self.transfer_id.clone(),
             error: error.to_string(),
+            route_kind,
         })
     }
 
@@ -221,6 +277,12 @@ impl QueueProgressTarget {
                 update.bytes,
                 update.total,
                 update.speed_bps,
+                TransferMetrics {
+                    route_kind: update.route_kind,
+                    connect_ms: update.connect_ms,
+                    download_ms: update.download_ms,
+                    export_ms: update.export_ms,
+                },
             )
             .await;
     }
@@ -231,6 +293,10 @@ impl QueueProgressTarget {
 pub struct ProgressHandle {
     bytes: Arc<AtomicU64>,
     total: Arc<AtomicU64>,
+    route_kind: Arc<AtomicU8>,
+    connect_ms: Arc<AtomicU64>,
+    download_ms: Arc<AtomicU64>,
+    export_ms: Arc<AtomicU64>,
 }
 
 impl ProgressHandle {
@@ -253,6 +319,48 @@ impl ProgressHandle {
             self.bytes.load(Ordering::Relaxed),
             self.total.load(Ordering::Relaxed),
         )
+    }
+
+    /// Returns the latest route and timing metrics.
+    #[must_use]
+    pub fn metrics_snapshot(&self) -> TransferMetrics {
+        TransferMetrics {
+            route_kind: RouteKind::from_repr(self.route_kind.load(Ordering::Relaxed)),
+            connect_ms: self.connect_ms.load(Ordering::Relaxed),
+            download_ms: self.download_ms.load(Ordering::Relaxed),
+            export_ms: self.export_ms.load(Ordering::Relaxed),
+        }
+    }
+
+    /// Stores route and timing metrics.
+    pub fn set_metrics(&self, metrics: TransferMetrics) {
+        self.route_kind
+            .store(metrics.route_kind.as_repr(), Ordering::Relaxed);
+        self.connect_ms.store(metrics.connect_ms, Ordering::Relaxed);
+        self.download_ms
+            .store(metrics.download_ms, Ordering::Relaxed);
+        self.export_ms.store(metrics.export_ms, Ordering::Relaxed);
+    }
+
+    /// Updates the route kind for the transfer.
+    pub fn set_route_kind(&self, route_kind: RouteKind) {
+        self.route_kind
+            .store(route_kind.as_repr(), Ordering::Relaxed);
+    }
+
+    /// Updates the connection timing metric.
+    pub fn set_connect_ms(&self, connect_ms: u64) {
+        self.connect_ms.store(connect_ms, Ordering::Relaxed);
+    }
+
+    /// Updates the download timing metric.
+    pub fn set_download_ms(&self, download_ms: u64) {
+        self.download_ms.store(download_ms, Ordering::Relaxed);
+    }
+
+    /// Updates the export timing metric.
+    pub fn set_export_ms(&self, export_ms: u64) {
+        self.export_ms.store(export_ms, Ordering::Relaxed);
     }
 }
 
@@ -374,11 +482,16 @@ fn sample_progress(
     now: Instant,
 ) -> ProgressUpdate {
     let (bytes, total) = handle.snapshot();
+    let metrics = handle.metrics_snapshot();
     let bytes_delta = bytes.saturating_sub(last_bytes);
     ProgressUpdate {
         bytes,
         total,
         speed_bps: calculate_speed(bytes_delta, now.saturating_duration_since(last_sample_at)),
+        route_kind: metrics.route_kind,
+        connect_ms: metrics.connect_ms,
+        download_ms: metrics.download_ms,
+        export_ms: metrics.export_ms,
     }
 }
 
@@ -410,10 +523,15 @@ mod tests {
             bytes: 128,
             total: 256,
             speed_bps: 64,
+            route_kind: RouteKind::Direct,
+            connect_ms: 12,
+            download_ms: 24,
+            export_ms: 0,
         };
         let json = serde_json::to_string(&event).expect("progress event should serialize");
         assert!(json.contains("\"type\":\"progress\""));
         assert!(json.contains("\"bytes\":128"));
+        assert!(json.contains("\"route_kind\":\"direct\""));
     }
 
     #[test]
@@ -429,6 +547,21 @@ mod tests {
         assert_eq!(handle.snapshot(), (96, 128));
         handle.set(128, 128);
         assert_eq!(handle.snapshot(), (128, 128));
+        handle.set_metrics(TransferMetrics {
+            route_kind: RouteKind::Relay,
+            connect_ms: 10,
+            download_ms: 20,
+            export_ms: 30,
+        });
+        assert_eq!(
+            handle.metrics_snapshot(),
+            TransferMetrics {
+                route_kind: RouteKind::Relay,
+                connect_ms: 10,
+                download_ms: 20,
+                export_ms: 30,
+            }
+        );
     }
 
     #[test]
@@ -446,5 +579,6 @@ mod tests {
         assert_eq!(update.bytes, 512);
         assert_eq!(update.total, 1024);
         assert!(update.speed_bps >= 2_000);
+        assert_eq!(update.route_kind, RouteKind::Unknown);
     }
 }

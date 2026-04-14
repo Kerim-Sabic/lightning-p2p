@@ -29,7 +29,21 @@ These are enforced project-wide:
 
 ```powershell
 winget install Rustlang.Rustup
-npm install -g pnpm
+rustup default stable-msvc
+corepack enable
+```
+
+Also install:
+
+- Microsoft C++ Build Tools with `Desktop development with C++`
+- Microsoft Edge WebView2 Runtime
+
+After installing Rust, restart your terminal and verify:
+
+```powershell
+cargo --version
+rustc -vV
+pnpm -v
 ```
 
 ### Install dependencies
@@ -61,6 +75,8 @@ If you change transfer performance or transport behavior, also run:
 cargo bench --manifest-path src-tauri/Cargo.toml --bench transfer_bench -- --noplot
 ```
 
+If you change user-facing wording, branding, or release packaging, also update the README and release notes so the public surface stays consistent.
+
 ## What Makes a Good PR
 
 A strong PR in this repo usually has:
@@ -79,15 +95,27 @@ A strong PR in this repo usually has:
 - public functions have doc comments
 - files stay reasonably small
 - README or docs are updated if behavior changed
+- release notes mention any checksum or installer changes when packaging changes
 
 ## Areas Where Help Is Valuable
 
 - transport performance
 - receive/export throughput
-- pause/resume transfer support
-- Windows packaging and updater flow
+- WAN diagnostics and relay visibility
+- send picker UX
+- release notes, checksums, and installer polish
 - integration test coverage
 - UX polish for send, receive, history, and settings
+
+## Repository Hygiene
+
+Recommended GitHub settings for this repository:
+
+- enable GitHub Discussions for questions and ideas
+- keep Dependabot enabled for `cargo`, `pnpm`, and GitHub Actions updates
+- keep `CODEOWNERS` pointed at the maintainer for docs and release-touching changes
+- use repo topics such as `p2p`, `file-transfer`, `tauri`, `rust`, `react`, `iroh`, `quic`, `blake3`, `desktop-app`, and `windows`
+- add `FUNDING.yml` only if sponsorship is intentionally supported
 
 ## Reporting Issues
 
@@ -97,6 +125,7 @@ When filing a bug, include:
 - whether you used `pnpm tauri dev` or a packaged build
 - sender and receiver environment
 - ticket type: file or directory
+- whether the transfer was LAN, direct internet, or relay-assisted
 - expected behavior
 - actual behavior
 - logs or screenshots when available
