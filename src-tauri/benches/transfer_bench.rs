@@ -169,8 +169,10 @@ fn transfer_benchmark(c: &mut Criterion) {
     let share_warmup = runtime.block_on(run_share_preparation(BENCH_SIZE));
     let receive_warmup = runtime.block_on(run_app_receive_phases(BENCH_SIZE));
     let memory_warmup = runtime.block_on(run_memory_transport_transfer(payload));
-    let directory_warmup =
-        runtime.block_on(run_directory_share_preparation(DIRECTORY_FILE_COUNT, DIRECTORY_FILE_SIZE));
+    let directory_warmup = runtime.block_on(run_directory_share_preparation(
+        DIRECTORY_FILE_COUNT,
+        DIRECTORY_FILE_SIZE,
+    ));
     eprintln!(
         "Sender prep 100MB: {:.2} MB/s in {:.2?}",
         mb_per_second(BENCH_SIZE, share_warmup),

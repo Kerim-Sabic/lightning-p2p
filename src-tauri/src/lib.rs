@@ -125,8 +125,12 @@ pub fn run() {
                     }
                 };
 
-                match node::FastDropNode::start_with_dirs_and_relay(data_dir, download_dir, relay_url)
-                    .await
+                match node::FastDropNode::start_with_dirs_and_relay(
+                    data_dir,
+                    download_dir,
+                    relay_url,
+                )
+                .await
                 {
                     Ok(node) => {
                         let runtime_status = node.runtime_status();

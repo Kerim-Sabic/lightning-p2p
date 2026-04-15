@@ -2,14 +2,14 @@ import { motion } from "framer-motion";
 import {
   ArrowDownToLine,
   Clock3,
+  Radar,
   Send,
   Settings2,
-  Wifi,
+  Sparkles,
 } from "lucide-react";
-import { useMemo } from "react";
 import type { View } from "../App";
 import lightningMark from "../assets/lightning-p2p-mark.png";
-import { useTransferStore } from "../stores/transferStore";
+import { useNavigationSnapshot } from "../stores/transferSelectors";
 
 interface SidebarProps {
   currentView: View;
@@ -20,35 +20,21 @@ const navItems: Array<{
   id: View;
   label: string;
   icon: typeof Send;
-  accent: string;
 }> = [
-  { id: "send", label: "Send", icon: Send, accent: "sky" },
-  { id: "receive", label: "Receive", icon: ArrowDownToLine, accent: "emerald" },
-  { id: "history", label: "History", icon: Clock3, accent: "violet" },
-  { id: "settings", label: "Settings", icon: Settings2, accent: "slate" },
+  { id: "send", label: "Send", icon: Send },
+  { id: "receive", label: "Receive", icon: ArrowDownToLine },
+  { id: "history", label: "History", icon: Clock3 },
+  { id: "settings", label: "Settings", icon: Settings2 },
 ];
 
-function activeIconClass(accent: string): string {
-  switch (accent) {
-    case "sky":
-      return "border-sky-400/25 bg-sky-500/14 text-sky-300";
-    case "emerald":
-      return "border-emerald-400/25 bg-emerald-500/14 text-emerald-300";
-    case "violet":
-      return "border-violet-400/25 bg-violet-500/14 text-violet-300";
-    default:
-      return "border-white/10 bg-white/[0.08] text-slate-200";
-  }
-}
-
-function statusLabel(onlineState: string): string {
+function routeLabel(onlineState: string): string {
   switch (onlineState) {
     case "direct_ready":
       return "Direct ready";
     case "relay_ready":
       return "Relay ready";
     case "degraded":
-      return "Degraded";
+      return "Routes warming";
     case "offline":
       return "Offline";
     case "starting":
@@ -57,155 +43,140 @@ function statusLabel(onlineState: string): string {
   }
 }
 
-function statusCopy(onlineState: string): string {
+function routeTone(onlineState: string): string {
   switch (onlineState) {
     case "direct_ready":
-      return "Fastest path available";
+      return "border-emerald-400/20 bg-emerald-500/12 text-emerald-100";
     case "relay_ready":
-      return "Relay path available";
+      return "border-sky-400/20 bg-sky-500/12 text-sky-100";
     case "degraded":
-      return "Waiting for a route";
+      return "border-amber-400/20 bg-amber-500/12 text-amber-100";
     case "offline":
-      return "Node unavailable";
+      return "border-rose-400/20 bg-rose-500/12 text-rose-100";
     case "starting":
     default:
-      return "Starting node";
+      return "border-white/10 bg-white/[0.05] text-slate-100";
   }
 }
 
-export function Sidebar({ currentView, onNavigate }: SidebarProps) {
-  const nodeStatus = useTransferStore((state) => state.nodeStatus);
-  const transfers = useTransferStore((state) => state.transfers);
+function updateCopy(updatePhase: string): string {
+  return updatePhase === "available"
+    ? "Update ready"
+    : updatePhase === "downloading"
+      ? "Updating"
+      : "Current";
+}
 
-  const activeTransferCount = useMemo(
-    () =>
-      Object.values(transfers).filter(
-        (transfer) =>
-          transfer.status === "starting" || transfer.status === "running",
-      ).length,
-    [transfers],
-  );
+export function Sidebar({ currentView, onNavigate }: SidebarProps) {
+  const { activeTransferCount, nodeStatus, receiveTransferCount, updatePhase } =
+    useNavigationSnapshot();
 
   return (
-    <aside className="group/sidebar relative z-10 m-3 flex h-[calc(100%-1.5rem)] w-[72px] shrink-0 overflow-hidden rounded-[24px] border border-white/[0.07] bg-black/40 shadow-[0_8px_40px_rgba(0,0,0,0.5)] backdrop-blur-2xl transition-[width] duration-300 ease-out hover:w-64">
-      <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),transparent_50%)]" />
-      <div className="relative flex h-full w-full flex-col">
-        {/* Logo */}
-        <div className="px-3 py-4">
-          <div className="flex items-center gap-3 overflow-hidden rounded-2xl border border-white/[0.07] bg-white/[0.04] px-2.5 py-2.5">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/[0.08] bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.12),rgba(255,255,255,0.02)_60%,transparent)] shadow-[0_4px_20px_rgba(15,23,42,0.35)]">
+    <aside className="relative z-10 m-4 flex h-[calc(100%-2rem)] w-[248px] shrink-0 overflow-hidden rounded-[28px] border border-white/10 bg-black/30 shadow-[0_20px_70px_rgba(2,6,23,0.44)]">
+      <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.07),transparent_22%,transparent)]" />
+      <div className="relative flex h-full w-full flex-col px-4 py-4">
+        <div className="rounded-[24px] border border-white/8 bg-white/[0.035] p-3.5">
+          <div className="flex items-center gap-3">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.05]">
               <img
                 src={lightningMark}
                 alt=""
                 className="h-7 w-7 object-contain opacity-95"
               />
             </div>
-            <div className="min-w-0 opacity-0 transition-opacity duration-200 group-hover/sidebar:opacity-100">
-              <p className="text-sm font-semibold tracking-tight text-white">
+            <div className="min-w-0">
+              <p className="truncate text-base font-semibold tracking-tight text-white">
                 Lightning P2P
               </p>
-              <p className="text-[11px] text-slate-500">P2P file transfer</p>
+              <p className="mt-1 text-xs leading-5 text-slate-300/70">
+                Direct-first desktop transfers.
+              </p>
             </div>
           </div>
         </div>
 
-        {/* Navigation */}
-        <nav className="flex flex-1 flex-col gap-1 px-2.5 py-1">
+        <div className="mt-4 flex flex-wrap gap-2">
+          <div
+            className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium ${routeTone(nodeStatus.online_state)}`}
+          >
+            <Radar className="h-3.5 w-3.5" />
+            {routeLabel(nodeStatus.online_state)}
+          </div>
+          <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-slate-200">
+            <Sparkles className="h-3.5 w-3.5 text-violet-200" />
+            {updateCopy(updatePhase)}
+          </div>
+        </div>
+
+        <nav className="mt-5 flex flex-1 flex-col gap-2">
           {navItems.map((item) => {
             const Icon = item.icon;
             const active = currentView === item.id;
+
             return (
               <button
                 key={item.id}
                 onClick={() => onNavigate(item.id)}
-                className={`group/item relative overflow-hidden rounded-xl px-2.5 py-2.5 text-left transition-all duration-200 ${
+                className={`group relative overflow-hidden rounded-2xl border px-3.5 py-3 text-left transition-all duration-200 ${
                   active
-                    ? "bg-white/[0.08] text-white"
-                    : "text-slate-400 hover:bg-white/[0.04] hover:text-slate-200"
+                    ? "border-white/12 bg-white/[0.08]"
+                    : "border-transparent bg-white/[0.02] hover:border-white/8 hover:bg-white/[0.045]"
                 }`}
               >
+                {active ? (
+                  <motion.div
+                    layoutId="sidebar-active"
+                    className="pointer-events-none absolute inset-0 rounded-2xl bg-[linear-gradient(135deg,rgba(56,189,248,0.14),rgba(99,102,241,0.08)_55%,transparent)]"
+                    transition={{ type: "spring", stiffness: 320, damping: 28 }}
+                  />
+                ) : null}
+
                 <div className="relative flex items-center gap-3">
                   <div
-                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-all duration-200 ${
+                    className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border ${
                       active
-                        ? activeIconClass(item.accent)
-                        : "border-white/[0.06] bg-white/[0.03] text-slate-400"
+                        ? "border-sky-300/20 bg-sky-500/14 text-sky-100"
+                        : "border-white/8 bg-white/[0.04] text-slate-300"
                     }`}
                   >
                     <Icon className="h-[18px] w-[18px]" />
                   </div>
 
-                  <div className="flex min-w-0 flex-1 items-center justify-between opacity-0 transition-opacity duration-200 group-hover/sidebar:opacity-100">
-                    <span className="truncate text-[13px] font-medium">
-                      {item.label}
-                    </span>
-                    {item.id === "receive" && activeTransferCount > 0 ? (
-                      <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-sky-500/20 px-1.5 text-[10px] font-semibold text-sky-200">
-                        {activeTransferCount}
-                      </span>
-                    ) : null}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-sm font-semibold text-white">
+                        {item.label}
+                      </p>
+                      {item.id === "receive" && receiveTransferCount > 0 ? (
+                        <span className="inline-flex min-w-6 items-center justify-center rounded-full border border-emerald-300/20 bg-emerald-500/14 px-2 py-0.5 text-[11px] font-semibold text-emerald-100">
+                          {receiveTransferCount}
+                        </span>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
-
-                {active ? (
-                  <motion.div
-                    layoutId="sidebar-active"
-                    className="pointer-events-none absolute inset-0 rounded-xl border border-white/[0.08] bg-[linear-gradient(135deg,rgba(59,130,246,0.08),transparent)]"
-                    transition={{ type: "spring", stiffness: 350, damping: 30 }}
-                  />
-                ) : null}
               </button>
             );
           })}
         </nav>
 
-        {/* Status */}
-        <div className="px-2.5 pb-3">
-          <div className="overflow-hidden rounded-xl border border-white/[0.07] bg-white/[0.04] p-2.5">
-            <div className="flex items-center gap-3">
-              <div
-                className={`relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-all duration-300 ${
-                  nodeStatus.online_state === "direct_ready"
-                    ? "border-emerald-400/20 bg-emerald-500/12 text-emerald-300"
-                    : nodeStatus.online_state === "relay_ready"
-                      ? "border-sky-400/20 bg-sky-500/12 text-sky-300"
-                      : nodeStatus.online
-                        ? "border-amber-400/20 bg-amber-500/12 text-amber-300"
-                        : "border-white/[0.06] bg-white/[0.03] text-slate-400"
-                }`}
-              >
-                <Wifi className="h-[18px] w-[18px]" />
-                {nodeStatus.online ? (
-                  <span className="absolute -right-0.5 -top-0.5 flex h-2.5 w-2.5">
-                    <span
-                      className={`absolute inline-flex h-full w-full animate-ping rounded-full ${
-                        nodeStatus.online_state === "direct_ready"
-                          ? "bg-emerald-400 opacity-50"
-                          : nodeStatus.online_state === "relay_ready"
-                            ? "bg-sky-400 opacity-50"
-                            : "bg-amber-400 opacity-50"
-                      }`}
-                    />
-                    <span
-                      className={`relative inline-flex h-2.5 w-2.5 rounded-full ${
-                        nodeStatus.online_state === "direct_ready"
-                          ? "bg-emerald-400"
-                          : nodeStatus.online_state === "relay_ready"
-                            ? "bg-sky-400"
-                            : "bg-amber-400"
-                      }`}
-                    />
-                  </span>
-                ) : null}
-              </div>
-              <div className="min-w-0 opacity-0 transition-opacity duration-200 group-hover/sidebar:opacity-100">
-                <p className="text-[13px] font-medium text-white">
-                  {statusLabel(nodeStatus.online_state)}
-                </p>
-                <p className="text-[11px] text-slate-500">
-                  {statusCopy(nodeStatus.online_state)}
-                </p>
-              </div>
+        <div className="rounded-[24px] border border-white/8 bg-white/[0.03] p-3.5">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.28em] text-slate-500">
+                Live transfers
+              </p>
+              <p className="mt-1.5 text-2xl font-semibold tabular-nums text-white">
+                {activeTransferCount}
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-[10px] uppercase tracking-[0.28em] text-slate-500">
+                Direct
+              </p>
+              <p className="mt-1.5 text-lg font-semibold tabular-nums text-white">
+                {nodeStatus.direct_address_count}
+              </p>
             </div>
           </div>
         </div>

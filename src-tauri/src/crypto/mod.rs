@@ -7,7 +7,7 @@
 
 use crate::error::{FastDropError, Result};
 
-const SERVICE_NAME: &str = "com.fastdrop.app";
+const SERVICE_NAME: &str = "com.lightningp2p.app";
 const KEY_NAME: &str = "iroh-secret-key";
 
 /// Stores the iroh secret key bytes in the OS keychain.

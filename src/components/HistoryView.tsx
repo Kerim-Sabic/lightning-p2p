@@ -1,16 +1,76 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { Clock3, Copy, History, RefreshCw } from "lucide-react";
-import { useState } from "react";
+import { Clock3, Copy, Filter, History, RefreshCw, Search } from "lucide-react";
+import { useDeferredValue, useMemo, useState } from "react";
 import { formatBytes, formatTimestamp } from "../lib/format";
 import { useTransferStore } from "../stores/transferStore";
 
+type DirectionFilter = "all" | "send" | "receive";
+
+function directionTone(direction: "send" | "receive"): string {
+  return direction === "send"
+    ? "border-sky-400/15 bg-sky-500/8 text-sky-200"
+    : "border-emerald-400/15 bg-emerald-500/8 text-emerald-200";
+}
+
 export function HistoryView() {
   const history = useTransferStore((state) => state.history);
-  const error = useTransferStore((state) => state.error);
   const reshare = useTransferStore((state) => state.reshare);
+  const setError = useTransferStore((state) => state.setError);
+  const [directionFilter, setDirectionFilter] =
+    useState<DirectionFilter>("all");
+  const [query, setQuery] = useState("");
   const [resharedHash, setResharedHash] = useState<string | null>(null);
   const [resharedTicket, setResharedTicket] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+
+  const deferredQuery = useDeferredValue(query);
+  const normalizedQuery = deferredQuery.trim().toLowerCase();
+
+  const filteredHistory = useMemo(
+    () =>
+      history.filter((record) => {
+        if (directionFilter !== "all" && record.direction !== directionFilter) {
+          return false;
+        }
+
+        if (!normalizedQuery) {
+          return true;
+        }
+
+        const searchableValues = [
+          record.filename,
+          record.hash,
+          record.peer ?? "",
+          record.direction,
+        ];
+
+        return searchableValues.some((value) =>
+          value.toLowerCase().includes(normalizedQuery),
+        );
+      }),
+    [directionFilter, history, normalizedQuery],
+  );
+
+  const totals = useMemo(() => {
+    let sentCount = 0;
+    let receivedCount = 0;
+    let totalBytes = 0;
+
+    for (const record of history) {
+      totalBytes += record.size;
+      if (record.direction === "send") {
+        sentCount += 1;
+      } else {
+        receivedCount += 1;
+      }
+    }
+
+    return {
+      sentCount,
+      receivedCount,
+      totalBytes,
+    };
+  }, [history]);
 
   const handleReshare = async (hash: string): Promise<void> => {
     const ticket = await reshare(hash);
@@ -26,27 +86,115 @@ export function HistoryView() {
     if (!resharedTicket) {
       return;
     }
-    await navigator.clipboard.writeText(resharedTicket);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1800);
+
+    try {
+      await navigator.clipboard.writeText(resharedTicket);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1800);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Copy failed");
+    }
   };
 
   return (
     <div className="space-y-5">
-      <header className="space-y-2">
-        <div className="badge">
-          <Clock3 className="h-3 w-3 text-violet-300" />
-          History
-        </div>
-        <h1 className="text-2xl font-semibold tracking-tight text-white">
-          Transfer history
-        </h1>
-        <p className="max-w-xl text-sm leading-relaxed text-slate-400">
-          Review past transfers and re-share stored content.
-        </p>
-      </header>
+      <section className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
+        <header className="glass-panel p-6">
+          <div className="badge">
+            <Clock3 className="h-3 w-3 text-violet-200" />
+            History
+          </div>
+          <h1 className="mt-4 text-3xl font-semibold tracking-tight text-white">
+            Review what moved and re-share it fast
+          </h1>
+          <p className="mt-3 max-w-2xl text-base leading-7 text-slate-300/80">
+            Transfer history is a working surface, not just a log. Filter by
+            direction, find past items quickly, and regenerate a ticket for any
+            stored send without reimporting the content.
+          </p>
 
-      {/* Re-share ticket */}
+          <div className="mt-5 grid gap-2 sm:grid-cols-3">
+            <div className="stat-card">
+              <p className="text-[10px] uppercase tracking-[0.28em] text-slate-500">
+                Sends
+              </p>
+              <p className="mt-1.5 text-xl font-semibold tabular-nums text-white">
+                {totals.sentCount}
+              </p>
+            </div>
+            <div className="stat-card">
+              <p className="text-[10px] uppercase tracking-[0.28em] text-slate-500">
+                Receives
+              </p>
+              <p className="mt-1.5 text-xl font-semibold tabular-nums text-white">
+                {totals.receivedCount}
+              </p>
+            </div>
+            <div className="stat-card">
+              <p className="text-[10px] uppercase tracking-[0.28em] text-slate-500">
+                Total volume
+              </p>
+              <p className="mt-1.5 text-xl font-semibold tabular-nums text-white">
+                {formatBytes(totals.totalBytes)}
+              </p>
+            </div>
+          </div>
+        </header>
+
+        <aside className="glass-panel p-6">
+          <div className="flex items-start gap-3">
+            <div className="glass-icon h-12 w-12 rounded-2xl">
+              <Filter className="h-5 w-5 text-sky-200" />
+            </div>
+            <div>
+              <div className="badge">
+                <History className="h-3 w-3 text-sky-200" />
+                Searchable log
+              </div>
+              <h2 className="mt-3 text-xl font-semibold tracking-tight text-white">
+                Find the right transfer quickly
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-slate-300/80">
+                Search by filename, hash, peer, or direction. Re-share only
+                reuses stored content that is already in the local blob store.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-5 space-y-3">
+            <label className="relative block">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search filename, peer, or hash"
+                className="glass-input w-full rounded-2xl py-3 pl-10 pr-4 text-sm text-slate-100 placeholder:text-slate-500"
+              />
+            </label>
+
+            <div className="flex flex-wrap gap-2">
+              {(["all", "send", "receive"] as const).map((value) => (
+                <button
+                  key={value}
+                  onClick={() => setDirectionFilter(value)}
+                  className={`rounded-2xl border px-4 py-2 text-sm transition-all ${
+                    directionFilter === value
+                      ? "border-sky-300/20 bg-sky-500/14 text-sky-100"
+                      : "border-white/10 bg-white/[0.04] text-slate-300"
+                  }`}
+                >
+                  {value === "all"
+                    ? "All transfers"
+                    : value === "send"
+                      ? "Sends only"
+                      : "Receives only"}
+                </button>
+              ))}
+            </div>
+          </div>
+        </aside>
+      </section>
+
       <AnimatePresence>
         {resharedHash && resharedTicket ? (
           <motion.section
@@ -55,12 +203,12 @@ export function HistoryView() {
             exit={{ opacity: 0, y: 10, scale: 0.99 }}
             className="glass-panel p-5"
           >
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
               <div className="min-w-0">
                 <p className="text-sm font-medium text-white">
                   Re-share ticket ready
                 </p>
-                <p className="mt-2 break-all rounded-xl border border-white/[0.06] bg-black/40 p-4 font-mono text-xs text-sky-100/80">
+                <p className="mt-2 break-all rounded-2xl border border-white/8 bg-black/35 p-4 font-mono text-xs leading-6 text-sky-50/88">
                   {resharedTicket}
                 </p>
               </div>
@@ -68,65 +216,72 @@ export function HistoryView() {
                 onClick={() => void handleCopy()}
                 className={`glass-button inline-flex items-center gap-2 self-start px-4 py-2 text-sm transition-all duration-200 ${
                   copied
-                    ? "border-emerald-400/20 bg-emerald-500/10 text-emerald-200"
-                    : "text-slate-200"
+                    ? "border-emerald-400/20 bg-emerald-500/10 text-emerald-100"
+                    : "text-slate-100"
                 }`}
               >
                 <Copy className="h-4 w-4" />
-                {copied ? "Copied!" : "Copy ticket"}
+                {copied ? "Copied" : "Copy ticket"}
               </button>
             </div>
           </motion.section>
         ) : null}
       </AnimatePresence>
 
-      {/* Transfer log */}
       <section className="space-y-2">
-        <div className="flex items-center gap-2 text-sm font-medium text-slate-300">
-          <History className="h-4 w-4 text-violet-300" />
+        <div className="flex items-center gap-2 text-sm font-medium text-slate-200">
+          <History className="h-4 w-4 text-violet-200" />
           Transfer log
         </div>
 
-        {history.length === 0 ? (
-          <div className="glass-panel px-6 py-14 text-center text-sm text-slate-500">
-            No completed transfers yet.
+        {filteredHistory.length === 0 ? (
+          <div className="glass-panel px-6 py-14 text-center">
+            <p className="text-base font-semibold text-white">
+              No matching transfers
+            </p>
+            <p className="mt-2 text-sm leading-6 text-slate-300/72">
+              Adjust the filters or complete a new transfer to populate the
+              history.
+            </p>
           </div>
         ) : (
           <div className="grid gap-2">
-            {history.map((record, index) => (
+            {filteredHistory.map((record, index) => (
               <motion.article
                 key={`${record.timestamp}-${record.hash}`}
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.03, duration: 0.2 }}
+                transition={{ delay: index * 0.02, duration: 0.18 }}
                 className="glass-panel group p-4 transition-colors duration-200 hover:bg-white/[0.06]"
               >
-                <div className="flex items-start justify-between gap-3">
+                <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span
-                        className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-0.5 text-[10px] uppercase tracking-[0.2em] ${
-                          record.direction === "send"
-                            ? "border-sky-400/15 bg-sky-500/8 text-sky-300"
-                            : "border-emerald-400/15 bg-emerald-500/8 text-emerald-300"
-                        }`}
+                        className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-0.5 text-[10px] uppercase tracking-[0.22em] ${directionTone(
+                          record.direction,
+                        )}`}
                       >
                         {record.direction}
                       </span>
-                      <span className="text-xs text-slate-600">
+                      <span className="text-xs text-slate-500">
                         {formatTimestamp(record.timestamp)}
                       </span>
                     </div>
-                    <p className="mt-2 text-sm font-medium text-white">
+
+                    <p className="mt-2 text-base font-semibold text-white">
                       {record.filename}
                     </p>
-                    <div className="mt-1 flex items-center gap-3 text-[13px] text-slate-500">
+                    <div className="mt-2 flex flex-wrap items-center gap-3 text-[13px] text-slate-300/72">
                       <span className="tabular-nums">
                         {formatBytes(record.size)}
                       </span>
+                      <span className="font-mono text-[11px] text-slate-400">
+                        {record.hash.slice(0, 16)}...
+                      </span>
                       {record.peer ? (
-                        <span className="truncate font-mono text-[10px] text-slate-600">
-                          {record.peer.slice(0, 16)}...
+                        <span className="truncate font-mono text-[11px] text-slate-400">
+                          {record.peer.slice(0, 18)}...
                         </span>
                       ) : null}
                     </div>
@@ -134,7 +289,7 @@ export function HistoryView() {
 
                   <button
                     onClick={() => void handleReshare(record.hash)}
-                    className="glass-button inline-flex shrink-0 items-center gap-2 px-3 py-1.5 text-sm text-slate-300 opacity-60 transition-opacity duration-200 group-hover:opacity-100"
+                    className="glass-button inline-flex shrink-0 items-center gap-2 px-4 py-2 text-sm text-slate-100 opacity-70 transition-opacity duration-200 group-hover:opacity-100"
                   >
                     <RefreshCw className="h-3.5 w-3.5" />
                     Re-share
@@ -145,17 +300,6 @@ export function HistoryView() {
           </div>
         )}
       </section>
-
-      {/* Error */}
-      {error ? (
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="glass-panel border-red-500/20 bg-red-500/8 px-4 py-3 text-sm text-red-200"
-        >
-          {error}
-        </motion.div>
-      ) : null}
     </div>
   );
 }

@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicklimmm/nicklimmm/main/empty.json",
   "identifier": "default",
-  "description": "Default capabilities for FastDrop",
+  "description": "Default capabilities for Lightning P2P",
   "windows": ["main"],
   "permissions": [
     "core:default",

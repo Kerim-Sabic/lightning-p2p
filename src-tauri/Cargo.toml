@@ -1,9 +1,9 @@
 [package]
 name = "fastdrop"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 rust-version = "1.81"
-description = "FastDrop — P2P file sharing at maximum speed"
+description = "Lightning P2P — P2P file sharing at maximum speed"
 
 [lib]
 name = "fastdrop_lib"
@@ -70,3 +70,8 @@ cli = ["clap"]
 [[bench]]
 name = "transfer_bench"
 harness = false
+
+[profile.release]
+codegen-units = 1
+lto = "thin"
+strip = true

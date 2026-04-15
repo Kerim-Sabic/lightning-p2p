@@ -1,7 +1,4 @@
-#![allow(
-    clippy::cast_possible_truncation,
-    clippy::ignored_unit_patterns
-)]
+#![allow(clippy::cast_possible_truncation, clippy::ignored_unit_patterns)]
 
 use fastdrop_lib::node::FastDropNode;
 use fastdrop_lib::transfer::{receiver, sender};

@@ -97,7 +97,8 @@ pub async fn send_files(
         }
         Err(error) => {
             let _ = sampler.finish().await;
-            let _ = reporter.emit_failed(&error.to_string(), progress.metrics_snapshot().route_kind);
+            let _ =
+                reporter.emit_failed(&error.to_string(), progress.metrics_snapshot().route_kind);
             Err(error)
         }
     }

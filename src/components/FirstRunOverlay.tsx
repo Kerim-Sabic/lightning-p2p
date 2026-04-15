@@ -4,6 +4,7 @@ import {
   FolderCog,
   HardDriveDownload,
   LoaderCircle,
+  Radar,
   Waypoints,
 } from "lucide-react";
 import { useState } from "react";
@@ -12,11 +13,11 @@ import { useTransferStore } from "../stores/transferStore";
 function statusLabel(onlineState: string): string {
   switch (onlineState) {
     case "direct_ready":
-      return "Direct path ready";
+      return "Direct route ready";
     case "relay_ready":
-      return "Relay ready";
+      return "Relay route ready";
     case "degraded":
-      return "Node degraded";
+      return "Route still warming";
     case "offline":
       return "Node offline";
     case "starting":
@@ -28,13 +29,13 @@ function statusLabel(onlineState: string): string {
 function statusCopy(onlineState: string): string {
   switch (onlineState) {
     case "direct_ready":
-      return "Lightning P2P is ready for direct send and receive traffic.";
+      return "The local node can already advertise direct addresses for the fastest transfers.";
     case "relay_ready":
-      return "Relay fallback is ready while direct addresses continue warming up.";
+      return "Relay fallback is online while direct route information keeps warming up.";
     case "degraded":
-      return "The node is online, but no route is ready yet.";
+      return "The node is online, but route discovery has not stabilized yet.";
     case "offline":
-      return "Startup failed. Review settings or restart the app.";
+      return "Startup failed. You can continue, but open Settings before starting real transfers.";
     case "starting":
     default:
       return "The iroh endpoint is starting in the background.";
@@ -63,84 +64,103 @@ export function FirstRunOverlay() {
   };
 
   return (
-    <div className="pointer-events-auto absolute inset-0 z-40 flex items-center justify-center bg-black/60 px-4 backdrop-blur-2xl">
+    <div className="pointer-events-auto absolute inset-0 z-40 flex items-center justify-center bg-black/70 px-4 backdrop-blur-2xl">
       <motion.section
         initial={{ opacity: 0, y: 20, scale: 0.96 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
-        className="glass-panel relative w-full max-w-2xl overflow-hidden p-6"
+        className="glass-panel relative w-full max-w-4xl overflow-hidden p-6"
       >
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.12),transparent_34%),radial-gradient(circle_at_90%_15%,rgba(16,185,129,0.12),transparent_30%)]" />
         <div className="relative space-y-5">
-          {/* Header */}
-          <header className="space-y-3">
-            <div className="badge">
-              <Waypoints className="h-3.5 w-3.5 text-sky-300" />
-              First Run
+          <header className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr] xl:items-start">
+            <div className="space-y-3">
+              <div className="badge">
+                <Waypoints className="h-3.5 w-3.5 text-sky-200" />
+                First Run
+              </div>
+              <div className="space-y-3">
+                <h2 className="text-3xl font-semibold tracking-tight text-white">
+                  Finish setup and keep the fast path available
+                </h2>
+                <p className="max-w-2xl text-sm leading-7 text-slate-300/80">
+                  Confirm where verified receives should land, wait for the node
+                  to publish route information, and Lightning P2P is ready to
+                  move files directly between devices.
+                </p>
+              </div>
             </div>
-            <div className="space-y-2">
-              <h2 className="text-2xl font-semibold tracking-tight text-white sm:text-3xl">
-                Lightning P2P is almost ready
-              </h2>
-              <p className="text-sm leading-6 text-slate-400">
-                Confirm where verified receives should land, wait for the local
-                node to come online, and you are ready to go.
-              </p>
-            </div>
-          </header>
 
-          {/* Cards */}
-          <div className="grid gap-3 md:grid-cols-2">
-            {/* Node status */}
-            <article className="glass-subtle p-4">
-              <div className="flex items-center gap-3">
-                <div className="glass-icon">
+            <div className="glass-subtle p-4">
+              <p className="text-[10px] uppercase tracking-[0.3em] text-slate-500">
+                Route readiness
+              </p>
+              <div className="mt-3 flex items-start gap-3">
+                <div className="glass-icon h-12 w-12 rounded-2xl">
                   {nodeStatus.online ? (
-                    <Waypoints className="h-5 w-5 text-emerald-300" />
+                    <Radar className="h-5 w-5 text-emerald-200" />
                   ) : (
-                    <LoaderCircle className="h-5 w-5 animate-spin text-sky-300" />
+                    <LoaderCircle className="h-5 w-5 animate-spin text-sky-200" />
                   )}
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-white">
+                  <p className="text-sm font-semibold text-white">
                     {statusLabel(nodeStatus.online_state)}
                   </p>
-                  <p className="text-[13px] text-slate-500">
+                  <p className="mt-1 text-sm leading-6 text-slate-300/72">
                     {statusCopy(nodeStatus.online_state)}
                   </p>
                 </div>
               </div>
+            </div>
+          </header>
 
-              <div className="mt-3 rounded-xl border border-white/[0.06] bg-black/30 p-3.5">
-                <p className="mb-1.5 text-[10px] uppercase tracking-[0.3em] text-slate-500">
+          <div className="grid gap-3 xl:grid-cols-2">
+            <article className="glass-subtle p-4">
+              <div className="flex items-center gap-3">
+                <div className="glass-icon">
+                  <Waypoints className="h-5 w-5 text-sky-200" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-white">
+                    Node identity
+                  </p>
+                  <p className="text-[13px] text-slate-300/72">
+                    This is the sender identity embedded into your share ticket.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-3 rounded-2xl border border-white/8 bg-black/25 p-4">
+                <p className="mb-2 text-[10px] uppercase tracking-[0.3em] text-slate-500">
                   NodeId
                 </p>
-                <p className="break-all font-mono text-[13px] text-slate-300">
+                <p className="break-all font-mono text-[13px] leading-6 text-slate-100/88">
                   {nodeStatus.node_id ?? "Initializing node..."}
                 </p>
               </div>
             </article>
 
-            {/* Download dir */}
             <article className="glass-subtle p-4">
               <div className="flex items-center gap-3">
                 <div className="glass-icon">
-                  <HardDriveDownload className="h-5 w-5 text-emerald-300" />
+                  <HardDriveDownload className="h-5 w-5 text-emerald-200" />
                 </div>
                 <div>
                   <p className="text-sm font-medium text-white">
                     Default receive folder
                   </p>
-                  <p className="text-[13px] text-slate-500">
+                  <p className="text-[13px] text-slate-300/72">
                     Verified downloads are exported here.
                   </p>
                 </div>
               </div>
 
-              <div className="mt-3 rounded-xl border border-white/[0.06] bg-black/30 p-3.5">
-                <p className="mb-1.5 text-[10px] uppercase tracking-[0.3em] text-slate-500">
+              <div className="mt-3 rounded-2xl border border-white/8 bg-black/25 p-4">
+                <p className="mb-2 text-[10px] uppercase tracking-[0.3em] text-slate-500">
                   Save location
                 </p>
-                <p className="break-all font-mono text-[13px] text-slate-300">
+                <p className="break-all font-mono text-[13px] leading-6 text-slate-100/88">
                   {settings.download_dir}
                 </p>
               </div>
@@ -148,14 +168,14 @@ export function FirstRunOverlay() {
               <div className="mt-3 flex flex-wrap gap-2">
                 <button
                   onClick={() => void pickDownloadDir()}
-                  className="glass-button inline-flex items-center gap-2 px-3.5 py-2 text-sm text-slate-200"
+                  className="glass-button inline-flex items-center gap-2 px-3.5 py-2 text-sm text-slate-100"
                 >
                   <FolderCog className="h-4 w-4" />
                   Change folder
                 </button>
                 <button
                   onClick={() => void openDownloadDir()}
-                  className="glass-button inline-flex items-center gap-2 px-3.5 py-2 text-sm text-slate-200"
+                  className="glass-button inline-flex items-center gap-2 px-3.5 py-2 text-sm text-slate-100"
                 >
                   <HardDriveDownload className="h-4 w-4" />
                   Open folder
@@ -164,10 +184,10 @@ export function FirstRunOverlay() {
             </article>
           </div>
 
-          {/* Footer */}
-          <div className="flex flex-col gap-3 border-t border-white/[0.06] pt-4 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-xs leading-5 text-slate-500">
-              You can change these settings later from the Settings view.
+          <div className="flex flex-col gap-3 border-t border-white/8 pt-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm leading-6 text-slate-300/72">
+              You can change storage and relay settings later from the Settings
+              view.
             </p>
             <button
               onClick={() => void handleContinue()}

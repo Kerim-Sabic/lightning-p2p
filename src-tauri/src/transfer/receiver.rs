@@ -197,7 +197,8 @@ async fn download_to_store(
         let Some(event) = event else {
             return stream_end_error();
         };
-        let done = handle_download_event(node, ticket, &mut state, &mut lifecycle, event, started_at)?;
+        let done =
+            handle_download_event(node, ticket, &mut state, &mut lifecycle, event, started_at)?;
         update_progress(progress, ticket, &state, lifecycle);
         if done {
             drain_download_stream(&mut stream).await?;

@@ -1,78 +1,153 @@
-import { useEffect } from "react";
-import { onTransferProgress } from "../lib/tauri";
+import { isTauri } from "@tauri-apps/api/core";
+import { useEffect, useEffectEvent } from "react";
+import {
+  desktopRuntimeMessage,
+  onTransferProgress,
+  type NodeOnlineState,
+  type TransferEvent,
+} from "../lib/tauri";
 import { useTransferStore } from "../stores/transferStore";
 
-const NODE_STATUS_POLL_MS = 3000;
+const FAST_NODE_STATUS_POLL_MS = 2500;
+const STABLE_NODE_STATUS_POLL_MS = 12000;
+const RELAY_NODE_STATUS_POLL_MS = 7000;
+const HIDDEN_NODE_STATUS_POLL_MS = 30000;
+
+function nextNodeStatusPollMs(onlineState: NodeOnlineState): number {
+  switch (onlineState) {
+    case "direct_ready":
+      return STABLE_NODE_STATUS_POLL_MS;
+    case "relay_ready":
+      return RELAY_NODE_STATUS_POLL_MS;
+    case "degraded":
+    case "offline":
+    case "starting":
+    default:
+      return FAST_NODE_STATUS_POLL_MS;
+  }
+}
 
 export function useTransfer(): void {
-  const refreshNodeStatus = useTransferStore(
-    (state) => state.refreshNodeStatus,
-  );
-  const refreshSettings = useTransferStore((state) => state.refreshSettings);
-  const refreshActiveTransfers = useTransferStore(
-    (state) => state.refreshActiveTransfers,
-  );
-  const refreshHistory = useTransferStore((state) => state.refreshHistory);
-  const checkForUpdates = useTransferStore((state) => state.checkForUpdates);
   const setError = useTransferStore((state) => state.setError);
+  const inTauriRuntime = isTauri();
+  const hydrateApp = useEffectEvent(async () => {
+    const store = useTransferStore.getState();
+
+    await Promise.all([
+      store.refreshNodeStatus(),
+      store.refreshSettings(),
+      store.refreshActiveTransfers(),
+      store.refreshHistory(),
+    ]);
+
+    const settings = useTransferStore.getState().settings;
+    if (settings?.auto_update_enabled) {
+      await useTransferStore.getState().checkForUpdates(true);
+    }
+  });
+
+  const handleTransferEvent = useEffectEvent((event: TransferEvent) => {
+    const store = useTransferStore.getState();
+    store.applyTransferEvent(event);
+
+    if (event.type === "completed" || event.type === "failed") {
+      void store.refreshActiveTransfers();
+    }
+    if (event.type === "completed") {
+      void store.refreshHistory();
+    }
+  });
+
+  const handleSubscriptionError = useEffectEvent((error: unknown) => {
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Failed to subscribe to transfers";
+    setError(message);
+  });
 
   useEffect(() => {
-    void (async () => {
-      await Promise.all([
-        refreshNodeStatus(),
-        refreshSettings(),
-        refreshActiveTransfers(),
-        refreshHistory(),
-      ]);
+    if (!inTauriRuntime) {
+      setError(desktopRuntimeMessage("Browser preview"));
+      return;
+    }
 
-      const settings = useTransferStore.getState().settings;
-      if (settings?.auto_update_enabled) {
-        await checkForUpdates(true);
+    void hydrateApp();
+  }, [hydrateApp, inTauriRuntime, setError]);
+
+  useEffect(() => {
+    if (!inTauriRuntime) {
+      return;
+    }
+
+    let timeoutId: number | null = null;
+    let disposed = false;
+
+    const clearScheduledPoll = (): void => {
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+        timeoutId = null;
       }
-    })();
+    };
 
-    const intervalId = window.setInterval(() => {
-      void refreshNodeStatus();
-    }, NODE_STATUS_POLL_MS);
+    const schedulePoll = (delayMs: number): void => {
+      if (disposed) {
+        return;
+      }
+
+      clearScheduledPoll();
+      timeoutId = window.setTimeout(() => {
+        void pollNodeStatus();
+      }, delayMs);
+    };
+
+    const pollNodeStatus = async (): Promise<void> => {
+      if (document.hidden) {
+        schedulePoll(HIDDEN_NODE_STATUS_POLL_MS);
+        return;
+      }
+
+      await useTransferStore.getState().refreshNodeStatus();
+      const onlineState = useTransferStore.getState().nodeStatus.online_state;
+      schedulePoll(nextNodeStatusPollMs(onlineState));
+    };
+
+    const handleVisibilityChange = (): void => {
+      if (document.hidden) {
+        schedulePoll(HIDDEN_NODE_STATUS_POLL_MS);
+        return;
+      }
+
+      void pollNodeStatus();
+    };
+
+    schedulePoll(
+      nextNodeStatusPollMs(useTransferStore.getState().nodeStatus.online_state),
+    );
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
-      window.clearInterval(intervalId);
+      disposed = true;
+      clearScheduledPoll();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [
-    refreshActiveTransfers,
-    refreshHistory,
-    refreshNodeStatus,
-    refreshSettings,
-    checkForUpdates,
-  ]);
+  }, [inTauriRuntime]);
 
   useEffect(() => {
+    if (!inTauriRuntime) {
+      return;
+    }
+
     let unlisten: (() => void) | null = null;
 
-    void onTransferProgress((event) => {
-      const store = useTransferStore.getState();
-      store.applyTransferEvent(event);
-
-      if (event.type === "completed" || event.type === "failed") {
-        void store.refreshActiveTransfers();
-      }
-      if (event.type === "completed") {
-        void store.refreshHistory();
-      }
-    })
+    void onTransferProgress(handleTransferEvent)
       .then((fn) => {
         unlisten = fn;
       })
-      .catch((error: unknown) => {
-        const message =
-          error instanceof Error
-            ? error.message
-            : "Failed to subscribe to transfers";
-        setError(message);
-      });
+      .catch(handleSubscriptionError);
 
     return () => {
       unlisten?.();
     };
-  }, [setError]);
+  }, [handleSubscriptionError, handleTransferEvent, inTauriRuntime]);
 }

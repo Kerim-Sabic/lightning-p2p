@@ -24,6 +24,8 @@ export type UpdatePhase =
   | "restartRequired"
   | "error";
 
+type ProgressTransferEvent = Extract<TransferEvent, { type: "progress" }>;
+
 export interface TransferEntry {
   transferId: string;
   direction: TransferDirection;
@@ -68,6 +70,7 @@ interface TransferStore {
   error: string | null;
   setError: (message: string | null) => void;
   clearError: () => void;
+  clearShareSelection: () => void;
   prepareShareSelection: (paths: string[]) => Promise<void>;
   pickShareFiles: () => Promise<void>;
   pickShareFolder: () => Promise<void>;
@@ -214,6 +217,44 @@ function updateDownloadProgress(
   };
 }
 
+function sameNodeStatus(left: NodeStatus, right: NodeStatus): boolean {
+  return (
+    left.online === right.online &&
+    left.node_id === right.node_id &&
+    left.relay_connected === right.relay_connected &&
+    left.relay_url === right.relay_url &&
+    left.direct_address_count === right.direct_address_count &&
+    left.online_state === right.online_state
+  );
+}
+
+function sameSettings(left: AppSettings, right: AppSettings): boolean {
+  return (
+    left.download_dir === right.download_dir &&
+    left.auto_update_enabled === right.auto_update_enabled &&
+    left.first_run_complete === right.first_run_complete &&
+    left.relay_mode === right.relay_mode &&
+    left.custom_relay_url === right.custom_relay_url
+  );
+}
+
+function sameTransferProgress(
+  current: TransferEntry,
+  event: ProgressTransferEvent,
+): boolean {
+  return (
+    current.bytes === event.bytes &&
+    current.total === event.total &&
+    current.speedBps === event.speed_bps &&
+    current.routeKind === event.route_kind &&
+    current.connectMs === event.connect_ms &&
+    current.downloadMs === event.download_ms &&
+    current.exportMs === event.export_ms &&
+    current.status === "running" &&
+    current.error === null
+  );
+}
+
 export const useTransferStore = create<TransferStore>((set, get) => ({
   nodeStatus: defaultNodeStatus,
   settings: null,
@@ -228,6 +269,12 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
 
   setError: (message) => set({ error: message }),
   clearError: () => set({ error: null }),
+  clearShareSelection: () =>
+    set({
+      shareSelection: [],
+      shareTicket: null,
+      isSharing: false,
+    }),
 
   prepareShareSelection: async (paths) => {
     set({ error: null, shareTicket: null, isSharing: false });
@@ -268,7 +315,9 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
   refreshNodeStatus: async () => {
     try {
       const nodeStatus = await tauri.getNodeStatus();
-      set({ nodeStatus });
+      set((state) =>
+        sameNodeStatus(state.nodeStatus, nodeStatus) ? state : { nodeStatus },
+      );
     } catch (error) {
       set({ error: toErrorMessage(error) });
     }
@@ -280,13 +329,28 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
         tauri.getAppSettings(),
         tauri.getAppVersion(),
       ]);
-      set((state) => ({
-        ...withSettings(settings),
-        updateState: {
-          ...state.updateState,
-          currentVersion,
-        },
-      }));
+      set((state) => {
+        const settingsChanged =
+          state.settings === null || !sameSettings(state.settings, settings);
+        const versionChanged =
+          state.updateState.currentVersion !== currentVersion;
+
+        if (!settingsChanged && !versionChanged) {
+          return state;
+        }
+
+        return {
+          ...(settingsChanged ? withSettings(settings) : {}),
+          ...(versionChanged
+            ? {
+                updateState: {
+                  ...state.updateState,
+                  currentVersion,
+                },
+              }
+            : {}),
+        };
+      });
     } catch (error) {
       set({ error: toErrorMessage(error) });
     }
@@ -543,9 +607,8 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
 
   applyTransferEvent: (event) => {
     set((state) => {
-      const transfers = { ...state.transfers };
-
       if (event.type === "started") {
+        const transfers = { ...state.transfers };
         transfers[event.transfer_id] = {
           transferId: event.transfer_id,
           direction: event.direction,
@@ -564,28 +627,43 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
           timestamp: null,
           error: null,
         };
+        return { transfers };
       } else if (event.type === "progress") {
         const current =
-          transfers[event.transfer_id] ??
+          state.transfers[event.transfer_id] ??
           createTransferEntry(
             event.transfer_id,
             "receive",
             event.transfer_id,
             null,
           );
-        transfers[event.transfer_id] = {
-          ...current,
-          bytes: event.bytes,
-          total: event.total,
-          speedBps: event.speed_bps,
-          routeKind: event.route_kind,
-          connectMs: event.connect_ms,
-          downloadMs: event.download_ms,
-          exportMs: event.export_ms,
-          status: "running",
-          error: null,
+
+        if (
+          state.transfers[event.transfer_id] &&
+          sameTransferProgress(current, event)
+        ) {
+          return state;
+        }
+
+        return {
+          transfers: {
+            ...state.transfers,
+            [event.transfer_id]: {
+              ...current,
+              bytes: event.bytes,
+              total: event.total,
+              speedBps: event.speed_bps,
+              routeKind: event.route_kind,
+              connectMs: event.connect_ms,
+              downloadMs: event.download_ms,
+              exportMs: event.export_ms,
+              status: "running",
+              error: null,
+            },
+          },
         };
       } else if (event.type === "completed") {
+        const transfers = { ...state.transfers };
         const current =
           transfers[event.transfer_id] ??
           createTransferEntry(
@@ -612,7 +690,9 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
           timestamp: event.timestamp,
           error: null,
         };
+        return { transfers };
       } else {
+        const transfers = { ...state.transfers };
         const current =
           transfers[event.transfer_id] ??
           createTransferEntry(
@@ -627,9 +707,8 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
           status: "failed",
           error: event.error,
         };
+        return { transfers };
       }
-
-      return { transfers };
     });
   },
 }));

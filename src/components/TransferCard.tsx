@@ -78,10 +78,10 @@ function statusIcon(transfer: TransferEntry) {
 function StatusBadge({ transfer }: { transfer: TransferEntry }) {
   const color =
     transfer.status === "completed"
-      ? "text-emerald-300 border-emerald-400/15 bg-emerald-500/8"
+      ? "text-emerald-100 border-emerald-400/15 bg-emerald-500/10"
       : transfer.status === "failed"
-        ? "text-red-300 border-red-400/15 bg-red-500/8"
-        : "text-sky-300 border-sky-400/15 bg-sky-500/8";
+        ? "text-rose-100 border-rose-400/15 bg-rose-500/10"
+        : "text-sky-100 border-sky-400/15 bg-sky-500/10";
 
   return (
     <span
@@ -138,19 +138,23 @@ export function TransferCard({ transfer, onCancel }: TransferCardProps) {
       transition={{ duration: 0.2, ease: "easeOut" }}
       className="glass-panel relative overflow-hidden p-4"
     >
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.05),transparent_28%)]" />
       <div className="relative flex flex-col gap-3">
         {/* Header */}
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <StatusBadge transfer={transfer} />
-              <StatusIcon className="h-3.5 w-3.5 text-slate-400" />
-              <span className="text-xs text-slate-500">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/8 bg-white/[0.04] px-2 py-0.5 text-[10px] uppercase tracking-[0.2em] text-slate-300/72">
+                {routeLabel(transfer.routeKind)}
+              </span>
+              <StatusIcon className="h-3.5 w-3.5 text-slate-300/60" />
+              <span className="text-xs text-slate-300/72">
                 {statusLabel(transfer)}
               </span>
             </div>
 
-            <p className="mt-2 truncate text-base font-medium text-white">
+            <p className="mt-2 truncate text-base font-semibold text-white">
               {transfer.name}
             </p>
           </div>
@@ -158,7 +162,7 @@ export function TransferCard({ transfer, onCancel }: TransferCardProps) {
           {isActive && onCancel ? (
             <button
               onClick={handleCancel}
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-red-400/15 bg-red-500/8 px-3 py-1.5 text-xs font-medium text-red-200/80 transition-all duration-200 hover:bg-red-500/14 hover:text-red-200 active:scale-[0.97]"
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-2xl border border-rose-400/15 bg-rose-500/10 px-3 py-1.5 text-xs font-medium text-rose-100/85 transition-all duration-200 hover:bg-rose-500/16 hover:text-rose-100 active:scale-[0.97]"
             >
               <StopCircle className="h-3.5 w-3.5" />
               Cancel
@@ -174,12 +178,12 @@ export function TransferCard({ transfer, onCancel }: TransferCardProps) {
                 ? `${percent.toFixed(percent > 99 ? 0 : 1)}%`
                 : "Preparing"}
             </span>
-            <span className="tabular-nums text-slate-500">
+            <span className="tabular-nums text-slate-300/70">
               {formatBytes(transfer.bytes)}
               {hasTotal ? ` / ${formatBytes(transfer.total)}` : ""}
             </span>
           </div>
-          <div className="relative h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
+          <div className="relative h-2 overflow-hidden rounded-full bg-white/[0.06]">
             <motion.div
               initial={{ width: 0 }}
               animate={{ width: hasTotal ? `${percent}%` : "34%" }}
@@ -214,7 +218,7 @@ export function TransferCard({ transfer, onCancel }: TransferCardProps) {
           />
         </div>
 
-        <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-500">
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-300/60">
           <span>Connect {formatDurationMs(transfer.connectMs)}</span>
           <span>Download {formatDurationMs(transfer.downloadMs)}</span>
           <span>Export {formatDurationMs(transfer.exportMs)}</span>
@@ -227,7 +231,7 @@ export function TransferCard({ transfer, onCancel }: TransferCardProps) {
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -6 }}
-              className="rounded-xl border border-red-500/20 bg-red-500/8 px-4 py-3 text-sm text-red-200"
+              className="rounded-2xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-100"
             >
               {transfer.error}
             </motion.p>
@@ -235,7 +239,7 @@ export function TransferCard({ transfer, onCancel }: TransferCardProps) {
         </AnimatePresence>
 
         {/* Footer */}
-        <div className="flex items-center justify-between text-[10px] text-slate-600">
+        <div className="flex items-center justify-between text-[10px] text-slate-400/60">
           <span className="truncate font-mono">
             {transfer.hash ?? transfer.transferId}
           </span>

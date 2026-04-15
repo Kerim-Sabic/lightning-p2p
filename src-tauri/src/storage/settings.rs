@@ -8,11 +8,11 @@ use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-const APP_IDENTIFIER: &str = "com.fastdrop.app";
+const APP_IDENTIFIER: &str = "com.lightningp2p.app";
 const DATA_DIR_ENV: &str = "FASTDROP_DATA_DIR";
 const PROFILE_ENV: &str = "FASTDROP_PROFILE";
 const SETTINGS_FILE_NAME: &str = "settings.json";
-const DOWNLOADS_FOLDER_NAME: &str = "FastDrop";
+const DOWNLOADS_FOLDER_NAME: &str = "Lightning P2P";
 
 /// Relay configuration mode used for WAN connectivity.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -177,7 +177,7 @@ impl SettingsState {
     }
 }
 
-/// Resolves the application data directory used by `FastDrop`.
+/// Resolves the application data directory used by `Lightning P2P`.
 ///
 /// # Errors
 ///

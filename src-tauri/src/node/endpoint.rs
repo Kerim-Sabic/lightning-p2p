@@ -124,11 +124,7 @@ impl FastDropNode {
             .flatten()
             .map_or(0, |addresses| addresses.len());
 
-        NodeRuntimeStatus::from_network(
-            self.node_id().to_string(),
-            relay_url,
-            direct_address_count,
-        )
+        NodeRuntimeStatus::from_network(self.node_id().to_string(), relay_url, direct_address_count)
     }
 
     /// Returns the best-known route kind for a remote peer.
@@ -225,10 +221,10 @@ mod tests {
     use crate::storage::settings::default_download_dir;
 
     #[test]
-    fn default_download_dir_prefers_fastdrop_subdirectory() {
+    fn default_download_dir_prefers_lightning_p2p_subdirectory() {
         let data_dir = PathBuf::from("C:/tmp/fastdrop-test");
         let path = default_download_dir(&data_dir);
-        assert!(path.ends_with("FastDrop") || path.ends_with("downloads"));
+        assert!(path.ends_with("Lightning P2P") || path.ends_with("downloads"));
     }
 
     #[test]

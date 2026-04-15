@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getVersion } from "@tauri-apps/api/app";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
@@ -125,33 +125,77 @@ export type TransferEvent =
 
 let pendingUpdate: Update | null = null;
 
+const browserNodeStatus: NodeStatus = {
+  online: false,
+  node_id: null,
+  relay_connected: false,
+  relay_url: null,
+  direct_address_count: 0,
+  online_state: "offline",
+};
+
+const browserSettings: AppSettings = {
+  download_dir: "Desktop app runtime required",
+  auto_update_enabled: false,
+  first_run_complete: true,
+  relay_mode: "public",
+  custom_relay_url: null,
+};
+
+export function isDesktopRuntime(): boolean {
+  return isTauri();
+}
+
+export function desktopRuntimeMessage(feature = "This feature"): string {
+  return `${feature} requires the Lightning P2P desktop app runtime. Use \`pnpm tauri dev\` or the installed app instead of the browser preview.`;
+}
+
+function requireDesktopRuntime(feature: string): void {
+  if (!isDesktopRuntime()) {
+    throw new Error(desktopRuntimeMessage(feature));
+  }
+}
+
 export async function getNodeId(): Promise<string> {
+  if (!isDesktopRuntime()) {
+    return "desktop-runtime-required";
+  }
   return invoke<string>("get_node_id");
 }
 
 export async function getNodeStatus(): Promise<NodeStatus> {
+  if (!isDesktopRuntime()) {
+    return browserNodeStatus;
+  }
   return invoke<NodeStatus>("get_node_status");
 }
 
 export async function getAppVersion(): Promise<string> {
+  if (!isDesktopRuntime()) {
+    return "web-preview";
+  }
   return getVersion();
 }
 
 export async function createShare(paths: string[]): Promise<string> {
+  requireDesktopRuntime("Share creation");
   return invoke<string>("create_share", { paths });
 }
 
 export async function describeSharePaths(
   paths: string[],
 ): Promise<SharePathInfo[]> {
+  requireDesktopRuntime("Share staging");
   return invoke<SharePathInfo[]>("describe_share_paths", { paths });
 }
 
 export async function getTicket(hash: string): Promise<string> {
+  requireDesktopRuntime("Ticket generation");
   return invoke<string>("get_ticket", { hash });
 }
 
 export async function renderTicketQr(ticket: string): Promise<string> {
+  requireDesktopRuntime("QR rendering");
   return invoke<string>("render_ticket_qr", { ticket });
 }
 
@@ -159,60 +203,81 @@ export async function startReceive(
   ticket: string,
   destination: string,
 ): Promise<string> {
+  requireDesktopRuntime("Receiving transfers");
   return invoke<string>("start_receive", { ticket, destination });
 }
 
 export async function cancelTransfer(transferId: string): Promise<void> {
+  requireDesktopRuntime("Transfer cancellation");
   await invoke("cancel_transfer", { transferId });
 }
 
 export async function getActiveTransfers(): Promise<ActiveTransfer[]> {
+  if (!isDesktopRuntime()) {
+    return [];
+  }
   return invoke<ActiveTransfer[]>("get_active_transfers");
 }
 
 export async function getTransferHistory(): Promise<TransferRecord[]> {
+  if (!isDesktopRuntime()) {
+    return [];
+  }
   return invoke<TransferRecord[]>("get_transfer_history");
 }
 
 export async function getAppSettings(): Promise<AppSettings> {
+  if (!isDesktopRuntime()) {
+    return browserSettings;
+  }
   return invoke<AppSettings>("get_app_settings");
 }
 
 export async function getDownloadDir(): Promise<string> {
+  if (!isDesktopRuntime()) {
+    return browserSettings.download_dir;
+  }
   return invoke<string>("get_download_dir");
 }
 
 export async function setDownloadDir(path: string): Promise<AppSettings> {
+  requireDesktopRuntime("Changing the download folder");
   return invoke<AppSettings>("set_download_dir", { path });
 }
 
 export async function setAutoUpdateEnabled(
   enabled: boolean,
 ): Promise<AppSettings> {
+  requireDesktopRuntime("Changing update settings");
   return invoke<AppSettings>("set_auto_update_enabled", { enabled });
 }
 
 export async function setRelayMode(relayMode: RelayMode): Promise<AppSettings> {
+  requireDesktopRuntime("Changing relay mode");
   return invoke<AppSettings>("set_relay_mode", { relayMode });
 }
 
 export async function setCustomRelayUrl(
   relayUrl: string | null,
 ): Promise<AppSettings> {
+  requireDesktopRuntime("Saving a custom relay URL");
   return invoke<AppSettings>("set_custom_relay_url", { relayUrl });
 }
 
 export async function completeFirstRun(): Promise<AppSettings> {
+  requireDesktopRuntime("Completing setup");
   return invoke<AppSettings>("complete_first_run");
 }
 
 export async function openDownloadDir(): Promise<void> {
+  requireDesktopRuntime("Opening the download folder");
   await invoke("open_download_dir");
 }
 
 export async function pickDirectory(
   defaultPath?: string,
 ): Promise<string | null> {
+  requireDesktopRuntime("Choosing a folder");
   const selected = await openDialog({
     directory: true,
     multiple: false,
@@ -223,6 +288,7 @@ export async function pickDirectory(
 }
 
 export async function pickShareFiles(defaultPath?: string): Promise<string[]> {
+  requireDesktopRuntime("Choosing files");
   const selected = await openDialog({
     directory: false,
     multiple: true,
@@ -240,6 +306,7 @@ export async function pickShareFiles(defaultPath?: string): Promise<string[]> {
 export async function pickShareFolder(
   defaultPath?: string,
 ): Promise<string | null> {
+  requireDesktopRuntime("Choosing a folder");
   const selected = await openDialog({
     directory: true,
     multiple: false,
@@ -251,6 +318,7 @@ export async function pickShareFolder(
 }
 
 export async function checkForAppUpdate(): Promise<UpdateCheckResult> {
+  requireDesktopRuntime("Checking for updates");
   await disposePendingUpdate();
   const currentVersion = await getAppVersion();
   pendingUpdate = await check({ timeout: 30_000 });
@@ -267,6 +335,7 @@ export async function checkForAppUpdate(): Promise<UpdateCheckResult> {
 export async function installAppUpdate(
   onProgress?: (progress: UpdateProgress) => void,
 ): Promise<void> {
+  requireDesktopRuntime("Installing updates");
   if (!pendingUpdate) {
     throw new Error("No update is available to install.");
   }
@@ -286,6 +355,10 @@ export async function installAppUpdate(
 export function onTransferProgress(
   callback: (event: TransferEvent) => void,
 ): Promise<UnlistenFn> {
+  if (!isDesktopRuntime()) {
+    return Promise.resolve(() => {});
+  }
+
   return listen<TransferEvent>("transfer-progress", ({ payload }) => {
     callback(payload);
   });

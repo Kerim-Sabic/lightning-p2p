@@ -4,7 +4,7 @@ use crate::error::{FastDropError, Result};
 use crate::transfer::metrics::{RouteKind, TransferMetrics};
 use crate::transfer::queue::TransferQueue;
 use serde::{Deserialize, Serialize};
-use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicU8, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{Emitter, Window};
@@ -425,6 +425,7 @@ async fn run_progress_sampler(
     interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
     let mut last_bytes = 0;
     let mut last_sample_at = Instant::now();
+    let mut last_emitted_update: Option<ProgressUpdate> = None;
     let mut smoothed_speed = 0_u64;
 
     loop {
@@ -445,14 +446,27 @@ async fn run_progress_sampler(
         }
         update.speed_bps = smoothed_speed;
 
-        if update.bytes > 0 || update.total > 0 || stopping {
+        if should_emit_progress(last_emitted_update, update, stopping) {
             emit_sample(&reporter, queue_target.as_ref(), update).await?;
+            last_emitted_update = Some(update);
         }
 
         if stopping {
             return Ok(());
         }
     }
+}
+
+fn should_emit_progress(
+    previous: Option<ProgressUpdate>,
+    next: ProgressUpdate,
+    stopping: bool,
+) -> bool {
+    if stopping {
+        return true;
+    }
+
+    (next.bytes > 0 || next.total > 0) && previous != Some(next)
 }
 
 fn smooth_speed(previous: u64, instant: u64) -> u64 {
@@ -580,5 +594,22 @@ mod tests {
         assert_eq!(update.total, 1024);
         assert!(update.speed_bps >= 2_000);
         assert_eq!(update.route_kind, RouteKind::Unknown);
+    }
+
+    #[test]
+    fn identical_progress_samples_are_not_emitted_mid_transfer() {
+        let update = ProgressUpdate {
+            bytes: 512,
+            total: 1024,
+            speed_bps: 2048,
+            route_kind: RouteKind::Direct,
+            connect_ms: 10,
+            download_ms: 20,
+            export_ms: 30,
+        };
+
+        assert!(should_emit_progress(None, update, false));
+        assert!(!should_emit_progress(Some(update), update, false));
+        assert!(should_emit_progress(Some(update), update, true));
     }
 }

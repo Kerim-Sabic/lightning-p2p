@@ -109,7 +109,8 @@ mod tests {
 
     #[test]
     fn relay_ready_without_direct_addresses() {
-        let status = NodeRuntimeStatus::from_network("node-1".into(), Some("https://relay".into()), 0);
+        let status =
+            NodeRuntimeStatus::from_network("node-1".into(), Some("https://relay".into()), 0);
         assert_eq!(status.online_state, NodeOnlineState::RelayReady);
         assert!(status.relay_connected);
     }
