@@ -15,7 +15,7 @@ pub mod telemetry;
 pub mod transfer;
 
 use error::{FastDropError, Result};
-use node::{FastDropNode, NodeRuntimeStatus};
+use node::{FastDropNode, NearbyShareProtocol, NearbyShareRegistry, NodeRuntimeStatus};
 use std::sync::Arc;
 use storage::settings::{resolve_app_data_dir, SettingsState};
 use tauri::Manager;
@@ -34,6 +34,8 @@ pub struct AppState {
     pub settings: SettingsState,
     /// In-memory registry of active transfers.
     pub transfers: TransferQueue,
+    /// Nearby-share discovery state for LAN-based receive flows.
+    pub nearby_shares: NearbyShareRegistry,
 }
 
 impl AppState {
@@ -46,6 +48,7 @@ impl AppState {
             node_runtime: Arc::new(RwLock::new(NodeRuntimeStatus::starting())),
             settings,
             transfers: TransferQueue::new(),
+            nearby_shares: NearbyShareRegistry::new(true),
         }
     }
 
@@ -87,7 +90,10 @@ pub fn run() {
             commands::share::describe_share_paths,
             commands::share::get_ticket,
             commands::share::render_ticket_qr,
+            commands::share::clear_active_share,
             commands::transfer::start_receive,
+            commands::transfer::get_discovered_shares,
+            commands::transfer::start_receive_discovered_share,
             commands::transfer::cancel_transfer,
             commands::transfer::get_active_transfers,
             commands::transfer::get_transfer_history,
@@ -100,6 +106,7 @@ pub fn run() {
             commands::settings::complete_first_run,
             commands::settings::set_relay_mode,
             commands::settings::set_custom_relay_url,
+            commands::settings::set_local_discovery_enabled,
             commands::settings::open_download_dir,
         ])
         .setup(|app| {
@@ -109,6 +116,12 @@ pub fn run() {
                 let data_dir = state.data_dir.clone();
                 let settings = state.settings.snapshot().await;
                 let download_dir = settings.download_dir.clone();
+                state
+                    .nearby_shares
+                    .set_local_discovery_enabled(settings.local_discovery_enabled)
+                    .await;
+                let nearby_protocol =
+                    Arc::new(NearbyShareProtocol::new(state.nearby_shares.clone()));
 
                 {
                     let mut runtime = state.node_runtime.write().await;
@@ -129,15 +142,22 @@ pub fn run() {
                     data_dir,
                     download_dir,
                     relay_url,
+                    nearby_protocol,
                 )
                 .await
                 {
                     Ok(node) => {
                         let runtime_status = node.runtime_status();
+                        let endpoint = node.endpoint().clone();
                         let mut guard = state.node.write().await;
                         *guard = Some(Arc::new(node));
                         let mut runtime = state.node_runtime.write().await;
                         *runtime = runtime_status;
+                        node::spawn_nearby_discovery_loop(
+                            handle.clone(),
+                            endpoint,
+                            state.nearby_shares.clone(),
+                        );
                         tracing::info!("iroh node started successfully");
                     }
                     Err(e) => {

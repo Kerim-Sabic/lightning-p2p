@@ -20,6 +20,7 @@ export type NodeOnlineState =
   | "degraded"
   | "offline";
 export type RouteKind = "unknown" | "direct" | "relay";
+export type NearbyRouteHint = "unknown" | "direct" | "relay" | "mixed";
 export type RelayMode = "public" | "custom";
 
 export interface NodeStatus {
@@ -67,6 +68,20 @@ export interface AppSettings {
   first_run_complete: boolean;
   relay_mode: RelayMode;
   custom_relay_url: string | null;
+  local_discovery_enabled: boolean;
+}
+
+export interface NearbyShare {
+  share_id: string;
+  device_name: string;
+  node_id: string;
+  label: string;
+  size: number;
+  hash: string;
+  route_hint: NearbyRouteHint;
+  direct_address_count: number;
+  freshness_seconds: number;
+  published_at: number;
 }
 
 export interface UpdateCheckResult {
@@ -149,6 +164,7 @@ const browserSettings: AppSettings = {
   first_run_complete: true,
   relay_mode: "public",
   custom_relay_url: null,
+  local_discovery_enabled: true,
 };
 
 export function isDesktopRuntime(): boolean {
@@ -162,6 +178,28 @@ export function desktopRuntimeMessage(feature = "This feature"): string {
 function requireDesktopRuntime(feature: string): void {
   if (!isDesktopRuntime()) {
     throw new Error(desktopRuntimeMessage(feature));
+  }
+}
+
+function runtimeError(feature: string, error: unknown): Error {
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : "Unexpected desktop runtime error";
+  return new Error(`${feature} failed: ${message}`);
+}
+
+async function runDesktopWindowAction(
+  feature: string,
+  action: () => Promise<void>,
+): Promise<void> {
+  requireDesktopRuntime(feature);
+  try {
+    await action();
+  } catch (error) {
+    throw runtimeError(feature, error);
   }
 }
 
@@ -216,6 +254,17 @@ export async function startReceive(
   return invoke<string>("start_receive", { ticket, destination });
 }
 
+export async function startReceiveDiscoveredShare(
+  shareId: string,
+  destination: string,
+): Promise<string> {
+  requireDesktopRuntime("Receiving nearby shares");
+  return invoke<string>("start_receive_discovered_share", {
+    shareId,
+    destination,
+  });
+}
+
 export async function cancelTransfer(transferId: string): Promise<void> {
   requireDesktopRuntime("Transfer cancellation");
   await invoke("cancel_transfer", { transferId });
@@ -226,6 +275,13 @@ export async function getActiveTransfers(): Promise<ActiveTransfer[]> {
     return [];
   }
   return invoke<ActiveTransfer[]>("get_active_transfers");
+}
+
+export async function getDiscoveredShares(): Promise<NearbyShare[]> {
+  if (!isDesktopRuntime()) {
+    return [];
+  }
+  return invoke<NearbyShare[]>("get_discovered_shares");
 }
 
 export async function getTransferHistory(): Promise<TransferRecord[]> {
@@ -273,6 +329,13 @@ export async function setCustomRelayUrl(
   return invoke<AppSettings>("set_custom_relay_url", { relayUrl });
 }
 
+export async function setLocalDiscoveryEnabled(
+  enabled: boolean,
+): Promise<AppSettings> {
+  requireDesktopRuntime("Changing local discovery settings");
+  return invoke<AppSettings>("set_local_discovery_enabled", { enabled });
+}
+
 export async function completeFirstRun(): Promise<AppSettings> {
   requireDesktopRuntime("Completing setup");
   return invoke<AppSettings>("complete_first_run");
@@ -281,6 +344,11 @@ export async function completeFirstRun(): Promise<AppSettings> {
 export async function openDownloadDir(): Promise<void> {
   requireDesktopRuntime("Opening the download folder");
   await invoke("open_download_dir");
+}
+
+export async function clearActiveShare(): Promise<void> {
+  requireDesktopRuntime("Clearing the active share");
+  await invoke("clear_active_share");
 }
 
 export async function pickDirectory(
@@ -373,6 +441,18 @@ export function onTransferProgress(
   });
 }
 
+export function onDiscoveredSharesUpdated(
+  callback: (shares: NearbyShare[]) => void,
+): Promise<UnlistenFn> {
+  if (!isDesktopRuntime()) {
+    return Promise.resolve(() => {});
+  }
+
+  return listen<NearbyShare[]>("discovered-shares-updated", ({ payload }) => {
+    callback(payload);
+  });
+}
+
 export async function getDesktopWindowState(): Promise<DesktopWindowState> {
   if (!isDesktopRuntime()) {
     return {
@@ -430,18 +510,21 @@ export function onWindowDragDropEvent(
 }
 
 export async function minimizeDesktopWindow(): Promise<void> {
-  requireDesktopRuntime("Window controls");
-  await getCurrentWindow().minimize();
+  await runDesktopWindowAction("Window minimize", async () => {
+    await getCurrentWindow().minimize();
+  });
 }
 
 export async function toggleDesktopWindowMaximize(): Promise<void> {
-  requireDesktopRuntime("Window controls");
-  await getCurrentWindow().toggleMaximize();
+  await runDesktopWindowAction("Window maximize", async () => {
+    await getCurrentWindow().toggleMaximize();
+  });
 }
 
 export async function closeDesktopWindow(): Promise<void> {
-  requireDesktopRuntime("Window controls");
-  await getCurrentWindow().close();
+  await runDesktopWindowAction("Window close", async () => {
+    await getCurrentWindow().close();
+  });
 }
 
 async function disposePendingUpdate(): Promise<void> {

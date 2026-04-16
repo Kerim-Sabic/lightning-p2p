@@ -6,13 +6,16 @@ import {
   Download,
   FolderSymlink,
   Radar,
+  ScanSearch,
   XCircle,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { isProbablyBlobTicket } from "../lib/format";
-import { isDesktopRuntime } from "../lib/tauri";
+import { isDesktopRuntime, type NearbyShare } from "../lib/tauri";
+import { useNearbyShareStore } from "../stores/nearbyShareStore";
 import { useTransferStore } from "../stores/transferStore";
 import { useReceiveTransfers } from "../stores/transferSelectors";
+import { NearbyShareCard } from "./NearbyShareCard";
 import { TransferCard } from "./TransferCard";
 
 function readinessLabel(onlineState: string): string {
@@ -34,31 +37,37 @@ function readinessLabel(onlineState: string): string {
 function readinessCopy(onlineState: string): string {
   switch (onlineState) {
     case "direct_ready":
-      return "If the sender is also reachable directly, this receive can take the fastest end-to-end route.";
+      return "Nearby shares can take the fastest local path immediately, and manual tickets still keep WAN fallback available.";
     case "relay_ready":
-      return "The transfer can still complete now, but speeds may be lower if the path stays relay-assisted.";
+      return "Nearby discovery still works, but remote sends may rely on relay fallback until direct addresses settle.";
     case "degraded":
-      return "Wait a moment if you want discovery to publish a better route before starting the receive.";
+      return "Give the node a moment if you want stronger route signals before receiving.";
     case "offline":
-      return "Open Settings and inspect the relay or local network state before trying again.";
+      return "Inspect relay and local network state in Settings before trying again.";
     case "starting":
     default:
-      return "You can prepare the ticket now and start as soon as the node is ready.";
+      return "The node is still starting. You can scan for nearby shares now and paste a manual ticket as a fallback.";
   }
 }
 
 export function ReceiveView() {
   const downloadDir = useTransferStore((state) => state.downloadDir);
   const nodeStatus = useTransferStore((state) => state.nodeStatus);
+  const settings = useTransferStore((state) => state.settings);
   const setError = useTransferStore((state) => state.setError);
   const startReceive = useTransferStore((state) => state.startReceive);
+  const startReceiveNearbyShare = useTransferStore(
+    (state) => state.startReceiveNearbyShare,
+  );
   const cancelTransfer = useTransferStore((state) => state.cancelTransfer);
   const receiveTransfers = useReceiveTransfers();
+  const nearbyShares = useNearbyShareStore((state) => state.shares);
   const desktopRuntime = isDesktopRuntime();
   const [ticketInput, setTicketInput] = useState("");
 
   const trimmedTicket = ticketInput.trim();
   const ticketLooksValid = isProbablyBlobTicket(trimmedTicket);
+  const localDiscoveryEnabled = settings?.local_discovery_enabled ?? true;
 
   const activeReceiveCount = useMemo(
     () =>
@@ -80,6 +89,10 @@ export function ReceiveView() {
     }
   };
 
+  const handleNearbyReceive = async (share: NearbyShare): Promise<void> => {
+    await startReceiveNearbyShare(share);
+  };
+
   const handlePaste = async (): Promise<void> => {
     try {
       const clipboardText = await navigator.clipboard.readText();
@@ -95,39 +108,35 @@ export function ReceiveView() {
         <header className="glass-panel hero-panel relative overflow-hidden p-8">
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_84%_18%,rgba(56,189,248,0.1),transparent_22%),radial-gradient(circle_at_14%_100%,rgba(16,185,129,0.06),transparent_24%)]" />
           <div className="relative">
-          <div className="badge">
-            <Download className="h-3 w-3 text-emerald-200" />
-            Receive
-          </div>
-          <h1 className="page-title mt-6 max-w-[13ch]">
-            Pull verified data straight to disk
-          </h1>
-          <p className="page-copy mt-4 max-w-[60ch]">
-            Paste a Lightning P2P blob ticket to connect to the sender, stream
-            the content through iroh, and export only verified bytes into your
-            chosen receive folder.
-          </p>
+            <div className="badge">
+              <Download className="h-3 w-3 text-emerald-200" />
+              Receive
+            </div>
+            <h1 className="page-title mt-6 max-w-[13ch]">
+              Pull nearby shares without making users trade codes first
+            </h1>
+            <p className="page-copy mt-4 max-w-[60ch]">
+              Lightning P2P now scans the local network for active nearby
+              shares. Receive straight from the LAN when possible, then fall
+              back to manual tickets when you need WAN reachability.
+            </p>
 
-          <div className="hero-metrics mt-7 grid gap-3 sm:grid-cols-3">
-            <div className="stat-card">
-              <p className="metric-label">Active receives</p>
-              <p className="metric-value">
-                {activeReceiveCount}
-              </p>
+            <div className="hero-metrics mt-7 grid gap-3 sm:grid-cols-3">
+              <div className="stat-card">
+                <p className="metric-label">Nearby shares</p>
+                <p className="metric-value">{nearbyShares.length}</p>
+              </div>
+              <div className="stat-card">
+                <p className="metric-label">Active receives</p>
+                <p className="metric-value">{activeReceiveCount}</p>
+              </div>
+              <div className="stat-card">
+                <p className="metric-label">Destination</p>
+                <p className="mt-2 truncate text-[15px] font-semibold tracking-[-0.02em] text-white">
+                  {downloadDir ? "Configured" : "Resolving"}
+                </p>
+              </div>
             </div>
-            <div className="stat-card">
-              <p className="metric-label">Direct addresses</p>
-              <p className="metric-value">
-                {nodeStatus.direct_address_count}
-              </p>
-            </div>
-            <div className="stat-card">
-              <p className="metric-label">Destination</p>
-              <p className="mt-2 truncate text-[15px] font-semibold tracking-[-0.02em] text-white">
-                {downloadDir ? "Configured" : "Resolving"}
-              </p>
-            </div>
-          </div>
           </div>
         </header>
 
@@ -163,25 +172,74 @@ export function ReceiveView() {
           </div>
 
           <p className="meta-copy mt-5">
-            Direct paths are the speed path. Relay paths are still secure and
-            verified, but they are there for reachability first and speed
-            second.
+            Nearby discovery is LAN-only in this pass. Manual tickets stay
+            available below for internet transfers, clipboard handoff, and
+            explicit fallback.
           </p>
         </aside>
+      </section>
+
+      <section className="glass-panel p-6">
+        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <div>
+            <p className="text-sm font-medium text-white">Nearby shares</p>
+            <p className="meta-copy mt-1">
+              Same-network senders appear here automatically while they have an
+              active share published.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 text-xs text-slate-400">
+            <ScanSearch className="h-4 w-4 text-sky-200/80" />
+            {localDiscoveryEnabled
+              ? "Scanning the local network"
+              : "Local discovery is disabled in Settings"}
+          </div>
+        </div>
+
+        <div className="mt-5 space-y-3">
+          {!localDiscoveryEnabled ? (
+            <div className="glass-subtle px-6 py-10 text-center">
+              <p className="text-base font-semibold text-white">
+                Nearby discovery is turned off
+              </p>
+              <p className="mt-2 text-sm leading-6 text-slate-300/72">
+                Enable local discovery in Settings if you want nearby senders to
+                appear automatically.
+              </p>
+            </div>
+          ) : nearbyShares.length === 0 ? (
+            <div className="glass-subtle px-6 py-10 text-center">
+              <p className="text-base font-semibold text-white">
+                No nearby shares detected yet
+              </p>
+              <p className="mt-2 text-sm leading-6 text-slate-300/72">
+                When a sender on this LAN stages a Lightning P2P share, it will
+                appear here automatically.
+              </p>
+            </div>
+          ) : (
+            nearbyShares.map((share) => (
+              <NearbyShareCard
+                key={share.share_id}
+                share={share}
+                disabled={!desktopRuntime || !downloadDir}
+                onReceive={(nextShare) => void handleNearbyReceive(nextShare)}
+              />
+            ))
+          )}
+        </div>
       </section>
 
       <section className="glass-panel p-6">
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div>
-              <p className="text-sm font-medium text-white">Blob ticket</p>
+              <p className="text-sm font-medium text-white">
+                Paste a code instead
+              </p>
               <p className="meta-copy mt-1">
-                Lightning P2P blob tickets usually begin with{" "}
-                <span className="rounded-md border border-white/10 bg-white/[0.05] px-1.5 py-0.5 font-mono text-[11px] text-slate-100">
-                  blob
-                </span>
-                . Paste the full string to recover the sender address, relay,
-                and hash.
+                Use a Lightning P2P blob ticket when the sender is not on the
+                same LAN or when you want the explicit manual path.
               </p>
             </div>
             <button
@@ -249,7 +307,7 @@ export function ReceiveView() {
             >
               <span className="relative inline-flex items-center gap-2">
                 <ArrowDownToLine className="h-4 w-4" />
-                Start receive
+                Start manual receive
               </span>
             </button>
           </div>
@@ -280,7 +338,8 @@ export function ReceiveView() {
                 No receive transfers yet
               </p>
               <p className="mt-2 text-sm leading-6 text-slate-300/72">
-                Paste a blob ticket above to start the first verified receive.
+                Accept a nearby share above or paste a manual ticket to start
+                the first verified receive.
               </p>
             </motion.div>
           ) : (

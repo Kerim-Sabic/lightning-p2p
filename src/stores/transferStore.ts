@@ -2,6 +2,7 @@ import { create } from "zustand";
 import type {
   ActiveTransfer,
   AppSettings,
+  NearbyShare,
   NodeStatus,
   RelayMode,
   RouteKind,
@@ -13,6 +14,7 @@ import type {
   UpdateProgress,
 } from "../lib/tauri";
 import * as tauri from "../lib/tauri";
+import { useNearbyShareStore } from "./nearbyShareStore";
 
 export type TransferStatus = "starting" | "running" | "completed" | "failed";
 export type UpdatePhase =
@@ -81,6 +83,7 @@ interface TransferStore {
   refreshHistory: () => Promise<void>;
   createShare: () => Promise<void>;
   startReceive: (ticket: string) => Promise<string | null>;
+  startReceiveNearbyShare: (share: NearbyShare) => Promise<string | null>;
   reshare: (hash: string) => Promise<string | null>;
   cancelTransfer: (transferId: string) => Promise<void>;
   pickDownloadDir: () => Promise<void>;
@@ -88,6 +91,7 @@ interface TransferStore {
   setAutoUpdateEnabled: (enabled: boolean) => Promise<void>;
   setRelayMode: (relayMode: RelayMode) => Promise<void>;
   setCustomRelayUrl: (relayUrl: string | null) => Promise<void>;
+  setLocalDiscoveryEnabled: (enabled: boolean) => Promise<void>;
   completeFirstRun: () => Promise<void>;
   checkForUpdates: (silent?: boolean) => Promise<void>;
   installUpdate: () => Promise<void>;
@@ -204,6 +208,31 @@ function withSettings(settings: AppSettings) {
   };
 }
 
+async function resolveReceiveDestination(
+  settings: AppSettings | null,
+  downloadDir: string | null,
+): Promise<{ destination: string; settings: AppSettings | null }> {
+  if (settings?.download_dir) {
+    return {
+      destination: settings.download_dir,
+      settings,
+    };
+  }
+
+  if (downloadDir) {
+    return {
+      destination: downloadDir,
+      settings,
+    };
+  }
+
+  const nextSettings = await tauri.getAppSettings();
+  return {
+    destination: nextSettings.download_dir,
+    settings: nextSettings,
+  };
+}
+
 function updateDownloadProgress(
   current: UpdateState,
   progress: UpdateProgress,
@@ -234,7 +263,8 @@ function sameSettings(left: AppSettings, right: AppSettings): boolean {
     left.auto_update_enabled === right.auto_update_enabled &&
     left.first_run_complete === right.first_run_complete &&
     left.relay_mode === right.relay_mode &&
-    left.custom_relay_url === right.custom_relay_url
+    left.custom_relay_url === right.custom_relay_url &&
+    left.local_discovery_enabled === right.local_discovery_enabled
   );
 }
 
@@ -269,16 +299,25 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
 
   setError: (message) => set({ error: message }),
   clearError: () => set({ error: null }),
-  clearShareSelection: () =>
+  clearShareSelection: () => {
     set({
       shareSelection: [],
       shareTicket: null,
       isSharing: false,
-    }),
+    });
+    if (tauri.isDesktopRuntime()) {
+      void tauri.clearActiveShare().catch((error: unknown) => {
+        set({ error: toErrorMessage(error) });
+      });
+    }
+  },
 
   prepareShareSelection: async (paths) => {
     set({ error: null, shareTicket: null, isSharing: false });
     try {
+      if (tauri.isDesktopRuntime()) {
+        await tauri.clearActiveShare();
+      }
       const shareSelection = await tauri.describeSharePaths(uniquePaths(paths));
       set({ shareSelection });
     } catch (error) {
@@ -425,13 +464,14 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
     set({ error: null });
 
     try {
-      let destination = get().settings?.download_dir ?? get().downloadDir;
-      if (!destination) {
-        const settings = await tauri.getAppSettings();
-        destination = settings.download_dir;
-        set(withSettings(settings));
+      const resolved = await resolveReceiveDestination(
+        get().settings,
+        get().downloadDir,
+      );
+      if (resolved.settings) {
+        set(withSettings(resolved.settings));
       }
-
+      const destination = resolved.destination;
       const transferId = await tauri.startReceive(ticket, destination);
       set((state) => ({
         transfers: {
@@ -443,6 +483,42 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
               "receive",
               "Preparing download",
               null,
+            ),
+        },
+      }));
+      return transferId;
+    } catch (error) {
+      set({ error: toErrorMessage(error) });
+      return null;
+    }
+  },
+
+  startReceiveNearbyShare: async (share) => {
+    set({ error: null });
+
+    try {
+      const resolved = await resolveReceiveDestination(
+        get().settings,
+        get().downloadDir,
+      );
+      if (resolved.settings) {
+        set(withSettings(resolved.settings));
+      }
+      const destination = resolved.destination;
+      const transferId = await tauri.startReceiveDiscoveredShare(
+        share.share_id,
+        destination,
+      );
+      set((state) => ({
+        transfers: {
+          ...state.transfers,
+          [transferId]:
+            state.transfers[transferId] ??
+            createTransferEntry(
+              transferId,
+              "receive",
+              share.label,
+              share.node_id,
             ),
         },
       }));
@@ -520,6 +596,18 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
     try {
       const settings = await tauri.setCustomRelayUrl(relayUrl);
       set(withSettings(settings));
+    } catch (error) {
+      set({ error: toErrorMessage(error) });
+    }
+  },
+
+  setLocalDiscoveryEnabled: async (enabled) => {
+    try {
+      const settings = await tauri.setLocalDiscoveryEnabled(enabled);
+      set(withSettings(settings));
+      if (!enabled) {
+        useNearbyShareStore.getState().clearShares();
+      }
     } catch (error) {
       set({ error: toErrorMessage(error) });
     }

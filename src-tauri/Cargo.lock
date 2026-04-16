@@ -1589,6 +1589,7 @@ dependencies = [
  "iroh",
  "iroh-blobs",
  "keyring",
+ "n0-future",
  "qrcode",
  "serde",
  "serde_json",

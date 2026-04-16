@@ -66,6 +66,18 @@ pub fn load_all(db: &StorageDb) -> Result<Vec<TransferRecord>> {
     Ok(records)
 }
 
+/// Finds the most recent send record for a given content hash.
+///
+/// # Errors
+///
+/// Returns `FastDropError` if deserialization fails while scanning history.
+pub fn latest_send_by_hash(db: &StorageDb, hash: &str) -> Result<Option<TransferRecord>> {
+    let records = load_all(db)?;
+    Ok(records
+        .into_iter()
+        .find(|record| record.direction == TransferDirection::Send && record.hash == hash))
+}
+
 fn history_key(record: &TransferRecord) -> Vec<u8> {
     format!(
         "{:020}-{:?}-{}",
@@ -99,5 +111,33 @@ mod tests {
         let records = load_all(&db).expect("records should load");
         assert_eq!(records.len(), 1);
         assert_eq!(records[0].filename, "test.txt");
+    }
+
+    #[test]
+    fn latest_send_by_hash_prefers_newest_send() {
+        let (db, _dir) = temp_db();
+        let oldest = TransferRecord {
+            hash: "abc123".into(),
+            filename: "old.txt".into(),
+            size: 128,
+            peer: None,
+            timestamp: 1_700_000_000,
+            direction: TransferDirection::Send,
+        };
+        let newest = TransferRecord {
+            hash: "abc123".into(),
+            filename: "new.txt".into(),
+            size: 256,
+            peer: None,
+            timestamp: 1_700_000_100,
+            direction: TransferDirection::Send,
+        };
+        save_record_no_flush(&db, &oldest).expect("oldest should save");
+        save_record(&db, &newest).expect("newest should save");
+
+        let record = latest_send_by_hash(&db, "abc123")
+            .expect("lookup should succeed")
+            .expect("send record should exist");
+        assert_eq!(record.filename, "new.txt");
     }
 }

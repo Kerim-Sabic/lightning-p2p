@@ -37,6 +37,9 @@ pub struct AppSettings {
     pub relay_mode: RelayModeSetting,
     /// Custom relay URL used when `relay_mode` is set to `custom`.
     pub custom_relay_url: Option<String>,
+    /// Whether nearby-share discovery is enabled on the local network.
+    #[serde(default = "default_local_discovery_enabled")]
+    pub local_discovery_enabled: bool,
 }
 
 impl AppSettings {
@@ -47,6 +50,7 @@ impl AppSettings {
             first_run_complete: false,
             relay_mode: RelayModeSetting::Public,
             custom_relay_url: None,
+            local_discovery_enabled: default_local_discovery_enabled(),
         }
     }
 
@@ -166,6 +170,19 @@ impl SettingsState {
             let mut guard = self.current.write().await;
             guard.custom_relay_url = normalize_custom_relay_url(relay_url)?;
             validate_relay_settings(&guard)?;
+        }
+        self.persist().await
+    }
+
+    /// Enables or disables nearby-share discovery on the local network.
+    ///
+    /// # Errors
+    ///
+    /// Returns `FastDropError` if the updated settings cannot be written.
+    pub async fn set_local_discovery_enabled(&self, enabled: bool) -> Result<AppSettings> {
+        {
+            let mut guard = self.current.write().await;
+            guard.local_discovery_enabled = enabled;
         }
         self.persist().await
     }
@@ -293,6 +310,10 @@ fn preferred_download_path(base_dir: &Path) -> PathBuf {
     }
 }
 
+fn default_local_discovery_enabled() -> bool {
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -351,6 +372,7 @@ mod tests {
             snapshot.custom_relay_url,
             Some("https://relay.example.com./".into())
         );
+        assert!(snapshot.local_discovery_enabled);
     }
 
     #[tokio::test]
@@ -361,5 +383,18 @@ mod tests {
             .await
             .expect_err("custom relay mode without url should fail");
         assert!(err.to_string().contains("requires a relay URL"));
+    }
+
+    #[tokio::test]
+    async fn local_discovery_setting_persists() {
+        let (state, dir) = temp_settings_state();
+        state
+            .set_local_discovery_enabled(false)
+            .await
+            .expect("local discovery should persist");
+
+        let reloaded = SettingsState::load_or_create(dir.path()).expect("settings reload");
+        let snapshot = reloaded.snapshot().await;
+        assert!(!snapshot.local_discovery_enabled);
     }
 }

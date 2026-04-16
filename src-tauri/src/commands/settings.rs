@@ -4,7 +4,7 @@ use crate::storage::settings::{AppSettings, RelayModeSetting};
 use crate::AppState;
 use serde::Serialize;
 use std::path::Path;
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
 
 /// Serializable snapshot of user-configurable application settings.
 #[derive(Debug, Clone, Serialize)]
@@ -19,6 +19,8 @@ pub struct SettingsPayload {
     pub relay_mode: RelayModeSetting,
     /// Custom relay URL used when relay mode is set to `custom`.
     pub custom_relay_url: Option<String>,
+    /// Whether nearby-share discovery is enabled on the local network.
+    pub local_discovery_enabled: bool,
 }
 
 impl From<AppSettings> for SettingsPayload {
@@ -29,6 +31,7 @@ impl From<AppSettings> for SettingsPayload {
             first_run_complete: settings.first_run_complete,
             relay_mode: settings.relay_mode,
             custom_relay_url: settings.custom_relay_url,
+            local_discovery_enabled: settings.local_discovery_enabled,
         }
     }
 }
@@ -145,6 +148,33 @@ pub async fn set_custom_relay_url(
         .await
         .map(SettingsPayload::from)
         .map_err(String::from)
+}
+
+/// Updates whether nearby-share discovery is enabled on the local network.
+///
+/// # Errors
+///
+/// Returns an error string if persistence or event emission fails.
+#[tauri::command]
+pub async fn set_local_discovery_enabled(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    enabled: bool,
+) -> Result<SettingsPayload, String> {
+    let settings = state
+        .settings
+        .set_local_discovery_enabled(enabled)
+        .await
+        .map_err(String::from)?;
+    state.nearby_shares.set_local_discovery_enabled(enabled).await;
+    if !enabled {
+        let shares = state.nearby_shares.clear_discovered_shares().await;
+        if let Some(shares) = shares {
+            app.emit("discovered-shares-updated", shares)
+                .map_err(|error| error.to_string())?;
+        }
+    }
+    Ok(SettingsPayload::from(settings))
 }
 
 /// Opens the current download directory in the operating system's file explorer.

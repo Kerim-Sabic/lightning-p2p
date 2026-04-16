@@ -74,7 +74,7 @@ export function Sidebar({ currentView, onNavigate }: SidebarProps) {
   const secondaryNavItems = navItems.filter((item) => item.id === "settings");
 
   return (
-    <aside className="relative z-10 flex w-[276px] shrink-0 flex-col border-r border-white/[0.05] px-4 pb-4 pt-3">
+    <aside className="relative z-10 flex w-[268px] shrink-0 flex-col border-r border-white/[0.04] px-4 pb-4 pt-3">
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),transparent_18%)]" />
       <div className="relative flex min-h-0 flex-1 flex-col gap-4">
         <div className="sidebar-card p-4">
@@ -91,7 +91,7 @@ export function Sidebar({ currentView, onNavigate }: SidebarProps) {
                 Lightning P2P
               </p>
               <p className="mt-1 text-[11px] uppercase tracking-[0.22em] text-slate-500">
-                Direct-first desktop transfers
+                Premium direct-first transfers
               </p>
             </div>
           </div>
@@ -222,8 +222,8 @@ export function Sidebar({ currentView, onNavigate }: SidebarProps) {
             {nodeStatus.relay_connected ? "Reachable now" : "Waiting on relay"}
           </div>
           <p className="mt-3 text-[13px] leading-6 text-slate-400">
-            Designed for fast, verified transfers across LAN and public
-            internet paths without leaving the device.
+            Optimized for nearby LAN discovery first, then verified direct and
+            relay-backed delivery beyond the local network.
           </p>
         </div>
       </div>

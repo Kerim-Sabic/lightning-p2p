@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { startTransition, useMemo, useState } from "react";
+import { startTransition, useEffect, useMemo, useState } from "react";
 import { AppOverview } from "./components/AppOverview";
 import { FirstRunOverlay } from "./components/FirstRunOverlay";
 import { HistoryView } from "./components/HistoryView";
@@ -10,6 +10,7 @@ import { SettingsView } from "./components/SettingsView";
 import { Sidebar } from "./components/Sidebar";
 import { WindowChrome } from "./components/WindowChrome";
 import { useTransfer } from "./hooks/useTransfer";
+import { isDesktopRuntime } from "./lib/tauri";
 import { useTransferStore } from "./stores/transferStore";
 
 export type View = "send" | "receive" | "history" | "settings";
@@ -24,7 +25,20 @@ export function App() {
   const [view, setView] = useState<View>("send");
   const error = useTransferStore((state) => state.error);
   const clearError = useTransferStore((state) => state.clearError);
+  const desktopRuntime = isDesktopRuntime();
   useTransfer();
+
+  useEffect(() => {
+    document.documentElement.dataset.runtime = desktopRuntime
+      ? "desktop"
+      : "browser";
+    document.body.dataset.runtime = desktopRuntime ? "desktop" : "browser";
+
+    return () => {
+      delete document.documentElement.dataset.runtime;
+      delete document.body.dataset.runtime;
+    };
+  }, [desktopRuntime]);
 
   const handleNavigate = (nextView: View): void => {
     startTransition(() => {
@@ -47,9 +61,19 @@ export function App() {
   }, [view]);
 
   return (
-    <div className="relative h-screen overflow-hidden bg-[var(--canvas-0)] text-[var(--fg-primary)]">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_10%_0%,rgba(59,130,246,0.18),transparent_28%),radial-gradient(circle_at_100%_10%,rgba(24,144,255,0.1),transparent_24%),radial-gradient(circle_at_50%_100%,rgba(14,165,233,0.08),transparent_30%)]" />
-      <div className="app-shell">
+    <div
+      className={`relative h-screen overflow-hidden text-[var(--fg-primary)] ${
+        desktopRuntime ? "bg-transparent" : "bg-[var(--canvas-0)]"
+      }`}
+    >
+      {!desktopRuntime ? (
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_10%_0%,rgba(59,130,246,0.18),transparent_28%),radial-gradient(circle_at_100%_10%,rgba(24,144,255,0.1),transparent_24%),radial-gradient(circle_at_50%_100%,rgba(14,165,233,0.08),transparent_30%)]" />
+      ) : null}
+      <div
+        className={`app-shell ${
+          desktopRuntime ? "app-shell-desktop" : "app-shell-browser"
+        }`}
+      >
         <FirstRunOverlay />
         <WindowChrome currentView={view} />
         <div className="relative flex min-h-0 flex-1">

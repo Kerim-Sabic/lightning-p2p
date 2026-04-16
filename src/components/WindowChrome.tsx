@@ -13,6 +13,7 @@ import {
   toggleDesktopWindowMaximize,
 } from "../lib/tauri";
 import { useOverviewSnapshot } from "../stores/transferSelectors";
+import { useTransferStore } from "../stores/transferStore";
 
 interface WindowChromeProps {
   currentView: View;
@@ -66,6 +67,7 @@ function viewLabel(view: View): string {
 
 export function WindowChrome({ currentView }: WindowChromeProps) {
   const overview = useOverviewSnapshot();
+  const setError = useTransferStore((state) => state.setError);
   const desktopRuntime = isDesktopRuntime();
   const [windowState, setWindowState] = useState({
     focused: true,
@@ -127,14 +129,22 @@ export function WindowChrome({ currentView }: WindowChromeProps) {
     overview.nodeStatus.online_state,
   ]);
 
-  const handleToggleMaximize = async (): Promise<void> => {
-    if (!desktopRuntime) {
-      return;
-    }
+  const runWindowAction = useEffectEvent(
+    async (action: () => Promise<void>, syncAfter = false) => {
+      if (!desktopRuntime) {
+        return;
+      }
 
-    await toggleDesktopWindowMaximize();
-    await syncWindowState();
-  };
+      try {
+        await action();
+        if (syncAfter) {
+          await syncWindowState();
+        }
+      } catch (error) {
+        setError(error instanceof Error ? error.message : "Window action failed");
+      }
+    },
+  );
 
   return (
     <header
@@ -142,36 +152,38 @@ export function WindowChrome({ currentView }: WindowChromeProps) {
         windowState.focused ? "opacity-100" : "opacity-90"
       }`}
     >
-      <div
-        data-tauri-drag-region
-        onDoubleClick={() => void handleToggleMaximize()}
-        className="flex min-w-0 flex-1 items-center gap-4"
-      >
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-white/[0.08] bg-white/[0.04] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-            <img
-              src={lightningMark}
-              alt=""
-              className="h-5 w-5 object-contain opacity-95"
-            />
-          </div>
-
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <p className="truncate text-sm font-semibold tracking-[-0.02em] text-white">
-                Lightning P2P
-              </p>
-              <span className="hidden rounded-full border border-white/[0.07] bg-white/[0.04] px-2.5 py-1 text-[10px] uppercase tracking-[0.24em] text-slate-400 xl:inline-flex">
-                {viewLabel(currentView)}
-              </span>
-            </div>
-            <p className="truncate text-[11px] tracking-[0.16em] text-slate-500">
-              Local-first peer-to-peer transfer
-            </p>
-          </div>
+      <div className="flex min-w-0 items-center gap-3">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[18px] border border-white/[0.08] bg-white/[0.04] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+          <img
+            src={lightningMark}
+            alt=""
+            className="h-5 w-5 object-contain opacity-95"
+          />
         </div>
 
-        <div className="hidden min-w-0 flex-1 items-center justify-center gap-2 xl:flex">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <p className="truncate text-sm font-semibold tracking-[-0.02em] text-white">
+              Lightning P2P
+            </p>
+            <span className="hidden rounded-full border border-white/[0.07] bg-white/[0.04] px-2.5 py-1 text-[10px] uppercase tracking-[0.24em] text-slate-400 xl:inline-flex">
+              {viewLabel(currentView)}
+            </span>
+          </div>
+          <p className="truncate text-[11px] tracking-[0.16em] text-slate-500">
+            Direct-first peer-to-peer transfer
+          </p>
+        </div>
+      </div>
+
+      <div
+        data-tauri-drag-region
+        onDoubleClick={() =>
+          void runWindowAction(() => toggleDesktopWindowMaximize(), true)
+        }
+        className="mx-4 flex min-w-0 flex-1 items-center justify-center"
+      >
+        <div className="hidden items-center gap-2 xl:flex">
           <div className="chrome-pill">
             <span
               className={`h-2 w-2 rounded-full ${routeTone(overview.nodeStatus.online_state)}`}
@@ -187,9 +199,7 @@ export function WindowChrome({ currentView }: WindowChromeProps) {
             <span>{statusText.transferCopy}</span>
           </div>
           {!desktopRuntime ? (
-            <div className="chrome-pill border-sky-300/12 bg-sky-500/10 text-sky-100/88">
-              Browser preview
-            </div>
+            <div className="chrome-pill">Browser preview</div>
           ) : null}
         </div>
       </div>
@@ -197,14 +207,16 @@ export function WindowChrome({ currentView }: WindowChromeProps) {
       {desktopRuntime ? (
         <div className="ml-4 flex items-center gap-1">
           <button
-            onClick={() => void minimizeDesktopWindow()}
+            onClick={() => void runWindowAction(() => minimizeDesktopWindow())}
             className="window-control-button"
             aria-label="Minimize window"
           >
             <Minus className="h-4 w-4" />
           </button>
           <button
-            onClick={() => void handleToggleMaximize()}
+            onClick={() =>
+              void runWindowAction(() => toggleDesktopWindowMaximize(), true)
+            }
             className="window-control-button"
             aria-label={
               windowState.maximized ? "Restore window" : "Maximize window"
@@ -217,7 +229,7 @@ export function WindowChrome({ currentView }: WindowChromeProps) {
             )}
           </button>
           <button
-            onClick={() => void closeDesktopWindow()}
+            onClick={() => void runWindowAction(() => closeDesktopWindow())}
             className="window-control-button window-control-button-danger"
             aria-label="Close window"
           >

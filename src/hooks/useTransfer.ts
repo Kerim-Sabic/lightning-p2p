@@ -2,10 +2,12 @@ import { isTauri } from "@tauri-apps/api/core";
 import { useEffect, useEffectEvent } from "react";
 import {
   desktopRuntimeMessage,
+  onDiscoveredSharesUpdated,
   onTransferProgress,
   type NodeOnlineState,
   type TransferEvent,
 } from "../lib/tauri";
+import { useNearbyShareStore } from "../stores/nearbyShareStore";
 import { useTransferStore } from "../stores/transferStore";
 
 const FAST_NODE_STATUS_POLL_MS = 2500;
@@ -38,6 +40,7 @@ export function useTransfer(): void {
       store.refreshSettings(),
       store.refreshActiveTransfers(),
       store.refreshHistory(),
+      useNearbyShareStore.getState().refreshShares(),
     ]);
 
     const settings = useTransferStore.getState().settings;
@@ -69,6 +72,7 @@ export function useTransfer(): void {
   useEffect(() => {
     if (!inTauriRuntime) {
       setError(desktopRuntimeMessage("Browser preview"));
+      useNearbyShareStore.getState().clearShares();
       return;
     }
 
@@ -150,4 +154,24 @@ export function useTransfer(): void {
       unlisten?.();
     };
   }, [handleSubscriptionError, handleTransferEvent, inTauriRuntime]);
+
+  useEffect(() => {
+    if (!inTauriRuntime) {
+      return;
+    }
+
+    let unlisten: (() => void) | null = null;
+
+    void onDiscoveredSharesUpdated((shares) => {
+      useNearbyShareStore.getState().applySharesUpdated(shares);
+    })
+      .then((fn) => {
+        unlisten = fn;
+      })
+      .catch(handleSubscriptionError);
+
+    return () => {
+      unlisten?.();
+    };
+  }, [handleSubscriptionError, inTauriRuntime]);
 }

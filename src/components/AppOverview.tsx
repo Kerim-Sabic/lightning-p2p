@@ -67,9 +67,7 @@ export function AppOverview() {
           <Radar className="h-4 w-4 text-sky-200/85" />
         </div>
         <div className="min-w-0">
-          <p className="metric-label">
-            Network
-          </p>
+          <p className="metric-label">Network</p>
           <p className="mt-1 text-[15px] font-semibold tracking-[-0.02em] text-white">
             {networkHeadline(overview.nodeStatus.online_state)}
           </p>
@@ -84,9 +82,7 @@ export function AppOverview() {
           <ArrowUpRight className="h-4 w-4 text-sky-200/85" />
         </div>
         <div className="min-w-0">
-          <p className="metric-label">
-            Throughput
-          </p>
+          <p className="metric-label">Throughput</p>
           <p className="mt-1 text-[15px] font-semibold tracking-[-0.02em] text-white">
             {formatSpeed(overview.combinedSpeedBps)}
           </p>
@@ -102,9 +98,7 @@ export function AppOverview() {
           <FolderSymlink className="h-4 w-4 text-slate-200/85" />
         </div>
         <div className="min-w-0">
-          <p className="metric-label">
-            Receive folder
-          </p>
+          <p className="metric-label">Receive folder</p>
           <p className="mt-1 truncate text-[15px] font-semibold tracking-[-0.02em] text-white">
             {pathTail(overview.downloadDir)}
           </p>
@@ -119,9 +113,7 @@ export function AppOverview() {
           <RefreshCw className="h-4 w-4 text-slate-200/85" />
         </div>
         <div className="min-w-0">
-          <p className="metric-label">
-            Updates
-          </p>
+          <p className="metric-label">Updates</p>
           <p className="mt-1 text-[15px] font-semibold tracking-[-0.02em] text-white">
             {updateCopy(overview.updatePhase)}
           </p>

@@ -97,6 +97,7 @@ export function SendView() {
   const createShare = useTransferStore((state) => state.createShare);
   const isSharing = useTransferStore((state) => state.isSharing);
   const nodeStatus = useTransferStore((state) => state.nodeStatus);
+  const settings = useTransferStore((state) => state.settings);
   const pickShareFiles = useTransferStore((state) => state.pickShareFiles);
   const pickShareFolder = useTransferStore((state) => state.pickShareFolder);
   const prepareShareSelection = useTransferStore(
@@ -115,6 +116,7 @@ export function SendView() {
     () => shareSelection.reduce((total, item) => total + item.size, 0),
     [shareSelection],
   );
+  const localDiscoveryEnabled = settings?.local_discovery_enabled ?? true;
 
   const stageSteps = useMemo(
     () => [
@@ -328,6 +330,16 @@ export function SendView() {
               <p className="metric-label">Relay session</p>
               <p className="mt-2 text-[15px] font-semibold tracking-[-0.02em] text-white">
                 {nodeStatus.relay_connected ? "Connected" : "Waiting"}
+              </p>
+            </div>
+            <div className="stat-card">
+              <p className="metric-label">Nearby visibility</p>
+              <p className="mt-2 text-[15px] font-semibold tracking-[-0.02em] text-white">
+                {shareTicket && localDiscoveryEnabled
+                  ? "Visible on this network"
+                  : localDiscoveryEnabled
+                    ? "Ready after ticket creation"
+                    : "Disabled in Settings"}
               </p>
             </div>
           </div>
@@ -589,6 +601,25 @@ export function SendView() {
                     <Copy className="h-4 w-4" />
                     {copied ? "Copied" : "Copy"}
                   </button>
+                </div>
+
+                <div
+                  className={`rounded-[24px] border px-4 py-3 text-sm ${
+                    localDiscoveryEnabled
+                      ? "border-emerald-400/18 bg-emerald-500/10 text-emerald-50"
+                      : "border-white/8 bg-white/[0.04] text-slate-300"
+                  }`}
+                >
+                  <p className="metric-label">
+                    {localDiscoveryEnabled
+                      ? "Visible on this network"
+                      : "Manual sharing only"}
+                  </p>
+                  <p className="mt-2 leading-6">
+                    {localDiscoveryEnabled
+                      ? "Nearby receivers on the same LAN can discover this share automatically while this ticket stays active."
+                      : "Local discovery is disabled, so receivers will need the ticket or QR code explicitly."}
+                  </p>
                 </div>
 
                 <div className="overflow-hidden rounded-[24px] border border-white/[0.08] bg-black/30 p-4">

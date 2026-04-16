@@ -1,5 +1,7 @@
 //! Commands for sharing files and regenerating tickets.
 
+use crate::node::ActiveShare;
+use crate::storage::history;
 use crate::AppState;
 use iroh_blobs::ticket::BlobTicket;
 use iroh_blobs::{BlobFormat, Hash};
@@ -38,9 +40,19 @@ pub async fn create_share(
 ) -> Result<String, String> {
     let node = state.get_node().await.map_err(String::from)?;
     let paths = paths.into_iter().map(PathBuf::from).collect::<Vec<_>>();
-    crate::transfer::sender::send_files(node.as_ref(), window, paths)
+    let outcome = crate::transfer::sender::send_files(node.as_ref(), window, paths)
         .await
-        .map_err(String::from)
+        .map_err(String::from)?;
+    state
+        .nearby_shares
+        .publish_share(ActiveShare::new(
+            outcome.label,
+            outcome.hash,
+            BlobFormat::HashSeq,
+            outcome.total_size,
+        ))
+        .await;
+    Ok(outcome.ticket.to_string())
 }
 
 /// Returns display metadata for local files or directories before sharing.
@@ -76,9 +88,23 @@ pub async fn get_ticket(state: State<'_, AppState>, hash: String) -> Result<Stri
     }
 
     let node_addr = node.ticket_addr().await.map_err(|err| err.to_string())?;
-    BlobTicket::new(node_addr, hash, BlobFormat::HashSeq)
-        .map(|ticket| ticket.to_string())
-        .map_err(|err| err.to_string())
+    let record = history::latest_send_by_hash(&node.db, &hash.to_string()).map_err(String::from)?;
+    let ticket = BlobTicket::new(node_addr, hash, BlobFormat::HashSeq)
+        .map_err(|err| err.to_string())?;
+    let label = record
+        .as_ref()
+        .map_or_else(|| hash.to_string(), |record| record.filename.clone());
+    let total_size = record.as_ref().map_or(0, |record| record.size);
+    state
+        .nearby_shares
+        .publish_share(ActiveShare::new(
+            label,
+            hash,
+            BlobFormat::HashSeq,
+            total_size,
+        ))
+        .await;
+    Ok(ticket.to_string())
 }
 
 /// Renders a ticket string as an SVG QR code.
@@ -95,6 +121,17 @@ pub fn render_ticket_qr(ticket: String) -> Result<String, String> {
         .dark_color(svg::Color("#E5F0FF"))
         .light_color(svg::Color("transparent"))
         .build())
+}
+
+/// Clears the currently advertised nearby share.
+///
+/// # Errors
+///
+/// Returns an error string if the app state cannot be accessed.
+#[tauri::command]
+pub async fn clear_active_share(state: State<'_, AppState>) -> Result<(), String> {
+    state.nearby_shares.clear_active_share().await;
+    Ok(())
 }
 
 fn describe_path(path: PathBuf) -> crate::error::Result<SharePathInfo> {

@@ -32,6 +32,11 @@ body,
   height: 100%;
 }
 
+html[data-runtime="desktop"],
+body[data-runtime="desktop"] {
+  background: transparent;
+}
+
 body {
   margin: 0;
   overflow: hidden;
@@ -125,25 +130,35 @@ body {
 
 @layer components {
   .app-shell {
-    @apply relative m-3 flex h-[calc(100vh-1.5rem)] flex-col overflow-hidden rounded-[32px];
+    @apply relative flex h-screen w-screen flex-col overflow-hidden rounded-[30px];
     border: 1px solid var(--border-subtle);
     background:
       linear-gradient(180deg, rgba(28, 33, 44, 0.96), rgba(14, 18, 26, 0.98)),
       var(--surface-0);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  }
+
+  .app-shell-browser {
+    @apply m-3 h-[calc(100vh-1.5rem)];
     box-shadow:
       0 24px 90px rgba(0, 0, 0, 0.42),
       inset 0 1px 0 rgba(255, 255, 255, 0.05);
   }
 
+  .app-shell-desktop {
+    @apply h-screen w-screen;
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+
   .window-chrome {
-    @apply relative flex h-[60px] items-center px-4;
+    @apply relative flex h-[54px] items-center px-3.5;
     border-bottom: 1px solid var(--border-subtle);
     background:
       linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 100%);
   }
 
   .window-control-button {
-    @apply relative inline-flex h-8 w-10 items-center justify-center rounded-xl text-slate-300 transition-all duration-150 focus:outline-none;
+    @apply relative inline-flex h-8 w-9 items-center justify-center rounded-[14px] text-slate-300 transition-all duration-150 focus:outline-none;
     border: 1px solid rgba(255, 255, 255, 0.04);
     background: rgba(255, 255, 255, 0.02);
   }
@@ -166,7 +181,7 @@ body {
   .chrome-pill {
     @apply inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[11px] font-medium tracking-[0.02em];
     border: 1px solid rgba(255, 255, 255, 0.08);
-    background: rgba(255, 255, 255, 0.04);
+    background: rgba(255, 255, 255, 0.035);
     color: var(--fg-secondary);
   }
 
@@ -177,7 +192,7 @@ body {
       linear-gradient(180deg, rgba(26, 31, 41, 0.96), rgba(15, 19, 27, 0.98)),
       var(--surface-1);
     box-shadow:
-      0 22px 80px rgba(0, 0, 0, 0.28),
+      0 18px 48px rgba(0, 0, 0, 0.2),
       inset 0 1px 0 rgba(255, 255, 255, 0.04);
   }
 
@@ -191,7 +206,7 @@ body {
     @apply rounded-[28px] backdrop-blur-lg;
     border: 1px solid rgba(255, 255, 255, 0.06);
     background:
-      linear-gradient(180deg, rgba(24, 29, 39, 0.94), rgba(17, 21, 30, 0.96));
+      linear-gradient(180deg, rgba(24, 29, 39, 0.88), rgba(17, 21, 30, 0.92));
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
   }
 
@@ -257,19 +272,19 @@ body {
   }
 
   .status-strip {
-    @apply grid gap-px overflow-hidden rounded-[26px] border md:grid-cols-2 xl:grid-cols-4;
+    @apply grid gap-px overflow-hidden rounded-[24px] border md:grid-cols-2 xl:grid-cols-4;
     border-color: rgba(255, 255, 255, 0.06);
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(255, 255, 255, 0.035);
   }
 
   .status-strip-segment {
-    @apply flex items-start gap-4 px-5 py-4;
+    @apply flex items-start gap-3 px-4 py-3.5;
     background:
-      linear-gradient(180deg, rgba(29, 35, 46, 0.95), rgba(18, 22, 31, 0.96));
+      linear-gradient(180deg, rgba(25, 30, 39, 0.94), rgba(18, 22, 31, 0.95));
   }
 
   .status-strip-icon {
-    @apply flex h-10 w-10 shrink-0 items-center justify-center rounded-[16px];
+    @apply flex h-9 w-9 shrink-0 items-center justify-center rounded-[14px];
     border: 1px solid rgba(255, 255, 255, 0.08);
     background:
       linear-gradient(
@@ -286,7 +301,7 @@ body {
   .nav-button {
     @apply relative flex items-start gap-3 overflow-hidden rounded-[22px] px-3.5 py-3.5 text-left transition-all duration-200;
     border: 1px solid transparent;
-    background: rgba(255, 255, 255, 0.015);
+    background: rgba(255, 255, 255, 0.012);
   }
 
   .nav-button:hover {

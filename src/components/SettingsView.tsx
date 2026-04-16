@@ -9,6 +9,7 @@ import {
   LoaderCircle,
   Radar,
   RefreshCw,
+  ScanSearch,
   Settings2,
   Waypoints,
 } from "lucide-react";
@@ -123,6 +124,9 @@ export function SettingsView() {
   const setRelayMode = useTransferStore((state) => state.setRelayMode);
   const setCustomRelayUrl = useTransferStore(
     (state) => state.setCustomRelayUrl,
+  );
+  const setLocalDiscoveryEnabled = useTransferStore(
+    (state) => state.setLocalDiscoveryEnabled,
   );
   const checkForUpdates = useTransferStore((state) => state.checkForUpdates);
   const installUpdate = useTransferStore((state) => state.installUpdate);
@@ -374,6 +378,52 @@ export function SettingsView() {
             runtime.
           </p>
         ) : null}
+
+        <div className="mt-5 flex items-center justify-between rounded-[24px] border border-white/8 bg-black/20 px-4 py-4">
+          <div className="flex items-start gap-3">
+            <div className="glass-icon h-10 w-10 rounded-[16px]">
+              <ScanSearch className="h-4 w-4 text-sky-200" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-white">
+                Nearby share discovery
+              </p>
+              <p className="text-[13px] leading-6 text-slate-300/72">
+                Automatically find active LAN shares without manually exchanging
+                a code first.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() =>
+              void setLocalDiscoveryEnabled(
+                !(settings?.local_discovery_enabled ?? true),
+              )
+            }
+            disabled={!desktopRuntime}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full border transition-all duration-200 ${
+              settings?.local_discovery_enabled ?? true
+                ? "border-sky-300/20 bg-sky-500/20"
+                : "border-white/10 bg-white/[0.04]"
+            } disabled:cursor-not-allowed disabled:opacity-50`}
+            aria-pressed={settings?.local_discovery_enabled ?? true}
+          >
+            <motion.span
+              layout
+              transition={{ type: "spring", stiffness: 500, damping: 30 }}
+              className={`inline-block h-4 w-4 rounded-full shadow-sm transition-colors ${
+                (settings?.local_discovery_enabled ?? true)
+                  ? "bg-sky-200"
+                  : "bg-slate-300"
+              }`}
+              style={{
+                marginLeft: (settings?.local_discovery_enabled ?? true)
+                  ? "22px"
+                  : "3px",
+              }}
+            />
+          </button>
+        </div>
 
         <div className="mt-5 grid gap-2 xl:grid-cols-3">
           <div className="stat-card">

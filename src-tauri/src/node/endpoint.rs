@@ -4,6 +4,7 @@
 //! iroh-blobs protocol for content-addressed transfers.
 
 use super::status::NodeRuntimeStatus;
+use super::NearbyShareProtocol;
 use crate::error::{FastDropError, Result};
 use crate::storage::db::StorageDb;
 use crate::transfer::metrics::RouteKind;
@@ -14,6 +15,7 @@ use iroh::{Endpoint, NodeAddr, NodeId, RelayMap, RelayMode, RelayUrl};
 use iroh_blobs::net_protocol::Blobs;
 use iroh_blobs::rpc::client::blobs::MemClient;
 use iroh_blobs::store::fs::Store as BlobStore;
+use std::sync::Arc;
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -42,7 +44,10 @@ impl FastDropNode {
     /// Returns `FastDropError` if endpoint binding, storage creation, or
     /// protocol startup fails.
     pub async fn start_with_dirs(data_dir: PathBuf, download_dir: PathBuf) -> Result<Self> {
-        Self::start_with_dirs_and_relay(data_dir, download_dir, None).await
+        let nearby_protocol = Arc::new(NearbyShareProtocol::new(
+            super::NearbyShareRegistry::new(false),
+        ));
+        Self::start_with_dirs_and_relay(data_dir, download_dir, None, nearby_protocol).await
     }
 
     /// Starts the iroh node with an optional custom relay URL.
@@ -55,6 +60,7 @@ impl FastDropNode {
         data_dir: PathBuf,
         download_dir: PathBuf,
         relay_url: Option<RelayUrl>,
+        nearby_protocol: Arc<NearbyShareProtocol>,
     ) -> Result<Self> {
         std::fs::create_dir_all(&data_dir)?;
         std::fs::create_dir_all(&download_dir)?;
@@ -66,6 +72,7 @@ impl FastDropNode {
         let blobs = Blobs::builder(blob_store).build(&endpoint);
         let router = Router::builder(endpoint.clone())
             .accept(iroh_blobs::ALPN, blobs.clone())
+            .accept(super::nearby_protocol::NEARBY_SHARE_ALPN, nearby_protocol)
             .spawn()
             .await
             .map_err(FastDropError::Network)?;

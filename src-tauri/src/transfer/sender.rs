@@ -65,7 +65,7 @@ pub async fn send_files(
     node: &FastDropNode,
     window: Window,
     paths: Vec<PathBuf>,
-) -> Result<String> {
+) -> Result<ShareOutcome> {
     let started_at = Instant::now();
     let plan = build_share_plan(paths)?;
     let reporter = EventReporter::new(
@@ -93,7 +93,7 @@ pub async fn send_files(
             sampler.finish().await?;
             reporter.emit_completed(outcome.hash.to_string(), outcome.total_size, metrics)?;
             save_send_record(node, &outcome)?;
-            Ok(outcome.ticket.to_string())
+            Ok(outcome)
         }
         Err(error) => {
             let _ = sampler.finish().await;

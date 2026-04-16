@@ -26,6 +26,89 @@ pub async fn start_receive(
     let node = state.get_node().await.map_err(String::from)?;
     let ticket = BlobTicket::from_str(&ticket)
         .map_err(|_err| "Invalid ticket. Check the share code and try again.".to_string())?;
+    start_receive_ticket(state, window, node, ticket, destination).await
+}
+
+/// Returns the current LAN-discovered nearby shares.
+///
+/// # Errors
+///
+/// Returns an error string if the nearby-share cache cannot be read.
+#[tauri::command]
+pub async fn get_discovered_shares(
+    state: State<'_, AppState>,
+) -> Result<Vec<crate::node::NearbyShare>, String> {
+    Ok(state.nearby_shares.snapshot().await)
+}
+
+/// Starts receiving from a LAN-discovered nearby share descriptor.
+///
+/// # Errors
+///
+/// Returns an error string if the nearby share is stale or the transfer cannot start.
+#[tauri::command]
+pub async fn start_receive_discovered_share(
+    window: tauri::Window,
+    state: State<'_, AppState>,
+    share_id: String,
+    destination: String,
+) -> Result<String, String> {
+    let node = state.get_node().await.map_err(String::from)?;
+    let ticket = state
+        .nearby_shares
+        .ticket_for_share(&share_id)
+        .await
+        .map_err(String::from)?;
+    start_receive_ticket(state, window, node, ticket, destination).await
+}
+
+/// Cancels an in-progress transfer.
+///
+/// # Errors
+///
+/// Returns an error string if the transfer cannot be found.
+#[tauri::command]
+pub async fn cancel_transfer(
+    state: State<'_, AppState>,
+    transfer_id: String,
+) -> Result<(), String> {
+    if state.transfers.cancel(&transfer_id).await {
+        Ok(())
+    } else {
+        Err("Transfer not found".into())
+    }
+}
+
+/// Returns a snapshot of all active transfers.
+///
+/// # Errors
+///
+/// Returns an error string if transfer state cannot be read.
+#[tauri::command]
+pub async fn get_active_transfers(state: State<'_, AppState>) -> Result<Vec<TransferInfo>, String> {
+    Ok(state.transfers.list().await)
+}
+
+/// Returns persisted transfer history.
+///
+/// # Errors
+///
+/// Returns an error string if the node is unavailable or history loading fails.
+#[tauri::command]
+pub async fn get_transfer_history(
+    state: State<'_, AppState>,
+) -> Result<Vec<TransferRecord>, String> {
+    let node = state.get_node().await.map_err(String::from)?;
+    history::load_all(&node.db).map_err(String::from)
+}
+
+async fn start_receive_ticket(
+    state: State<'_, AppState>,
+    window: tauri::Window,
+    node: std::sync::Arc<crate::node::FastDropNode>,
+    ticket: BlobTicket,
+    destination: String,
+) -> Result<String, String> {
     let transfer_id = state.transfers.next_transfer_id("recv");
     let (cancel_tx, cancel_rx) = watch::channel(false);
 
@@ -71,44 +154,4 @@ pub async fn start_receive(
     });
 
     Ok(transfer_id)
-}
-
-/// Cancels an in-progress transfer.
-///
-/// # Errors
-///
-/// Returns an error string if the transfer cannot be found.
-#[tauri::command]
-pub async fn cancel_transfer(
-    state: State<'_, AppState>,
-    transfer_id: String,
-) -> Result<(), String> {
-    if state.transfers.cancel(&transfer_id).await {
-        Ok(())
-    } else {
-        Err("Transfer not found".into())
-    }
-}
-
-/// Returns a snapshot of all active transfers.
-///
-/// # Errors
-///
-/// Returns an error string if transfer state cannot be read.
-#[tauri::command]
-pub async fn get_active_transfers(state: State<'_, AppState>) -> Result<Vec<TransferInfo>, String> {
-    Ok(state.transfers.list().await)
-}
-
-/// Returns persisted transfer history.
-///
-/// # Errors
-///
-/// Returns an error string if the node is unavailable or history loading fails.
-#[tauri::command]
-pub async fn get_transfer_history(
-    state: State<'_, AppState>,
-) -> Result<Vec<TransferRecord>, String> {
-    let node = state.get_node().await.map_err(String::from)?;
-    history::load_all(&node.db).map_err(String::from)
 }
