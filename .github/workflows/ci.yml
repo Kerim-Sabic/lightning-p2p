@@ -145,6 +145,13 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Resolve release version
+        shell: pwsh
+        run: |
+          $config = Get-Content src-tauri/tauri.conf.json | ConvertFrom-Json
+          "APP_VERSION=$($config.version)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "RELEASE_TAG=v$($config.version)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
       - name: Enable updater artifacts when signing secrets exist
         shell: pwsh
         run: |
@@ -164,10 +171,10 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tauriScript: pnpm tauri
-          tagName: v__VERSION__
-          releaseName: Lightning P2P v__VERSION__
+          tagName: ${{ env.RELEASE_TAG }}
+          releaseName: Lightning P2P v${{ env.APP_VERSION }}
           releaseBody: |
-            ## Lightning P2P v__VERSION__
+            ## Lightning P2P v${{ env.APP_VERSION }}
 
             Direct peer-to-peer file transfer. No cloud. No accounts. No limits. Works across LAN and the public internet through iroh relay fallback.
 
@@ -175,8 +182,8 @@ jobs:
 
             | File | Description |
             |------|-------------|
-            | `LightningP2P___VERSION___x64-setup.exe` | Windows NSIS installer (recommended) |
-            | `LightningP2P___VERSION___x64_en-US.msi` | Windows MSI installer |
+            | `Lightning.P2P_${{ env.APP_VERSION }}_x64-setup.exe` | Windows NSIS installer (recommended) |
+            | `Lightning.P2P_${{ env.APP_VERSION }}_x64_en-US.msi` | Windows MSI installer |
 
             SHA256 checksums are published alongside the installers.
 
@@ -198,7 +205,7 @@ jobs:
 
             ---
 
-            Full changelog: https://github.com/Kerim-Sabic/lightning-p2p/commits/v__VERSION__
+            Full changelog: https://github.com/Kerim-Sabic/lightning-p2p/commits/${{ env.RELEASE_TAG }}
           releaseDraft: false
           prerelease: false
           args: --target x86_64-pc-windows-msvc
@@ -224,7 +231,7 @@ jobs:
       - name: Upload release checksums
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v__VERSION__
+          tag_name: ${{ env.RELEASE_TAG }}
           files: src-tauri/target/x86_64-pc-windows-msvc/release/bundle/SHA256SUMS.txt
 
       - name: Upload release bundle artifact
