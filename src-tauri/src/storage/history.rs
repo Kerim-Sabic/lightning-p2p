@@ -62,7 +62,7 @@ pub fn load_all(db: &StorageDb) -> Result<Vec<TransferRecord>> {
         let record: TransferRecord = serde_json::from_slice(&value)?;
         records.push(record);
     }
-    records.sort_by(|left, right| right.timestamp.cmp(&left.timestamp));
+    records.sort_by_key(|record| std::cmp::Reverse(record.timestamp));
     Ok(records)
 }
 

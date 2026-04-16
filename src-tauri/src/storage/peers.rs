@@ -55,7 +55,7 @@ pub fn load_all(db: &StorageDb) -> Result<Vec<PeerRecord>> {
         let peer: PeerRecord = serde_json::from_slice(&value)?;
         peers.push(peer);
     }
-    peers.sort_by(|left, right| right.last_seen.cmp(&left.last_seen));
+    peers.sort_by_key(|peer| std::cmp::Reverse(peer.last_seen));
     Ok(peers)
 }
 
