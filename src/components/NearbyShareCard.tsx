@@ -10,7 +10,7 @@ interface NearbyShareCardProps {
 
 function freshnessLabel(seconds: number): string {
   if (seconds <= 3) {
-    return "Just seen";
+    return "just seen";
   }
   if (seconds < 60) {
     return `${seconds}s ago`;
@@ -24,28 +24,14 @@ function freshnessLabel(seconds: number): string {
 function routeLabel(routeHint: NearbyShare["route_hint"]): string {
   switch (routeHint) {
     case "direct":
-      return "Direct path";
+      return "Direct";
     case "relay":
-      return "Relay fallback";
+      return "Relay";
     case "mixed":
       return "Direct + relay";
     case "unknown":
     default:
-      return "Route warming";
-  }
-}
-
-function routeTone(routeHint: NearbyShare["route_hint"]): string {
-  switch (routeHint) {
-    case "direct":
-      return "border-emerald-400/20 bg-emerald-500/10 text-emerald-100";
-    case "relay":
-      return "border-sky-400/20 bg-sky-500/10 text-sky-100";
-    case "mixed":
-      return "border-cyan-400/20 bg-cyan-500/10 text-cyan-100";
-    case "unknown":
-    default:
-      return "border-white/10 bg-white/[0.04] text-slate-200";
+      return "Detecting";
   }
 }
 
@@ -55,7 +41,7 @@ export function NearbyShareCard({
   onReceive,
 }: NearbyShareCardProps) {
   return (
-    <article className="glass-subtle flex flex-col gap-4 p-5">
+    <article className="glass-subtle flex flex-col gap-4 p-4">
       <div className="flex items-start justify-between gap-4">
         <div className="flex min-w-0 items-start gap-3">
           <div className="glass-icon shrink-0">
@@ -66,17 +52,13 @@ export function NearbyShareCard({
               <p className="truncate text-sm font-semibold text-white">
                 {share.label}
               </p>
-              <span
-                className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] uppercase tracking-[0.22em] ${routeTone(
-                  share.route_hint,
-                )}`}
-              >
-                <Radar className="h-3 w-3" />
+              <span className="rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-slate-300">
+                <Radar className="mr-1 inline h-3 w-3 text-sky-200/80" />
                 {routeLabel(share.route_hint)}
               </span>
             </div>
-            <p className="mt-1 text-[13px] leading-6 text-slate-300/72">
-              {share.device_name} · {formatBytes(share.size)} · Seen{" "}
+            <p className="mt-1 text-sm text-slate-300/72">
+              {share.device_name} | {formatBytes(share.size)} | Seen{" "}
               {freshnessLabel(share.freshness_seconds)}
             </p>
           </div>
@@ -94,25 +76,9 @@ export function NearbyShareCard({
         </button>
       </div>
 
-      <div className="grid gap-2 text-[12px] text-slate-400 md:grid-cols-3">
-        <div className="rounded-2xl border border-white/8 bg-black/20 px-3 py-3">
-          <p className="metric-label">Sender</p>
-          <p className="mt-1 truncate text-sm font-medium text-slate-100/88">
-            {share.device_name}
-          </p>
-        </div>
-        <div className="rounded-2xl border border-white/8 bg-black/20 px-3 py-3">
-          <p className="metric-label">Direct addresses</p>
-          <p className="mt-1 text-sm font-medium text-slate-100/88">
-            {share.direct_address_count}
-          </p>
-        </div>
-        <div className="rounded-2xl border border-white/8 bg-black/20 px-3 py-3">
-          <p className="metric-label">Node</p>
-          <p className="mt-1 truncate font-mono text-[11px] text-slate-100/80">
-            {share.node_id}
-          </p>
-        </div>
+      <div className="flex flex-wrap gap-3 text-[12px] text-slate-400">
+        <span>Direct addresses {share.direct_address_count}</span>
+        <span className="truncate font-mono text-slate-500">{share.node_id}</span>
       </div>
     </article>
   );

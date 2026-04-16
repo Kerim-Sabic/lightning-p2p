@@ -1,6 +1,4 @@
-import { AnimatePresence, motion } from "framer-motion";
 import { startTransition, useEffect, useMemo, useState } from "react";
-import { AppOverview } from "./components/AppOverview";
 import { FirstRunOverlay } from "./components/FirstRunOverlay";
 import { HistoryView } from "./components/HistoryView";
 import { InlineAlert } from "./components/InlineAlert";
@@ -14,12 +12,6 @@ import { isDesktopRuntime } from "./lib/tauri";
 import { useTransferStore } from "./stores/transferStore";
 
 export type View = "send" | "receive" | "history" | "settings";
-
-const pageTransition = {
-  initial: { opacity: 0, y: 10 },
-  animate: { opacity: 1, y: 0 },
-  exit: { opacity: 0, y: -6 },
-};
 
 export function App() {
   const [view, setView] = useState<View>("send");
@@ -67,7 +59,7 @@ export function App() {
       }`}
     >
       {!desktopRuntime ? (
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_10%_0%,rgba(59,130,246,0.18),transparent_28%),radial-gradient(circle_at_100%_10%,rgba(24,144,255,0.1),transparent_24%),radial-gradient(circle_at_50%_100%,rgba(14,165,233,0.08),transparent_30%)]" />
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.12),transparent_26%),linear-gradient(180deg,rgba(9,12,18,0.96),rgba(11,14,20,1))]" />
       ) : null}
       <div
         className={`app-shell ${
@@ -76,31 +68,12 @@ export function App() {
       >
         <FirstRunOverlay />
         <WindowChrome currentView={view} />
-        <div className="relative flex min-h-0 flex-1">
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.04),transparent_24%),linear-gradient(180deg,rgba(255,255,255,0.03),transparent_22%)]" />
+        <div className="flex min-h-0 flex-1">
           <Sidebar currentView={view} onNavigate={handleNavigate} />
-          <main className="relative min-h-0 flex-1 overflow-hidden">
-            <div className="relative flex h-full min-h-0 flex-col gap-4 px-4 pb-4 pt-3">
-              <AppOverview />
+          <main className="min-h-0 flex-1 overflow-y-auto">
+            <div className="mx-auto flex min-h-full max-w-[1040px] flex-col gap-4 px-4 pb-5 pt-4">
               <InlineAlert message={error} onDismiss={clearError} />
-              <div className="min-h-0 flex-1 overflow-y-auto pr-1">
-                <AnimatePresence mode="wait">
-                  <motion.div
-                    key={view}
-                    initial="initial"
-                    animate="animate"
-                    exit="exit"
-                    transition={{
-                      duration: 0.18,
-                      ease: [0.25, 0.46, 0.45, 0.94],
-                    }}
-                    variants={pageTransition}
-                    className="mx-auto flex min-h-full max-w-[1280px] flex-col gap-5 pb-8"
-                  >
-                    {content}
-                  </motion.div>
-                </AnimatePresence>
-              </div>
+              {content}
             </div>
           </main>
         </div>

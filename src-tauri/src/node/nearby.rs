@@ -4,9 +4,9 @@ use super::nearby_protocol::{fetch_remote_shares, RemoteAdvertisedShare};
 use crate::error::{FastDropError, Result};
 use futures_util::{stream, StreamExt};
 use iroh::{
-    discovery::local_swarm_discovery,
+    discovery::{local_swarm_discovery, DiscoveryItem},
     endpoint::{ConnectionType, RemoteInfo, Source},
-    Endpoint, NodeAddr,
+    Endpoint, NodeAddr, NodeId,
 };
 use iroh_blobs::{ticket::BlobTicket, BlobFormat, Hash};
 use serde::Serialize;
@@ -16,11 +16,15 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tauri::{AppHandle, Emitter};
-use tokio::sync::RwLock;
+use tokio::{
+    sync::RwLock,
+    time::{Instant, MissedTickBehavior},
+};
 
 const DISCOVERED_SHARES_UPDATED_EVENT: &str = "discovered-shares-updated";
 const REFRESH_INTERVAL: Duration = Duration::from_secs(4);
 const NODE_QUERY_TIMEOUT: Duration = Duration::from_millis(900);
+const CANDIDATE_STALE_AFTER: Duration = Duration::from_secs(18);
 const MAX_PARALLEL_QUERIES: usize = 8;
 
 /// High-level reachability hint for a nearby share candidate.
@@ -101,11 +105,11 @@ struct NearbyShareRecord {
 
 #[derive(Debug, Clone)]
 struct RemoteCandidate {
-    node_id: String,
+    node_id: NodeId,
     node_addr: NodeAddr,
     route_hint: NearbyRouteHint,
     direct_address_count: usize,
-    freshness_seconds: u64,
+    last_seen_at: Instant,
 }
 
 /// In-memory registry for the active local share and discovered nearby shares.
@@ -201,11 +205,7 @@ impl NearbyShareRegistry {
                 "Nearby share is no longer available. Refresh and try again.".into(),
             ));
         };
-        BlobTicket::new(
-            record.node_addr.clone(),
-            record.hash,
-            record.format,
-        )
+        BlobTicket::new(record.node_addr.clone(), record.hash, record.format)
             .map_err(|error| FastDropError::Blob(error.to_string()))
     }
 }
@@ -216,29 +216,86 @@ pub fn spawn_nearby_discovery_loop(
     endpoint: Endpoint,
     registry: NearbyShareRegistry,
 ) {
+    let discovery_events = endpoint
+        .discovery()
+        .and_then(iroh::discovery::Discovery::subscribe);
     tauri::async_runtime::spawn(async move {
+        let mut candidates = seed_candidates(&endpoint);
+        let mut interval = tokio::time::interval(REFRESH_INTERVAL);
+        interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
+
+        let mut discovery_events = discovery_events;
+        let _ = refresh_nearby_shares(
+            &app_handle,
+            &endpoint,
+            &registry,
+            candidates.values().cloned().collect(),
+        )
+        .await;
+
         loop {
-            if let Err(error) =
-                refresh_discovered_shares(&app_handle, &endpoint, &registry).await
-            {
+            if let Some(events) = discovery_events.as_mut() {
+                tokio::select! {
+                    _ = interval.tick() => {
+                        if let Err(error) = refresh_candidates(&app_handle, &endpoint, &registry, &mut candidates).await {
+                            tracing::debug!("nearby share refresh failed: {error}");
+                        }
+                    }
+                    maybe_item = events.next() => {
+                        match maybe_item {
+                            Some(item) => {
+                                if let Some(candidate) = candidate_from_discovery_item(item) {
+                                    upsert_candidate(&mut candidates, candidate);
+                                }
+                                if let Err(error) = refresh_candidates(&app_handle, &endpoint, &registry, &mut candidates).await {
+                                    tracing::debug!("nearby share refresh failed: {error}");
+                                }
+                            }
+                            None => {
+                                discovery_events = None;
+                            }
+                        }
+                    }
+                }
+                continue;
+            }
+
+            interval.tick().await;
+            if let Err(error) = refresh_candidates(&app_handle, &endpoint, &registry, &mut candidates).await {
                 tracing::debug!("nearby share refresh failed: {error}");
             }
-            tokio::time::sleep(REFRESH_INTERVAL).await;
         }
     });
 }
 
-async fn refresh_discovered_shares(
+async fn refresh_candidates(
     app_handle: &AppHandle,
     endpoint: &Endpoint,
     registry: &NearbyShareRegistry,
+    candidates: &mut BTreeMap<NodeId, RemoteCandidate>,
+) -> Result<()> {
+    merge_endpoint_candidates(endpoint, candidates);
+    prune_stale_candidates(candidates);
+    refresh_nearby_shares(
+        app_handle,
+        endpoint,
+        registry,
+        candidates.values().cloned().collect(),
+    )
+    .await
+}
+
+async fn refresh_nearby_shares(
+    app_handle: &AppHandle,
+    endpoint: &Endpoint,
+    registry: &NearbyShareRegistry,
+    candidates: Vec<RemoteCandidate>,
 ) -> Result<()> {
     if !registry.local_discovery_enabled().await {
         emit_if_changed(app_handle, registry.clear_discovered_shares().await)?;
         return Ok(());
     }
 
-    let candidates = local_candidates(endpoint);
     if candidates.is_empty() {
         emit_if_changed(app_handle, registry.clear_discovered_shares().await)?;
         return Ok(());
@@ -268,6 +325,51 @@ fn emit_if_changed(app_handle: &AppHandle, shares: Option<Vec<NearbyShare>>) -> 
     Ok(())
 }
 
+fn seed_candidates(endpoint: &Endpoint) -> BTreeMap<NodeId, RemoteCandidate> {
+    local_candidates(endpoint)
+        .into_iter()
+        .map(|candidate| (candidate.node_id, candidate))
+        .collect()
+}
+
+fn merge_endpoint_candidates(
+    endpoint: &Endpoint,
+    candidates: &mut BTreeMap<NodeId, RemoteCandidate>,
+) {
+    for candidate in local_candidates(endpoint) {
+        upsert_candidate(candidates, candidate);
+    }
+}
+
+fn upsert_candidate(
+    candidates: &mut BTreeMap<NodeId, RemoteCandidate>,
+    candidate: RemoteCandidate,
+) {
+    candidates
+        .entry(candidate.node_id)
+        .and_modify(|current| {
+            current.node_addr = merge_node_addrs(&current.node_addr, &candidate.node_addr);
+            current.route_hint = stronger_route_hint(current.route_hint, candidate.route_hint);
+            current.direct_address_count = current.node_addr.direct_addresses.len();
+            current.last_seen_at = candidate.last_seen_at;
+        })
+        .or_insert(candidate);
+}
+
+fn merge_node_addrs(current: &NodeAddr, next: &NodeAddr) -> NodeAddr {
+    let relay_url = next.relay_url.clone().or_else(|| current.relay_url.clone());
+    let direct_addresses = current
+        .direct_addresses
+        .union(&next.direct_addresses)
+        .copied()
+        .collect::<Vec<_>>();
+    NodeAddr::from_parts(current.node_id, relay_url, direct_addresses)
+}
+
+fn prune_stale_candidates(candidates: &mut BTreeMap<NodeId, RemoteCandidate>) {
+    candidates.retain(|_, candidate| candidate.last_seen_at.elapsed() <= CANDIDATE_STALE_AFTER);
+}
+
 fn local_candidates(endpoint: &Endpoint) -> Vec<RemoteCandidate> {
     let local_node_id = endpoint.node_id();
     endpoint
@@ -289,21 +391,66 @@ fn is_local_network_candidate(remote: &RemoteInfo) -> bool {
 }
 
 fn remote_candidate(remote: RemoteInfo) -> RemoteCandidate {
-    let freshness_seconds = remote
-        .last_received()
-        .or(remote.last_used)
-        .map_or(0, |duration: Duration| duration.as_secs());
+    let freshness = remote_freshness(&remote);
     let route_hint = route_hint(&remote.conn_type);
     let direct_address_count = remote.addrs.len();
-    let node_id = remote.node_id.to_string();
+    let node_id = remote.node_id;
     let node_addr = NodeAddr::from(remote);
     RemoteCandidate {
         node_id,
         node_addr,
         route_hint,
         direct_address_count,
-        freshness_seconds,
+        last_seen_at: instant_from_freshness(freshness),
     }
+}
+
+fn remote_freshness(remote: &RemoteInfo) -> Duration {
+    remote
+        .last_received()
+        .or(remote.last_used)
+        .or_else(|| {
+            remote
+                .sources()
+                .into_iter()
+                .filter_map(|(source, age)| match source {
+                    Source::Discovery { name } if name == local_swarm_discovery::NAME => Some(age),
+                    _ => None,
+                })
+                .min()
+        })
+        .unwrap_or_default()
+}
+
+fn instant_from_freshness(freshness: Duration) -> Instant {
+    Instant::now()
+        .checked_sub(freshness)
+        .unwrap_or_else(Instant::now)
+}
+
+fn candidate_from_discovery_item(item: DiscoveryItem) -> Option<RemoteCandidate> {
+    if item.provenance != local_swarm_discovery::NAME {
+        return None;
+    }
+
+    let direct_address_count = item.node_addr.direct_addresses.len();
+    let route_hint = if direct_address_count > 0 && item.node_addr.relay_url.is_some() {
+        NearbyRouteHint::Mixed
+    } else if direct_address_count > 0 {
+        NearbyRouteHint::Direct
+    } else if item.node_addr.relay_url.is_some() {
+        NearbyRouteHint::Relay
+    } else {
+        NearbyRouteHint::Unknown
+    };
+
+    Some(RemoteCandidate {
+        node_id: item.node_addr.node_id,
+        node_addr: item.node_addr,
+        route_hint,
+        direct_address_count,
+        last_seen_at: Instant::now(),
+    })
 }
 
 async fn query_candidate(endpoint: Endpoint, candidate: RemoteCandidate) -> Vec<NearbyShareRecord> {
@@ -319,7 +466,10 @@ async fn query_candidate(endpoint: Endpoint, candidate: RemoteCandidate) -> Vec<
             .filter_map(|share| discovered_record(&candidate, &envelope.device_name, &share))
             .collect(),
         Ok(Err(error)) => {
-            tracing::debug!(node_id = %candidate.node_id, "nearby share query failed: {error}");
+            tracing::debug!(
+                node_id = %candidate.node_id,
+                "nearby share query failed: {error}"
+            );
             Vec::new()
         }
         Err(_) => Vec::new(),
@@ -337,13 +487,13 @@ fn discovered_record(
         public: NearbyShare {
             share_id,
             device_name: device_name.to_string(),
-            node_id: candidate.node_id.clone(),
+            node_id: candidate.node_id.to_string(),
             label: share.label.clone(),
             size: share.size,
             hash: share.hash.clone(),
             route_hint: candidate.route_hint,
             direct_address_count: candidate.direct_address_count,
-            freshness_seconds: candidate.freshness_seconds,
+            freshness_seconds: candidate.last_seen_at.elapsed().as_secs(),
             published_at: share.published_at,
         },
         node_addr: candidate.node_addr.clone(),
@@ -369,6 +519,23 @@ fn normalized_records(shares: Vec<NearbyShareRecord>) -> Vec<NearbyShareRecord> 
             .then(left.public.share_id.cmp(&right.public.share_id))
     });
     deduped
+}
+
+fn stronger_route_hint(current: NearbyRouteHint, next: NearbyRouteHint) -> NearbyRouteHint {
+    if route_hint_score(next) >= route_hint_score(current) {
+        next
+    } else {
+        current
+    }
+}
+
+fn route_hint_score(route_hint: NearbyRouteHint) -> u8 {
+    match route_hint {
+        NearbyRouteHint::Unknown => 0,
+        NearbyRouteHint::Relay => 1,
+        NearbyRouteHint::Direct => 2,
+        NearbyRouteHint::Mixed => 3,
+    }
 }
 
 fn route_hint(connection_type: &ConnectionType) -> NearbyRouteHint {
@@ -447,8 +614,7 @@ mod tests {
 
     #[test]
     fn route_hint_maps_all_connection_types() {
-        let relay_url: iroh::RelayUrl =
-            "https://relay.example.com".parse().expect("relay url");
+        let relay_url: iroh::RelayUrl = "https://relay.example.com".parse().expect("relay url");
         let direct_addr = "127.0.0.1:4433".parse().expect("direct addr");
         assert_eq!(
             route_hint(&ConnectionType::Direct(direct_addr)),
@@ -460,6 +626,18 @@ mod tests {
         );
         assert_eq!(
             route_hint(&ConnectionType::Mixed(direct_addr, relay_url)),
+            NearbyRouteHint::Mixed
+        );
+    }
+
+    #[test]
+    fn stronger_route_hint_prefers_more_specific_state() {
+        assert_eq!(
+            stronger_route_hint(NearbyRouteHint::Unknown, NearbyRouteHint::Direct),
+            NearbyRouteHint::Direct
+        );
+        assert_eq!(
+            stronger_route_hint(NearbyRouteHint::Relay, NearbyRouteHint::Mixed),
             NearbyRouteHint::Mixed
         );
     }

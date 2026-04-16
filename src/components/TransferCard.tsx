@@ -1,4 +1,3 @@
-import { AnimatePresence, motion } from "framer-motion";
 import {
   ArrowUpRight,
   CheckCircle2,
@@ -19,21 +18,16 @@ interface TransferCardProps {
   onCancel?: (transferId: string) => void;
 }
 
-interface StatProps {
-  label: string;
-  value: string;
-}
-
 function statusLabel(transfer: TransferEntry): string {
   switch (transfer.status) {
     case "starting":
       return transfer.direction === "send"
-        ? "Preparing share ticket"
-        : "Connecting to peer";
+        ? "Preparing share"
+        : "Connecting";
     case "running":
       return transfer.direction === "send"
         ? "Importing content"
-        : "Streaming verified data";
+        : "Receiving";
     case "completed":
       return transfer.direction === "send" ? "Ticket ready" : "Saved locally";
     case "failed":
@@ -53,18 +47,6 @@ function routeLabel(routeKind: TransferEntry["routeKind"]): string {
   }
 }
 
-function accentClasses(transfer: TransferEntry): string {
-  if (transfer.status === "completed") {
-    return "from-emerald-400 via-emerald-500 to-sky-400";
-  }
-  if (transfer.status === "failed") {
-    return "from-rose-400 via-rose-500 to-amber-300";
-  }
-  return transfer.direction === "send"
-    ? "from-sky-300 via-sky-400 to-cyan-200"
-    : "from-emerald-400 via-sky-500 to-blue-500";
-}
-
 function statusIcon(transfer: TransferEntry) {
   if (transfer.status === "completed") {
     return CheckCircle2;
@@ -73,36 +55,6 @@ function statusIcon(transfer: TransferEntry) {
     return TimerReset;
   }
   return ArrowUpRight;
-}
-
-function StatusBadge({ transfer }: { transfer: TransferEntry }) {
-  const color =
-    transfer.status === "completed"
-      ? "text-emerald-100 border-emerald-400/15 bg-emerald-500/10"
-      : transfer.status === "failed"
-        ? "text-rose-100 border-rose-400/15 bg-rose-500/10"
-        : "text-sky-100 border-sky-400/15 bg-sky-500/10";
-
-  return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-0.5 text-[10px] uppercase tracking-[0.2em] ${color}`}
-    >
-      {transfer.direction}
-    </span>
-  );
-}
-
-function AnimatedMetric({ label, value }: StatProps) {
-  return (
-    <div className="stat-card">
-      <p className="text-[10px] uppercase tracking-[0.3em] text-slate-500">
-        {label}
-      </p>
-      <p className="mt-1.5 text-sm font-semibold tabular-nums text-white">
-        {value}
-      </p>
-    </div>
-  );
 }
 
 export function TransferCard({ transfer, onCancel }: TransferCardProps) {
@@ -130,31 +82,21 @@ export function TransferCard({ transfer, onCancel }: TransferCardProps) {
   };
 
   return (
-    <motion.article
-      layout
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -6 }}
-      transition={{ duration: 0.2, ease: "easeOut" }}
-      className="glass-panel relative overflow-hidden p-5"
-    >
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.04),transparent_28%)]" />
-      <div className="relative flex flex-col gap-3">
-        {/* Header */}
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
+    <article className="glass-panel p-4">
+      <div className="flex flex-col gap-4">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <StatusBadge transfer={transfer} />
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-0.5 text-[10px] uppercase tracking-[0.2em] text-slate-300/72">
+              <span className="rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-slate-300">
+                {transfer.direction}
+              </span>
+              <span className="rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-slate-300">
                 {routeLabel(transfer.routeKind)}
               </span>
-              <StatusIcon className="h-3.5 w-3.5 text-slate-300/60" />
-              <span className="text-xs text-slate-300/72">
-                {statusLabel(transfer)}
-              </span>
+              <StatusIcon className="h-3.5 w-3.5 text-slate-400" />
+              <span className="text-xs text-slate-400">{statusLabel(transfer)}</span>
             </div>
-
-            <p className="mt-2 truncate text-[17px] font-semibold tracking-[-0.02em] text-white">
+            <p className="mt-2 truncate text-base font-semibold tracking-[-0.02em] text-white">
               {transfer.name}
             </p>
           </div>
@@ -162,7 +104,7 @@ export function TransferCard({ transfer, onCancel }: TransferCardProps) {
           {isActive && onCancel ? (
             <button
               onClick={handleCancel}
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-2xl border border-rose-400/15 bg-rose-500/10 px-3 py-1.5 text-xs font-medium text-rose-100/85 transition-all duration-200 hover:bg-rose-500/16 hover:text-rose-100 active:scale-[0.97]"
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-rose-400/15 bg-rose-500/10 px-3 py-2 text-xs font-medium text-rose-100/85"
             >
               <StopCircle className="h-3.5 w-3.5" />
               Cancel
@@ -170,84 +112,70 @@ export function TransferCard({ transfer, onCancel }: TransferCardProps) {
           ) : null}
         </div>
 
-        {/* Progress bar */}
         <div className="space-y-2">
-          <div className="flex items-baseline justify-between text-xs">
+          <div className="flex items-baseline justify-between gap-3 text-xs">
             <span className="font-semibold tabular-nums text-white">
               {hasTotal
                 ? `${percent.toFixed(percent > 99 ? 0 : 1)}%`
                 : "Preparing"}
             </span>
-            <span className="tabular-nums text-slate-300/70">
+            <span className="tabular-nums text-slate-400">
               {formatBytes(transfer.bytes)}
               {hasTotal ? ` / ${formatBytes(transfer.total)}` : ""}
             </span>
           </div>
-          <div className="relative h-2.5 overflow-hidden rounded-full bg-white/[0.05]">
-            <motion.div
-              initial={{ width: 0 }}
-              animate={{ width: hasTotal ? `${percent}%` : "34%" }}
-              transition={{ duration: 0.3, ease: "easeOut" }}
-              className={`absolute inset-y-0 left-0 rounded-full bg-gradient-to-r ${accentClasses(transfer)}`}
+          <div className="h-2 overflow-hidden rounded-full bg-white/[0.06]">
+            <div
+              className="h-full rounded-full bg-[linear-gradient(90deg,rgba(56,189,248,0.95),rgba(16,185,129,0.9))]"
+              style={{
+                width: hasTotal ? `${percent}%` : "24%",
+              }}
             />
-            {isActive ? (
-              <div className="absolute inset-0 overflow-hidden rounded-full">
-                <div className="shimmer-overlay h-full w-full" />
-              </div>
-            ) : null}
           </div>
         </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-3 gap-3">
-          <AnimatedMetric
-            label="Speed"
-            value={formatSpeed(transfer.speedBps)}
-          />
-          <AnimatedMetric
-            label="ETA"
-            value={
-              hasTotal
+        <div className="grid gap-3 text-sm text-slate-300/78 md:grid-cols-3">
+          <div className="stat-card">
+            <p className="metric-label">Speed</p>
+            <p className="mt-1.5 font-semibold text-white">
+              {formatSpeed(transfer.speedBps)}
+            </p>
+          </div>
+          <div className="stat-card">
+            <p className="metric-label">ETA</p>
+            <p className="mt-1.5 font-semibold text-white">
+              {hasTotal
                 ? formatEta(transfer.bytes, transfer.total, transfer.speedBps)
-                : "--"
-            }
-          />
-          <AnimatedMetric
-            label="Route"
-            value={routeLabel(transfer.routeKind)}
-          />
+                : "--"}
+            </p>
+          </div>
+          <div className="stat-card">
+            <p className="metric-label">Route</p>
+            <p className="mt-1.5 font-semibold text-white">
+              {routeLabel(transfer.routeKind)}
+            </p>
+          </div>
         </div>
 
-        <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-300/60">
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-500">
           <span>Connect {formatDurationMs(transfer.connectMs)}</span>
           <span>Download {formatDurationMs(transfer.downloadMs)}</span>
           <span>Export {formatDurationMs(transfer.exportMs)}</span>
         </div>
 
-        {/* Error */}
-        <AnimatePresence>
-          {transfer.error ? (
-            <motion.p
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -6 }}
-              className="rounded-2xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-100"
-            >
-              {transfer.error}
-            </motion.p>
-          ) : null}
-        </AnimatePresence>
+        {transfer.error ? (
+          <p className="rounded-2xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
+            {transfer.error}
+          </p>
+        ) : null}
 
-        {/* Footer */}
-        <div className="flex items-center justify-between text-[10px] text-slate-400/60">
+        <div className="flex items-center justify-between gap-3 text-[10px] text-slate-500">
           <span className="truncate font-mono">
             {transfer.hash ?? transfer.transferId}
           </span>
-          {timestamp ? (
-            <span className="ml-3 shrink-0">{timestamp}</span>
-          ) : null}
+          {timestamp ? <span className="shrink-0">{timestamp}</span> : null}
         </div>
       </div>
-    </motion.article>
+    </article>
   );
 }

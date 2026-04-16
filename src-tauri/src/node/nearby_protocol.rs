@@ -205,6 +205,9 @@ fn local_device_name() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use futures_util::StreamExt;
+    use iroh::{protocol::Router, Endpoint};
+    use tokio::time::{timeout, Duration};
 
     #[test]
     fn active_share_round_trips_to_wire_format() {
@@ -224,5 +227,70 @@ mod tests {
     #[test]
     fn local_device_name_has_fallback() {
         assert!(!local_device_name().trim().is_empty());
+    }
+
+    #[tokio::test]
+    async fn local_discovery_finds_sender_and_fetches_share_metadata() {
+        let receiver_endpoint = Endpoint::builder()
+            .discovery_local_network()
+            .bind()
+            .await
+            .expect("receiver endpoint");
+        let mut discovery_stream = receiver_endpoint
+            .discovery()
+            .and_then(iroh::discovery::Discovery::subscribe)
+            .expect("discovery stream");
+
+        let sender_registry = NearbyShareRegistry::new(true);
+        sender_registry
+            .publish_share(ActiveShare {
+                label: "demo-share".into(),
+                hash: Hash::new(b"demo-share"),
+                format: BlobFormat::HashSeq,
+                total_size: 128,
+                published_at: 42,
+            })
+            .await;
+        let sender_endpoint = Endpoint::builder()
+            .discovery_local_network()
+            .bind()
+            .await
+            .expect("sender endpoint");
+        let sender_router = Router::builder(sender_endpoint.clone())
+            .accept(
+                NEARBY_SHARE_ALPN,
+                NearbyShareProtocol::new(sender_registry.clone()),
+            )
+            .spawn()
+            .await
+            .expect("sender router");
+
+        let sender_addr = timeout(Duration::from_secs(12), async {
+            while let Some(item) = discovery_stream.next().await {
+                if item.node_addr.node_id == sender_endpoint.node_id() {
+                    return item.node_addr;
+                }
+            }
+            panic!("discovery stream ended before sender appeared");
+        })
+        .await
+        .expect("sender should be discovered");
+
+        let envelope = timeout(
+            Duration::from_secs(12),
+            fetch_remote_shares(&receiver_endpoint, sender_addr),
+        )
+        .await
+        .expect("share query should complete")
+        .expect("share query should succeed");
+
+        assert_eq!(envelope.shares.len(), 1);
+        assert_eq!(envelope.shares[0].label, "demo-share");
+        assert_eq!(envelope.shares[0].size, 128);
+        assert_eq!(envelope.shares[0].published_at, 42);
+
+        sender_router.shutdown().await.expect("router shutdown");
+        sender_endpoint.close().await;
+        receiver_endpoint.close().await;
     }
 }
