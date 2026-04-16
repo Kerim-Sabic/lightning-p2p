@@ -150,46 +150,43 @@ export function SettingsView() {
 
   return (
     <div className="space-y-5">
-      <section className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
-        <header className="glass-panel p-6">
+      <section className="grid gap-4 xl:grid-cols-[1.24fr_0.76fr]">
+        <header className="glass-panel hero-panel relative overflow-hidden p-8">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_86%_18%,rgba(56,189,248,0.08),transparent_24%),radial-gradient(circle_at_12%_100%,rgba(148,163,184,0.05),transparent_28%)]" />
+          <div className="relative">
           <div className="badge">
             <Settings2 className="h-3 w-3 text-slate-200" />
             Settings
           </div>
-          <h1 className="mt-4 text-3xl font-semibold tracking-tight text-white">
+          <h1 className="page-title mt-6 max-w-[14ch]">
             Tune reachability, storage, and update flow
           </h1>
-          <p className="mt-3 max-w-2xl text-base leading-7 text-slate-300/80">
+          <p className="page-copy mt-4 max-w-[60ch]">
             These controls govern how Lightning P2P exposes routes, where
             verified files land, and how quickly this install picks up new
             signed releases.
           </p>
 
-          <div className="mt-5 grid gap-2 sm:grid-cols-3">
+          <div className="hero-metrics mt-7 grid gap-3 sm:grid-cols-3">
             <div className="stat-card">
-              <p className="text-[10px] uppercase tracking-[0.28em] text-slate-500">
-                Node state
-              </p>
-              <p className="mt-1.5 text-sm font-semibold text-white">
+              <p className="metric-label">Node state</p>
+              <p className="mt-2 text-[15px] font-semibold tracking-[-0.02em] text-white">
                 {onlineStateLabel(nodeStatus.online_state)}
               </p>
             </div>
             <div className="stat-card">
-              <p className="text-[10px] uppercase tracking-[0.28em] text-slate-500">
-                Relay mode
-              </p>
-              <p className="mt-1.5 text-sm font-semibold text-white">
+              <p className="metric-label">Relay mode</p>
+              <p className="mt-2 text-[15px] font-semibold tracking-[-0.02em] text-white">
                 {relayModeLabel(settings?.relay_mode ?? "public")}
               </p>
             </div>
             <div className="stat-card">
-              <p className="text-[10px] uppercase tracking-[0.28em] text-slate-500">
-                App version
-              </p>
-              <p className="mt-1.5 text-sm font-semibold tabular-nums text-white">
+              <p className="metric-label">App version</p>
+              <p className="mt-2 text-[15px] font-semibold tabular-nums tracking-[-0.02em] text-white">
                 {updateState.currentVersion ?? "Unknown"}
               </p>
             </div>
+          </div>
           </div>
         </header>
 
@@ -203,10 +200,10 @@ export function SettingsView() {
                 <Radar className="h-3 w-3 text-sky-200" />
                 Connection strategy
               </div>
-              <h2 className="mt-3 text-xl font-semibold tracking-tight text-white">
+              <h2 className="mt-4 text-[1.55rem] font-semibold leading-tight tracking-[-0.03em] text-white">
                 Keep the direct path healthy
               </h2>
-              <p className="mt-2 text-sm leading-6 text-slate-300/80">
+              <p className="meta-copy mt-3">
                 Direct routes are the speed path. Relay connectivity is the
                 fallback that preserves reachability when NAT or firewall rules
                 prevent peers from dialing each other directly.
@@ -236,7 +233,7 @@ export function SettingsView() {
       </section>
 
       <section className="grid gap-4 xl:grid-cols-2">
-        <article className="glass-panel p-5">
+        <article className="glass-panel p-6">
           <div className="flex items-center gap-3">
             <div className="glass-icon">
               <Fingerprint className="h-5 w-5 text-sky-200" />
@@ -270,7 +267,7 @@ export function SettingsView() {
           </div>
         </article>
 
-        <article className="glass-panel p-5">
+        <article className="glass-panel p-6">
           <div className="flex items-center gap-3">
             <div className="glass-icon">
               <HardDriveDownload className="h-5 w-5 text-emerald-200" />
@@ -315,7 +312,7 @@ export function SettingsView() {
         </article>
       </section>
 
-      <section className="glass-panel p-5">
+      <section className="glass-panel p-6">
         <div className="flex items-center gap-3">
           <div className="glass-icon">
             <Waypoints className="h-5 w-5 text-sky-200" />
@@ -407,7 +404,7 @@ export function SettingsView() {
         </div>
       </section>
 
-      <section className="glass-panel p-5">
+      <section className="glass-panel p-6">
         <div className="flex items-center gap-3">
           <div className="glass-icon">
             <Download className="h-5 w-5 text-sky-200" />

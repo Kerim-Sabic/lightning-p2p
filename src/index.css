@@ -2,7 +2,7 @@
 
 @theme {
   --font-sans:
-    "Aptos", "Segoe UI Variable Display", "SF Pro Display", "Inter Variable",
+    "Segoe UI Variable Display", "Aptos", "SF Pro Display", "Inter Variable",
     "Segoe UI", sans-serif;
   --font-mono:
     "JetBrains Mono", "Cascadia Code", "SFMono-Regular", "Consolas", monospace;
@@ -11,7 +11,19 @@
 :root {
   color-scheme: dark;
   font-family: var(--font-sans);
-  background-color: oklch(18% 0.02 258);
+  background-color: oklch(13.5% 0.014 256);
+  --canvas-0: oklch(13.5% 0.014 256);
+  --canvas-1: oklch(15.5% 0.016 256);
+  --surface-0: oklch(16.8% 0.018 256 / 0.96);
+  --surface-1: oklch(18.8% 0.019 256 / 0.98);
+  --surface-2: oklch(20.8% 0.02 256 / 0.98);
+  --surface-3: oklch(23.2% 0.022 256 / 0.98);
+  --surface-hover: oklch(25.4% 0.023 256 / 0.98);
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-strong: rgba(255, 255, 255, 0.09);
+  --fg-primary: oklch(95% 0.006 256);
+  --fg-secondary: oklch(79% 0.012 256);
+  --fg-muted: oklch(60% 0.012 256);
 }
 
 html,
@@ -25,35 +37,29 @@ body {
   overflow: hidden;
   background:
     radial-gradient(
-      circle at 8% 8%,
-      oklch(64% 0.18 226 / 0.18),
-      transparent 26%
+      circle at 10% 0%,
+      oklch(64% 0.14 230 / 0.16),
+      transparent 24%
     ),
     radial-gradient(
-      circle at 84% 16%,
-      oklch(72% 0.16 162 / 0.16),
-      transparent 22%
-    ),
-    radial-gradient(
-      circle at 52% 100%,
-      oklch(62% 0.14 286 / 0.14),
-      transparent 26%
+      circle at 100% 12%,
+      oklch(60% 0.1 225 / 0.08),
+      transparent 28%
     ),
     linear-gradient(
       180deg,
-      oklch(19% 0.024 258) 0%,
-      oklch(16% 0.022 258) 55%,
-      oklch(14% 0.02 258) 100%
+      oklch(15% 0.018 256) 0%,
+      oklch(13.5% 0.016 256) 100%
     );
-  color: oklch(96% 0.01 258);
+  color: var(--fg-primary);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 ::selection {
-  background: oklch(70% 0.16 226 / 0.28);
-  color: oklch(98% 0.01 258);
+  background: oklch(73% 0.14 230 / 0.24);
+  color: oklch(98% 0.004 256);
 }
 
 * {
@@ -78,13 +84,13 @@ body {
 ::-webkit-scrollbar-thumb {
   border-radius: 9999px;
   border: 2px solid transparent;
-  background: oklch(70% 0.012 258 / 0.18);
+  background: oklch(82% 0.008 256 / 0.14);
   background-clip: padding-box;
   transition: background 0.2s;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: oklch(74% 0.016 258 / 0.3);
+  background: oklch(84% 0.01 256 / 0.22);
   background-clip: padding-box;
 }
 
@@ -118,24 +124,287 @@ body {
 }
 
 @layer components {
+  .app-shell {
+    @apply relative m-3 flex h-[calc(100vh-1.5rem)] flex-col overflow-hidden rounded-[32px];
+    border: 1px solid var(--border-subtle);
+    background:
+      linear-gradient(180deg, rgba(28, 33, 44, 0.96), rgba(14, 18, 26, 0.98)),
+      var(--surface-0);
+    box-shadow:
+      0 24px 90px rgba(0, 0, 0, 0.42),
+      inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  }
+
+  .window-chrome {
+    @apply relative flex h-[60px] items-center px-4;
+    border-bottom: 1px solid var(--border-subtle);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 100%);
+  }
+
+  .window-control-button {
+    @apply relative inline-flex h-8 w-10 items-center justify-center rounded-xl text-slate-300 transition-all duration-150 focus:outline-none;
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    background: rgba(255, 255, 255, 0.02);
+  }
+
+  .window-control-button:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: white;
+  }
+
+  .window-control-button:active {
+    transform: scale(0.97);
+  }
+
+  .window-control-button-danger:hover {
+    border-color: rgba(251, 113, 133, 0.18);
+    background: rgba(244, 63, 94, 0.18);
+    color: oklch(95% 0.02 24);
+  }
+
+  .chrome-pill {
+    @apply inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[11px] font-medium tracking-[0.02em];
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--fg-secondary);
+  }
+
   .glass-panel {
-    @apply rounded-[28px] border border-white/10 bg-white/[0.045] shadow-[0_20px_80px_rgba(2,6,23,0.42),inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-lg;
+    @apply rounded-[30px] backdrop-blur-xl;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    background:
+      linear-gradient(180deg, rgba(26, 31, 41, 0.96), rgba(15, 19, 27, 0.98)),
+      var(--surface-1);
+    box-shadow:
+      0 22px 80px rgba(0, 0, 0, 0.28),
+      inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  }
+
+  .hero-panel {
+    background:
+      linear-gradient(180deg, rgba(30, 36, 49, 0.98), rgba(16, 20, 29, 0.98)),
+      var(--surface-1);
+  }
+
+  .sidebar-card {
+    @apply rounded-[28px] backdrop-blur-lg;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    background:
+      linear-gradient(180deg, rgba(24, 29, 39, 0.94), rgba(17, 21, 30, 0.96));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
   }
 
   .glass-subtle {
-    @apply rounded-[24px] border border-white/8 bg-white/[0.03];
+    @apply rounded-[24px];
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    background:
+      linear-gradient(
+        180deg,
+        rgba(255, 255, 255, 0.035),
+        rgba(255, 255, 255, 0.02)
+      );
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
   }
 
   .glass-icon {
-    @apply flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.05];
+    @apply flex h-10 w-10 items-center justify-center rounded-[16px];
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background:
+      linear-gradient(
+        180deg,
+        rgba(255, 255, 255, 0.06),
+        rgba(255, 255, 255, 0.03)
+      );
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
   }
 
   .glass-button {
-    @apply rounded-2xl border border-white/10 bg-white/[0.05] transition-all duration-200 hover:bg-white/[0.09] hover:border-white/15 active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-white/10 disabled:hover:bg-white/[0.05] disabled:active:scale-100;
+    @apply rounded-2xl transition-all duration-200 active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background:
+      linear-gradient(
+        180deg,
+        rgba(255, 255, 255, 0.055),
+        rgba(255, 255, 255, 0.03)
+      );
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  }
+
+  .glass-button:hover {
+    border-color: rgba(255, 255, 255, 0.12);
+    background:
+      linear-gradient(
+        180deg,
+        rgba(255, 255, 255, 0.08),
+        rgba(255, 255, 255, 0.04)
+      );
   }
 
   .glass-input {
-    @apply rounded-2xl border border-white/10 bg-white/[0.035] outline-none transition-all duration-200 focus:border-white/15 focus:ring-1 focus:ring-sky-300/15;
+    @apply rounded-2xl outline-none transition-all duration-200;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background:
+      linear-gradient(180deg, rgba(7, 10, 16, 0.42), rgba(7, 10, 16, 0.26));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+  }
+
+  .glass-input:focus {
+    border-color: rgba(125, 211, 252, 0.22);
+    box-shadow:
+      0 0 0 1px rgba(125, 211, 252, 0.12),
+      inset 0 1px 0 rgba(255, 255, 255, 0.02);
+  }
+
+  .status-strip {
+    @apply grid gap-px overflow-hidden rounded-[26px] border md:grid-cols-2 xl:grid-cols-4;
+    border-color: rgba(255, 255, 255, 0.06);
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .status-strip-segment {
+    @apply flex items-start gap-4 px-5 py-4;
+    background:
+      linear-gradient(180deg, rgba(29, 35, 46, 0.95), rgba(18, 22, 31, 0.96));
+  }
+
+  .status-strip-icon {
+    @apply flex h-10 w-10 shrink-0 items-center justify-center rounded-[16px];
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background:
+      linear-gradient(
+        180deg,
+        rgba(255, 255, 255, 0.05),
+        rgba(255, 255, 255, 0.03)
+      );
+  }
+
+  .nav-section-label {
+    @apply px-2 text-[10px] uppercase tracking-[0.3em] text-slate-500;
+  }
+
+  .nav-button {
+    @apply relative flex items-start gap-3 overflow-hidden rounded-[22px] px-3.5 py-3.5 text-left transition-all duration-200;
+    border: 1px solid transparent;
+    background: rgba(255, 255, 255, 0.015);
+  }
+
+  .nav-button:hover {
+    border-color: rgba(255, 255, 255, 0.07);
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  .nav-button-active {
+    border-color: rgba(255, 255, 255, 0.08);
+    background:
+      linear-gradient(
+        180deg,
+        rgba(255, 255, 255, 0.055),
+        rgba(255, 255, 255, 0.03)
+      );
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.04),
+      0 10px 30px rgba(0, 0, 0, 0.18);
+  }
+
+  .nav-icon {
+    @apply flex h-11 w-11 shrink-0 items-center justify-center rounded-[16px] text-slate-300;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  .nav-icon-active {
+    border-color: rgba(125, 211, 252, 0.18);
+    background:
+      linear-gradient(180deg, rgba(56, 189, 248, 0.14), rgba(56, 189, 248, 0.08));
+    color: oklch(96% 0.016 230);
+  }
+
+  .page-eyebrow {
+    @apply text-[11px] uppercase tracking-[0.3em] text-slate-500;
+  }
+
+  .page-title {
+    @apply text-[clamp(2.45rem,2.2rem+1vw,3.2rem)] font-semibold leading-[1.02] tracking-[-0.04em] text-white;
+  }
+
+  .page-copy {
+    @apply text-[15px] leading-7;
+    color: rgba(226, 232, 240, 0.76);
+  }
+
+  .metric-label {
+    @apply text-[10px] uppercase tracking-[0.28em] text-slate-500;
+  }
+
+  .metric-value {
+    @apply mt-1.5 text-[1.42rem] font-semibold tracking-[-0.03em] text-white tabular-nums;
+  }
+
+  .meta-copy {
+    @apply text-[13px] leading-6;
+    color: rgba(203, 213, 225, 0.72);
+  }
+
+  .badge {
+    @apply inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.28em];
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.04);
+    color: rgba(203, 213, 225, 0.78);
+  }
+
+  .btn-primary {
+    @apply relative inline-flex items-center justify-center overflow-hidden rounded-2xl px-5 py-3 text-sm font-medium transition-all duration-200 disabled:cursor-wait disabled:opacity-70;
+    border: 1px solid rgba(125, 211, 252, 0.22);
+    background:
+      linear-gradient(180deg, rgba(56, 189, 248, 0.18), rgba(56, 189, 248, 0.12));
+    color: oklch(97% 0.008 230);
+    box-shadow:
+      0 12px 28px rgba(8, 15, 28, 0.28),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+
+  .btn-primary:hover {
+    border-color: rgba(125, 211, 252, 0.3);
+    background:
+      linear-gradient(180deg, rgba(56, 189, 248, 0.24), rgba(56, 189, 248, 0.15));
+  }
+
+  .btn-primary:active {
+    transform: scale(0.985);
+  }
+
+  .btn-success {
+    @apply relative inline-flex items-center justify-center overflow-hidden rounded-2xl px-5 py-3 text-sm font-medium transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50;
+    border: 1px solid rgba(52, 211, 153, 0.22);
+    background:
+      linear-gradient(180deg, rgba(16, 185, 129, 0.18), rgba(16, 185, 129, 0.12));
+    color: oklch(97% 0.008 160);
+    box-shadow:
+      0 12px 28px rgba(8, 15, 28, 0.24),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+
+  .btn-success:hover {
+    border-color: rgba(52, 211, 153, 0.3);
+    background:
+      linear-gradient(180deg, rgba(16, 185, 129, 0.24), rgba(16, 185, 129, 0.15));
+  }
+
+  .btn-success:active {
+    transform: scale(0.985);
+  }
+
+  .stat-card {
+    @apply rounded-[22px] px-4 py-4 transition-colors duration-200;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    background:
+      linear-gradient(
+        180deg,
+        rgba(255, 255, 255, 0.04),
+        rgba(255, 255, 255, 0.02)
+      );
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
   }
 
   .drop-zone::after {
@@ -146,10 +415,10 @@ body {
     padding: 1px;
     background: linear-gradient(
       120deg,
-      oklch(70% 0.16 226 / 0.06),
+      oklch(72% 0.14 230 / 0.05),
       rgba(255, 255, 255, 0.12),
-      oklch(74% 0.14 162 / 0.08),
-      oklch(70% 0.16 226 / 0.06)
+      oklch(72% 0.14 230 / 0.07),
+      oklch(72% 0.14 230 / 0.05)
     );
     background-size: 200% 200%;
     animation: border-pan 8s linear infinite;
@@ -163,6 +432,20 @@ body {
     opacity: 0.8;
   }
 
+  .drop-zone::before {
+    content: "";
+    position: absolute;
+    inset: 18px;
+    border-radius: calc(1.75rem - 6px);
+    background-image:
+      linear-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.06) 1px, transparent 1px);
+    background-size: 36px 36px;
+    mask-image: linear-gradient(135deg, rgba(255, 255, 255, 0.24), transparent 72%);
+    opacity: 0.05;
+    pointer-events: none;
+  }
+
   .drop-zone-active::after {
     animation-play-state: running;
     opacity: 1;
@@ -172,7 +455,7 @@ body {
     background: linear-gradient(
       110deg,
       transparent 20%,
-      rgba(255, 255, 255, 0.18) 48%,
+      rgba(255, 255, 255, 0.16) 48%,
       transparent 76%
     );
     animation: shimmer 1.4s ease-in-out infinite;
@@ -182,19 +465,7 @@ body {
     animation: fade-in-up 0.3s ease-out;
   }
 
-  .btn-primary {
-    @apply relative inline-flex items-center justify-center overflow-hidden rounded-2xl border border-sky-300/20 bg-sky-500/16 px-5 py-3 text-sm font-medium text-sky-50 shadow-[0_0_30px_rgba(56,189,248,0.18)] transition-all duration-200 hover:border-sky-200/30 hover:bg-sky-500/22 hover:shadow-[0_0_42px_rgba(56,189,248,0.22)] active:scale-[0.985] disabled:cursor-wait disabled:opacity-70;
-  }
-
-  .btn-success {
-    @apply relative inline-flex items-center justify-center overflow-hidden rounded-2xl border border-emerald-300/20 bg-emerald-500/16 px-5 py-3 text-sm font-medium text-emerald-50 shadow-[0_0_30px_rgba(16,185,129,0.16)] transition-all duration-200 hover:border-emerald-200/30 hover:bg-emerald-500/22 hover:shadow-[0_0_42px_rgba(16,185,129,0.2)] active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-50;
-  }
-
-  .badge {
-    @apply inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-[10px] uppercase tracking-[0.3em] text-slate-300/72;
-  }
-
-  .stat-card {
-    @apply rounded-2xl border border-white/8 bg-white/[0.04] px-3.5 py-3.5 transition-colors duration-200;
+  [data-tauri-drag-region] {
+    cursor: default;
   }
 }

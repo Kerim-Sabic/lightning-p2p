@@ -58,10 +58,10 @@ function accentClasses(transfer: TransferEntry): string {
     return "from-emerald-400 via-emerald-500 to-sky-400";
   }
   if (transfer.status === "failed") {
-    return "from-red-400 via-red-500 to-orange-400";
+    return "from-rose-400 via-rose-500 to-amber-300";
   }
   return transfer.direction === "send"
-    ? "from-sky-400 via-blue-500 to-violet-500"
+    ? "from-sky-300 via-sky-400 to-cyan-200"
     : "from-emerald-400 via-sky-500 to-blue-500";
 }
 
@@ -136,16 +136,16 @@ export function TransferCard({ transfer, onCancel }: TransferCardProps) {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -6 }}
       transition={{ duration: 0.2, ease: "easeOut" }}
-      className="glass-panel relative overflow-hidden p-4"
+      className="glass-panel relative overflow-hidden p-5"
     >
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.05),transparent_28%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.04),transparent_28%)]" />
       <div className="relative flex flex-col gap-3">
         {/* Header */}
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <StatusBadge transfer={transfer} />
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/8 bg-white/[0.04] px-2 py-0.5 text-[10px] uppercase tracking-[0.2em] text-slate-300/72">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-0.5 text-[10px] uppercase tracking-[0.2em] text-slate-300/72">
                 {routeLabel(transfer.routeKind)}
               </span>
               <StatusIcon className="h-3.5 w-3.5 text-slate-300/60" />
@@ -154,7 +154,7 @@ export function TransferCard({ transfer, onCancel }: TransferCardProps) {
               </span>
             </div>
 
-            <p className="mt-2 truncate text-base font-semibold text-white">
+            <p className="mt-2 truncate text-[17px] font-semibold tracking-[-0.02em] text-white">
               {transfer.name}
             </p>
           </div>
@@ -183,7 +183,7 @@ export function TransferCard({ transfer, onCancel }: TransferCardProps) {
               {hasTotal ? ` / ${formatBytes(transfer.total)}` : ""}
             </span>
           </div>
-          <div className="relative h-2 overflow-hidden rounded-full bg-white/[0.06]">
+          <div className="relative h-2.5 overflow-hidden rounded-full bg-white/[0.05]">
             <motion.div
               initial={{ width: 0 }}
               animate={{ width: hasTotal ? `${percent}%` : "34%" }}
@@ -199,7 +199,7 @@ export function TransferCard({ transfer, onCancel }: TransferCardProps) {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-3 gap-3">
           <AnimatedMetric
             label="Speed"
             value={formatSpeed(transfer.speedBps)}

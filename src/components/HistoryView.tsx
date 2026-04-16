@@ -98,46 +98,43 @@ export function HistoryView() {
 
   return (
     <div className="space-y-5">
-      <section className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
-        <header className="glass-panel p-6">
+      <section className="grid gap-4 xl:grid-cols-[1.24fr_0.76fr]">
+        <header className="glass-panel hero-panel relative overflow-hidden p-8">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_84%_18%,rgba(56,189,248,0.08),transparent_24%),radial-gradient(circle_at_12%_100%,rgba(148,163,184,0.05),transparent_26%)]" />
+          <div className="relative">
           <div className="badge">
-            <Clock3 className="h-3 w-3 text-violet-200" />
+            <Clock3 className="h-3 w-3 text-sky-200" />
             History
           </div>
-          <h1 className="mt-4 text-3xl font-semibold tracking-tight text-white">
+          <h1 className="page-title mt-6 max-w-[12ch]">
             Review what moved and re-share it fast
           </h1>
-          <p className="mt-3 max-w-2xl text-base leading-7 text-slate-300/80">
+          <p className="page-copy mt-4 max-w-[60ch]">
             Transfer history is a working surface, not just a log. Filter by
             direction, find past items quickly, and regenerate a ticket for any
             stored send without reimporting the content.
           </p>
 
-          <div className="mt-5 grid gap-2 sm:grid-cols-3">
+          <div className="hero-metrics mt-7 grid gap-3 sm:grid-cols-3">
             <div className="stat-card">
-              <p className="text-[10px] uppercase tracking-[0.28em] text-slate-500">
-                Sends
-              </p>
-              <p className="mt-1.5 text-xl font-semibold tabular-nums text-white">
+              <p className="metric-label">Sends</p>
+              <p className="metric-value">
                 {totals.sentCount}
               </p>
             </div>
             <div className="stat-card">
-              <p className="text-[10px] uppercase tracking-[0.28em] text-slate-500">
-                Receives
-              </p>
-              <p className="mt-1.5 text-xl font-semibold tabular-nums text-white">
+              <p className="metric-label">Receives</p>
+              <p className="metric-value">
                 {totals.receivedCount}
               </p>
             </div>
             <div className="stat-card">
-              <p className="text-[10px] uppercase tracking-[0.28em] text-slate-500">
-                Total volume
-              </p>
-              <p className="mt-1.5 text-xl font-semibold tabular-nums text-white">
+              <p className="metric-label">Total volume</p>
+              <p className="metric-value">
                 {formatBytes(totals.totalBytes)}
               </p>
             </div>
+          </div>
           </div>
         </header>
 
@@ -151,10 +148,10 @@ export function HistoryView() {
                 <History className="h-3 w-3 text-sky-200" />
                 Searchable log
               </div>
-              <h2 className="mt-3 text-xl font-semibold tracking-tight text-white">
+              <h2 className="mt-4 text-[1.55rem] font-semibold leading-tight tracking-[-0.03em] text-white">
                 Find the right transfer quickly
               </h2>
-              <p className="mt-2 text-sm leading-6 text-slate-300/80">
+              <p className="meta-copy mt-3">
                 Search by filename, hash, peer, or direction. Re-share only
                 reuses stored content that is already in the local blob store.
               </p>
@@ -201,7 +198,7 @@ export function HistoryView() {
             initial={{ opacity: 0, y: 14, scale: 0.99 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 10, scale: 0.99 }}
-            className="glass-panel p-5"
+            className="glass-panel p-6"
           >
             <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
               <div className="min-w-0">
@@ -245,14 +242,14 @@ export function HistoryView() {
             </p>
           </div>
         ) : (
-          <div className="grid gap-2">
+          <div className="grid gap-3">
             {filteredHistory.map((record, index) => (
               <motion.article
                 key={`${record.timestamp}-${record.hash}`}
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.02, duration: 0.18 }}
-                className="glass-panel group p-4 transition-colors duration-200 hover:bg-white/[0.06]"
+                className="glass-panel group p-5 transition-colors duration-200 hover:bg-white/[0.05]"
               >
                 <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
                   <div className="min-w-0 flex-1">

@@ -64,14 +64,14 @@ export function FirstRunOverlay() {
   };
 
   return (
-    <div className="pointer-events-auto absolute inset-0 z-40 flex items-center justify-center bg-black/70 px-4 backdrop-blur-2xl">
+    <div className="pointer-events-auto absolute inset-0 z-40 flex items-center justify-center bg-black/72 px-4 backdrop-blur-2xl">
       <motion.section
         initial={{ opacity: 0, y: 20, scale: 0.96 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
-        className="glass-panel relative w-full max-w-4xl overflow-hidden p-6"
+        className="glass-panel relative w-full max-w-4xl overflow-hidden p-7"
       >
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.12),transparent_34%),radial-gradient(circle_at_90%_15%,rgba(16,185,129,0.12),transparent_30%)]" />
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.12),transparent_34%),radial-gradient(circle_at_90%_15%,rgba(56,189,248,0.08),transparent_30%)]" />
         <div className="relative space-y-5">
           <header className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr] xl:items-start">
             <div className="space-y-3">
@@ -80,10 +80,10 @@ export function FirstRunOverlay() {
                 First Run
               </div>
               <div className="space-y-3">
-                <h2 className="text-3xl font-semibold tracking-tight text-white">
+                <h2 className="page-title max-w-[13ch] text-[clamp(2.2rem,2rem+0.9vw,2.8rem)]">
                   Finish setup and keep the fast path available
                 </h2>
-                <p className="max-w-2xl text-sm leading-7 text-slate-300/80">
+                <p className="page-copy max-w-2xl text-[15px]">
                   Confirm where verified receives should land, wait for the node
                   to publish route information, and Lightning P2P is ready to
                   move files directly between devices.
@@ -92,9 +92,7 @@ export function FirstRunOverlay() {
             </div>
 
             <div className="glass-subtle p-4">
-              <p className="text-[10px] uppercase tracking-[0.3em] text-slate-500">
-                Route readiness
-              </p>
+              <p className="metric-label">Route readiness</p>
               <div className="mt-3 flex items-start gap-3">
                 <div className="glass-icon h-12 w-12 rounded-2xl">
                   {nodeStatus.online ? (
@@ -107,7 +105,7 @@ export function FirstRunOverlay() {
                   <p className="text-sm font-semibold text-white">
                     {statusLabel(nodeStatus.online_state)}
                   </p>
-                  <p className="mt-1 text-sm leading-6 text-slate-300/72">
+                  <p className="meta-copy mt-1">
                     {statusCopy(nodeStatus.online_state)}
                   </p>
                 </div>

@@ -8,6 +8,7 @@ import { ReceiveView } from "./components/ReceiveView";
 import { SendView } from "./components/SendView";
 import { SettingsView } from "./components/SettingsView";
 import { Sidebar } from "./components/Sidebar";
+import { WindowChrome } from "./components/WindowChrome";
 import { useTransfer } from "./hooks/useTransfer";
 import { useTransferStore } from "./stores/transferStore";
 
@@ -46,31 +47,39 @@ export function App() {
   }, [view]);
 
   return (
-    <div className="h-screen overflow-hidden bg-[#050816] text-slate-100">
-      <div className="relative flex h-full">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.12),transparent_28%),radial-gradient(circle_at_85%_12%,rgba(16,185,129,0.12),transparent_24%),radial-gradient(circle_at_50%_100%,rgba(99,102,241,0.12),transparent_28%)]" />
+    <div className="relative h-screen overflow-hidden bg-[var(--canvas-0)] text-[var(--fg-primary)]">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_10%_0%,rgba(59,130,246,0.18),transparent_28%),radial-gradient(circle_at_100%_10%,rgba(24,144,255,0.1),transparent_24%),radial-gradient(circle_at_50%_100%,rgba(14,165,233,0.08),transparent_30%)]" />
+      <div className="app-shell">
         <FirstRunOverlay />
-        <Sidebar currentView={view} onNavigate={handleNavigate} />
-        <main className="relative flex-1 overflow-hidden">
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),transparent)] opacity-70" />
-          <div className="relative h-full overflow-y-auto px-5 py-5 sm:px-6 sm:py-6">
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={view}
-                initial="initial"
-                animate="animate"
-                exit="exit"
-                transition={{ duration: 0.18, ease: [0.25, 0.46, 0.45, 0.94] }}
-                variants={pageTransition}
-                className="mx-auto flex min-h-full max-w-[1320px] flex-col gap-5 pb-8"
-              >
-                <AppOverview />
-                <InlineAlert message={error} onDismiss={clearError} />
-                {content}
-              </motion.div>
-            </AnimatePresence>
-          </div>
-        </main>
+        <WindowChrome currentView={view} />
+        <div className="relative flex min-h-0 flex-1">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.04),transparent_24%),linear-gradient(180deg,rgba(255,255,255,0.03),transparent_22%)]" />
+          <Sidebar currentView={view} onNavigate={handleNavigate} />
+          <main className="relative min-h-0 flex-1 overflow-hidden">
+            <div className="relative flex h-full min-h-0 flex-col gap-4 px-4 pb-4 pt-3">
+              <AppOverview />
+              <InlineAlert message={error} onDismiss={clearError} />
+              <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={view}
+                    initial="initial"
+                    animate="animate"
+                    exit="exit"
+                    transition={{
+                      duration: 0.18,
+                      ease: [0.25, 0.46, 0.45, 0.94],
+                    }}
+                    variants={pageTransition}
+                    className="mx-auto flex min-h-full max-w-[1280px] flex-col gap-5 pb-8"
+                  >
+                    {content}
+                  </motion.div>
+                </AnimatePresence>
+              </div>
+            </div>
+          </main>
+        </div>
       </div>
     </div>
   );

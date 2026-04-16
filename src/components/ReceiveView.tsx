@@ -91,46 +91,43 @@ export function ReceiveView() {
 
   return (
     <div className="space-y-5">
-      <section className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
-        <header className="glass-panel p-6">
+      <section className="grid gap-4 xl:grid-cols-[1.24fr_0.76fr]">
+        <header className="glass-panel hero-panel relative overflow-hidden p-8">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_84%_18%,rgba(56,189,248,0.1),transparent_22%),radial-gradient(circle_at_14%_100%,rgba(16,185,129,0.06),transparent_24%)]" />
+          <div className="relative">
           <div className="badge">
             <Download className="h-3 w-3 text-emerald-200" />
             Receive
           </div>
-          <h1 className="mt-4 text-3xl font-semibold tracking-tight text-white">
+          <h1 className="page-title mt-6 max-w-[13ch]">
             Pull verified data straight to disk
           </h1>
-          <p className="mt-3 max-w-2xl text-base leading-7 text-slate-300/80">
+          <p className="page-copy mt-4 max-w-[60ch]">
             Paste a Lightning P2P blob ticket to connect to the sender, stream
             the content through iroh, and export only verified bytes into your
             chosen receive folder.
           </p>
 
-          <div className="mt-5 grid gap-2 sm:grid-cols-3">
+          <div className="hero-metrics mt-7 grid gap-3 sm:grid-cols-3">
             <div className="stat-card">
-              <p className="text-[10px] uppercase tracking-[0.28em] text-slate-500">
-                Active receives
-              </p>
-              <p className="mt-1.5 text-xl font-semibold tabular-nums text-white">
+              <p className="metric-label">Active receives</p>
+              <p className="metric-value">
                 {activeReceiveCount}
               </p>
             </div>
             <div className="stat-card">
-              <p className="text-[10px] uppercase tracking-[0.28em] text-slate-500">
-                Direct addresses
-              </p>
-              <p className="mt-1.5 text-xl font-semibold tabular-nums text-white">
+              <p className="metric-label">Direct addresses</p>
+              <p className="metric-value">
                 {nodeStatus.direct_address_count}
               </p>
             </div>
             <div className="stat-card">
-              <p className="text-[10px] uppercase tracking-[0.28em] text-slate-500">
-                Destination
-              </p>
-              <p className="mt-1.5 truncate text-sm font-semibold text-white">
+              <p className="metric-label">Destination</p>
+              <p className="mt-2 truncate text-[15px] font-semibold tracking-[-0.02em] text-white">
                 {downloadDir ? "Configured" : "Resolving"}
               </p>
             </div>
+          </div>
           </div>
         </header>
 
@@ -144,19 +141,17 @@ export function ReceiveView() {
                 <CheckCircle2 className="h-3 w-3 text-sky-200" />
                 Route readiness
               </div>
-              <h2 className="mt-3 text-xl font-semibold tracking-tight text-white">
+              <h2 className="mt-4 text-[1.55rem] font-semibold leading-tight tracking-[-0.03em] text-white">
                 {readinessLabel(nodeStatus.online_state)}
               </h2>
-              <p className="mt-2 text-sm leading-6 text-slate-300/80">
+              <p className="meta-copy mt-3">
                 {readinessCopy(nodeStatus.online_state)}
               </p>
             </div>
           </div>
 
-          <div className="mt-5 rounded-2xl border border-white/8 bg-black/25 p-4">
-            <p className="text-[10px] uppercase tracking-[0.28em] text-slate-500">
-              Receive folder
-            </p>
+          <div className="mt-6 rounded-[24px] border border-white/[0.08] bg-black/20 p-4">
+            <p className="metric-label">Receive folder</p>
             <div className="mt-3 flex items-start gap-3">
               <div className="glass-icon h-11 w-11 rounded-2xl">
                 <FolderSymlink className="h-4 w-4 text-emerald-200" />
@@ -167,7 +162,7 @@ export function ReceiveView() {
             </div>
           </div>
 
-          <p className="mt-5 text-sm leading-6 text-slate-300/72">
+          <p className="meta-copy mt-5">
             Direct paths are the speed path. Relay paths are still secure and
             verified, but they are there for reachability first and speed
             second.
@@ -175,12 +170,12 @@ export function ReceiveView() {
         </aside>
       </section>
 
-      <section className="glass-panel p-5">
+      <section className="glass-panel p-6">
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <p className="text-sm font-medium text-white">Blob ticket</p>
-              <p className="mt-1 text-[13px] leading-6 text-slate-300/72">
+              <p className="meta-copy mt-1">
                 Lightning P2P blob tickets usually begin with{" "}
                 <span className="rounded-md border border-white/10 bg-white/[0.05] px-1.5 py-0.5 font-mono text-[11px] text-slate-100">
                   blob
@@ -204,7 +199,7 @@ export function ReceiveView() {
               onChange={(event) => setTicketInput(event.target.value)}
               rows={4}
               placeholder="Paste a blob ticket..."
-              className={`glass-input w-full resize-none rounded-2xl px-4 py-3.5 pr-12 font-mono text-sm leading-6 text-slate-100 placeholder:text-slate-500 ${
+              className={`glass-input w-full resize-none rounded-[24px] px-4 py-4 pr-12 font-mono text-sm leading-6 text-slate-100 placeholder:text-slate-500 ${
                 trimmedTicket.length === 0
                   ? ""
                   : ticketLooksValid
@@ -241,9 +236,7 @@ export function ReceiveView() {
 
           <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
             <div>
-              <p className="text-[10px] uppercase tracking-[0.3em] text-slate-500">
-                Export destination
-              </p>
+              <p className="metric-label">Export destination</p>
               <p className="mt-2 break-all font-mono text-sm leading-6 text-slate-100/88">
                 {downloadDir ?? "Resolving download directory..."}
               </p>

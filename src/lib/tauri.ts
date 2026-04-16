@@ -7,6 +7,10 @@ import {
   type DownloadEvent,
   type Update,
 } from "@tauri-apps/plugin-updater";
+import {
+  getCurrentWindow,
+  type DragDropEvent,
+} from "@tauri-apps/api/window";
 
 export type TransferDirection = "send" | "receive";
 export type NodeOnlineState =
@@ -76,6 +80,11 @@ export interface UpdateCheckResult {
 export interface UpdateProgress {
   downloaded_bytes: number;
   total_bytes: number | null;
+}
+
+export interface DesktopWindowState {
+  focused: boolean;
+  maximized: boolean;
 }
 
 export type TransferEvent =
@@ -362,6 +371,77 @@ export function onTransferProgress(
   return listen<TransferEvent>("transfer-progress", ({ payload }) => {
     callback(payload);
   });
+}
+
+export async function getDesktopWindowState(): Promise<DesktopWindowState> {
+  if (!isDesktopRuntime()) {
+    return {
+      focused: true,
+      maximized: false,
+    };
+  }
+
+  const currentWindow = getCurrentWindow();
+  const [focused, maximized] = await Promise.all([
+    currentWindow.isFocused(),
+    currentWindow.isMaximized(),
+  ]);
+
+  return {
+    focused,
+    maximized,
+  };
+}
+
+export function onDesktopWindowResized(
+  callback: () => void,
+): Promise<UnlistenFn> {
+  if (!isDesktopRuntime()) {
+    return Promise.resolve(() => {});
+  }
+
+  return getCurrentWindow().onResized(() => {
+    callback();
+  });
+}
+
+export function onDesktopWindowFocusChanged(
+  callback: (focused: boolean) => void,
+): Promise<UnlistenFn> {
+  if (!isDesktopRuntime()) {
+    return Promise.resolve(() => {});
+  }
+
+  return getCurrentWindow().onFocusChanged(({ payload }) => {
+    callback(payload);
+  });
+}
+
+export function onWindowDragDropEvent(
+  callback: (event: DragDropEvent) => void,
+): Promise<UnlistenFn> {
+  if (!isDesktopRuntime()) {
+    return Promise.resolve(() => {});
+  }
+
+  return getCurrentWindow().onDragDropEvent((event) => {
+    callback(event.payload);
+  });
+}
+
+export async function minimizeDesktopWindow(): Promise<void> {
+  requireDesktopRuntime("Window controls");
+  await getCurrentWindow().minimize();
+}
+
+export async function toggleDesktopWindowMaximize(): Promise<void> {
+  requireDesktopRuntime("Window controls");
+  await getCurrentWindow().toggleMaximize();
+}
+
+export async function closeDesktopWindow(): Promise<void> {
+  requireDesktopRuntime("Window controls");
+  await getCurrentWindow().close();
 }
 
 async function disposePendingUpdate(): Promise<void> {
