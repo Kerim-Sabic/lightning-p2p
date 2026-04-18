@@ -81,6 +81,7 @@ pub fn run() {
     let app_state = AppState::new(data_dir, settings);
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -149,6 +150,7 @@ pub fn run() {
                     Ok(node) => {
                         let runtime_status = node.runtime_status();
                         let endpoint = node.endpoint().clone();
+                        let lan_flag = node.lan_discovery_flag();
                         let mut guard = state.node.write().await;
                         *guard = Some(Arc::new(node));
                         let mut runtime = state.node_runtime.write().await;
@@ -157,6 +159,7 @@ pub fn run() {
                             handle.clone(),
                             endpoint,
                             state.nearby_shares.clone(),
+                            lan_flag,
                         );
                         tracing::info!("iroh node started successfully");
                     }

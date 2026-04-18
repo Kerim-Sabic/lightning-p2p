@@ -47,11 +47,14 @@ Most file sharing tools route your data through the cloud, require accounts, or 
 - **Instant P2P transfers** using [iroh](https://iroh.computer) for QUIC networking, NAT traversal, and relay fallback
 - **BLAKE3 verified streaming** with [iroh-blobs](https://docs.rs/iroh-blobs) -- every byte is cryptographically verified during transfer
 - **End-to-end encrypted** via QUIC TLS 1.3 -- your files never touch a server
+- **Nearby sharing** -- senders on the same LAN appear automatically on the receiver, no codes to type
 - **QR code sharing** -- scan a code to start receiving on another device
+- **Deep links** -- open `lightning-p2p://receive?t=<ticket>` from chat or email and the app jumps straight to the receive screen
+- **Clipboard auto-detect** -- when a ticket is on the clipboard, Lightning P2P offers to paste it for you
 - **Live progress tracking** -- speed, ETA, and progress bar updated in real-time
 - **Transfer history** with one-click re-sharing of previously sent content
 - **Auto-updates** with signed releases delivered through GitHub Releases
-- **Native Windows installer** -- NSIS and MSI bundles with embedded WebView2
+- **Native Windows installer** -- NSIS and MSI bundles with embedded WebView2 and automatic firewall rule setup
 
 ## Download
 
@@ -244,10 +247,12 @@ The transfer pipeline is tuned for maximum throughput:
 
 - **256 MB** QUIC connection window with **64 MB** per-stream windows
 - **1024** concurrent QUIC streams
-- **Parallel file hashing** across up to 64 cores
+- **Up to 128 parallel blob imports** -- the import stage is I/O-bound, so parallelism scales with batch size rather than CPU count
+- **Fat LTO + panic=abort** in release builds for smaller, faster binaries
 - **Direct download mode** skips relay when peers can connect directly
 - **Streaming export** writes to disk during transfer, no full-file buffering
 - **10 Hz** progress sampling with exponential moving average smoothing
+- **6 s** relay-readiness timeout on cold start so ticket generation is never blocked by a slow relay handshake
 
 ## Architecture
 

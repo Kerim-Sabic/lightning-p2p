@@ -22,8 +22,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use tauri::Window;
 
-const MAX_IMPORT_PARALLELISM: usize = 64;
-const MIN_IMPORT_PARALLELISM: usize = 8;
+const MAX_IMPORT_PARALLELISM: usize = 128;
 
 struct SharePlan {
     sources: Vec<DataSource>,
@@ -248,8 +247,10 @@ fn import_task(
 }
 
 fn import_parallelism(source_count: usize) -> usize {
-    let cores = std::thread::available_parallelism().map_or(MIN_IMPORT_PARALLELISM, usize::from);
-    source_count.min(cores.clamp(MIN_IMPORT_PARALLELISM, MAX_IMPORT_PARALLELISM))
+    // Import is I/O-bound (disk read + hashing handled by iroh-blobs in async tasks),
+    // so CPU count is a poor proxy — NVMe can comfortably absorb many in-flight imports.
+    // Scale directly with the batch size, capped at MAX.
+    source_count.clamp(1, MAX_IMPORT_PARALLELISM)
 }
 
 async fn import_source(

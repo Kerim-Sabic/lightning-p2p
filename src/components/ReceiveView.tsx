@@ -5,9 +5,10 @@ import {
   Download,
   FolderSymlink,
   ScanSearch,
+  Sparkles,
   XCircle,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { isProbablyBlobTicket } from "../lib/format";
 import { isDesktopRuntime, type NearbyShare } from "../lib/tauri";
 import { useNearbyShareStore } from "../stores/nearbyShareStore";
@@ -42,14 +43,73 @@ export function ReceiveView() {
     (state) => state.startReceiveNearbyShare,
   );
   const cancelTransfer = useTransferStore((state) => state.cancelTransfer);
+  const pendingReceiveTicket = useTransferStore(
+    (state) => state.pendingReceiveTicket,
+  );
+  const consumePendingReceiveTicket = useTransferStore(
+    (state) => state.consumePendingReceiveTicket,
+  );
   const receiveTransfers = useReceiveTransfers();
   const nearbyShares = useNearbyShareStore((state) => state.shares);
   const desktopRuntime = isDesktopRuntime();
   const [ticketInput, setTicketInput] = useState("");
+  const [clipboardSuggestion, setClipboardSuggestion] = useState<string | null>(
+    null,
+  );
 
   const trimmedTicket = ticketInput.trim();
   const ticketLooksValid = isProbablyBlobTicket(trimmedTicket);
   const localDiscoveryEnabled = settings?.local_discovery_enabled ?? true;
+
+  const probeClipboardForTicket = useCallback(async (): Promise<void> => {
+    if (!navigator?.clipboard?.readText) {
+      return;
+    }
+    try {
+      const text = (await navigator.clipboard.readText()).trim();
+      if (!isProbablyBlobTicket(text)) {
+        setClipboardSuggestion(null);
+        return;
+      }
+      setClipboardSuggestion((previous) => {
+        if (previous === text) {
+          return previous;
+        }
+        return text;
+      });
+    } catch {
+      // Clipboard access can fail when the window isn't focused or on first
+      // read; silently ignore — the user can still paste manually.
+    }
+  }, []);
+
+  useEffect(() => {
+    void probeClipboardForTicket();
+    const handleFocus = (): void => {
+      void probeClipboardForTicket();
+    };
+    window.addEventListener("focus", handleFocus);
+    return () => window.removeEventListener("focus", handleFocus);
+  }, [probeClipboardForTicket]);
+
+  useEffect(() => {
+    if (!clipboardSuggestion) {
+      return;
+    }
+    if (trimmedTicket === clipboardSuggestion) {
+      setClipboardSuggestion(null);
+    }
+  }, [clipboardSuggestion, trimmedTicket]);
+
+  useEffect(() => {
+    if (!pendingReceiveTicket) {
+      return;
+    }
+    const ticket = consumePendingReceiveTicket();
+    if (ticket) {
+      setTicketInput(ticket);
+    }
+  }, [pendingReceiveTicket, consumePendingReceiveTicket]);
 
   const activeReceiveCount = useMemo(
     () =>
@@ -197,6 +257,24 @@ export function ReceiveView() {
         </div>
 
         <div className="mt-4 space-y-4">
+          {clipboardSuggestion ? (
+            <button
+              type="button"
+              onClick={() => {
+                setTicketInput(clipboardSuggestion);
+                setClipboardSuggestion(null);
+              }}
+              className="glass-subtle flex w-full items-center gap-3 rounded-[16px] px-4 py-2.5 text-left text-sm text-slate-100 transition hover:border-sky-400/30"
+            >
+              <Sparkles className="h-4 w-4 shrink-0 text-sky-200" />
+              <span className="min-w-0 flex-1 truncate">
+                Ticket found on clipboard — tap to use it
+              </span>
+              <span className="shrink-0 font-mono text-[11px] text-slate-400">
+                {clipboardSuggestion.slice(0, 10)}…
+              </span>
+            </button>
+          ) : null}
           <div className="relative">
             <textarea
               value={ticketInput}

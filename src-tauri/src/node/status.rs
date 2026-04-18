@@ -31,6 +31,8 @@ pub struct NodeRuntimeStatus {
     pub relay_url: Option<String>,
     /// Number of known direct addresses for this endpoint.
     pub direct_address_count: usize,
+    /// Whether the local-network (LAN) discovery subscription is live.
+    pub lan_discovery_active: bool,
     /// Coarse online state for the UI.
     pub online_state: NodeOnlineState,
 }
@@ -51,6 +53,7 @@ impl NodeRuntimeStatus {
             relay_connected: false,
             relay_url: None,
             direct_address_count: 0,
+            lan_discovery_active: false,
             online_state: NodeOnlineState::Starting,
         }
     }
@@ -64,6 +67,7 @@ impl NodeRuntimeStatus {
             relay_connected: false,
             relay_url: None,
             direct_address_count: 0,
+            lan_discovery_active: false,
             online_state: NodeOnlineState::Offline,
         }
     }
@@ -74,6 +78,7 @@ impl NodeRuntimeStatus {
         node_id: String,
         relay_url: Option<String>,
         direct_address_count: usize,
+        lan_discovery_active: bool,
     ) -> Self {
         let relay_connected = relay_url.is_some();
         let online_state = if direct_address_count > 0 {
@@ -90,6 +95,7 @@ impl NodeRuntimeStatus {
             relay_connected,
             relay_url,
             direct_address_count,
+            lan_discovery_active,
             online_state,
         }
     }
@@ -101,23 +107,33 @@ mod tests {
 
     #[test]
     fn direct_addresses_take_priority_for_online_state() {
-        let status =
-            NodeRuntimeStatus::from_network("node-1".into(), Some("https://relay".into()), 2);
+        let status = NodeRuntimeStatus::from_network(
+            "node-1".into(),
+            Some("https://relay".into()),
+            2,
+            true,
+        );
         assert_eq!(status.online_state, NodeOnlineState::DirectReady);
         assert!(status.online);
+        assert!(status.lan_discovery_active);
     }
 
     #[test]
     fn relay_ready_without_direct_addresses() {
-        let status =
-            NodeRuntimeStatus::from_network("node-1".into(), Some("https://relay".into()), 0);
+        let status = NodeRuntimeStatus::from_network(
+            "node-1".into(),
+            Some("https://relay".into()),
+            0,
+            false,
+        );
         assert_eq!(status.online_state, NodeOnlineState::RelayReady);
         assert!(status.relay_connected);
+        assert!(!status.lan_discovery_active);
     }
 
     #[test]
     fn missing_routes_is_degraded() {
-        let status = NodeRuntimeStatus::from_network("node-1".into(), None, 0);
+        let status = NodeRuntimeStatus::from_network("node-1".into(), None, 0, false);
         assert_eq!(status.online_state, NodeOnlineState::Degraded);
         assert!(status.online);
     }

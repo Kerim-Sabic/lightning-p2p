@@ -11,8 +11,11 @@ use iroh::{
 use iroh_blobs::{ticket::BlobTicket, BlobFormat, Hash};
 use serde::Serialize;
 use std::{
-    collections::BTreeMap,
-    sync::Arc,
+    collections::{BTreeMap, HashSet},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tauri::{AppHandle, Emitter};
@@ -211,16 +214,39 @@ impl NearbyShareRegistry {
 }
 
 /// Starts the background LAN discovery loop for nearby shares.
+///
+/// The `lan_discovery_active` flag is flipped to `true` once the local-network
+/// discovery stream is successfully subscribed, and back to `false` if the
+/// stream ends. The UI reads this flag via `NodeRuntimeStatus` to surface a
+/// hint when LAN discovery is unexpectedly offline.
 pub fn spawn_nearby_discovery_loop(
     app_handle: AppHandle,
     endpoint: Endpoint,
     registry: NearbyShareRegistry,
+    lan_discovery_active: Arc<AtomicBool>,
 ) {
-    let discovery_events = endpoint
-        .discovery()
-        .and_then(iroh::discovery::Discovery::subscribe);
+    let discovery_events = if let Some(service) = endpoint.discovery() {
+        if let Some(stream) = service.subscribe() {
+            tracing::info!("LAN discovery subscription established");
+            lan_discovery_active.store(true, Ordering::Relaxed);
+            Some(stream)
+        } else {
+            tracing::warn!(
+                "LAN discovery unavailable: endpoint discovery service does not support subscription. \
+                 Nearby shares will fall back to polling known peers only."
+            );
+            None
+        }
+    } else {
+        tracing::warn!(
+            "LAN discovery unavailable: endpoint has no discovery service configured"
+        );
+        None
+    };
+
     tauri::async_runtime::spawn(async move {
         let mut candidates = seed_candidates(&endpoint);
+        let mut stream_seen: HashSet<NodeId> = HashSet::new();
         let mut interval = tokio::time::interval(REFRESH_INTERVAL);
         interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
 
@@ -237,23 +263,23 @@ pub fn spawn_nearby_discovery_loop(
             if let Some(events) = discovery_events.as_mut() {
                 tokio::select! {
                     _ = interval.tick() => {
-                        if let Err(error) = refresh_candidates(&app_handle, &endpoint, &registry, &mut candidates).await {
+                        if let Err(error) = refresh_candidates(&app_handle, &endpoint, &registry, &mut candidates, &stream_seen).await {
                             tracing::debug!("nearby share refresh failed: {error}");
                         }
                     }
                     maybe_item = events.next() => {
-                        match maybe_item {
-                            Some(item) => {
-                                if let Some(candidate) = candidate_from_discovery_item(item) {
-                                    upsert_candidate(&mut candidates, candidate);
-                                }
-                                if let Err(error) = refresh_candidates(&app_handle, &endpoint, &registry, &mut candidates).await {
-                                    tracing::debug!("nearby share refresh failed: {error}");
-                                }
+                        if let Some(item) = maybe_item {
+                            if let Some(candidate) = candidate_from_discovery_item(item) {
+                                stream_seen.insert(candidate.node_id);
+                                upsert_candidate(&mut candidates, candidate);
                             }
-                            None => {
-                                discovery_events = None;
+                            if let Err(error) = refresh_candidates(&app_handle, &endpoint, &registry, &mut candidates, &stream_seen).await {
+                                tracing::debug!("nearby share refresh failed: {error}");
                             }
+                        } else {
+                            tracing::warn!("LAN discovery subscription ended");
+                            lan_discovery_active.store(false, Ordering::Relaxed);
+                            discovery_events = None;
                         }
                     }
                 }
@@ -261,20 +287,22 @@ pub fn spawn_nearby_discovery_loop(
             }
 
             interval.tick().await;
-            if let Err(error) = refresh_candidates(&app_handle, &endpoint, &registry, &mut candidates).await {
+            if let Err(error) = refresh_candidates(&app_handle, &endpoint, &registry, &mut candidates, &stream_seen).await {
                 tracing::debug!("nearby share refresh failed: {error}");
             }
         }
     });
 }
 
+
 async fn refresh_candidates(
     app_handle: &AppHandle,
     endpoint: &Endpoint,
     registry: &NearbyShareRegistry,
     candidates: &mut BTreeMap<NodeId, RemoteCandidate>,
+    stream_seen: &HashSet<NodeId>,
 ) -> Result<()> {
-    merge_endpoint_candidates(endpoint, candidates);
+    merge_endpoint_candidates(endpoint, candidates, stream_seen);
     prune_stale_candidates(candidates);
     refresh_nearby_shares(
         app_handle,
@@ -326,7 +354,7 @@ fn emit_if_changed(app_handle: &AppHandle, shares: Option<Vec<NearbyShare>>) -> 
 }
 
 fn seed_candidates(endpoint: &Endpoint) -> BTreeMap<NodeId, RemoteCandidate> {
-    local_candidates(endpoint)
+    local_candidates(endpoint, &HashSet::new())
         .into_iter()
         .map(|candidate| (candidate.node_id, candidate))
         .collect()
@@ -335,8 +363,9 @@ fn seed_candidates(endpoint: &Endpoint) -> BTreeMap<NodeId, RemoteCandidate> {
 fn merge_endpoint_candidates(
     endpoint: &Endpoint,
     candidates: &mut BTreeMap<NodeId, RemoteCandidate>,
+    stream_seen: &HashSet<NodeId>,
 ) {
-    for candidate in local_candidates(endpoint) {
+    for candidate in local_candidates(endpoint, stream_seen) {
         upsert_candidate(candidates, candidate);
     }
 }
@@ -370,18 +399,26 @@ fn prune_stale_candidates(candidates: &mut BTreeMap<NodeId, RemoteCandidate>) {
     candidates.retain(|_, candidate| candidate.last_seen_at.elapsed() <= CANDIDATE_STALE_AFTER);
 }
 
-fn local_candidates(endpoint: &Endpoint) -> Vec<RemoteCandidate> {
+fn local_candidates(endpoint: &Endpoint, stream_seen: &HashSet<NodeId>) -> Vec<RemoteCandidate> {
     let local_node_id = endpoint.node_id();
     endpoint
         .remote_info_iter()
         .filter(|remote| remote.node_id != local_node_id)
         .filter(RemoteInfo::has_send_address)
-        .filter(is_local_network_candidate)
+        .filter(|remote| is_local_network_candidate(remote, stream_seen))
         .map(remote_candidate)
         .collect()
 }
 
-fn is_local_network_candidate(remote: &RemoteInfo) -> bool {
+/// A remote is considered a local-network candidate if it has EVER been
+/// announced via the local-swarm discovery (source match), or if we have
+/// observed its node id in the current session's discovery stream — some
+/// iroh versions overwrite the source after first contact, which caused
+/// known-LAN peers to be pruned from the candidate pool.
+fn is_local_network_candidate(remote: &RemoteInfo, stream_seen: &HashSet<NodeId>) -> bool {
+    if stream_seen.contains(&remote.node_id) {
+        return true;
+    }
     remote.sources().into_iter().any(|(source, _age)| {
         matches!(
             source,

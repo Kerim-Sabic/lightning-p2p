@@ -70,6 +70,9 @@ interface TransferStore {
   shareTicket: string | null;
   isSharing: boolean;
   error: string | null;
+  pendingReceiveTicket: string | null;
+  setPendingReceiveTicket: (ticket: string | null) => void;
+  consumePendingReceiveTicket: () => string | null;
   setError: (message: string | null) => void;
   clearError: () => void;
   clearShareSelection: () => void;
@@ -104,6 +107,7 @@ const defaultNodeStatus: NodeStatus = {
   relay_connected: false,
   relay_url: null,
   direct_address_count: 0,
+  lan_discovery_active: false,
   online_state: "starting",
 };
 
@@ -253,6 +257,7 @@ function sameNodeStatus(left: NodeStatus, right: NodeStatus): boolean {
     left.relay_connected === right.relay_connected &&
     left.relay_url === right.relay_url &&
     left.direct_address_count === right.direct_address_count &&
+    left.lan_discovery_active === right.lan_discovery_active &&
     left.online_state === right.online_state
   );
 }
@@ -296,9 +301,18 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
   shareTicket: null,
   isSharing: false,
   error: null,
+  pendingReceiveTicket: null,
 
   setError: (message) => set({ error: message }),
   clearError: () => set({ error: null }),
+  setPendingReceiveTicket: (ticket) => set({ pendingReceiveTicket: ticket }),
+  consumePendingReceiveTicket: () => {
+    const current = get().pendingReceiveTicket;
+    if (current) {
+      set({ pendingReceiveTicket: null });
+    }
+    return current;
+  },
   clearShareSelection: () => {
     set({
       shareSelection: [],

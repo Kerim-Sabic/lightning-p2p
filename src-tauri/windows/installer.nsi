@@ -136,9 +136,9 @@ VIAddVersionKey "ProductVersion" "${VERSION}"
 !define MUI_ABORTWARNING
 !define MUI_INSTFILESPAGE_PROGRESSBAR colored
 !define MUI_WELCOMEPAGE_TITLE "${PRODUCTNAME}"
-!define MUI_WELCOMEPAGE_TEXT "Direct-first file transfer, ready in seconds.$\r$\n$\r$\nInstall ${PRODUCTNAME} to send large files quickly over local or relay-assisted routes with verified transfers."
+!define MUI_WELCOMEPAGE_TEXT "Send files directly, device-to-device, at local-network speed.$\r$\n$\r$\nNo accounts. No cloud uploads. Verified transfers over QUIC.$\r$\n$\r$\nClick Next to install ${PRODUCTNAME}."
 !define MUI_FINISHPAGE_TITLE "${PRODUCTNAME} is ready"
-!define MUI_FINISHPAGE_TEXT "Install completed successfully.$\r$\n$\r$\nOpen ${PRODUCTNAME} to stage a share, discover nearby senders, and move files directly."
+!define MUI_FINISHPAGE_TEXT "Installation complete.$\r$\n$\r$\nLaunch ${PRODUCTNAME} to share a file or pick one up from a nearby device."
 
 ; Enable header images for installer and uninstaller pages when either image is configured.
 !if "${HEADERIMAGE}" != ""
@@ -697,6 +697,13 @@ Section Install
     WriteRegStr SHCTX "${UNINSTKEY}" "HelpLink" "${HOMEPAGE}"
   !endif
 
+  ; Add Windows Firewall rules so LAN peer discovery and direct QUIC
+  ; connections work on first launch. The rules are scoped to this
+  ; specific binary path and cleaned up on uninstall.
+  nsExec::ExecToLog 'netsh advfirewall firewall delete rule name="${PRODUCTNAME}"'
+  nsExec::ExecToLog 'netsh advfirewall firewall add rule name="${PRODUCTNAME}" dir=in action=allow program="$INSTDIR\${MAINBINARYNAME}.exe" enable=yes profile=any'
+  nsExec::ExecToLog 'netsh advfirewall firewall add rule name="${PRODUCTNAME}" dir=out action=allow program="$INSTDIR\${MAINBINARYNAME}.exe" enable=yes profile=any'
+
   ; Create start menu shortcut
   !insertmacro MUI_STARTMENU_WRITE_BEGIN Application
     Call CreateOrUpdateStartMenuShortcut
@@ -759,6 +766,11 @@ Section Uninstall
   !endif
 
   !insertmacro CheckIfAppIsRunning "${MAINBINARYNAME}.exe" "${PRODUCTNAME}"
+
+  ; Remove firewall rules added during install
+  ${If} $UpdateMode <> 1
+    nsExec::ExecToLog 'netsh advfirewall firewall delete rule name="${PRODUCTNAME}"'
+  ${EndIf}
 
   ; Delete the app directory and its content from disk
   ; Copy main executable

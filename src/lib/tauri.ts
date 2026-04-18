@@ -29,6 +29,7 @@ export interface NodeStatus {
   relay_connected: boolean;
   relay_url: string | null;
   direct_address_count: number;
+  lan_discovery_active: boolean;
   online_state: NodeOnlineState;
 }
 
@@ -155,6 +156,7 @@ const browserNodeStatus: NodeStatus = {
   relay_connected: false,
   relay_url: null,
   direct_address_count: 0,
+  lan_discovery_active: false,
   online_state: "offline",
 };
 
@@ -450,6 +452,43 @@ export function onDiscoveredSharesUpdated(
 
   return listen<NearbyShare[]>("discovered-shares-updated", ({ payload }) => {
     callback(payload);
+  });
+}
+
+export const DEEP_LINK_SCHEME = "lightning-p2p";
+
+export function extractTicketFromDeepLink(url: string): string | null {
+  if (!url) {
+    return null;
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== `${DEEP_LINK_SCHEME}:`) {
+    return null;
+  }
+  const ticket = parsed.searchParams.get("t") ?? parsed.searchParams.get("ticket");
+  return ticket ? ticket.trim() : null;
+}
+
+export function onDeepLinkOpened(
+  callback: (ticket: string) => void,
+): Promise<UnlistenFn> {
+  if (!isDesktopRuntime()) {
+    return Promise.resolve(() => {});
+  }
+
+  return listen<string[]>("deep-link://new-url", ({ payload }) => {
+    for (const url of payload ?? []) {
+      const ticket = extractTicketFromDeepLink(url);
+      if (ticket) {
+        callback(ticket);
+        return;
+      }
+    }
   });
 }
 

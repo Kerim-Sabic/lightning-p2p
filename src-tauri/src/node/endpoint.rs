@@ -15,20 +15,27 @@ use iroh::{Endpoint, NodeAddr, NodeId, RelayMap, RelayMode, RelayUrl};
 use iroh_blobs::net_protocol::Blobs;
 use iroh_blobs::rpc::client::blobs::MemClient;
 use iroh_blobs::store::fs::Store as BlobStore;
-use std::sync::Arc;
+use socket2::{Domain, Protocol, Socket, Type};
+use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
-const RELAY_WAIT_TIMEOUT: Duration = Duration::from_secs(15);
+const RELAY_WAIT_TIMEOUT: Duration = Duration::from_secs(6);
 const MAX_CONCURRENT_STREAMS: u32 = 1024;
 const CONNECTION_WINDOW_BYTES: u32 = 268_435_456; // 256 MB
 const STREAM_WINDOW_BYTES: u32 = 67_108_864; // 64 MB
+const MDNS_MULTICAST_ADDR: Ipv4Addr = Ipv4Addr::new(224, 0, 0, 251);
+const MDNS_PORT: u16 = 5353;
 
 /// The running iroh node with blob transfer capability.
 pub struct FastDropNode {
     endpoint: Endpoint,
     blobs: Blobs<BlobStore>,
     router: Router,
+    /// Shared flag toggled by the LAN discovery loop when the subscription is live.
+    lan_discovery_active: Arc<AtomicBool>,
     /// Local sled database.
     pub db: StorageDb,
 }
@@ -65,8 +72,13 @@ impl FastDropNode {
         std::fs::create_dir_all(&data_dir)?;
         std::fs::create_dir_all(&download_dir)?;
 
+        probe_mdns_socket();
+
         let endpoint = bind_endpoint(relay_url).await?;
-        tracing::info!("FastDrop node started: {}", endpoint.node_id());
+        tracing::info!(
+            node_id = %endpoint.node_id(),
+            "iroh endpoint bound (n0-discovery=on, local-network-discovery=on)"
+        );
 
         let blob_store = load_blob_store(&data_dir).await?;
         let blobs = Blobs::builder(blob_store).build(&endpoint);
@@ -82,8 +94,19 @@ impl FastDropNode {
             endpoint,
             blobs,
             router,
+            lan_discovery_active: Arc::new(AtomicBool::new(false)),
             db,
         })
+    }
+
+    /// Returns the shared LAN-discovery activity flag.
+    ///
+    /// The flag is flipped to `true` by the nearby-discovery loop once the
+    /// local-network discovery subscription is established, and back to `false`
+    /// if the stream ends.
+    #[must_use]
+    pub fn lan_discovery_flag(&self) -> Arc<AtomicBool> {
+        self.lan_discovery_active.clone()
     }
 
     /// Returns this node's unique `NodeId`.
@@ -130,8 +153,14 @@ impl FastDropNode {
             .ok()
             .flatten()
             .map_or(0, |addresses| addresses.len());
+        let lan_discovery_active = self.lan_discovery_active.load(Ordering::Relaxed);
 
-        NodeRuntimeStatus::from_network(self.node_id().to_string(), relay_url, direct_address_count)
+        NodeRuntimeStatus::from_network(
+            self.node_id().to_string(),
+            relay_url,
+            direct_address_count,
+            lan_discovery_active,
+        )
     }
 
     /// Returns the best-known route kind for a remote peer.
@@ -187,6 +216,56 @@ async fn bind_endpoint(relay_url: Option<RelayUrl>) -> Result<Endpoint> {
         .bind()
         .await
         .map_err(FastDropError::Network)
+}
+
+/// Best-effort probe that binds a UDP socket on the mDNS port and joins the
+/// multicast group. If this fails (commonly: Windows Firewall, another mDNS
+/// responder, or insufficient privileges), LAN discovery will silently stop
+/// working — so we log a loud warning that explains exactly what to fix.
+fn probe_mdns_socket() {
+    let socket = match Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP)) {
+        Ok(socket) => socket,
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                "mDNS probe: could not create UDP socket — LAN discovery may be unavailable"
+            );
+            return;
+        }
+    };
+
+    if let Err(error) = socket.set_reuse_address(true) {
+        tracing::warn!(error = %error, "mDNS probe: SO_REUSEADDR failed");
+    }
+
+    let addr: SocketAddr = SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, MDNS_PORT).into();
+    if let Err(error) = socket.bind(&addr.into()) {
+        tracing::warn!(
+            error = %error,
+            port = MDNS_PORT,
+            "mDNS probe: bind failed — LAN peer discovery will not work. \
+             On Windows this usually means the firewall is blocking the app; \
+             add an inbound/outbound rule for the Lightning P2P executable, \
+             or ensure no other process is holding UDP {}.",
+            MDNS_PORT,
+        );
+        return;
+    }
+
+    if let Err(error) = socket.join_multicast_v4(&MDNS_MULTICAST_ADDR, &Ipv4Addr::UNSPECIFIED) {
+        tracing::warn!(
+            error = %error,
+            group = %MDNS_MULTICAST_ADDR,
+            "mDNS probe: multicast group join failed — LAN discovery may be degraded"
+        );
+        return;
+    }
+
+    tracing::info!(
+        port = MDNS_PORT,
+        group = %MDNS_MULTICAST_ADDR,
+        "mDNS probe: OK (multicast join succeeded)"
+    );
 }
 
 fn tuned_transport_config() -> TransportConfig {

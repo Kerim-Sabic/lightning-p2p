@@ -8,7 +8,7 @@ import { SettingsView } from "./components/SettingsView";
 import { Sidebar } from "./components/Sidebar";
 import { WindowChrome } from "./components/WindowChrome";
 import { useTransfer } from "./hooks/useTransfer";
-import { isDesktopRuntime } from "./lib/tauri";
+import { isDesktopRuntime, onDeepLinkOpened } from "./lib/tauri";
 import { useTransferStore } from "./stores/transferStore";
 
 export type View = "send" | "receive" | "history" | "settings";
@@ -17,8 +17,31 @@ export function App() {
   const [view, setView] = useState<View>("send");
   const error = useTransferStore((state) => state.error);
   const clearError = useTransferStore((state) => state.clearError);
+  const setPendingReceiveTicket = useTransferStore(
+    (state) => state.setPendingReceiveTicket,
+  );
   const desktopRuntime = isDesktopRuntime();
   useTransfer();
+
+  useEffect(() => {
+    if (!desktopRuntime) {
+      return;
+    }
+    let active = true;
+    const subscription = onDeepLinkOpened((ticket) => {
+      if (!active) {
+        return;
+      }
+      setPendingReceiveTicket(ticket);
+      startTransition(() => {
+        setView("receive");
+      });
+    });
+    return () => {
+      active = false;
+      void subscription.then((unlisten) => unlisten());
+    };
+  }, [desktopRuntime, setPendingReceiveTicket]);
 
   useEffect(() => {
     document.documentElement.dataset.runtime = desktopRuntime
