@@ -152,17 +152,15 @@ jobs:
           "APP_VERSION=$($config.version)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "RELEASE_TAG=v$($config.version)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
-      - name: Enable updater artifacts when signing secrets exist
+      - name: Require updater signing key
         shell: pwsh
         run: |
           if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY)) {
-            $config = '{"bundle":{"createUpdaterArtifacts":false}}'
-            Write-Host "Signing key missing. Building installers without updater metadata."
-          } else {
-            $config = '{"bundle":{"createUpdaterArtifacts":true}}'
-            Write-Host "Signing key detected. Enabling updater artifacts."
+            throw "TAURI_SIGNING_PRIVATE_KEY is required for release builds so updater artifacts can be generated."
           }
 
+          $config = '{"bundle":{"createUpdaterArtifacts":true}}'
+          Write-Host "Signing key detected. Enabling updater artifacts."
           "TAURI_CONFIG=$config" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       - name: Build and create GitHub release
@@ -208,20 +206,29 @@ jobs:
             Full changelog: https://github.com/Kerim-Sabic/lightning-p2p/commits/${{ env.RELEASE_TAG }}
           releaseDraft: false
           prerelease: false
+          includeUpdaterJson: true
+          updaterJsonPreferNsis: true
           args: --target x86_64-pc-windows-msvc
 
       - name: Generate SHA256 checksums
         shell: pwsh
         run: |
           $bundleRoot = "src-tauri/target/x86_64-pc-windows-msvc/release/bundle"
-          $files = Get-ChildItem -Path $bundleRoot -Recurse -File -Include *.exe, *.msi
+          $files = Get-ChildItem -Path $bundleRoot -Recurse -File |
+            Where-Object {
+              $_.Extension -in ".exe", ".msi", ".sig" -or
+              $_.Name -like "latest*.json"
+            } |
+            Sort-Object Name
+
           if (-not $files) {
-            throw "No installer files found for checksum generation."
+            throw "No release files found for checksum generation."
           }
 
           $lines = foreach ($file in $files) {
             $hash = (Get-FileHash -Path $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-            "$hash  $($file.Name)"
+            $assetName = $file.Name -replace " ", "."
+            "$hash  $assetName"
           }
 
           $checksumPath = Join-Path $bundleRoot "SHA256SUMS.txt"
@@ -240,7 +247,9 @@ jobs:
           name: lightning-p2p-windows-release-bundle
           path: |
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
+            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.sig
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
+            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.sig
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/SHA256SUMS.txt
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/**/*.sig
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/**/latest*.json

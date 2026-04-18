@@ -77,13 +77,8 @@ export function App() {
 
   return (
     <div
-      className={`relative h-screen overflow-hidden text-[var(--fg-primary)] ${
-        desktopRuntime ? "bg-transparent" : "bg-[var(--canvas-0)]"
-      }`}
+      className="relative h-screen overflow-hidden bg-[var(--canvas-0)] text-[var(--fg-primary)]"
     >
-      {!desktopRuntime ? (
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.12),transparent_26%),linear-gradient(180deg,rgba(9,12,18,0.96),rgba(11,14,20,1))]" />
-      ) : null}
       <div
         className={`app-shell ${
           desktopRuntime ? "app-shell-desktop" : "app-shell-browser"

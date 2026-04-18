@@ -34,15 +34,13 @@ body,
 
 html[data-runtime="desktop"],
 body[data-runtime="desktop"] {
-  background: transparent;
+  background: var(--canvas-0);
 }
 
 body {
   margin: 0;
   overflow: hidden;
-  background:
-    radial-gradient(circle at top left, oklch(62% 0.1 230 / 0.08), transparent 22%),
-    linear-gradient(180deg, oklch(14.5% 0.016 256) 0%, oklch(13% 0.014 256) 100%);
+  background: var(--canvas-0);
   color: var(--fg-primary);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;

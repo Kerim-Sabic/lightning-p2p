@@ -64,8 +64,8 @@ Download the latest installer from [**GitHub Releases**](https://github.com/Keri
 
 | Installer | Description |
 |-----------|-------------|
-| `LightningP2P_x.x.x_x64-setup.exe` | NSIS installer (recommended) |
-| `LightningP2P_x.x.x_x64_en-US.msi` | MSI installer |
+| `Lightning.P2P_x.x.x_x64-setup.exe` | NSIS installer (recommended) |
+| `Lightning.P2P_x.x.x_x64_en-US.msi` | MSI installer |
 
 Verify the SHA256 checksum from the release notes before installing if you want to confirm the binary you downloaded.
 
