@@ -12,20 +12,29 @@
 
 # Lightning P2P
 
-### The fastest way to move files between devices.
+### Free, open-source peer-to-peer file transfer for Windows.
 
 **Lightning P2P** is a desktop peer-to-peer file transfer app built with Rust, iroh, and Tauri v2.<br />
 No cloud. No accounts. No file size limits. Just direct, encrypted, verified transfers over LAN or the public internet.
 
 <br />
 
-[Download for Windows](#download) &nbsp;&middot;&nbsp; [Quick Start](#quick-start) &nbsp;&middot;&nbsp; [How It Works](#how-it-works) &nbsp;&middot;&nbsp; [Contributing](#contributing)
+[Website](https://lightning-p2p.netlify.app) &nbsp;&middot;&nbsp; [Download for Windows](#download) &nbsp;&middot;&nbsp; [Benchmarks](#benchmark-methodology) &nbsp;&middot;&nbsp; [Security](#security) &nbsp;&middot;&nbsp; [Contributing](#contributing)
 
 <br />
+
+<img src="./public/og-image.png" alt="Lightning P2P website preview showing direct peer-to-peer file transfer" width="900" />
 
 </div>
 
 ---
+
+## Current Status
+
+- **Windows desktop app:** available now with signed release artifacts and auto-update metadata.
+- **Public website:** Netlify-ready landing and SEO pages for download, security, benchmarks, and AirDrop-for-Windows searches.
+- **Mobile/browser transfers:** planned, not shipped yet. The website works on mobile, but real transfers currently require the desktop app.
+- **Speed claims:** benchmark-backed only. The app is built for high throughput, but public "fastest" claims should reference repeatable results.
 
 ## Why Lightning P2P?
 
@@ -60,12 +69,12 @@ Most file sharing tools route your data through the cloud, require accounts, or 
 
 ### Windows
 
-Download the latest installer from [**GitHub Releases**](https://github.com/Kerim-Sabic/lightning-p2p/releases). Each release publishes installers, updater artifacts, and SHA256 checksums.
+Download the latest installer from [**GitHub Releases**](https://github.com/Kerim-Sabic/lightning-p2p/releases). Each release publishes installers, updater artifacts, signatures, and SHA256 checksums.
 
 | Installer | Description |
 |-----------|-------------|
-| `Lightning.P2P_x.x.x_x64-setup.exe` | NSIS installer (recommended) |
-| `Lightning.P2P_x.x.x_x64_en-US.msi` | MSI installer |
+| [`Lightning.P2P_0.3.1_x64-setup.exe`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/Lightning.P2P_0.3.1_x64-setup.exe) | NSIS installer (recommended) |
+| [`Lightning.P2P_0.3.1_x64_en-US.msi`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/Lightning.P2P_0.3.1_x64_en-US.msi) | MSI installer |
 
 Verify the SHA256 checksum from the release notes before installing if you want to confirm the binary you downloaded.
 
@@ -207,6 +216,32 @@ pnpm build:windows
 
 Output: `src-tauri/target/x86_64-pc-windows-msvc/release/bundle/`
 
+## Website and Netlify
+
+The browser build is a public website and download funnel, not the transfer engine. Desktop/Tauri runtime still opens the app shell; normal browsers open the SEO landing experience.
+
+### Deploy to Netlify
+
+1. Create a Netlify site from the GitHub repository.
+2. Use branch `main`.
+3. Use build command `pnpm build`.
+4. Use publish directory `dist`.
+5. Keep `SITE_URL=https://lightning-p2p.netlify.app` until a custom domain is connected.
+6. After deploy, submit `https://lightning-p2p.netlify.app/sitemap.xml` in Google Search Console.
+
+The checked-in `netlify.toml` defines the build command, publish directory, Node 22, SPA fallback rewrite, cache headers, and crawlable SEO metadata output.
+
+### SEO pages
+
+- `/`
+- `/download`
+- `/security`
+- `/benchmarks`
+- `/alternatives/airdrop-for-windows`
+- `/free-p2p-file-transfer`
+
+Each page has a unique title, description, canonical URL, static fallback content, Open Graph/Twitter metadata, and SoftwareApplication JSON-LD.
+
 ## How It Works
 
 Lightning P2P uses **iroh** for peer-to-peer networking and **iroh-blobs** for content-addressed blob transfer. The entire transfer flow is:
@@ -253,6 +288,35 @@ The transfer pipeline is tuned for maximum throughput:
 - **Streaming export** writes to disk during transfer, no full-file buffering
 - **10 Hz** progress sampling with exponential moving average smoothing
 - **6 s** relay-readiness timeout on cold start so ticket generation is never blocked by a slow relay handshake
+
+## Benchmark Methodology
+
+Lightning P2P should only claim "fastest" beside repeatable measurements. Publish benchmark results with:
+
+- app versions and commit hashes
+- sender and receiver hardware
+- operating system versions
+- file sizes and file counts
+- LAN, direct WAN, or relay route type
+- median transfer time, throughput, and failed attempts
+
+Planned comparison set:
+
+| Tool | Why compare |
+|------|-------------|
+| LocalSend | Popular open-source cross-platform local transfer app |
+| PairDrop | Browser-based WebRTC transfer baseline |
+| Snapdrop | Widely known browser local-share baseline |
+| Magic Wormhole | Trusted encrypted transfer baseline |
+| Cloud upload/download | Common non-P2P workflow users are trying to avoid |
+
+## GitHub Growth Checklist
+
+- Repository homepage is set to `https://lightning-p2p.netlify.app`.
+- Repository topics: `p2p`, `peer-to-peer`, `file-transfer`, `airdrop-alternative`, `tauri`, `rust`, `iroh`, `quic`, `blake3`, `windows`, `privacy`, `end-to-end-encryption`, `open-source`, `react`, `typescript`.
+- Upload `public/og-image.png` as the GitHub social preview image from repository settings.
+- Pin launch issues for benchmarks, mobile/browser transfer architecture, Linux/macOS packaging, and UX screenshots.
+- Launch only with honest claims: free, open-source, no account, direct-first transfer, signed Windows release, benchmark methodology published.
 
 ## Architecture
 

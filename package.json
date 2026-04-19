@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && node scripts/build-web-metadata.mjs",
     "build:windows": "pnpm tauri build --target x86_64-pc-windows-msvc",
     "preview": "vite preview",
     "lint": "eslint src/",

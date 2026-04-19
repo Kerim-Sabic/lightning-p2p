@@ -1,0 +1,54 @@
+[build]
+  command = "pnpm build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+  SITE_URL = "https://lightning-p2p.netlify.app"
+
+[[redirects]]
+  from = "/download"
+  to = "/download/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/security"
+  to = "/security/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/benchmarks"
+  to = "/benchmarks/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/alternatives/airdrop-for-windows"
+  to = "/alternatives/airdrop-for-windows/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/free-p2p-file-transfer"
+  to = "/free-p2p-file-transfer/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
+
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/*.html"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"

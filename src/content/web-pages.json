@@ -1,0 +1,62 @@
+[
+  {
+    "path": "/",
+    "label": "Home",
+    "title": "Lightning P2P - Free Open Source P2P File Transfer for Windows",
+    "description": "Lightning P2P is a free, open-source Windows app for direct peer-to-peer file transfers with iroh, QUIC, BLAKE3 verification, and no accounts.",
+    "eyebrow": "Free open-source file transfer",
+    "heading": "Move huge files directly between devices.",
+    "intro": "Lightning P2P sends files from one device to another with a Rust desktop app, direct QUIC connections when possible, relay fallback when needed, and no cloud storage account in the middle.",
+    "focus": "Windows desktop is available now. Mobile and browser transfer support is planned, and the website gives mobile users a clear path to the current release."
+  },
+  {
+    "path": "/download",
+    "label": "Download",
+    "title": "Download Lightning P2P for Windows - Free P2P File Transfer",
+    "description": "Download Lightning P2P for Windows. Install the free open-source desktop app for encrypted peer-to-peer file transfers with signed auto-updates.",
+    "eyebrow": "Windows installer",
+    "heading": "Download the free Windows P2P file transfer app.",
+    "intro": "Install Lightning P2P on Windows 10 or Windows 11 to send large files directly between devices without upload limits, storage accounts, or temporary cloud links.",
+    "focus": "Use the NSIS setup installer for normal Windows installs. Every release includes signatures, updater metadata, and SHA256 checksums."
+  },
+  {
+    "path": "/security",
+    "label": "Security",
+    "title": "Lightning P2P Security - Encrypted Direct File Transfers",
+    "description": "Learn how Lightning P2P protects transfers with QUIC TLS 1.3, iroh-blobs, BLAKE3 verification, signed releases, and no cloud file storage.",
+    "eyebrow": "Private by design",
+    "heading": "Encrypted transfers without storing files in the cloud.",
+    "intro": "Lightning P2P uses iroh for encrypted peer connectivity and iroh-blobs for content-addressed transfer, so each receiver verifies the bytes it writes to disk.",
+    "focus": "Relay fallback helps connectivity, but the relay is not the product database and does not turn Lightning P2P into a cloud file host."
+  },
+  {
+    "path": "/benchmarks",
+    "label": "Benchmarks",
+    "title": "Lightning P2P Benchmarks - Repeatable File Transfer Speed Tests",
+    "description": "See the benchmark methodology for Lightning P2P against LocalSend, PairDrop, Snapdrop, Magic Wormhole, and cloud upload/download workflows.",
+    "eyebrow": "Benchmark-backed claims",
+    "heading": "Speed claims need repeatable numbers.",
+    "intro": "Lightning P2P is built for high-throughput transfers, but public claims should be tied to hardware, network route, file size, app version, and measured results.",
+    "focus": "The benchmark page defines the test matrix before publishing fastest or best claims, so users can trust the comparison."
+  },
+  {
+    "path": "/alternatives/airdrop-for-windows",
+    "label": "AirDrop for Windows",
+    "title": "AirDrop Alternative for Windows - Lightning P2P",
+    "description": "Lightning P2P is an open-source AirDrop-style alternative for Windows focused on direct encrypted transfers, huge files, and no account requirement.",
+    "eyebrow": "AirDrop-style Windows sharing",
+    "heading": "An open-source AirDrop alternative for Windows.",
+    "intro": "If you need AirDrop-like sharing outside the Apple ecosystem, Lightning P2P focuses on direct device-to-device transfers, nearby discovery, QR tickets, and no file size caps.",
+    "focus": "The first public release is Windows-first. Cross-platform mobile work is tracked separately so the transfer engine stays reliable."
+  },
+  {
+    "path": "/free-p2p-file-transfer",
+    "label": "Free P2P Transfer",
+    "title": "Free P2P File Transfer - Send Large Files Without Cloud Storage",
+    "description": "Use Lightning P2P to transfer large files for free with direct encrypted peer-to-peer connections, no account, no cloud upload, and no file size limit.",
+    "eyebrow": "No account. No upload cap.",
+    "heading": "A free way to transfer large files peer-to-peer.",
+    "intro": "Lightning P2P is for people who want to move big files without waiting for a cloud upload, creating an account, or splitting archives to fit attachment limits.",
+    "focus": "For the fastest path, keep both devices online, allow the app through the firewall, and use direct connectivity when the network allows it."
+  }
+]

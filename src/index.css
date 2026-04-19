@@ -37,6 +37,18 @@ body[data-runtime="desktop"] {
   background: var(--canvas-0);
 }
 
+html[data-runtime="browser"],
+body[data-runtime="browser"],
+html[data-runtime="browser"] #root {
+  min-height: 100%;
+  height: auto;
+}
+
+body[data-runtime="browser"] {
+  overflow: auto;
+  background: #08120f;
+}
+
 body {
   margin: 0;
   overflow: hidden;
@@ -60,6 +72,28 @@ body {
 *::before,
 *::after {
   border-color: transparent;
+}
+
+.static-seo-fallback {
+  min-height: 100vh;
+  padding: 96px 24px 48px;
+  background: #08120f;
+  color: white;
+  font-family: var(--font-sans);
+}
+
+.static-seo-fallback p {
+  max-width: 720px;
+  color: rgba(226, 232, 240, 0.78);
+  line-height: 1.75;
+}
+
+.static-seo-fallback h1 {
+  max-width: 880px;
+  margin: 16px 0;
+  color: white;
+  font-size: clamp(2.5rem, 8vw, 5rem);
+  line-height: 1;
 }
 
 ::-webkit-scrollbar {

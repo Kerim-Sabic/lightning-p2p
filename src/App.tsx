@@ -6,6 +6,7 @@ import { ReceiveView } from "./components/ReceiveView";
 import { SendView } from "./components/SendView";
 import { SettingsView } from "./components/SettingsView";
 import { Sidebar } from "./components/Sidebar";
+import { WebLandingPage } from "./components/WebLandingPage";
 import { WindowChrome } from "./components/WindowChrome";
 import { useTransfer } from "./hooks/useTransfer";
 import { isDesktopRuntime, onDeepLinkOpened } from "./lib/tauri";
@@ -14,19 +15,37 @@ import { useTransferStore } from "./stores/transferStore";
 export type View = "send" | "receive" | "history" | "settings";
 
 export function App() {
+  const desktopRuntime = isDesktopRuntime();
+
+  useEffect(() => {
+    document.documentElement.dataset.runtime = desktopRuntime
+      ? "desktop"
+      : "browser";
+    document.body.dataset.runtime = desktopRuntime ? "desktop" : "browser";
+
+    return () => {
+      delete document.documentElement.dataset.runtime;
+      delete document.body.dataset.runtime;
+    };
+  }, [desktopRuntime]);
+
+  if (!desktopRuntime) {
+    return <WebLandingPage />;
+  }
+
+  return <DesktopAppShell />;
+}
+
+function DesktopAppShell() {
   const [view, setView] = useState<View>("send");
   const error = useTransferStore((state) => state.error);
   const clearError = useTransferStore((state) => state.clearError);
   const setPendingReceiveTicket = useTransferStore(
     (state) => state.setPendingReceiveTicket,
   );
-  const desktopRuntime = isDesktopRuntime();
   useTransfer();
 
   useEffect(() => {
-    if (!desktopRuntime) {
-      return;
-    }
     let active = true;
     const subscription = onDeepLinkOpened((ticket) => {
       if (!active) {
@@ -41,19 +60,7 @@ export function App() {
       active = false;
       void subscription.then((unlisten) => unlisten());
     };
-  }, [desktopRuntime, setPendingReceiveTicket]);
-
-  useEffect(() => {
-    document.documentElement.dataset.runtime = desktopRuntime
-      ? "desktop"
-      : "browser";
-    document.body.dataset.runtime = desktopRuntime ? "desktop" : "browser";
-
-    return () => {
-      delete document.documentElement.dataset.runtime;
-      delete document.body.dataset.runtime;
-    };
-  }, [desktopRuntime]);
+  }, [setPendingReceiveTicket]);
 
   const handleNavigate = (nextView: View): void => {
     startTransition(() => {
@@ -80,9 +87,7 @@ export function App() {
       className="relative h-screen overflow-hidden bg-[var(--canvas-0)] text-[var(--fg-primary)]"
     >
       <div
-        className={`app-shell ${
-          desktopRuntime ? "app-shell-desktop" : "app-shell-browser"
-        }`}
+        className="app-shell app-shell-desktop"
       >
         <FirstRunOverlay />
         <WindowChrome currentView={view} />
