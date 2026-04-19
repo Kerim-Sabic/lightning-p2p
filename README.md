@@ -332,7 +332,18 @@ Lightning P2P should only claim "fastest" beside repeatable measurements. Publis
 - LAN, direct WAN, or relay route type
 - median transfer time, throughput, and failed attempts
 
-Planned comparison set:
+Homepage comparison set:
+
+| Tool | Why compare |
+|------|-------------|
+| WeTransfer | Common cloud-upload workflow Lightning P2P replaces |
+| Windows Nearby Sharing | Built-in proximity transfer without Lightning-style WAN tickets |
+| Quick Share for Windows | Ecosystem nearby sharing with narrower openness and reachability |
+| PairDrop | Browser-based WebRTC transfer baseline |
+| Snapdrop | Widely known browser local-share baseline |
+| LocalSend | Popular LAN-first cross-platform transfer app |
+
+Full benchmark baselines:
 
 | Tool | Why compare |
 |------|-------------|

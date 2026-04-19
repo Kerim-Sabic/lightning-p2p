@@ -6,10 +6,10 @@ interface Row {
   tool: string;
   note: string;
   directP2p: Cell;
-  verifiedBytes: Cell;
-  noAccount: Cell;
   wan: Cell;
-  noSizeCap: Cell;
+  verifiedContent: Cell;
+  noCloudUpload: Cell;
+  nativeWindows: Cell;
   openSource: Cell;
 }
 
@@ -18,70 +18,80 @@ const rows: Row[] = [
     tool: "Lightning P2P",
     note: "Windows desktop",
     directP2p: "yes",
-    verifiedBytes: "yes",
-    noAccount: "yes",
     wan: "yes",
-    noSizeCap: "yes",
-    openSource: "yes",
-  },
-  {
-    tool: "LocalSend",
-    note: "Cross-platform LAN",
-    directP2p: "yes",
-    verifiedBytes: "partial",
-    noAccount: "yes",
-    wan: "no",
-    noSizeCap: "yes",
-    openSource: "yes",
-  },
-  {
-    tool: "PairDrop",
-    note: "Browser WebRTC",
-    directP2p: "yes",
-    verifiedBytes: "partial",
-    noAccount: "yes",
-    wan: "partial",
-    noSizeCap: "yes",
-    openSource: "yes",
-  },
-  {
-    tool: "Snapdrop",
-    note: "Browser LAN",
-    directP2p: "yes",
-    verifiedBytes: "no",
-    noAccount: "yes",
-    wan: "no",
-    noSizeCap: "yes",
-    openSource: "yes",
-  },
-  {
-    tool: "Magic Wormhole",
-    note: "CLI direct transfer",
-    directP2p: "yes",
-    verifiedBytes: "yes",
-    noAccount: "yes",
-    wan: "yes",
-    noSizeCap: "yes",
+    verifiedContent: "yes",
+    noCloudUpload: "yes",
+    nativeWindows: "yes",
     openSource: "yes",
   },
   {
     tool: "WeTransfer",
     note: "Cloud upload link",
     directP2p: "no",
-    verifiedBytes: "no",
-    noAccount: "partial",
     wan: "yes",
-    noSizeCap: "no",
+    verifiedContent: "no",
+    noCloudUpload: "no",
+    nativeWindows: "no",
     openSource: "no",
+  },
+  {
+    tool: "Windows Nearby Sharing",
+    note: "Local proximity sharing",
+    directP2p: "yes",
+    wan: "no",
+    verifiedContent: "no",
+    noCloudUpload: "yes",
+    nativeWindows: "partial",
+    openSource: "no",
+  },
+  {
+    tool: "Quick Share for Windows",
+    note: "Ecosystem nearby sharing",
+    directP2p: "partial",
+    wan: "no",
+    verifiedContent: "no",
+    noCloudUpload: "yes",
+    nativeWindows: "yes",
+    openSource: "no",
+  },
+  {
+    tool: "PairDrop",
+    note: "Browser WebRTC",
+    directP2p: "partial",
+    wan: "partial",
+    verifiedContent: "no",
+    noCloudUpload: "yes",
+    nativeWindows: "no",
+    openSource: "yes",
+  },
+  {
+    tool: "Snapdrop",
+    note: "Browser local sharing",
+    directP2p: "partial",
+    wan: "no",
+    verifiedContent: "no",
+    noCloudUpload: "yes",
+    nativeWindows: "no",
+    openSource: "yes",
+  },
+  {
+    tool: "LocalSend",
+    note: "Cross-platform LAN",
+    directP2p: "yes",
+    wan: "no",
+    verifiedContent: "no",
+    noCloudUpload: "yes",
+    nativeWindows: "yes",
+    openSource: "yes",
   },
 ];
 
 const columns: Array<{ key: keyof Row; label: string }> = [
   { key: "directP2p", label: "Direct P2P" },
-  { key: "verifiedBytes", label: "Verified bytes" },
-  { key: "noAccount", label: "No account" },
-  { key: "wan", label: "WAN support" },
-  { key: "noSizeCap", label: "No size cap" },
+  { key: "wan", label: "Works across WAN" },
+  { key: "verifiedContent", label: "Content-addressed verification" },
+  { key: "noCloudUpload", label: "No cloud upload" },
+  { key: "nativeWindows", label: "Native Windows install" },
   { key: "openSource", label: "Open source" },
 ];
 
@@ -126,15 +136,15 @@ export function ComparisonTable() {
             How Lightning P2P compares.
           </h2>
           <p className="mt-4 text-base leading-7 text-slate-300">
-            Honest side-by-side with tools people ask about most. See the{" "}
+            Common alternatives people try before Lightning P2P. See the{" "}
             <a
               href="/benchmarks"
               className="text-emerald-200 underline-offset-4 hover:underline"
             >
               benchmark methodology
             </a>{" "}
-            for how we plan to publish repeatable speed numbers against these
-            tools.
+            for how repeatable speed numbers will be published before any
+            strongest-in-class claims.
           </p>
         </div>
 

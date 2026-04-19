@@ -79,11 +79,11 @@
     "path": "/benchmarks",
     "label": "Benchmarks",
     "title": "Lightning P2P Benchmarks - Repeatable File Transfer Speed Tests",
-    "description": "See the benchmark methodology for Lightning P2P against LocalSend, PairDrop, Snapdrop, Magic Wormhole, and cloud upload/download workflows.",
+    "description": "See the benchmark methodology for Lightning P2P against cloud upload, browser transfer, OS nearby sharing, and LAN-only alternatives.",
     "eyebrow": "Benchmark-backed claims",
     "heading": "Speed claims need repeatable numbers.",
     "intro": "Lightning P2P is built for high-throughput transfers, but public claims should be tied to hardware, network route, file size, app version, and measured results.",
-    "focus": "The benchmark page defines the test matrix before publishing fastest or best claims, so users can trust the comparison.",
+    "focus": "The benchmark page defines the test matrix before publishing fastest or best claims, so users can trust the comparison instead of reading hype.",
     "inNav": true,
     "priority": "0.8",
     "related": ["/", "/localsend-vs-lightning-p2p", "/wormhole-alternative"]
@@ -127,7 +127,7 @@
       "Magic Wormhole pioneered the idea that short human-readable codes, PAKE, and direct file streams can replace cloud upload links. Lightning P2P keeps that spirit while targeting Windows users who want a graphical desktop app rather than a Python command line.",
       "Like Magic Wormhole, Lightning P2P never stores the file on a server. The sender keeps the file on disk, the receiver pulls it directly over QUIC, and the relay is only used when a direct path is blocked. Content is verified with BLAKE3 on the receiver before it is written to disk.",
       "Where Lightning P2P differs: the app is a native Windows installer with drag-and-drop, generates copyable tickets and QR codes, keeps a local transfer history, and ships with a signed updater. It is built on iroh and iroh-blobs, which are maintained Rust libraries for P2P QUIC transport and content-addressed blob transfer.",
-      "If you are comparing file transfer tools, also see the Lightning P2P benchmark plan, which lays out the test matrix for publishing honest speed comparisons between Lightning P2P, Magic Wormhole, LocalSend, PairDrop, Snapdrop, and cloud upload/download flows."
+      "If you are comparing file transfer tools, also see the Lightning P2P benchmark plan, which lays out the test matrix for publishing honest speed comparisons across cloud upload, browser transfer, LAN-only apps, and command-line baselines."
     ],
     "faqs": [
       {

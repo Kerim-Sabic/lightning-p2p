@@ -74,7 +74,7 @@ const benchmarkRows = [
   "Windows to Windows on the same LAN",
   "Windows to Windows across WAN with direct connectivity",
   "Windows to Windows across WAN through relay fallback",
-  "Comparison runs against LocalSend, PairDrop, Snapdrop, Magic Wormhole, and cloud upload/download flows",
+  "Comparison runs against cloud upload, browser transfer, OS nearby sharing, and LAN-only alternatives",
 ];
 
 const capabilityCards: Array<{
@@ -318,9 +318,10 @@ export function WebLandingPage() {
                 </p>
                 <p className="text-slate-300">
                   It works as an AirDrop alternative for Windows, a WeTransfer
-                  alternative without the cloud upload, and a Magic Wormhole
-                  alternative with a proper desktop GUI. MIT licensed on
-                  GitHub. Built with Rust, Tauri, iroh, and iroh-blobs.
+                  alternative without the cloud upload, and a no-terminal way
+                  to send files directly with a polished desktop GUI. MIT
+                  licensed on GitHub. Built with Rust, Tauri, iroh, and
+                  iroh-blobs.
                 </p>
               </div>
             </div>
@@ -693,7 +694,6 @@ export function WebLandingPage() {
                   .filter((p) =>
                     [
                       "/wetransfer-alternative",
-                      "/wormhole-alternative",
                       "/localsend-vs-lightning-p2p",
                       "/alternatives/airdrop-for-windows",
                     ].includes(p.path),
