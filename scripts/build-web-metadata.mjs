@@ -22,6 +22,7 @@ const releaseUrl = `${repoUrl}/releases/latest`;
 const exeDownloadUrl = `${repoUrl}/releases/latest/download/Lightning.P2P_${appVersion}_x64-setup.exe`;
 const msiDownloadUrl = `${repoUrl}/releases/latest/download/Lightning.P2P_${appVersion}_x64_en-US.msi`;
 const velopackDownloadUrl = `${repoUrl}/releases/latest/download/LightningP2P-win-Setup.exe`;
+const siteLogoUrl = `${siteUrl}/site-logo.png`;
 
 function escapeHtml(value) {
   return String(value)
@@ -141,7 +142,7 @@ function organizationJsonLd() {
     "@type": "Organization",
     name: "Lightning P2P",
     url: siteUrl,
-    logo: `${siteUrl}/og-image.png`,
+    logo: siteLogoUrl,
     sameAs: [repoUrl],
   });
 }

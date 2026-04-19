@@ -4,7 +4,10 @@ All notable changes to Lightning P2P are documented here. Format: [Keep a Change
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-04-19
+
 ### Added
+- Dark website logo asset from the new mark, plus updated favicon and Web App Manifest logo entries.
 - **Velopack installer** as a second official Windows install path alongside NSIS. Modern one-click flow, per-user install, delta updates. NSIS remains the default and continues to use `tauri-plugin-updater`; Velopack ships its own updater with its artifact.
 - **winget manifest workflow** (`.github/workflows/winget.yml`) auto-publishes to `microsoft/winget-pkgs` after each GitHub release. First submission is manual.
 - WiX `upgradeCode` GUID pinned in `tauri.conf.json` to avoid MSI upgrade-code collisions ([tauri#14968](https://github.com/tauri-apps/tauri/issues/14968)).

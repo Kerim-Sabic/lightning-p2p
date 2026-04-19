@@ -16,7 +16,7 @@
   type LucideIcon,
 } from "lucide-react";
 import packageJson from "../../package.json";
-import markUrl from "../assets/lightning-p2p-mark.png";
+import siteLogoUrl from "../assets/lightning-p2p-site-logo.png";
 import pages from "../content/web-pages.json";
 import { ComparisonTable } from "./landing/ComparisonTable";
 import { HowItWorks } from "./landing/HowItWorks";
@@ -160,9 +160,9 @@ export function WebLandingPage() {
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
           <a href="/" className="flex min-w-0 items-center gap-3">
             <img
-              src={markUrl}
+              src={siteLogoUrl}
               alt=""
-              className="h-9 w-9 shrink-0 rounded-[10px]"
+              className="h-9 w-9 shrink-0 rounded-[8px]"
             />
             <span className="truncate text-sm font-semibold tracking-[0.02em]">
               Lightning P2P
@@ -268,6 +268,11 @@ export function WebLandingPage() {
               </div>
             </div>
             <aside className="self-end border-l border-white/12 pl-5 text-sm leading-6 text-slate-300">
+              <img
+                src={siteLogoUrl}
+                alt="Lightning P2P dark logo"
+                className="mb-6 aspect-square w-40 rounded-[8px] border border-white/10 object-cover shadow-2xl shadow-black/40 sm:w-52"
+              />
               <p className="font-semibold text-white">Current launch target</p>
               <p className="mt-2">
                 Windows desktop transfers now. Netlify-hosted website now.
@@ -357,7 +362,7 @@ export function WebLandingPage() {
               </h2>
               <p className="mt-5 text-base leading-7 text-slate-300">
                 Three official install paths for Windows. Same signed binary
-                underneath â€” pick the flow you prefer. MSI and checksums are in
+                underneath - pick the flow you prefer. MSI and checksums are in
                 the release page for managed environments.
               </p>
             </div>
@@ -636,9 +641,9 @@ export function WebLandingPage() {
           <div>
             <a href="/" className="flex items-center gap-3">
               <img
-                src={markUrl}
+                src={siteLogoUrl}
                 alt=""
-                className="h-9 w-9 shrink-0 rounded-[10px]"
+                className="h-9 w-9 shrink-0 rounded-[8px]"
               />
               <span className="text-sm font-semibold text-white">
                 Lightning P2P

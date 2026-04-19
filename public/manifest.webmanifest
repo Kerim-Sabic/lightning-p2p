@@ -9,7 +9,13 @@
   "icons": [
     {
       "src": "/favicon.png",
-      "sizes": "128x128",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/site-logo.png",
+      "sizes": "1024x1024",
       "type": "image/png",
       "purpose": "any"
     },

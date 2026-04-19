@@ -94,9 +94,9 @@ Download the latest installer from [**GitHub Releases**](https://github.com/Keri
 
 | Installer | Description |
 |-----------|-------------|
-| [`Lightning.P2P_0.3.1_x64-setup.exe`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/Lightning.P2P_0.3.1_x64-setup.exe) | NSIS installer (recommended) — signed Tauri auto-updates, installs firewall rule |
+| [`Lightning.P2P_0.3.2_x64-setup.exe`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/Lightning.P2P_0.3.2_x64-setup.exe) | NSIS installer (recommended) — signed Tauri auto-updates, installs firewall rule |
 | [`LightningP2P-win-Setup.exe`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P-win-Setup.exe) | Velopack installer — modern one-click flow, delta updates, per-user install |
-| [`Lightning.P2P_0.3.1_x64_en-US.msi`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/Lightning.P2P_0.3.1_x64_en-US.msi) | MSI installer — for managed environments and Group Policy deployments |
+| [`Lightning.P2P_0.3.2_x64_en-US.msi`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/Lightning.P2P_0.3.2_x64_en-US.msi) | MSI installer — for managed environments and Group Policy deployments |
 | `winget install lightning-p2p` | Windows Package Manager (after the manifest lands in `microsoft/winget-pkgs`) |
 
 Same signed binary underneath all four — pick the install flow you prefer. The NSIS artifact is wired up to `tauri-plugin-updater` for background update checks; the Velopack artifact ships Velopack's own delta updater instead.
