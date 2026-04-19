@@ -159,9 +159,7 @@ jobs:
             throw "TAURI_SIGNING_PRIVATE_KEY is required for release builds so updater artifacts can be generated."
           }
 
-          $config = '{"bundle":{"createUpdaterArtifacts":true}}'
-          Write-Host "Signing key detected. Enabling updater artifacts."
-          "TAURI_CONFIG=$config" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host "Signing key detected. Release config will enable updater artifacts."
 
       - name: Build and create GitHub release
         uses: tauri-apps/tauri-action@v0.6.0
@@ -208,7 +206,7 @@ jobs:
           prerelease: false
           includeUpdaterJson: true
           updaterJsonPreferNsis: true
-          args: --target x86_64-pc-windows-msvc
+          args: --ci --target x86_64-pc-windows-msvc --config src-tauri/tauri.release.conf.json
 
       - name: Generate SHA256 checksums
         shell: pwsh
@@ -217,6 +215,7 @@ jobs:
           $files = Get-ChildItem -Path $bundleRoot -Recurse -File |
             Where-Object {
               $_.Extension -in ".exe", ".msi", ".sig" -or
+              $_.Extension -eq ".zip" -or
               $_.Name -like "latest*.json"
             } |
             Sort-Object Name
@@ -247,9 +246,12 @@ jobs:
           name: lightning-p2p-windows-release-bundle
           path: |
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
+            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.zip
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.sig
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
+            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.zip
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.sig
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/SHA256SUMS.txt
+            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/**/*.zip
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/**/*.sig
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/**/latest*.json
