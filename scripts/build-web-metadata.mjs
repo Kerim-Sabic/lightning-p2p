@@ -21,6 +21,7 @@ const repoUrl = "https://github.com/Kerim-Sabic/lightning-p2p";
 const releaseUrl = `${repoUrl}/releases/latest`;
 const exeDownloadUrl = `${repoUrl}/releases/latest/download/Lightning.P2P_${appVersion}_x64-setup.exe`;
 const msiDownloadUrl = `${repoUrl}/releases/latest/download/Lightning.P2P_${appVersion}_x64_en-US.msi`;
+const velopackDownloadUrl = `${repoUrl}/releases/latest/download/LightningP2P-win-Setup.exe`;
 
 function escapeHtml(value) {
   return String(value)
@@ -103,9 +104,10 @@ ${page.related
       <p>${escapeHtml(page.focus)}</p>
 ${body}
       <p>
-        Download the Windows <a href="${escapeHtml(exeDownloadUrl)}">EXE setup installer</a>
-        or <a href="${escapeHtml(msiDownloadUrl)}">MSI installer</a>. Release checksums and
-        signatures are available on <a href="${escapeHtml(releaseUrl)}">GitHub Releases</a>.
+        Download the Windows <a href="${escapeHtml(exeDownloadUrl)}">EXE setup installer</a>,
+        <a href="${escapeHtml(velopackDownloadUrl)}">Velopack one-click installer</a>, or
+        <a href="${escapeHtml(msiDownloadUrl)}">MSI installer</a>. Release checksums and signatures
+        are available on <a href="${escapeHtml(releaseUrl)}">GitHub Releases</a>.
       </p>${faqs}${related}
     </main>`;
 }
