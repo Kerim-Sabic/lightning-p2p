@@ -246,7 +246,8 @@ jobs:
             --packAuthors "Lightning P2P" `
             --icon "src-tauri/icons/icon.ico" `
             --outputDir "$releasesDir" `
-            --runtime "win-x64"
+            --runtime "win-x64" `
+            --noPortable
 
       - name: Generate SHA256 checksums
         shell: pwsh
@@ -255,6 +256,21 @@ jobs:
           $bundleRoot = Join-Path $releaseRoot "bundle"
           $velopackRoot = Join-Path $releaseRoot "velopack-releases"
           $checksumPath = Join-Path $bundleRoot "SHA256SUMS.txt"
+          $latestJsonPath = Join-Path $bundleRoot "latest.json"
+          $latestJsonUrl = "https://github.com/${{ github.repository }}/releases/download/$env:RELEASE_TAG/latest.json"
+
+          for ($attempt = 1; $attempt -le 5; $attempt++) {
+            try {
+              Invoke-WebRequest -Uri $latestJsonUrl -OutFile $latestJsonPath
+              break
+            } catch {
+              if ($attempt -eq 5) {
+                throw
+              }
+
+              Start-Sleep -Seconds 5
+            }
+          }
 
           $files = @()
           foreach ($root in @($bundleRoot, $velopackRoot)) {
