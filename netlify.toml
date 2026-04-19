@@ -32,9 +32,33 @@
   status = 200
 
 [[redirects]]
-  from = "/*"
-  to = "/index.html"
+  from = "/wormhole-alternative"
+  to = "/wormhole-alternative/index.html"
   status = 200
+
+[[redirects]]
+  from = "/wetransfer-alternative"
+  to = "/wetransfer-alternative/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/localsend-vs-lightning-p2p"
+  to = "/localsend-vs-lightning-p2p/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/how-to-send-large-files"
+  to = "/how-to-send-large-files/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/send-files-between-windows-computers"
+  to = "/send-files-between-windows-computers/index.html"
+  status = 200
+
+# No SPA catch-all: every real route has an explicit rewrite above, so unknown
+# paths fall through to Netlify's default /404.html handler with a real 404
+# status. This keeps Google and Bing from indexing fabricated pages.
 
 [[headers]]
   for = "/*"
@@ -52,3 +76,15 @@
   for = "/*.html"
   [headers.values]
     Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/llms.txt"
+  [headers.values]
+    Content-Type = "text/plain; charset=utf-8"
+    Cache-Control = "public, max-age=3600"
+
+[[headers]]
+  for = "/llms-full.txt"
+  [headers.values]
+    Content-Type = "text/plain; charset=utf-8"
+    Cache-Control = "public, max-age=3600"

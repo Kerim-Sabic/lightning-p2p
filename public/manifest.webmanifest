@@ -1,0 +1,23 @@
+{
+  "name": "Lightning P2P",
+  "short_name": "Lightning P2P",
+  "description": "Direct peer-to-peer file transfer for Windows. Free, open-source, no account.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#08120f",
+  "theme_color": "#08120f",
+  "icons": [
+    {
+      "src": "/favicon.png",
+      "sizes": "128x128",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/og-image.png",
+      "sizes": "1280x640",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

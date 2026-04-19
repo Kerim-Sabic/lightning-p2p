@@ -1,0 +1,51 @@
+# Lightning P2P
+
+> Lightning P2P is a free, open-source Windows desktop app for direct peer-to-peer
+> file transfer over QUIC with BLAKE3-verified streaming. No accounts, no cloud
+> storage, no file size caps. MIT licensed. Built with Rust, Tauri, iroh, and
+> iroh-blobs.
+
+## What it is
+
+- A desktop app for sending files directly from one device to another.
+- Uses the iroh library for QUIC transport with direct paths first and relay-assisted
+  fallback when NAT or firewall rules block the direct path.
+- Uses iroh-blobs for content-addressed, BLAKE3-verified streaming, so the receiver
+  validates every byte as it is written to disk.
+- Ships signed Windows installers (NSIS and MSI) with a signed auto-updater.
+- MIT licensed. Source at https://github.com/Kerim-Sabic/lightning-p2p.
+
+## What it is not
+
+- Not a cloud file host. Files are never uploaded to a third-party storage bucket.
+- Not a WebRTC-based app. Transport is QUIC via iroh, not WebRTC data channels.
+- Not a WeTransfer-style hosted link service. Tickets resolve only while the sender
+  is online.
+- Not account-based. There is no sign-in, no email capture, no paid tier.
+
+## How it compares
+
+- Magic Wormhole: similar direct-transfer model, Lightning P2P adds a Windows GUI,
+  drag-and-drop, QR tickets, and a transfer history.
+- LocalSend: LAN-focused, cross-platform. Lightning P2P is Windows-first today but
+  works across LAN and WAN (via iroh relay fallback).
+- WeTransfer: Lightning P2P does not upload to a server; transfers stream directly.
+- Snapdrop / PairDrop: browser-only, LAN-only; Lightning P2P is a native Windows app
+  with WAN support.
+
+## Documentation
+
+- [Home](https://lightning-p2p.netlify.app/)
+- [Download](https://lightning-p2p.netlify.app/download)
+- [Security model](https://lightning-p2p.netlify.app/security)
+- [Benchmarks methodology](https://lightning-p2p.netlify.app/benchmarks)
+- [How to send large files](https://lightning-p2p.netlify.app/how-to-send-large-files)
+- [WeTransfer alternative](https://lightning-p2p.netlify.app/wetransfer-alternative)
+- [Magic Wormhole alternative](https://lightning-p2p.netlify.app/wormhole-alternative)
+- [LocalSend comparison](https://lightning-p2p.netlify.app/localsend-vs-lightning-p2p)
+- [AirDrop for Windows](https://lightning-p2p.netlify.app/alternatives/airdrop-for-windows)
+- [Send files between Windows computers](https://lightning-p2p.netlify.app/send-files-between-windows-computers)
+
+## Full context
+
+- [llms-full.txt](https://lightning-p2p.netlify.app/llms-full.txt)

@@ -1,8 +1,14 @@
-# CLAUDE.md — FastDrop P2P File Transfer
+# CLAUDE.md — Lightning P2P (internal crate name: `fastdrop`)
 
 ## Project Identity
-FastDrop is a P2P file sharing application built for maximum transfer speed.
+Lightning P2P is a P2P file sharing application built for maximum transfer speed.
 Rust backend (iroh + Tauri v2) with React/TypeScript frontend.
+
+**Naming note:** the public product name is **Lightning P2P**. The internal Rust
+crate is still named `fastdrop` (see `src-tauri/Cargo.toml` and the output binary
+`fastdrop.exe`). Both names refer to the same project. Do not rename the crate
+unless explicitly asked — binary path and historical `FASTDROP_PROFILE` env var
+still use `fastdrop`.
 
 ## Architecture Invariants — NEVER VIOLATE
 - ALL networking goes through iroh. No raw sockets, no WebRTC, no HTTP file transfer.

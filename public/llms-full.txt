@@ -1,0 +1,145 @@
+# Lightning P2P - Full Context
+
+Lightning P2P is a free, open-source, MIT-licensed Windows desktop application for
+direct peer-to-peer file transfer. It is designed to replace cloud-upload file
+transfer workflows (WeTransfer, Dropbox links, email attachments) with direct
+encrypted streams between devices.
+
+Project repository: https://github.com/Kerim-Sabic/lightning-p2p
+Public website: https://lightning-p2p.netlify.app
+License: MIT
+
+## Core technology
+
+- **Transport**: QUIC with TLS 1.3 via the `iroh` Rust library. Direct peer-to-peer
+  connections are attempted first; when NAT or firewall rules block the direct path,
+  iroh's relay network provides relay-assisted connectivity. Files are never stored
+  on a relay server; the relay only helps the two peers reach each other.
+- **Content addressing and integrity**: `iroh-blobs` for BLAKE3-verified streaming.
+  The receiver verifies content addresses as bytes are written to disk. If the bytes
+  do not match the expected BLAKE3 hash, the transfer fails.
+- **Identity**: Each install has an Ed25519 keypair stored in the OS keychain via
+  the `keyring` crate.
+- **Discovery**:
+  - LAN discovery: mDNS via iroh's `discovery_local_network` (UDP 5353).
+  - WAN discovery: iroh's default discovery network.
+  - The NSIS installer registers a Windows Firewall rule on UDP 5353 so nearby
+    discovery works out of the box.
+- **Storage**: Local transfer history via `sled` embedded KV store. No server-side
+  database. No telemetry.
+- **App shell**: Tauri v2 desktop app. Rust backend, React 19 + TypeScript frontend.
+
+## What the app does
+
+1. The sender drags files or a folder into the Send view.
+2. The app creates a BlobTicket: a short string (also rendered as a QR code) that
+   contains the sender's node ID, the content hashes, and relay hints.
+3. The receiver pastes the ticket or scans the QR. The app pulls the file directly
+   from the sender's device over QUIC.
+4. Every byte is verified with BLAKE3 as it is written to the receiver's disk.
+5. Both sides get a content hash confirming byte-for-byte integrity.
+
+Deep links of the form `lightning-p2p://receive?t=<ticket>` open the app straight
+to the receive-confirm screen. The receive view also auto-detects tickets on the
+clipboard on focus.
+
+## What it is not
+
+- Not a cloud file host. No file is ever uploaded to a storage bucket.
+- Not an account-based service. No sign-in, no email capture, no paid tier.
+- Not a WebRTC app. Transport is QUIC via iroh, not WebRTC data channels.
+- Not a BitTorrent client, not IPFS, not Syncthing. Different protocols, different
+  use cases.
+- Not cross-platform yet. Windows-first. A public mobile RFC covers iOS and Android
+  plans once the Windows engine is stable.
+
+## Comparisons
+
+### vs Magic Wormhole
+
+- Same spirit: direct transfer, no intermediate server storing files.
+- Wormhole is a Python CLI with short human-readable codes; Lightning P2P is a
+  Windows desktop app with drag-and-drop, QR tickets, and a transfer history.
+- Wormhole codes and Lightning P2P tickets are not interchangeable.
+
+### vs LocalSend
+
+- LocalSend is LAN-first and cross-platform (Windows, macOS, Linux, Android, iOS).
+- Lightning P2P is Windows-first today and supports both LAN and WAN through iroh.
+- LocalSend uses HTTPS on the LAN; Lightning P2P uses QUIC with TLS 1.3 end to end
+  and BLAKE3-verified streaming through iroh-blobs.
+
+### vs WeTransfer / Dropbox Transfer / cloud-upload links
+
+- WeTransfer uploads your file to its servers; recipients download from a link.
+- Lightning P2P keeps the file on your machine; the recipient streams it directly.
+- No account, no size cap, no retention window, no paid tier.
+
+### vs Snapdrop / PairDrop
+
+- Snapdrop and PairDrop are browser-only, LAN-only web apps.
+- Lightning P2P is a native Windows desktop app and works on both LAN and WAN.
+
+## Typical use cases
+
+- Sending large media files (raw video, RAW photo shoots, design assets).
+- Sending VM images, database dumps, or logs between two developer machines.
+- Moving files between two of your own devices without a cloud round trip.
+- Transferring files on a slow or metered uplink where a cloud upload would be
+  slower than a direct peer stream to someone on the same ISP or LAN.
+
+## Installation
+
+Windows 10 or Windows 11 x64:
+
+- NSIS installer: https://github.com/Kerim-Sabic/lightning-p2p/releases/latest
+- MSI installer: available on the same releases page.
+- Installs under the current user profile; no admin elevation prompt on most
+  systems.
+
+## Security summary
+
+- Transport: QUIC TLS 1.3 via iroh.
+- Integrity: BLAKE3 content addresses verified on every write.
+- Releases: signed; updater metadata checked against the release's public key.
+- Telemetry: none.
+- Keys: Ed25519 identity in OS keychain.
+
+## FAQ
+
+Q: What is the largest file Lightning P2P can send?
+A: No software-imposed limit. Streams directly from disk without buffering the full
+file in memory. The bound is disk, network, and how long you leave peers online.
+
+Q: Does it work across different networks, not just LAN?
+A: Yes. iroh tries direct QUIC paths first and falls back to relay-assisted
+connectivity when NAT or firewall rules block the direct path.
+
+Q: Does relay fallback mean my files are stored on a server?
+A: No. Relay fallback helps peers reach each other. Transfers remain encrypted end
+to end and are not stored on any hosted server.
+
+Q: Do I need an account?
+A: No. There is no sign-in, no email capture, no paid tier.
+
+Q: Is it open source?
+A: Yes, MIT licensed, with public releases, checksums, and signatures.
+
+Q: Is it available on macOS, Linux, iOS, Android?
+A: Not yet. Windows is the public target today. A public mobile RFC outlines iOS
+and Android plans.
+
+## Useful links
+
+- Home: https://lightning-p2p.netlify.app/
+- Download: https://lightning-p2p.netlify.app/download
+- Security: https://lightning-p2p.netlify.app/security
+- Benchmarks methodology: https://lightning-p2p.netlify.app/benchmarks
+- How to send large files: https://lightning-p2p.netlify.app/how-to-send-large-files
+- WeTransfer alternative: https://lightning-p2p.netlify.app/wetransfer-alternative
+- Magic Wormhole alternative: https://lightning-p2p.netlify.app/wormhole-alternative
+- LocalSend comparison: https://lightning-p2p.netlify.app/localsend-vs-lightning-p2p
+- AirDrop for Windows: https://lightning-p2p.netlify.app/alternatives/airdrop-for-windows
+- Windows-to-Windows transfers: https://lightning-p2p.netlify.app/send-files-between-windows-computers
+- Repository: https://github.com/Kerim-Sabic/lightning-p2p
+- License: https://github.com/Kerim-Sabic/lightning-p2p/blob/main/LICENSE

@@ -17,6 +17,8 @@
 **Lightning P2P** is a desktop peer-to-peer file transfer app built with Rust, iroh, and Tauri v2.<br />
 No cloud. No accounts. No file size limits. Just direct, encrypted, verified transfers over LAN or the public internet.
 
+<sub>Looking for an <strong>AirDrop alternative for Windows</strong>, a <strong>WeTransfer alternative</strong>, a <strong>Magic Wormhole alternative</strong> with a GUI, or a <strong>LocalSend alternative</strong> that works across WAN — Lightning P2P covers those use cases.</sub>
+
 <br />
 
 [Website](https://lightning-p2p.netlify.app) &nbsp;&middot;&nbsp; [Download for Windows](#download) &nbsp;&middot;&nbsp; [Benchmarks](#benchmark-methodology) &nbsp;&middot;&nbsp; [Security](#security) &nbsp;&middot;&nbsp; [Contributing](#contributing)
@@ -35,6 +37,25 @@ No cloud. No accounts. No file size limits. Just direct, encrypted, verified tra
 - **Public website:** Netlify-ready landing and SEO pages for download, security, benchmarks, and AirDrop-for-Windows searches.
 - **Mobile/browser transfers:** planned, not shipped yet. The website works on mobile, but real transfers currently require the desktop app.
 - **Speed claims:** benchmark-backed only. The app is built for high throughput, but public "fastest" claims should reference repeatable results.
+
+## Why Use Lightning P2P
+
+- **No account, no sign-in, no email capture.** Install and send.
+- **No file size cap.** Streams directly from disk; not buffered in memory.
+- **No cloud upload.** The file never leaves your machine for a third-party bucket.
+- **Verified bytes.** BLAKE3 content addressing means every byte is checked on the receiver before it lands on disk.
+- **Works across WAN, not just LAN.** Direct QUIC when reachable; iroh relay-assisted fallback when NAT or firewalls block the direct path.
+- **MIT-licensed, auditable, Rust-native.** No proprietary SDK, no closed transport stack.
+
+## What Lightning P2P Is Not
+
+To prevent disambiguation mistakes:
+
+- **Not a cloud file host.** No storage bucket, no retention window, no public link.
+- **Not a WebRTC app.** Transport is QUIC via iroh, not WebRTC data channels.
+- **Not an account-based service.** No paid tier, no sign-up, no email capture.
+- **Not a BitTorrent client, IPFS node, or Syncthing replacement.** Different protocols and use cases.
+- **Not cross-platform yet.** Windows-first; mobile RFC published, iOS and Android planned.
 
 ## Why Lightning P2P?
 
@@ -63,7 +84,7 @@ Most file sharing tools route your data through the cloud, require accounts, or 
 - **Live progress tracking** -- speed, ETA, and progress bar updated in real-time
 - **Transfer history** with one-click re-sharing of previously sent content
 - **Auto-updates** with signed releases delivered through GitHub Releases
-- **Native Windows installer** -- NSIS and MSI bundles with embedded WebView2 and automatic firewall rule setup
+- **Four Windows install paths** -- NSIS (signed auto-updates), Velopack (modern one-click + delta updates), MSI (managed deployments), and winget
 
 ## Download
 
@@ -73,8 +94,12 @@ Download the latest installer from [**GitHub Releases**](https://github.com/Keri
 
 | Installer | Description |
 |-----------|-------------|
-| [`Lightning.P2P_0.3.1_x64-setup.exe`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/Lightning.P2P_0.3.1_x64-setup.exe) | NSIS installer (recommended) |
-| [`Lightning.P2P_0.3.1_x64_en-US.msi`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/Lightning.P2P_0.3.1_x64_en-US.msi) | MSI installer |
+| [`Lightning.P2P_0.3.1_x64-setup.exe`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/Lightning.P2P_0.3.1_x64-setup.exe) | NSIS installer (recommended) — signed Tauri auto-updates, installs firewall rule |
+| [`LightningP2P-win-Setup.exe`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P-win-Setup.exe) | Velopack installer — modern one-click flow, delta updates, per-user install |
+| [`Lightning.P2P_0.3.1_x64_en-US.msi`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/Lightning.P2P_0.3.1_x64_en-US.msi) | MSI installer — for managed environments and Group Policy deployments |
+| `winget install lightning-p2p` | Windows Package Manager (after the manifest lands in `microsoft/winget-pkgs`) |
+
+Same signed binary underneath all four — pick the install flow you prefer. The NSIS artifact is wired up to `tauri-plugin-updater` for background update checks; the Velopack artifact ships Velopack's own delta updater instead.
 
 Verify the SHA256 checksum from the release notes before installing if you want to confirm the binary you downloaded.
 
@@ -216,6 +241,8 @@ pnpm build:windows
 
 Output: `src-tauri/target/x86_64-pc-windows-msvc/release/bundle/`
 
+Release and package-manager operations are tracked in [docs/release-operations.md](docs/release-operations.md).
+
 ## Website and Netlify
 
 The browser build is a public website and download funnel, not the transfer engine. Desktop/Tauri runtime still opens the app shell; normal browsers open the SEO landing experience.
@@ -229,18 +256,23 @@ The browser build is a public website and download funnel, not the transfer engi
 5. Keep `SITE_URL=https://lightning-p2p.netlify.app` until a custom domain is connected.
 6. After deploy, submit `https://lightning-p2p.netlify.app/sitemap.xml` in Google Search Console.
 
-The checked-in `netlify.toml` defines the build command, publish directory, Node 22, SPA fallback rewrite, cache headers, and crawlable SEO metadata output.
+The checked-in `netlify.toml` defines the build command, publish directory, Node 22, explicit route rewrites, cache headers, and crawlable SEO metadata output.
 
 ### SEO pages
 
-- `/`
-- `/download`
-- `/security`
-- `/benchmarks`
-- `/alternatives/airdrop-for-windows`
-- `/free-p2p-file-transfer`
+- `/` — home
+- `/download` — Windows installer
+- `/security` — private-by-design model
+- `/benchmarks` — methodology
+- `/alternatives/airdrop-for-windows` — AirDrop for Windows
+- `/free-p2p-file-transfer` — free P2P transfer
+- `/wormhole-alternative` — Magic Wormhole alternative
+- `/wetransfer-alternative` — WeTransfer alternative
+- `/localsend-vs-lightning-p2p` — LocalSend comparison
+- `/how-to-send-large-files` — how-to guide (with HowTo schema)
+- `/send-files-between-windows-computers` — Windows-to-Windows transfer
 
-Each page has a unique title, description, canonical URL, static fallback content, Open Graph/Twitter metadata, and SoftwareApplication JSON-LD.
+Each page has a unique title, description, canonical URL, static fallback content, Open Graph/Twitter metadata, and relevant JSON-LD (`SoftwareApplication` on every page; `WebSite` and `Organization` on `/`; `BreadcrumbList` on non-home pages; `FAQPage` where applicable; `HowTo` on `/` and `/how-to-send-large-files`). `llms.txt` and `llms-full.txt` at the site root expose the project model to LLM crawlers.
 
 ## How It Works
 
@@ -313,7 +345,7 @@ Planned comparison set:
 ## GitHub Growth Checklist
 
 - Repository homepage is set to `https://lightning-p2p.netlify.app`.
-- Repository topics: `p2p`, `peer-to-peer`, `file-transfer`, `airdrop-alternative`, `tauri`, `rust`, `iroh`, `quic`, `blake3`, `windows`, `privacy`, `end-to-end-encryption`, `open-source`, `react`, `typescript`.
+- Repository topics: `p2p`, `peer-to-peer`, `file-transfer`, `airdrop-alternative`, `wetransfer-alternative`, `magic-wormhole-alternative`, `localsend-alternative`, `tauri`, `rust`, `iroh`, `quic`, `blake3`, `windows`, `privacy`, `end-to-end-encryption`, `open-source`, `react`, `typescript`.
 - Upload `public/og-image.png` as the GitHub social preview image from repository settings.
 - Pin launch issues for benchmarks, mobile/browser transfer architecture, Linux/macOS packaging, and UX screenshots.
 - Launch only with honest claims: free, open-source, no account, direct-first transfer, signed Windows release, benchmark methodology published.
@@ -355,7 +387,7 @@ lightning-p2p/
 | **Styling** | Tailwind CSS v4, Framer Motion |
 | **Storage** | sled embedded database |
 | **Security** | QUIC TLS 1.3, Ed25519 keys in OS keychain |
-| **Packaging** | NSIS + MSI installers, signed auto-updates |
+| **Packaging** | NSIS, Velopack, MSI, winget — signed auto-updates |
 
 ## Development
 

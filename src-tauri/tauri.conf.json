@@ -60,6 +60,7 @@
         }
       },
       "wix": {
+        "upgradeCode": "4f6a7b2c-3d8e-5f1a-9c2b-7e4d6a8b1c3f",
         "bannerPath": "icons/installer/wix-banner.bmp",
         "dialogImagePath": "icons/installer/wix-dialog.bmp"
       }

@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#08120f" />
+    <meta name="robots" content="noindex, follow" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="shortcut icon" href="/favicon.ico" />
+    <link rel="apple-touch-icon" href="/favicon.png" />
+    <title>Page not found - Lightning P2P</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: #08120f;
+        color: #f1f5f4;
+        font-family:
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          "Segoe UI",
+          Roboto,
+          "Helvetica Neue",
+          Arial,
+          sans-serif;
+        min-height: 100vh;
+      }
+      body {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem;
+        background:
+          radial-gradient(
+            1200px circle at 20% 10%,
+            rgba(16, 185, 129, 0.08),
+            transparent 60%
+          ),
+          radial-gradient(
+            800px circle at 80% 90%,
+            rgba(16, 185, 129, 0.06),
+            transparent 60%
+          ),
+          #08120f;
+      }
+      main {
+        max-width: 640px;
+        text-align: left;
+      }
+      .eyebrow {
+        font-size: 0.75rem;
+        font-weight: 600;
+        letter-spacing: 0.32em;
+        text-transform: uppercase;
+        color: #6ee7b7;
+        margin: 0;
+      }
+      h1 {
+        font-size: clamp(2.25rem, 5vw, 3.25rem);
+        font-weight: 600;
+        line-height: 1.05;
+        margin: 1rem 0 0.75rem;
+        color: #ffffff;
+      }
+      p {
+        line-height: 1.7;
+        color: #cbd5d1;
+        font-size: 1rem;
+        margin: 0.5rem 0;
+      }
+      ul {
+        margin: 1.5rem 0 0;
+        padding: 0;
+        list-style: none;
+        display: grid;
+        gap: 0.5rem;
+      }
+      li a {
+        display: inline-block;
+        color: #f1f5f4;
+        text-decoration: none;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+        padding: 0.25rem 0;
+        transition: border-color 0.15s ease;
+      }
+      li a:hover {
+        border-color: #6ee7b7;
+      }
+      .cta {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-top: 1.5rem;
+        padding: 0.75rem 1.25rem;
+        background: #6ee7b7;
+        color: #052e1a;
+        font-weight: 600;
+        border-radius: 999px;
+        text-decoration: none;
+      }
+      .cta:hover {
+        background: #86efac;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p class="eyebrow">404</p>
+      <h1>That page is not on the map.</h1>
+      <p>
+        We could not find the page you asked for. It may have moved, or the
+        link may have been typed incorrectly. Everything still works -
+        transfers do not touch this page.
+      </p>
+      <a class="cta" href="/">Return to the home page</a>
+      <ul>
+        <li><a href="/download">Download Lightning P2P for Windows</a></li>
+        <li><a href="/how-to-send-large-files">How to send large files</a></li>
+        <li><a href="/security">Security model</a></li>
+        <li><a href="/benchmarks">Benchmark methodology</a></li>
+        <li>
+          <a href="/wetransfer-alternative">A WeTransfer alternative</a>
+        </li>
+        <li>
+          <a href="/localsend-vs-lightning-p2p">LocalSend vs Lightning P2P</a>
+        </li>
+      </ul>
+    </main>
+  </body>
+</html>

@@ -178,8 +178,10 @@ jobs:
 
             | File | Description |
             |------|-------------|
-            | `Lightning.P2P_${{ env.APP_VERSION }}_x64-setup.exe` | Windows NSIS installer (recommended) |
-            | `Lightning.P2P_${{ env.APP_VERSION }}_x64_en-US.msi` | Windows MSI installer |
+            | `Lightning.P2P_${{ env.APP_VERSION }}_x64-setup.exe` | Windows NSIS installer (signed auto-updates via Tauri updater) |
+            | `LightningP2P-win-Setup.exe` | Velopack installer (one-click, Discord-style delta updates) |
+            | `Lightning.P2P_${{ env.APP_VERSION }}_x64_en-US.msi` | Windows MSI installer (managed environments) |
+            | `winget install lightning-p2p` | winget package (after manifest lands in `microsoft/winget-pkgs`) |
 
             SHA256 checksums are published alongside the installers.
 
@@ -208,18 +210,65 @@ jobs:
           updaterJsonPreferNsis: true
           args: --ci --target x86_64-pc-windows-msvc --config src-tauri/tauri.release.conf.json
 
+      - name: Setup .NET for Velopack
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Install Velopack CLI
+        shell: pwsh
+        run: dotnet tool install -g vpk
+
+      - name: Pack Velopack installer
+        shell: pwsh
+        run: |
+          $releaseRoot = "src-tauri/target/x86_64-pc-windows-msvc/release"
+          $stageDir = Join-Path $releaseRoot "velopack-stage"
+          $releasesDir = Join-Path $releaseRoot "velopack-releases"
+
+          New-Item -ItemType Directory -Force -Path $stageDir | Out-Null
+          New-Item -ItemType Directory -Force -Path $releasesDir | Out-Null
+
+          Copy-Item -Path (Join-Path $releaseRoot "fastdrop.exe") -Destination $stageDir -Force
+          $webView = Join-Path $releaseRoot "WebView2Loader.dll"
+          if (Test-Path $webView) {
+            Copy-Item -Path $webView -Destination $stageDir -Force
+          }
+          Copy-Item -Path "scripts/velopack-post-install.ps1" -Destination $stageDir -Force
+          Copy-Item -Path "scripts/velopack-post-uninstall.ps1" -Destination $stageDir -Force
+
+          vpk pack `
+            --packId "LightningP2P" `
+            --packVersion "$env:APP_VERSION" `
+            --packDir "$stageDir" `
+            --mainExe "fastdrop.exe" `
+            --packTitle "Lightning P2P" `
+            --packAuthors "Lightning P2P" `
+            --icon "src-tauri/icons/icon.ico" `
+            --outputDir "$releasesDir" `
+            --runtime "win-x64"
+
       - name: Generate SHA256 checksums
         shell: pwsh
         run: |
-          $bundleRoot = "src-tauri/target/x86_64-pc-windows-msvc/release/bundle"
-          $files = Get-ChildItem -Path $bundleRoot -Recurse -File |
-            Where-Object {
-              $_.Extension -in ".exe", ".msi", ".sig" -or
-              $_.Extension -eq ".zip" -or
-              $_.Name -like "latest*.json"
-            } |
-            Sort-Object Name
+          $releaseRoot = "src-tauri/target/x86_64-pc-windows-msvc/release"
+          $bundleRoot = Join-Path $releaseRoot "bundle"
+          $velopackRoot = Join-Path $releaseRoot "velopack-releases"
+          $checksumPath = Join-Path $bundleRoot "SHA256SUMS.txt"
 
+          $files = @()
+          foreach ($root in @($bundleRoot, $velopackRoot)) {
+            if (Test-Path $root) {
+              $files += Get-ChildItem -Path $root -Recurse -File |
+                Where-Object {
+                  $_.Extension -in ".exe", ".msi", ".sig", ".zip", ".nupkg" -or
+                  $_.Name -like "latest*.json" -or
+                  $_.Name -eq "RELEASES"
+                }
+            }
+          }
+
+          $files = $files | Sort-Object Name
           if (-not $files) {
             throw "No release files found for checksum generation."
           }
@@ -230,15 +279,18 @@ jobs:
             "$hash  $assetName"
           }
 
-          $checksumPath = Join-Path $bundleRoot "SHA256SUMS.txt"
           $lines | Set-Content -Path $checksumPath -Encoding utf8
           Write-Host "Checksums written to $checksumPath"
 
-      - name: Upload release checksums
+      - name: Upload Velopack installer and checksums to release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
-          files: src-tauri/target/x86_64-pc-windows-msvc/release/bundle/SHA256SUMS.txt
+          files: |
+            src-tauri/target/x86_64-pc-windows-msvc/release/velopack-releases/*-Setup.exe
+            src-tauri/target/x86_64-pc-windows-msvc/release/velopack-releases/*-full.nupkg
+            src-tauri/target/x86_64-pc-windows-msvc/release/velopack-releases/RELEASES
+            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/SHA256SUMS.txt
 
       - name: Upload release bundle artifact
         uses: actions/upload-artifact@v4
@@ -255,3 +307,6 @@ jobs:
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/**/*.zip
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/**/*.sig
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/**/latest*.json
+            src-tauri/target/x86_64-pc-windows-msvc/release/velopack-releases/*-Setup.exe
+            src-tauri/target/x86_64-pc-windows-msvc/release/velopack-releases/*-full.nupkg
+            src-tauri/target/x86_64-pc-windows-msvc/release/velopack-releases/RELEASES

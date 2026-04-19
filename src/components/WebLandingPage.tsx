@@ -1,4 +1,4 @@
-import {
+﻿import {
   ArrowRight,
   BadgeCheck,
   BarChart3,
@@ -7,15 +7,24 @@ import {
   Globe2,
   LockKeyhole,
   Network,
+  Plus,
   RadioTower,
   ShieldCheck,
   Sparkles,
+  Terminal,
   Zap,
   type LucideIcon,
 } from "lucide-react";
 import packageJson from "../../package.json";
 import markUrl from "../assets/lightning-p2p-mark.png";
 import pages from "../content/web-pages.json";
+import { ComparisonTable } from "./landing/ComparisonTable";
+import { HowItWorks } from "./landing/HowItWorks";
+
+interface Faq {
+  q: string;
+  a: string;
+}
 
 interface WebPage {
   path: string;
@@ -26,6 +35,11 @@ interface WebPage {
   heading: string;
   intro: string;
   focus: string;
+  inNav?: boolean;
+  priority?: string;
+  related?: string[];
+  body?: string[];
+  faqs?: Faq[];
 }
 
 const SITE_URL = "https://lightning-p2p.netlify.app";
@@ -33,7 +47,9 @@ const APP_VERSION = packageJson.version;
 const RELEASE_URL = "https://github.com/Kerim-Sabic/lightning-p2p/releases/latest";
 const EXE_DOWNLOAD_URL = `https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/Lightning.P2P_${APP_VERSION}_x64-setup.exe`;
 const MSI_DOWNLOAD_URL = `https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/Lightning.P2P_${APP_VERSION}_x64_en-US.msi`;
+const VELOPACK_DOWNLOAD_URL = `https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P-win-Setup.exe`;
 const REPO_URL = "https://github.com/Kerim-Sabic/lightning-p2p";
+const GH_STARS_BADGE = `https://img.shields.io/github/stars/Kerim-Sabic/lightning-p2p?style=for-the-badge&logo=github&color=10B981&labelColor=08120f`;
 const webPages = pages as WebPage[];
 
 const proofPoints = [
@@ -88,26 +104,22 @@ const capabilityCards: Array<{
   },
 ];
 
-const faqs = [
+const fallbackFaqs: Faq[] = [
   {
-    question: "Can I use Lightning P2P in a mobile browser today?",
-    answer:
-      "The public website works on mobile, but real transfers currently require the Windows desktop app. Browser and native mobile transfer support are planned as separate workstreams.",
+    q: "Can I use Lightning P2P in a mobile browser today?",
+    a: "The public website works on mobile, but real transfers currently require the Windows desktop app. Browser and native mobile transfer support are planned as separate workstreams.",
   },
   {
-    question: "Why not promise the fastest transfer app immediately?",
-    answer:
-      "The app is designed for high-throughput P2P transfer, but public fastest claims should be backed by repeatable tests with hardware, network route, file size, and version details.",
+    q: "Why not promise the fastest transfer app immediately?",
+    a: "The app is designed for high-throughput P2P transfer, but public fastest claims should be backed by repeatable tests with hardware, network route, file size, and version details.",
   },
   {
-    question: "Does relay fallback mean my files are stored on a server?",
-    answer:
-      "No. Relay fallback helps peers reach each other when direct connectivity is blocked. Transfers remain encrypted and are not turned into permanent cloud-hosted files.",
+    q: "Does relay fallback mean my files are stored on a server?",
+    a: "No. Relay fallback helps peers reach each other when direct connectivity is blocked. Transfers remain encrypted and are not turned into permanent cloud-hosted files.",
   },
   {
-    question: "Is the project open source?",
-    answer:
-      "Yes. The app is MIT licensed and built with Rust, Tauri, React, TypeScript, iroh, and iroh-blobs on GitHub.",
+    q: "Is the project open source?",
+    a: "Yes. The app is MIT licensed and built with Rust, Tauri, React, TypeScript, iroh, and iroh-blobs on GitHub.",
   },
 ];
 
@@ -130,9 +142,17 @@ function navClass(active: boolean): string {
   }`;
 }
 
+function statCardClass(): string {
+  return "relative overflow-hidden rounded-[10px] border border-white/10 bg-white/[0.03] px-5 py-6 backdrop-blur-sm transition-colors hover:border-emerald-300/25 hover:bg-white/[0.05]";
+}
+
 export function WebLandingPage() {
   const page = currentPage();
   const canonicalUrl = `${SITE_URL}${page.path === "/" ? "" : page.path}`;
+  const homePage = webPages.find((p) => p.path === "/") ?? page;
+  const faqs = page.faqs ?? homePage.faqs ?? fallbackFaqs;
+  const isHome = page.path === "/";
+  const navPages = webPages.filter((p) => p.inNav);
 
   return (
     <div className="min-h-screen bg-[#08120f] text-white">
@@ -149,7 +169,7 @@ export function WebLandingPage() {
             </span>
           </a>
           <nav className="hidden items-center gap-1 lg:flex">
-            {webPages.slice(0, 4).map((item) => (
+            {navPages.map((item) => (
               <a
                 key={item.path}
                 href={item.path}
@@ -172,25 +192,50 @@ export function WebLandingPage() {
               className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-950 transition-colors hover:bg-emerald-100"
             >
               <Download className="h-4 w-4" />
-              EXE
+              <span className="hidden sm:inline">Download</span>
+              <span className="sm:hidden">EXE</span>
             </a>
           </div>
         </div>
       </header>
 
       <main>
-        <section
-          className="relative flex min-h-[92vh] items-end overflow-hidden bg-cover bg-center pt-24"
-          style={{ backgroundImage: "url('/web-hero.png')" }}
-        >
-          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(8,18,15,0.96)_0%,rgba(8,18,15,0.76)_45%,rgba(8,18,15,0.42)_100%)]" />
-          <div className="relative mx-auto grid w-full max-w-7xl gap-10 px-4 pb-12 sm:px-6 lg:grid-cols-[minmax(0,0.92fr)_minmax(320px,0.58fr)] lg:pb-16">
+        <section className="relative flex min-h-[92vh] items-end overflow-hidden pt-24">
+          <div className="absolute inset-0 bg-gradient-to-br from-[#06110d] via-[#08120f] to-[#041b14]" />
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 bg-[radial-gradient(1200px_circle_at_18%_10%,rgba(16,185,129,0.18),transparent_55%),radial-gradient(900px_circle_at_82%_92%,rgba(16,185,129,0.12),transparent_55%)]"
+          />
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 bg-center bg-no-repeat opacity-25 mix-blend-screen [background-image:url('/web-hero.png')] [background-size:cover]"
+          />
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 opacity-[0.035]"
+            style={{
+              backgroundImage:
+                "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>\")",
+            }}
+          />
+          <div className="relative mx-auto grid w-full max-w-7xl gap-10 px-4 pb-14 sm:px-6 lg:grid-cols-[minmax(0,0.92fr)_minmax(320px,0.58fr)] lg:pb-20">
             <div className="max-w-4xl">
-              <p className="text-xs font-semibold uppercase tracking-[0.32em] text-emerald-200">
+              <p className="inline-flex items-center gap-2 rounded-full border border-emerald-300/20 bg-emerald-300/5 px-3 py-1 text-xs font-semibold uppercase tracking-[0.28em] text-emerald-200">
+                <Sparkles className="h-3 w-3" />
                 {page.eyebrow}
               </p>
-              <h1 className="mt-5 max-w-4xl text-5xl font-semibold leading-[0.98] text-white sm:text-6xl lg:text-7xl">
-                {page.heading}
+              <h1 className="mt-6 max-w-4xl text-5xl font-semibold leading-[0.98] tracking-tight text-white sm:text-6xl lg:text-[5.2rem]">
+                {isHome ? (
+                  <>
+                    Move huge files{" "}
+                    <span className="font-serif italic font-normal text-emerald-200">
+                      directly
+                    </span>{" "}
+                    between devices.
+                  </>
+                ) : (
+                  page.heading
+                )}
               </h1>
               <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-200">
                 {page.intro}
@@ -198,20 +243,13 @@ export function WebLandingPage() {
               <p className="mt-4 max-w-2xl text-base leading-7 text-emerald-100/84">
                 {page.focus}
               </p>
-              <div className="mt-8 flex flex-wrap gap-3">
+              <div className="mt-9 flex flex-wrap gap-3">
                 <a
                   href={EXE_DOWNLOAD_URL}
-                  className="inline-flex items-center gap-2 rounded-full bg-emerald-300 px-5 py-3 text-sm font-semibold text-emerald-950 transition-colors hover:bg-emerald-200"
+                  className="inline-flex items-center gap-2 rounded-full bg-emerald-300 px-5 py-3 text-sm font-semibold text-emerald-950 shadow-lg shadow-emerald-500/20 transition-colors hover:bg-emerald-200"
                 >
                   <Download className="h-4 w-4" />
-                  Download EXE
-                </a>
-                <a
-                  href={MSI_DOWNLOAD_URL}
-                  className="inline-flex items-center gap-2 rounded-full border border-white/16 bg-white/8 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/14"
-                >
-                  <Download className="h-4 w-4" />
-                  Download MSI
+                  Download for Windows
                 </a>
                 <a
                   href={REPO_URL}
@@ -219,6 +257,13 @@ export function WebLandingPage() {
                 >
                   <Github className="h-4 w-4" />
                   Star on GitHub
+                </a>
+                <a
+                  href="#how-it-works"
+                  className="inline-flex items-center gap-2 rounded-full px-5 py-3 text-sm font-semibold text-slate-300 transition-colors hover:text-white"
+                >
+                  How it works
+                  <ArrowRight className="h-4 w-4" />
                 </a>
               </div>
             </div>
@@ -229,86 +274,209 @@ export function WebLandingPage() {
                 Browser and mobile transfer engines after the desktop path is
                 benchmarked and stable.
               </p>
+              <a
+                href={RELEASE_URL}
+                className="mt-4 inline-flex items-center gap-1 text-emerald-200 hover:text-emerald-100"
+              >
+                Latest release v{APP_VERSION}
+                <ArrowRight className="h-3 w-3" />
+              </a>
             </aside>
           </div>
         </section>
 
-        <section className="border-y border-white/8 bg-[#0e1b15]">
-          <div className="mx-auto grid max-w-7xl grid-cols-2 gap-px px-4 py-px sm:px-6 lg:grid-cols-4">
+        {isHome && (
+          <section
+            id="what-is"
+            className="relative border-y border-white/8 bg-[#0a1511] px-4 py-16 sm:px-6"
+            aria-labelledby="what-is-heading"
+          >
+            <div className="mx-auto grid max-w-5xl gap-8 md:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.3em] text-emerald-300">
+                  Answer
+                </p>
+                <h2
+                  id="what-is-heading"
+                  className="mt-3 text-3xl font-semibold leading-tight text-white"
+                >
+                  What is Lightning P2P?
+                </h2>
+              </div>
+              <div className="space-y-4 text-base leading-7 text-slate-200">
+                <p>
+                  <strong className="text-white">Lightning P2P</strong> is a
+                  free, open-source Windows app that sends files directly from
+                  one device to another over QUIC. Bytes stream from the
+                  sender's disk, BLAKE3 verifies each chunk on the receiver,
+                  and no file is ever uploaded to a cloud server.
+                </p>
+                <p className="text-slate-300">
+                  It works as an AirDrop alternative for Windows, a WeTransfer
+                  alternative without the cloud upload, and a Magic Wormhole
+                  alternative with a proper desktop GUI. MIT licensed on
+                  GitHub. Built with Rust, Tauri, iroh, and iroh-blobs.
+                </p>
+              </div>
+            </div>
+          </section>
+        )}
+
+        <section className="border-b border-white/8 bg-[#0e1b15] px-4 py-8 sm:px-6">
+          <div className="mx-auto grid max-w-7xl grid-cols-2 gap-3 lg:grid-cols-4">
             {[
-              ["0 USD", "Free and open source"],
-              ["No account", "No cloud storage login"],
-              ["QUIC + BLAKE3", "Encrypted, verified transfer"],
-              ["v0.3.1", "Signed Windows release"],
+              ["$0", "Free and open source"],
+              ["No account", "No cloud login"],
+              ["QUIC + BLAKE3", "Encrypted, verified"],
+              [`v${APP_VERSION}`, "Signed Windows release"],
             ].map(([value, label]) => (
-              <div key={label} className="bg-[#0a1511] px-4 py-5">
-                <p className="text-2xl font-semibold text-white">{value}</p>
-                <p className="mt-1 text-sm text-slate-400">{label}</p>
+              <div key={label} className={statCardClass()}>
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute -right-10 -top-10 h-24 w-24 rounded-full bg-emerald-300/10 blur-2xl"
+                />
+                <p className="relative text-2xl font-semibold text-white">
+                  {value}
+                </p>
+                <p className="relative mt-1 text-sm text-slate-400">{label}</p>
               </div>
             ))}
           </div>
         </section>
 
+        {isHome && <HowItWorks />}
+
         <section id="download" className="bg-[#08120f] px-4 py-20 sm:px-6">
           <div className="mx-auto max-w-7xl">
-            <div className="grid gap-10 lg:grid-cols-[0.85fr_1.15fr] lg:items-start">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.3em] text-emerald-300">
-                  Desktop app
+            <div className="max-w-2xl">
+              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-emerald-300">
+                Download
+              </p>
+              <h2 className="mt-4 text-4xl font-semibold leading-tight text-white">
+                Pick your install flavor.
+              </h2>
+              <p className="mt-5 text-base leading-7 text-slate-300">
+                Three official install paths for Windows. Same signed binary
+                underneath â€” pick the flow you prefer. MSI and checksums are in
+                the release page for managed environments.
+              </p>
+            </div>
+            <div className="mt-10 grid gap-4 md:grid-cols-3">
+              <article className="relative flex flex-col rounded-[14px] border border-emerald-300/30 bg-emerald-300/[0.04] p-6 transition-colors hover:border-emerald-300/50">
+                <span className="absolute right-5 top-5 rounded-full bg-emerald-300/15 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-widest text-emerald-200">
+                  Recommended
+                </span>
+                <span className="inline-flex h-10 w-10 items-center justify-center rounded-[10px] bg-emerald-300/15 text-emerald-200 ring-1 ring-inset ring-emerald-300/25">
+                  <Download className="h-5 w-5" />
+                </span>
+                <h3 className="mt-5 text-lg font-semibold text-white">
+                  NSIS setup
+                </h3>
+                <p className="mt-1 text-xs font-medium uppercase tracking-wider text-emerald-200/80">
+                  Classic installer / signed auto-updates
                 </p>
-                <h2 className="mt-4 text-4xl font-semibold leading-tight text-white">
-                  Built for the transfer path that browsers cannot provide yet.
-                </h2>
-                <p className="mt-5 text-base leading-7 text-slate-300">
-                  The desktop app can use iroh networking, local file access,
-                  nearby discovery, firewall setup, signed updates, and native
-                  installers. The web launch focuses on discovery and download
-                  until browser/mobile transfer support is implemented honestly.
+                <p className="mt-3 text-sm leading-6 text-slate-300">
+                  Familiar Windows installer flow, signed Tauri updater built
+                  in, adds firewall rules for direct peer connections.
                 </p>
-                <div className="mt-7 flex flex-wrap gap-3">
-                  <a
-                    href={EXE_DOWNLOAD_URL}
-                    className="inline-flex items-center gap-2 rounded-full bg-emerald-300 px-5 py-3 text-sm font-semibold text-emerald-950 transition-colors hover:bg-emerald-200"
-                  >
-                    <Download className="h-4 w-4" />
-                    Windows setup .exe
-                  </a>
-                  <a
-                    href={MSI_DOWNLOAD_URL}
-                    className="inline-flex items-center gap-2 rounded-full border border-white/16 bg-white/8 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/14"
-                  >
-                    <Download className="h-4 w-4" />
-                    Windows installer .msi
-                  </a>
-                  <a
-                    href={RELEASE_URL}
-                    className="inline-flex items-center gap-2 rounded-full border border-white/16 px-5 py-3 text-sm font-semibold text-slate-200 transition-colors hover:bg-white/8 hover:text-white"
-                  >
-                    Checksums and signatures
-                  </a>
-                </div>
-              </div>
-              <div className="grid gap-4 md:grid-cols-3">
-                {proofPoints.map((item) => (
-                  <article
-                    key={item.title}
-                    className="rounded-[8px] border border-white/10 bg-white/[0.04] p-5"
-                  >
-                    <item.icon className="h-6 w-6 text-emerald-200" />
-                    <h3 className="mt-5 text-lg font-semibold text-white">
-                      {item.title}
-                    </h3>
-                    <p className="mt-3 text-sm leading-6 text-slate-300">
-                      {item.body}
-                    </p>
-                  </article>
-                ))}
-              </div>
+                <a
+                  href={EXE_DOWNLOAD_URL}
+                  className="mt-6 inline-flex items-center justify-center gap-2 rounded-full bg-emerald-300 px-5 py-3 text-sm font-semibold text-emerald-950 transition-colors hover:bg-emerald-200"
+                >
+                  <Download className="h-4 w-4" />
+                  Download .exe (NSIS)
+                </a>
+              </article>
+              <article className="flex flex-col rounded-[14px] border border-white/10 bg-white/[0.03] p-6 transition-colors hover:border-emerald-300/25 hover:bg-white/[0.05]">
+                <span className="inline-flex h-10 w-10 items-center justify-center rounded-[10px] bg-white/10 text-white ring-1 ring-inset ring-white/15">
+                  <Download className="h-5 w-5" />
+                </span>
+                <h3 className="mt-5 text-lg font-semibold text-white">
+                  Velopack setup
+                </h3>
+                <p className="mt-1 text-xs font-medium uppercase tracking-wider text-slate-400">
+                  Modern one-click / delta updates
+                </p>
+                <p className="mt-3 text-sm leading-6 text-slate-300">
+                  Discord-style splash, one-click install into your user
+                  profile, delta updates (smaller patches) on every release.
+                </p>
+                <a
+                  href={VELOPACK_DOWNLOAD_URL}
+                  className="mt-6 inline-flex items-center justify-center gap-2 rounded-full border border-white/16 bg-white/8 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/14"
+                >
+                  <Download className="h-4 w-4" />
+                  Download Velopack .exe
+                </a>
+              </article>
+              <article className="flex flex-col rounded-[14px] border border-white/10 bg-white/[0.03] p-6 transition-colors hover:border-emerald-300/25 hover:bg-white/[0.05]">
+                <span className="inline-flex h-10 w-10 items-center justify-center rounded-[10px] bg-white/10 text-white ring-1 ring-inset ring-white/15">
+                  <Terminal className="h-5 w-5" />
+                </span>
+                <h3 className="mt-5 text-lg font-semibold text-white">
+                  winget
+                </h3>
+                <p className="mt-1 text-xs font-medium uppercase tracking-wider text-slate-400">
+                  Command line / scriptable installs
+                </p>
+                <p className="mt-3 text-sm leading-6 text-slate-300">
+                  For terminal regulars and IT provisioning. Pulls the signed
+                  installer and tracks updates via the Windows Package Manager.
+                </p>
+                <code className="mt-6 inline-flex items-center justify-center gap-2 rounded-full border border-white/16 bg-black/40 px-5 py-3 text-sm font-mono text-emerald-200">
+                  winget install lightning-p2p
+                </code>
+              </article>
+            </div>
+            <div className="mt-6 flex flex-wrap items-center gap-3 text-sm">
+              <a
+                href={MSI_DOWNLOAD_URL}
+                className="inline-flex items-center gap-2 text-slate-300 underline-offset-4 hover:text-white hover:underline"
+              >
+                <Download className="h-4 w-4" /> Windows installer .msi
+              </a>
+              <span className="text-slate-700">/</span>
+              <a
+                href={RELEASE_URL}
+                className="inline-flex items-center gap-2 text-slate-300 underline-offset-4 hover:text-white hover:underline"
+              >
+                Checksums and signatures
+              </a>
+              <span className="text-slate-700">/</span>
+              <a
+                href={RELEASE_URL}
+                className="inline-flex items-center gap-2 text-slate-300 underline-offset-4 hover:text-white hover:underline"
+              >
+                All release artifacts
+              </a>
+            </div>
+            <div className="mt-12 grid gap-4 md:grid-cols-3">
+              {proofPoints.map((item) => (
+                <article
+                  key={item.title}
+                  className="rounded-[10px] border border-white/10 bg-white/[0.04] p-5 transition-colors hover:border-emerald-300/25 hover:bg-white/[0.06]"
+                >
+                  <span className="inline-flex h-10 w-10 items-center justify-center rounded-[10px] bg-emerald-300/10 text-emerald-200 ring-1 ring-inset ring-emerald-300/20">
+                    <item.icon className="h-5 w-5" />
+                  </span>
+                  <h3 className="mt-5 text-lg font-semibold text-white">
+                    {item.title}
+                  </h3>
+                  <p className="mt-3 text-sm leading-6 text-slate-300">
+                    {item.body}
+                  </p>
+                </article>
+              ))}
             </div>
           </div>
         </section>
 
-        <section id="security" className="bg-[#f3ead7] px-4 py-20 text-[#17201b] sm:px-6">
+        {isHome && <ComparisonTable />}
+
+        <section
+          id="security"
+          className="bg-[#f3ead7] px-4 py-20 text-[#17201b] sm:px-6"
+        >
           <div className="mx-auto max-w-7xl">
             <div className="grid gap-10 lg:grid-cols-[1fr_1fr] lg:items-center">
               <div>
@@ -334,7 +502,7 @@ export function WebLandingPage() {
                 ].map(([term, detail]) => (
                   <div
                     key={term}
-                    className="grid gap-1 rounded-[8px] border border-[#d7c69d] bg-white/50 p-4 sm:grid-cols-[130px_1fr]"
+                    className="grid gap-1 rounded-[10px] border border-[#d7c69d] bg-white/60 p-4 sm:grid-cols-[130px_1fr]"
                   >
                     <dt className="font-semibold">{term}</dt>
                     <dd className="text-[#526156]">{detail}</dd>
@@ -365,7 +533,7 @@ export function WebLandingPage() {
               {benchmarkRows.map((row) => (
                 <div
                   key={row}
-                  className="flex items-start gap-3 rounded-[8px] border border-white/10 bg-white/[0.04] p-4"
+                  className="flex items-start gap-3 rounded-[10px] border border-white/10 bg-white/[0.04] p-4"
                 >
                   <BarChart3 className="mt-0.5 h-5 w-5 shrink-0 text-amber-200" />
                   <p className="text-sm leading-6 text-slate-300">{row}</p>
@@ -377,13 +545,15 @@ export function WebLandingPage() {
 
         <section className="bg-[#08120f] px-4 py-20 sm:px-6">
           <div className="mx-auto max-w-7xl">
-            <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
               {capabilityCards.map((item) => (
                 <article
                   key={item.title}
-                  className="rounded-[8px] border border-white/10 bg-white/[0.04] p-5"
+                  className="rounded-[10px] border border-white/10 bg-white/[0.04] p-5 transition-colors hover:border-emerald-300/25 hover:bg-white/[0.06]"
                 >
-                  <item.icon className="h-6 w-6 text-emerald-200" />
+                  <span className="inline-flex h-10 w-10 items-center justify-center rounded-[10px] bg-emerald-300/10 text-emerald-200 ring-1 ring-inset ring-emerald-300/20">
+                    <item.icon className="h-5 w-5" />
+                  </span>
                   <h3 className="mt-5 text-lg font-semibold text-white">
                     {item.title}
                   </h3>
@@ -396,7 +566,10 @@ export function WebLandingPage() {
           </div>
         </section>
 
-        <section id="faq" className="bg-[#f8faf7] px-4 py-20 text-[#111b16] sm:px-6">
+        <section
+          id="faq"
+          className="bg-[#f8faf7] px-4 py-20 text-[#111b16] sm:px-6"
+        >
           <div className="mx-auto max-w-4xl">
             <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[#51733f]">
               FAQ
@@ -406,10 +579,23 @@ export function WebLandingPage() {
             </h2>
             <div className="mt-8 divide-y divide-[#d8e2d4] border-y border-[#d8e2d4]">
               {faqs.map((item) => (
-                <article key={item.question} className="py-6">
-                  <h3 className="text-lg font-semibold">{item.question}</h3>
-                  <p className="mt-3 leading-7 text-[#405249]">{item.answer}</p>
-                </article>
+                <details
+                  key={item.q}
+                  className="group py-5 [&_summary::-webkit-details-marker]:hidden"
+                >
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-left">
+                    <h3 className="text-lg font-semibold">{item.q}</h3>
+                    <span
+                      aria-hidden="true"
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#bccab2] text-[#51733f] transition-transform group-open:rotate-45"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </span>
+                  </summary>
+                  <p className="mt-3 pr-12 leading-7 text-[#405249]">
+                    {item.a}
+                  </p>
+                </details>
               ))}
             </div>
           </div>
@@ -445,19 +631,131 @@ export function WebLandingPage() {
         </section>
       </main>
 
-      <footer className="border-t border-white/10 bg-[#08120f] px-4 py-8 text-sm text-slate-400 sm:px-6">
-        <div className="mx-auto flex max-w-7xl flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <p>Lightning P2P is MIT licensed and open source.</p>
-          <div className="flex flex-wrap gap-4">
-            {webPages.map((item) => (
-              <a key={item.path} href={item.path} className="hover:text-white">
-                {item.label}
-              </a>
-            ))}
-            <a href={REPO_URL} className="hover:text-white">
-              GitHub
+      <footer className="border-t border-white/10 bg-[#08120f] px-4 py-10 text-sm text-slate-400 sm:px-6">
+        <div className="mx-auto grid max-w-7xl gap-8 md:grid-cols-[1.2fr_2fr]">
+          <div>
+            <a href="/" className="flex items-center gap-3">
+              <img
+                src={markUrl}
+                alt=""
+                className="h-9 w-9 shrink-0 rounded-[10px]"
+              />
+              <span className="text-sm font-semibold text-white">
+                Lightning P2P
+              </span>
+            </a>
+            <p className="mt-4 max-w-sm leading-6">
+              Direct, encrypted, verified peer-to-peer file transfer for
+              Windows. MIT licensed, built with Rust and Tauri.
+            </p>
+            <a
+              href={REPO_URL}
+              className="mt-5 inline-block"
+              aria-label="GitHub stars for Lightning P2P"
+            >
+              <img
+                src={GH_STARS_BADGE}
+                alt="GitHub stars"
+                className="h-7"
+                loading="lazy"
+                decoding="async"
+              />
             </a>
           </div>
+          <div className="grid grid-cols-2 gap-6 sm:grid-cols-3">
+            <div>
+              <p className="font-semibold text-white">Product</p>
+              <ul className="mt-3 space-y-2">
+                {webPages
+                  .filter((p) =>
+                    ["/", "/download", "/security", "/benchmarks"].includes(
+                      p.path,
+                    ),
+                  )
+                  .map((item) => (
+                    <li key={item.path}>
+                      <a href={item.path} className="hover:text-white">
+                        {item.label}
+                      </a>
+                    </li>
+                  ))}
+              </ul>
+            </div>
+            <div>
+              <p className="font-semibold text-white">Compare</p>
+              <ul className="mt-3 space-y-2">
+                {webPages
+                  .filter((p) =>
+                    [
+                      "/wetransfer-alternative",
+                      "/wormhole-alternative",
+                      "/localsend-vs-lightning-p2p",
+                      "/alternatives/airdrop-for-windows",
+                    ].includes(p.path),
+                  )
+                  .map((item) => (
+                    <li key={item.path}>
+                      <a href={item.path} className="hover:text-white">
+                        {item.label}
+                      </a>
+                    </li>
+                  ))}
+              </ul>
+            </div>
+            <div>
+              <p className="font-semibold text-white">Resources</p>
+              <ul className="mt-3 space-y-2">
+                <li>
+                  <a href={REPO_URL} className="hover:text-white">
+                    GitHub
+                  </a>
+                </li>
+                <li>
+                  <a href="/llms.txt" className="hover:text-white">
+                    llms.txt
+                  </a>
+                </li>
+                <li>
+                  <a href="/sitemap.xml" className="hover:text-white">
+                    sitemap.xml
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href={`${REPO_URL}/blob/main/CHANGELOG.md`}
+                    className="hover:text-white"
+                  >
+                    Changelog
+                  </a>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+        <div className="mx-auto mt-8 flex max-w-7xl flex-col gap-3 border-t border-white/10 pt-6 text-xs sm:flex-row sm:items-center sm:justify-between">
+          <p>MIT licensed. Built with Rust + Tauri v2.</p>
+          <p>
+            <a
+              href={`${REPO_URL}/blob/main/LICENSE`}
+              className="hover:text-white"
+            >
+              License
+            </a>
+            <span className="mx-2 text-slate-700">/</span>
+            <a
+              href={`${REPO_URL}/blob/main/SECURITY.md`}
+              className="hover:text-white"
+            >
+              Security
+            </a>
+            <span className="mx-2 text-slate-700">/</span>
+            <a
+              href={`${REPO_URL}/issues/new/choose`}
+              className="hover:text-white"
+            >
+              Report an issue
+            </a>
+          </p>
         </div>
       </footer>
     </div>

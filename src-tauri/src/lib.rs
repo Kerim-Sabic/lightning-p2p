@@ -66,6 +66,18 @@ impl AppState {
     }
 }
 
+#[cfg(windows)]
+fn register_deep_links<R: tauri::Runtime>(app: &tauri::App<R>) {
+    use tauri_plugin_deep_link::DeepLinkExt;
+
+    if let Err(error) = app.deep_link().register_all() {
+        tracing::warn!("Failed to register deep links at runtime: {error}");
+    }
+}
+
+#[cfg(not(windows))]
+fn register_deep_links<R: tauri::Runtime>(_app: &tauri::App<R>) {}
+
 /// Entry point: configures Tauri with plugins, state, and command handlers.
 ///
 /// # Panics
@@ -111,6 +123,8 @@ pub fn run() {
             commands::settings::open_download_dir,
         ])
         .setup(|app| {
+            register_deep_links(app);
+
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 let state = handle.state::<AppState>();
