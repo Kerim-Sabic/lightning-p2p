@@ -47,7 +47,7 @@ pub(crate) fn preflight_destination(destination: &Path) -> Result<DestinationPre
     Ok(DestinationPreflight {
         exists: destination.exists(),
         writable: true,
-        available_bytes: available_disk_space(destination)?,
+        available_bytes: available_disk_space(destination),
     })
 }
 
@@ -56,7 +56,7 @@ pub(crate) fn ensure_enough_space(destination: &Path, size: u64) -> Result<()> {
         return Ok(());
     }
 
-    let Some(available_bytes) = available_disk_space(destination)? else {
+    let Some(available_bytes) = available_disk_space(destination) else {
         return Ok(());
     };
     let required = size.saturating_add(DISK_SPACE_HEADROOM_BYTES);
@@ -140,7 +140,7 @@ fn write_probe(destination: &Path) -> Result<()> {
 }
 
 #[cfg(windows)]
-fn available_disk_space(path: &Path) -> Result<Option<u64>> {
+fn available_disk_space(path: &Path) -> Option<u64> {
     use std::os::windows::ffi::OsStrExt;
     use windows_sys::Win32::Storage::FileSystem::GetDiskFreeSpaceExW;
 
@@ -159,14 +159,19 @@ fn available_disk_space(path: &Path) -> Result<Option<u64>> {
         )
     };
     if ok == 0 {
-        return Err(std::io::Error::last_os_error().into());
+        tracing::warn!(
+            error = %std::io::Error::last_os_error(),
+            path = %path.display(),
+            "Could not query free disk space for receive destination"
+        );
+        return None;
     }
-    Ok(Some(available_bytes))
+    Some(available_bytes)
 }
 
 #[cfg(not(windows))]
-fn available_disk_space(_path: &Path) -> Result<Option<u64>> {
-    Ok(None)
+fn available_disk_space(_path: &Path) -> Option<u64> {
+    None
 }
 
 fn unix_timestamp() -> u64 {
