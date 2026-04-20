@@ -7,7 +7,8 @@ use crate::storage::peers::{self, PeerRecord};
 use crate::transfer::export;
 use crate::transfer::metrics::{RouteKind, TransferMetrics};
 use crate::transfer::progress::{
-    EventReporter, ProgressHandle, ProgressSampler, QueueProgressTarget, TransferDirection,
+    EventReporter, FailureCategory, ProgressHandle, ProgressSampler, QueueProgressTarget,
+    TransferDirection, TransferPhase,
 };
 use crate::transfer::queue::TransferQueue;
 use futures_util::StreamExt;
@@ -32,6 +33,7 @@ struct ReceiveSummary {
     size: u64,
     peer: String,
     metrics: TransferMetrics,
+    output_path: PathBuf,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -65,6 +67,8 @@ pub struct ReceiveOutcome {
     pub download_ms: u64,
     /// Time spent exporting verified data to disk.
     pub export_ms: u64,
+    /// Final output path written by the export stage.
+    pub output_path: PathBuf,
 }
 
 /// Downloads the content addressed by a ticket and exports it to disk.
@@ -93,13 +97,14 @@ pub async fn receive_blob(
         ticket.hash().to_string(),
         Some(peer.clone()),
     );
-    reporter.emit_started(0, TransferMetrics::default())?;
+    reporter.emit_started(0, TransferMetrics::default(), TransferPhase::Connecting)?;
 
     let sampler = ProgressSampler::spawn(
         reporter.clone(),
         Some(QueueProgressTarget::new(queue.clone(), transfer_id.clone())),
     );
     let progress = sampler.handle();
+    progress.set_phase(TransferPhase::Connecting);
     let result = receive_core(node, &ticket, destination, &mut cancel_rx, Some(&progress)).await;
 
     match result {
@@ -107,18 +112,30 @@ pub async fn receive_blob(
             queue.remove(&transfer_id).await;
             progress.set(summary.size, summary.size);
             progress.set_metrics(summary.metrics);
+            progress.set_phase(TransferPhase::Completed);
             sampler.finish().await?;
             save_peer_no_flush(node, &summary.peer)?;
             save_receive_record_no_flush(node, &summary)?;
             node.db.flush()?;
-            reporter.emit_completed(summary.hash, summary.size, summary.metrics)?;
+            reporter.emit_completed(
+                summary.hash,
+                summary.size,
+                summary.metrics,
+                Some(summary.output_path.to_string_lossy().to_string()),
+            )?;
             Ok(())
         }
         Err(error) => {
             queue.remove(&transfer_id).await;
+            let phase = progress.phase_snapshot();
+            let failure_category = categorize_receive_error(&error, phase);
+            progress.set_phase(match failure_category {
+                FailureCategory::Cancelled => TransferPhase::Cancelled,
+                _ => TransferPhase::Failed,
+            });
             let route_kind = progress.metrics_snapshot().route_kind;
             let _ = sampler.finish().await;
-            let _ = reporter.emit_failed(&error.to_string(), route_kind);
+            let _ = reporter.emit_failed(&error.to_string(), route_kind, Some(failure_category));
             Err(error)
         }
     }
@@ -145,6 +162,7 @@ pub async fn receive_ticket(
         connect_ms: summary.metrics.connect_ms,
         download_ms: summary.metrics.download_ms,
         export_ms: summary.metrics.export_ms,
+        output_path: summary.output_path,
     })
 }
 
@@ -159,8 +177,11 @@ async fn receive_core(
     let download = download_to_store(node, ticket, cancel_rx, progress).await?;
     let download_ms = elapsed_ms(download_started_at.elapsed());
     let tracked_total = progress.map(|p| p.snapshot().1);
+    if let Some(progress) = progress {
+        progress.set_phase(TransferPhase::Verifying);
+    }
     let export_started_at = Instant::now();
-    let size =
+    let export_summary =
         export::export_ticket(node.blobs_client(), ticket, &destination, tracked_total).await?;
     let export_ms = elapsed_ms(export_started_at.elapsed());
     let metrics = TransferMetrics {
@@ -174,10 +195,11 @@ async fn receive_core(
     }
     Ok(ReceiveSummary {
         hash: ticket.hash().to_string(),
-        label: export::resolve_label(node.blobs_client(), ticket).await?,
-        size,
+        label: export_summary.label,
+        size: export_summary.size,
         peer: ticket.node_addr().node_id.to_string(),
         metrics,
+        output_path: export_summary.output_path,
     })
 }
 
@@ -293,6 +315,11 @@ fn update_progress(
         progress.set(transferred_bytes(ticket, state), total_bytes(ticket, state));
         progress.set_route_kind(lifecycle.route_kind);
         progress.set_connect_ms(lifecycle.connect_ms);
+        progress.set_phase(if lifecycle.contacted_peer {
+            TransferPhase::Downloading
+        } else {
+            TransferPhase::Connecting
+        });
     }
 }
 
@@ -354,6 +381,35 @@ fn download_abort_error(message: String, lifecycle: DownloadLifecycle) -> FastDr
     } else {
         FastDropError::Other("Peer not reachable".into())
     }
+}
+
+fn categorize_receive_error(error: &FastDropError, phase: TransferPhase) -> FailureCategory {
+    let message = error.to_string().to_lowercase();
+    if message.contains("cancelled") {
+        return FailureCategory::Cancelled;
+    }
+    if message.contains("peer not reachable") {
+        return FailureCategory::Unreachable;
+    }
+    if message.contains("transfer interrupted") {
+        return FailureCategory::Interrupted;
+    }
+    if message.contains("not enough free disk space") {
+        return FailureCategory::DiskSpace;
+    }
+    if message.contains("download folder")
+        || message.contains("download destination")
+        || message.contains("not writable")
+    {
+        return FailureCategory::Destination;
+    }
+    if phase == TransferPhase::Verifying || message.contains("export") {
+        return FailureCategory::Export;
+    }
+    if matches!(error, FastDropError::Blob(_)) {
+        return FailureCategory::Interrupted;
+    }
+    FailureCategory::Unknown
 }
 
 fn transferred_bytes(ticket: &BlobTicket, state: &TransferState) -> u64 {
@@ -441,6 +497,31 @@ mod tests {
     fn timeout_error_is_user_friendly() {
         assert_eq!(timeout_error(false).to_string(), "Peer not reachable");
         assert_eq!(timeout_error(true).to_string(), "Transfer interrupted");
+    }
+
+    #[test]
+    fn receive_errors_are_categorized_for_ui() {
+        assert_eq!(
+            categorize_receive_error(
+                &FastDropError::Other("Cancelled".into()),
+                TransferPhase::Downloading
+            ),
+            FailureCategory::Cancelled
+        );
+        assert_eq!(
+            categorize_receive_error(
+                &FastDropError::Other("Peer not reachable".into()),
+                TransferPhase::Connecting
+            ),
+            FailureCategory::Unreachable
+        );
+        assert_eq!(
+            categorize_receive_error(
+                &FastDropError::Blob("disk write failed".into()),
+                TransferPhase::Verifying
+            ),
+            FailureCategory::Export
+        );
     }
 
     #[test]

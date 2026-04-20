@@ -58,11 +58,18 @@
         "applicationCategory": "UtilitiesApplication",
         "operatingSystem": "Windows 10, Windows 11",
         "description": "A free, open-source Windows app for direct peer-to-peer file transfers with iroh, QUIC, BLAKE3 verification, and no accounts.",
-        "softwareVersion": "0.3.1",
+        "softwareVersion": "0.4.0",
         "isAccessibleForFree": true,
         "license": "https://github.com/Kerim-Sabic/lightning-p2p/blob/main/LICENSE",
         "codeRepository": "https://github.com/Kerim-Sabic/lightning-p2p",
-        "downloadUrl": "https://github.com/Kerim-Sabic/lightning-p2p/releases/latest",
+        "downloadUrl": "https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/Lightning.P2P_0.4.0_x64-setup.exe",
+        "featureList": [
+          "Direct peer-to-peer file transfer",
+          "QUIC transport with relay-assisted fallback",
+          "BLAKE3 verified streaming",
+          "No account and no cloud file storage",
+          "Signed Windows installers and updater metadata"
+        ],
         "offers": {
           "@type": "Offer",
           "price": "0",
@@ -74,15 +81,27 @@
   </head>
   <body class="bg-gray-950 text-gray-100 min-h-screen antialiased">
     <main id="static-seo-content" class="static-seo-fallback">
-      <p>Free open-source file transfer</p>
-      <h1>Move huge files directly between devices.</h1>
-      <p>
-        Lightning P2P is a free Windows desktop app for direct peer-to-peer file
-        transfers with iroh, QUIC, BLAKE3 verification, and no accounts.
-      </p>
-      <p>
-        Download the signed Windows EXE or MSI installer from GitHub Releases.
-      </p>
+      <section class="site-loader" aria-label="Loading Lightning P2P">
+        <img src="/site-logo.png" alt="" class="site-loader-logo" />
+        <p class="site-loader-kicker">Lightning P2P</p>
+        <h1>Move huge files directly between devices.</h1>
+        <div class="site-loader-skeleton" aria-hidden="true">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+      </section>
+      <section class="static-seo-copy">
+        <p>Free open-source file transfer</p>
+        <h2>Move huge files directly between devices.</h2>
+        <p>
+          Lightning P2P is a free Windows desktop app for direct peer-to-peer file
+          transfers with iroh, QUIC, BLAKE3 verification, and no accounts.
+        </p>
+        <p>
+          Download the signed Windows EXE or MSI installer from GitHub Releases.
+        </p>
+      </section>
     </main>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>

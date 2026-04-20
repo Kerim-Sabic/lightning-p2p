@@ -19,15 +19,20 @@ interface TransferCardProps {
 }
 
 function statusLabel(transfer: TransferEntry): string {
+  if (transfer.phase === "cancelled") {
+    return "Cancelled";
+  }
   switch (transfer.status) {
     case "starting":
-      return transfer.direction === "send"
-        ? "Preparing share"
-        : "Connecting";
+      return transfer.direction === "send" ? "Preparing share" : "Connecting";
     case "running":
-      return transfer.direction === "send"
-        ? "Importing content"
-        : "Receiving";
+      if (transfer.phase === "connecting") {
+        return "Connecting";
+      }
+      if (transfer.phase === "verifying") {
+        return "Verifying and saving";
+      }
+      return transfer.direction === "send" ? "Importing content" : "Receiving";
     case "completed":
       return transfer.direction === "send" ? "Ticket ready" : "Saved locally";
     case "failed":
@@ -43,7 +48,19 @@ function routeLabel(routeKind: TransferEntry["routeKind"]): string {
       return "Relay";
     case "unknown":
     default:
-      return "Detecting";
+      return "Unknown";
+  }
+}
+
+function routeTone(routeKind: TransferEntry["routeKind"]): string {
+  switch (routeKind) {
+    case "direct":
+      return "border-emerald-400/20 bg-emerald-500/10 text-emerald-100";
+    case "relay":
+      return "border-sky-400/20 bg-sky-500/10 text-sky-100";
+    case "unknown":
+    default:
+      return "border-white/[0.08] bg-white/[0.04] text-slate-300";
   }
 }
 
@@ -55,6 +72,27 @@ function statusIcon(transfer: TransferEntry) {
     return TimerReset;
   }
   return ArrowUpRight;
+}
+
+function failureHelp(transfer: TransferEntry): string | null {
+  switch (transfer.failureCategory) {
+    case "cancelled":
+      return "The transfer was cancelled before completion. Start it again when both devices are ready.";
+    case "unreachable":
+      return "The sender could not be reached. Confirm both apps are open and try again.";
+    case "interrupted":
+      return "The transfer started, then stopped. Retry after checking network or sender sleep settings.";
+    case "destination":
+      return "Choose a writable download folder in Settings, then retry.";
+    case "disk_space":
+      return "Free space in the download folder, then retry.";
+    case "export":
+      return "The verified download finished, but saving to disk failed.";
+    case "invalid_ticket":
+    case "unknown":
+    case null:
+      return null;
+  }
 }
 
 export function TransferCard({ transfer, onCancel }: TransferCardProps) {
@@ -90,8 +128,12 @@ export function TransferCard({ transfer, onCancel }: TransferCardProps) {
               <span className="rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-slate-300">
                 {transfer.direction}
               </span>
-              <span className="rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-slate-300">
-                {routeLabel(transfer.routeKind)}
+              <span
+                className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] ${routeTone(
+                  transfer.routeKind,
+                )}`}
+              >
+                Route {routeLabel(transfer.routeKind)}
               </span>
               <StatusIcon className="h-3.5 w-3.5 text-slate-400" />
               <span className="text-xs text-slate-400">{statusLabel(transfer)}</span>
@@ -164,9 +206,23 @@ export function TransferCard({ transfer, onCancel }: TransferCardProps) {
         </div>
 
         {transfer.error ? (
-          <p className="rounded-2xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
-            {transfer.error}
-          </p>
+          <div className="rounded-2xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
+            <p>{transfer.error}</p>
+            {failureHelp(transfer) ? (
+              <p className="mt-2 text-xs leading-5 text-rose-100/72">
+                {failureHelp(transfer)}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+
+        {transfer.outputPath && transfer.status === "completed" ? (
+          <div className="rounded-2xl border border-emerald-400/15 bg-emerald-500/8 px-4 py-3">
+            <p className="metric-label">Saved to</p>
+            <p className="mt-1.5 break-all font-mono text-xs leading-5 text-emerald-50/86">
+              {transfer.outputPath}
+            </p>
+          </div>
         ) : null}
 
         <div className="flex items-center justify-between gap-3 text-[10px] text-slate-500">

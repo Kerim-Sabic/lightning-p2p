@@ -9,6 +9,8 @@ import type {
   SharePathInfo,
   TransferDirection,
   TransferEvent,
+  FailureCategory,
+  TransferPhase,
   TransferRecord,
   UpdateCheckResult,
   UpdateProgress,
@@ -37,6 +39,9 @@ export interface TransferEntry {
   total: number;
   speedBps: number;
   routeKind: RouteKind;
+  phase: TransferPhase;
+  failureCategory: FailureCategory | null;
+  outputPath: string | null;
   connectMs: number;
   downloadMs: number;
   exportMs: number;
@@ -152,6 +157,9 @@ function createTransferEntry(
     total: 0,
     speedBps: 0,
     routeKind: "unknown",
+    phase: direction === "receive" ? "connecting" : "preparing",
+    failureCategory: null,
+    outputPath: null,
     connectMs: 0,
     downloadMs: 0,
     exportMs: 0,
@@ -176,6 +184,12 @@ function mergeActiveTransfer(
     total: transfer.total,
     speedBps: transfer.speed_bps,
     routeKind: transfer.route_kind,
+    phase:
+      transfer.phase ??
+      current?.phase ??
+      (transfer.direction === "receive" ? "connecting" : "preparing"),
+    failureCategory: transfer.failure_category ?? current?.failureCategory ?? null,
+    outputPath: transfer.output_path ?? current?.outputPath ?? null,
     connectMs: transfer.connect_ms,
     downloadMs: transfer.download_ms,
     exportMs: transfer.export_ms,
@@ -282,6 +296,7 @@ function sameTransferProgress(
     current.total === event.total &&
     current.speedBps === event.speed_bps &&
     current.routeKind === event.route_kind &&
+    current.phase === (event.phase ?? "downloading") &&
     current.connectMs === event.connect_ms &&
     current.downloadMs === event.download_ms &&
     current.exportMs === event.export_ms &&
@@ -720,6 +735,11 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
           total: event.total,
           speedBps: 0,
           routeKind: event.route_kind,
+          phase:
+            event.phase ??
+            (event.direction === "receive" ? "connecting" : "preparing"),
+          failureCategory: null,
+          outputPath: null,
           connectMs: event.connect_ms,
           downloadMs: event.download_ms,
           exportMs: event.export_ms,
@@ -756,6 +776,8 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
               total: event.total,
               speedBps: event.speed_bps,
               routeKind: event.route_kind,
+              phase: event.phase ?? "downloading",
+              failureCategory: null,
               connectMs: event.connect_ms,
               downloadMs: event.download_ms,
               exportMs: event.export_ms,
@@ -783,6 +805,9 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
           total: event.size,
           speedBps: current.speedBps,
           routeKind: event.route_kind,
+          phase: event.phase ?? "completed",
+          failureCategory: null,
+          outputPath: event.output_path ?? null,
           connectMs: event.connect_ms,
           downloadMs: event.download_ms,
           exportMs: event.export_ms,
@@ -806,6 +831,8 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
         transfers[event.transfer_id] = {
           ...current,
           routeKind: event.route_kind,
+          phase: event.phase ?? "failed",
+          failureCategory: event.failure_category ?? "unknown",
           status: "failed",
           error: event.error,
         };

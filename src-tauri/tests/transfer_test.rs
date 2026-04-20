@@ -113,6 +113,27 @@ async fn transfers_directory_with_thousand_files_end_to_end() -> TestResult<()> 
 }
 
 #[tokio::test]
+async fn receiving_file_with_existing_output_uses_safe_suffix() -> TestResult<()> {
+    init_tracing();
+    let fixture = TransferFixture::new_file(1024 * 1024).await?;
+    let share = create_share(&fixture).await?;
+    let existing_path = fixture.receive_dir.join(file_name(&fixture.source_path)?);
+    fs::write(&existing_path, b"existing file")?;
+    let receive = receive_share(&fixture, &share.ticket.to_string()).await?;
+    let second_path = fixture.receive_dir.join("payload (1).bin");
+
+    assert_eq!(receive.output_path, second_path);
+    assert_eq!(fs::read(&existing_path)?, b"existing file");
+    assert_eq!(
+        file_sha256(&fixture.source_path)?,
+        file_sha256(&receive.output_path)?
+    );
+
+    fixture.shutdown().await?;
+    Ok(())
+}
+
+#[tokio::test]
 #[ignore = "manual large transfer smoke test"]
 async fn transfers_ten_megabytes_end_to_end() -> TestResult<()> {
     run_file_transfer_smoke_test(10 * 1024 * 1024, false).await

@@ -3,6 +3,7 @@
 //! Each sub-module exposes `#[tauri::command]` functions that the
 //! frontend calls via `invoke()`. Every command returns `Result<T, String>`.
 
+pub mod diagnostics;
 pub mod peer;
 pub mod settings;
 pub mod share;

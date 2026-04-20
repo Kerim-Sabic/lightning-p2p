@@ -1,6 +1,9 @@
 import { motion } from "framer-motion";
 import {
+  Activity,
   CheckCircle2,
+  ClipboardCheck,
+  Copy,
   Download,
   Fingerprint,
   FolderCog,
@@ -15,7 +18,9 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
+  getNetworkDiagnostics,
   isDesktopRuntime,
+  type NetworkDiagnostics,
   type NodeStatus,
   type RelayMode,
 } from "../lib/tauri";
@@ -111,6 +116,24 @@ function relayModeButtonClass(active: boolean): string {
     : "border-white/10 bg-white/[0.04] text-slate-300";
 }
 
+function diagnosticsText(diagnostics: NetworkDiagnostics): string {
+  return [
+    "Lightning P2P diagnostics",
+    `App version: ${diagnostics.app_version}`,
+    `Node ID: ${diagnostics.node_id ?? "not ready"}`,
+    `Online state: ${diagnostics.online_state}`,
+    `Relay mode: ${diagnostics.relay_mode}`,
+    `Relay connected: ${diagnostics.relay_connected ? "yes" : "no"}`,
+    `Relay URL: ${diagnostics.relay_url ?? "none"}`,
+    `Direct address count: ${diagnostics.direct_address_count}`,
+    `LAN discovery enabled: ${diagnostics.local_discovery_enabled ? "yes" : "no"}`,
+    `LAN discovery active: ${diagnostics.lan_discovery_active ? "yes" : "no"}`,
+    `Download folder status: ${diagnostics.download_dir_status.status}`,
+    `Download folder writable: ${diagnostics.download_dir_status.writable ? "yes" : "no"}`,
+    `Latest route kind: ${diagnostics.latest_route_kind}`,
+  ].join("\n");
+}
+
 export function SettingsView() {
   const settings = useTransferStore((state) => state.settings);
   const downloadDir = useTransferStore((state) => state.downloadDir);
@@ -132,6 +155,9 @@ export function SettingsView() {
   const installUpdate = useTransferStore((state) => state.installUpdate);
   const desktopRuntime = isDesktopRuntime();
   const [customRelayUrl, setCustomRelayUrlInput] = useState("");
+  const [diagnosticsState, setDiagnosticsState] = useState<
+    "idle" | "copied" | "error"
+  >("idle");
 
   useEffect(() => {
     setCustomRelayUrlInput(settings?.custom_relay_url ?? "");
@@ -150,6 +176,17 @@ export function SettingsView() {
       await setCustomRelayUrl(customRelayUrl.trim());
     }
     await setRelayMode("custom");
+  };
+
+  const copyDiagnostics = async (): Promise<void> => {
+    try {
+      const diagnostics = await getNetworkDiagnostics();
+      await navigator.clipboard.writeText(diagnosticsText(diagnostics));
+      setDiagnosticsState("copied");
+      window.setTimeout(() => setDiagnosticsState("idle"), 1800);
+    } catch {
+      setDiagnosticsState("error");
+    }
   };
 
   return (
@@ -314,6 +351,61 @@ export function SettingsView() {
             </button>
           </div>
         </article>
+      </section>
+
+      <section className="glass-panel p-6">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex items-center gap-3">
+            <div className="glass-icon">
+              <Activity className="h-5 w-5 text-emerald-200" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-white">Diagnostics</p>
+              <p className="text-[13px] text-slate-300/72">
+                Copy a privacy-safe network snapshot for troubleshooting direct
+                versus relay-backed transfers.
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={() => void copyDiagnostics()}
+            disabled={!desktopRuntime}
+            className="glass-button inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm text-slate-100"
+          >
+            {diagnosticsState === "copied" ? (
+              <ClipboardCheck className="h-4 w-4 text-emerald-200" />
+            ) : (
+              <Copy className="h-4 w-4" />
+            )}
+            {diagnosticsState === "copied"
+              ? "Copied"
+              : diagnosticsState === "error"
+                ? "Copy failed"
+                : "Copy diagnostics"}
+          </button>
+        </div>
+
+        <div className="mt-4 grid gap-2 md:grid-cols-3">
+          <div className="stat-card">
+            <p className="metric-label">Route state</p>
+            <p className="mt-1.5 text-sm font-semibold text-white">
+              {onlineStateLabel(nodeStatus.online_state)}
+            </p>
+          </div>
+          <div className="stat-card">
+            <p className="metric-label">LAN discovery</p>
+            <p className="mt-1.5 text-sm font-semibold text-white">
+              {nodeStatus.lan_discovery_active ? "Active" : "Inactive"}
+            </p>
+          </div>
+          <div className="stat-card">
+            <p className="metric-label">Output folder</p>
+            <p className="mt-1.5 text-sm font-semibold text-white">
+              {downloadDir ? "Configured" : "Resolving"}
+            </p>
+          </div>
+        </div>
       </section>
 
       <section className="glass-panel p-6">

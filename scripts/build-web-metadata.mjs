@@ -99,8 +99,19 @@ ${page.related
       </nav>`
     : "";
   return `<main id="static-seo-content" class="static-seo-fallback">
+      <section class="site-loader" aria-label="Loading Lightning P2P">
+        <img src="/site-logo.png" alt="" class="site-loader-logo" />
+        <p class="site-loader-kicker">Lightning P2P</p>
+        <h1>${escapeHtml(page.heading)}</h1>
+        <div class="site-loader-skeleton" aria-hidden="true">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+      </section>
+      <section class="static-seo-copy">
       <p>${escapeHtml(page.eyebrow)}</p>
-      <h1>${escapeHtml(page.heading)}</h1>
+      <h2>${escapeHtml(page.heading)}</h2>
       <p>${escapeHtml(page.intro)}</p>
       <p>${escapeHtml(page.focus)}</p>
 ${body}
@@ -110,6 +121,7 @@ ${body}
         <a href="${escapeHtml(msiDownloadUrl)}">MSI installer</a>. Release checksums and signatures
         are available on <a href="${escapeHtml(releaseUrl)}">GitHub Releases</a>.
       </p>${faqs}${related}
+      </section>
     </main>`;
 }
 
@@ -127,6 +139,29 @@ function softwareApplicationJsonLd(page) {
     codeRepository: repoUrl,
     url: siteUrl,
     downloadUrl: exeDownloadUrl,
+    installUrl: releaseUrl,
+    screenshot: `${siteUrl}/og-image.png`,
+    softwareHelp: `${siteUrl}/security`,
+    releaseNotes: `${repoUrl}/blob/main/CHANGELOG.md`,
+    keywords:
+      "p2p file transfer, peer to peer file transfer, free file transfer, AirDrop for Windows, WeTransfer alternative, LocalSend alternative, QUIC file transfer, BLAKE3 verification",
+    featureList: [
+      "Direct peer-to-peer file transfer",
+      "QUIC transport with relay-assisted fallback",
+      "BLAKE3 verified streaming",
+      "No account and no cloud file storage",
+      "Signed Windows installers and updater metadata",
+    ],
+    publisher: {
+      "@type": "Organization",
+      name: "Lightning P2P",
+      url: siteUrl,
+      logo: siteLogoUrl,
+    },
+    audience: {
+      "@type": "Audience",
+      audienceType: "Windows users sending large files peer-to-peer",
+    },
     sameAs: [repoUrl],
     offers: {
       "@type": "Offer",

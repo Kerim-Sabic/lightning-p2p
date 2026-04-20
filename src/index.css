@@ -75,11 +75,114 @@ body {
 }
 
 .static-seo-fallback {
-  min-height: 100vh;
-  padding: 96px 24px 48px;
-  background: #08120f;
+  min-height: 100%;
+  background: #050706;
   color: white;
   font-family: var(--font-sans);
+  transition:
+    opacity 0.28s ease,
+    visibility 0.28s ease;
+}
+
+body.app-hydrated .static-seo-fallback {
+  pointer-events: none;
+  visibility: hidden;
+  opacity: 0;
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.site-loader {
+  min-height: 100vh;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 16px;
+  padding: 88px 24px 48px;
+  text-align: center;
+  background:
+    linear-gradient(rgba(5, 7, 6, 0.72), rgba(5, 7, 6, 0.9)),
+    url("/web-hero.png") center / cover no-repeat;
+}
+
+.site-loader-logo {
+  width: 88px;
+  height: 88px;
+  border-radius: 12px;
+  object-fit: cover;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.46);
+}
+
+.site-loader-kicker {
+  margin: 8px 0 0;
+  color: rgba(226, 232, 240, 0.72);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+}
+
+.site-loader h1 {
+  max-width: 760px;
+  margin: 0;
+  color: white;
+  font-size: clamp(2.6rem, 8vw, 5.6rem);
+  font-weight: 650;
+  letter-spacing: -0.04em;
+  line-height: 0.96;
+}
+
+.site-loader-skeleton {
+  width: min(520px, 84vw);
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.site-loader-skeleton span {
+  position: relative;
+  height: 12px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.site-loader-skeleton span::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.24),
+    transparent
+  );
+  transform: translateX(-100%);
+  animation: loader-sheen 1.25s ease-in-out infinite;
+}
+
+.site-loader-skeleton span:nth-child(2) {
+  width: 84%;
+  justify-self: center;
+}
+
+.site-loader-skeleton span:nth-child(3) {
+  width: 62%;
+  justify-self: center;
+}
+
+.static-seo-copy {
+  padding: 48px 24px 64px;
+  background: #08120f;
+}
+
+.static-seo-copy h2 {
+  max-width: 880px;
+  margin: 16px 0;
+  color: white;
+  font-size: clamp(2.3rem, 7vw, 4.8rem);
+  line-height: 1;
 }
 
 .static-seo-fallback p {
@@ -88,12 +191,19 @@ body {
   line-height: 1.75;
 }
 
-.static-seo-fallback h1 {
+.static-seo-fallback h1,
+.static-seo-fallback h2 {
   max-width: 880px;
   margin: 16px 0;
   color: white;
   font-size: clamp(2.5rem, 8vw, 5rem);
   line-height: 1;
+}
+
+@keyframes loader-sheen {
+  100% {
+    transform: translateX(100%);
+  }
 }
 
 ::-webkit-scrollbar {

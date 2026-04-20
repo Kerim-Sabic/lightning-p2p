@@ -23,6 +23,79 @@ pub enum TransferDirection {
     Receive,
 }
 
+/// Current user-visible phase of a transfer.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TransferPhase {
+    /// The transfer is preparing local state before network traffic starts.
+    #[default]
+    Preparing,
+    /// The receiver is trying to contact the sender.
+    Connecting,
+    /// File bytes are moving into the local blob store.
+    Downloading,
+    /// Verified blobs are being exported to the destination folder.
+    Verifying,
+    /// The transfer completed successfully.
+    Completed,
+    /// The transfer failed.
+    Failed,
+    /// The user cancelled the transfer.
+    Cancelled,
+}
+
+impl TransferPhase {
+    /// Converts an atomic-friendly integer into a transfer phase.
+    #[must_use]
+    pub fn from_repr(value: u8) -> Self {
+        match value {
+            1 => Self::Connecting,
+            2 => Self::Downloading,
+            3 => Self::Verifying,
+            4 => Self::Completed,
+            5 => Self::Failed,
+            6 => Self::Cancelled,
+            _ => Self::Preparing,
+        }
+    }
+
+    /// Converts the transfer phase into an atomic-friendly integer.
+    #[must_use]
+    pub const fn as_repr(self) -> u8 {
+        match self {
+            Self::Preparing => 0,
+            Self::Connecting => 1,
+            Self::Downloading => 2,
+            Self::Verifying => 3,
+            Self::Completed => 4,
+            Self::Failed => 5,
+            Self::Cancelled => 6,
+        }
+    }
+}
+
+/// Coarse failure bucket used by the frontend for actionable copy.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum FailureCategory {
+    /// The ticket could not be parsed or used.
+    InvalidTicket,
+    /// The output folder is missing, invalid, or unwritable.
+    Destination,
+    /// The sender could not be reached.
+    Unreachable,
+    /// The sender was reached, then the transfer stopped.
+    Interrupted,
+    /// The user cancelled the transfer.
+    Cancelled,
+    /// The destination volume does not have enough available space.
+    DiskSpace,
+    /// Verified content could not be exported to disk.
+    Export,
+    /// The backend could not classify the failure more precisely.
+    Unknown,
+}
+
 /// Live transfer snapshot stored in memory and mirrored to the frontend.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TransferInfo {
@@ -42,6 +115,12 @@ pub struct TransferInfo {
     pub speed_bps: u64,
     /// Best-known route used for this transfer.
     pub route_kind: RouteKind,
+    /// Current user-visible transfer phase.
+    pub phase: TransferPhase,
+    /// Failure category when the transfer has failed.
+    pub failure_category: Option<FailureCategory>,
+    /// Final output path when a receive completed.
+    pub output_path: Option<String>,
     /// Time to first peer contact or sender preparation completion.
     pub connect_ms: u64,
     /// Time spent downloading data into the local blob store.
@@ -68,6 +147,8 @@ pub enum TransferEvent {
         total: u64,
         /// Best-known route used for this transfer.
         route_kind: RouteKind,
+        /// Current user-visible transfer phase.
+        phase: TransferPhase,
         /// Time to first peer contact or sender preparation completion.
         connect_ms: u64,
         /// Time spent downloading data into the local blob store.
@@ -87,6 +168,8 @@ pub enum TransferEvent {
         speed_bps: u64,
         /// Best-known route used for this transfer.
         route_kind: RouteKind,
+        /// Current user-visible transfer phase.
+        phase: TransferPhase,
         /// Time to first peer contact or sender preparation completion.
         connect_ms: u64,
         /// Time spent downloading data into the local blob store.
@@ -112,6 +195,10 @@ pub enum TransferEvent {
         timestamp: u64,
         /// Best-known route used for this transfer.
         route_kind: RouteKind,
+        /// Current user-visible transfer phase.
+        phase: TransferPhase,
+        /// Final output path for receive transfers.
+        output_path: Option<String>,
         /// Time to first peer contact or sender preparation completion.
         connect_ms: u64,
         /// Time spent downloading data into the local blob store.
@@ -127,6 +214,10 @@ pub enum TransferEvent {
         error: String,
         /// Best-known route used for this transfer.
         route_kind: RouteKind,
+        /// Current user-visible transfer phase.
+        phase: TransferPhase,
+        /// Coarse failure bucket for actionable frontend copy.
+        failure_category: Option<FailureCategory>,
     },
 }
 
@@ -141,6 +232,8 @@ pub struct ProgressUpdate {
     pub speed_bps: u64,
     /// Best-known route used for this transfer.
     pub route_kind: RouteKind,
+    /// Current transfer phase.
+    pub phase: TransferPhase,
     /// Time to first peer contact or sender preparation completion.
     pub connect_ms: u64,
     /// Time spent downloading data into the local blob store.
@@ -183,7 +276,12 @@ impl EventReporter {
     /// # Errors
     ///
     /// Returns `FastDropError` if the Tauri event cannot be emitted.
-    pub fn emit_started(&self, total: u64, metrics: TransferMetrics) -> Result<()> {
+    pub fn emit_started(
+        &self,
+        total: u64,
+        metrics: TransferMetrics,
+        phase: TransferPhase,
+    ) -> Result<()> {
         self.emit(TransferEvent::Started {
             transfer_id: self.transfer_id.clone(),
             direction: self.direction,
@@ -191,6 +289,7 @@ impl EventReporter {
             peer: self.peer.clone(),
             total,
             route_kind: metrics.route_kind,
+            phase,
             connect_ms: metrics.connect_ms,
             download_ms: metrics.download_ms,
             export_ms: metrics.export_ms,
@@ -209,6 +308,7 @@ impl EventReporter {
             total: update.total,
             speed_bps: update.speed_bps,
             route_kind: update.route_kind,
+            phase: update.phase,
             connect_ms: update.connect_ms,
             download_ms: update.download_ms,
             export_ms: update.export_ms,
@@ -220,7 +320,13 @@ impl EventReporter {
     /// # Errors
     ///
     /// Returns `FastDropError` if the Tauri event cannot be emitted.
-    pub fn emit_completed(&self, hash: String, size: u64, metrics: TransferMetrics) -> Result<()> {
+    pub fn emit_completed(
+        &self,
+        hash: String,
+        size: u64,
+        metrics: TransferMetrics,
+        output_path: Option<String>,
+    ) -> Result<()> {
         self.emit(TransferEvent::Completed {
             transfer_id: self.transfer_id.clone(),
             direction: self.direction,
@@ -230,6 +336,8 @@ impl EventReporter {
             peer: self.peer.clone(),
             timestamp: unix_timestamp(),
             route_kind: metrics.route_kind,
+            phase: TransferPhase::Completed,
+            output_path,
             connect_ms: metrics.connect_ms,
             download_ms: metrics.download_ms,
             export_ms: metrics.export_ms,
@@ -241,11 +349,23 @@ impl EventReporter {
     /// # Errors
     ///
     /// Returns `FastDropError` if the Tauri event cannot be emitted.
-    pub fn emit_failed(&self, error: &str, route_kind: RouteKind) -> Result<()> {
+    pub fn emit_failed(
+        &self,
+        error: &str,
+        route_kind: RouteKind,
+        failure_category: Option<FailureCategory>,
+    ) -> Result<()> {
+        let phase = if failure_category == Some(FailureCategory::Cancelled) {
+            TransferPhase::Cancelled
+        } else {
+            TransferPhase::Failed
+        };
         self.emit(TransferEvent::Failed {
             transfer_id: self.transfer_id.clone(),
             error: error.to_string(),
             route_kind,
+            phase,
+            failure_category,
         })
     }
 
@@ -283,6 +403,7 @@ impl QueueProgressTarget {
                     download_ms: update.download_ms,
                     export_ms: update.export_ms,
                 },
+                update.phase,
             )
             .await;
     }
@@ -294,6 +415,7 @@ pub struct ProgressHandle {
     bytes: Arc<AtomicU64>,
     total: Arc<AtomicU64>,
     route_kind: Arc<AtomicU8>,
+    phase: Arc<AtomicU8>,
     connect_ms: Arc<AtomicU64>,
     download_ms: Arc<AtomicU64>,
     export_ms: Arc<AtomicU64>,
@@ -332,6 +454,12 @@ impl ProgressHandle {
         }
     }
 
+    /// Returns the current transfer phase.
+    #[must_use]
+    pub fn phase_snapshot(&self) -> TransferPhase {
+        TransferPhase::from_repr(self.phase.load(Ordering::Relaxed))
+    }
+
     /// Stores route and timing metrics.
     pub fn set_metrics(&self, metrics: TransferMetrics) {
         self.route_kind
@@ -340,6 +468,11 @@ impl ProgressHandle {
         self.download_ms
             .store(metrics.download_ms, Ordering::Relaxed);
         self.export_ms.store(metrics.export_ms, Ordering::Relaxed);
+    }
+
+    /// Updates the current transfer phase.
+    pub fn set_phase(&self, phase: TransferPhase) {
+        self.phase.store(phase.as_repr(), Ordering::Relaxed);
     }
 
     /// Updates the route kind for the transfer.
@@ -497,12 +630,14 @@ fn sample_progress(
 ) -> ProgressUpdate {
     let (bytes, total) = handle.snapshot();
     let metrics = handle.metrics_snapshot();
+    let phase = handle.phase_snapshot();
     let bytes_delta = bytes.saturating_sub(last_bytes);
     ProgressUpdate {
         bytes,
         total,
         speed_bps: calculate_speed(bytes_delta, now.saturating_duration_since(last_sample_at)),
         route_kind: metrics.route_kind,
+        phase,
         connect_ms: metrics.connect_ms,
         download_ms: metrics.download_ms,
         export_ms: metrics.export_ms,
@@ -538,6 +673,7 @@ mod tests {
             total: 256,
             speed_bps: 64,
             route_kind: RouteKind::Direct,
+            phase: TransferPhase::Downloading,
             connect_ms: 12,
             download_ms: 24,
             export_ms: 0,
@@ -546,6 +682,7 @@ mod tests {
         assert!(json.contains("\"type\":\"progress\""));
         assert!(json.contains("\"bytes\":128"));
         assert!(json.contains("\"route_kind\":\"direct\""));
+        assert!(json.contains("\"phase\":\"downloading\""));
     }
 
     #[test]
@@ -576,6 +713,8 @@ mod tests {
                 export_ms: 30,
             }
         );
+        handle.set_phase(TransferPhase::Verifying);
+        assert_eq!(handle.phase_snapshot(), TransferPhase::Verifying);
     }
 
     #[test]
@@ -594,6 +733,7 @@ mod tests {
         assert_eq!(update.total, 1024);
         assert!(update.speed_bps >= 2_000);
         assert_eq!(update.route_kind, RouteKind::Unknown);
+        assert_eq!(update.phase, TransferPhase::Preparing);
     }
 
     #[test]
@@ -603,6 +743,7 @@ mod tests {
             total: 1024,
             speed_bps: 2048,
             route_kind: RouteKind::Direct,
+            phase: TransferPhase::Downloading,
             connect_ms: 10,
             download_ms: 20,
             export_ms: 30,

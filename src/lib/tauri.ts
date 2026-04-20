@@ -20,6 +20,23 @@ export type NodeOnlineState =
   | "degraded"
   | "offline";
 export type RouteKind = "unknown" | "direct" | "relay";
+export type TransferPhase =
+  | "preparing"
+  | "connecting"
+  | "downloading"
+  | "verifying"
+  | "completed"
+  | "failed"
+  | "cancelled";
+export type FailureCategory =
+  | "invalid_ticket"
+  | "destination"
+  | "unreachable"
+  | "interrupted"
+  | "cancelled"
+  | "disk_space"
+  | "export"
+  | "unknown";
 export type NearbyRouteHint = "unknown" | "direct" | "relay" | "mixed";
 export type RelayMode = "public" | "custom";
 
@@ -42,6 +59,9 @@ export interface ActiveTransfer {
   total: number;
   speed_bps: number;
   route_kind: RouteKind;
+  phase?: TransferPhase;
+  failure_category?: FailureCategory | null;
+  output_path?: string | null;
   connect_ms: number;
   download_ms: number;
   export_ms: number;
@@ -70,6 +90,28 @@ export interface AppSettings {
   relay_mode: RelayMode;
   custom_relay_url: string | null;
   local_discovery_enabled: boolean;
+}
+
+export interface DownloadDirectoryDiagnostics {
+  exists: boolean;
+  is_dir: boolean;
+  writable: boolean;
+  status: string;
+}
+
+export interface NetworkDiagnostics {
+  app_version: string;
+  node_id: string | null;
+  online: boolean;
+  online_state: NodeOnlineState;
+  relay_mode: RelayMode;
+  relay_connected: boolean;
+  relay_url: string | null;
+  direct_address_count: number;
+  lan_discovery_active: boolean;
+  local_discovery_enabled: boolean;
+  download_dir_status: DownloadDirectoryDiagnostics;
+  latest_route_kind: RouteKind;
 }
 
 export interface NearbyShare {
@@ -112,6 +154,7 @@ export type TransferEvent =
       peer: string | null;
       total: number;
       route_kind: RouteKind;
+      phase?: TransferPhase;
       connect_ms: number;
       download_ms: number;
       export_ms: number;
@@ -123,6 +166,7 @@ export type TransferEvent =
       total: number;
       speed_bps: number;
       route_kind: RouteKind;
+      phase?: TransferPhase;
       connect_ms: number;
       download_ms: number;
       export_ms: number;
@@ -137,6 +181,8 @@ export type TransferEvent =
       peer: string | null;
       timestamp: number;
       route_kind: RouteKind;
+      phase?: TransferPhase;
+      output_path?: string | null;
       connect_ms: number;
       download_ms: number;
       export_ms: number;
@@ -146,6 +192,8 @@ export type TransferEvent =
       transfer_id: string;
       error: string;
       route_kind: RouteKind;
+      phase?: TransferPhase;
+      failure_category?: FailureCategory | null;
     };
 
 let pendingUpdate: Update | null = null;
@@ -167,6 +215,26 @@ const browserSettings: AppSettings = {
   relay_mode: "public",
   custom_relay_url: null,
   local_discovery_enabled: true,
+};
+
+const browserNetworkDiagnostics: NetworkDiagnostics = {
+  app_version: "web-preview",
+  node_id: null,
+  online: false,
+  online_state: "offline",
+  relay_mode: "public",
+  relay_connected: false,
+  relay_url: null,
+  direct_address_count: 0,
+  lan_discovery_active: false,
+  local_discovery_enabled: false,
+  download_dir_status: {
+    exists: false,
+    is_dir: false,
+    writable: false,
+    status: "desktop_runtime_required",
+  },
+  latest_route_kind: "unknown",
 };
 
 export function isDesktopRuntime(): boolean {
@@ -298,6 +366,13 @@ export async function getAppSettings(): Promise<AppSettings> {
     return browserSettings;
   }
   return invoke<AppSettings>("get_app_settings");
+}
+
+export async function getNetworkDiagnostics(): Promise<NetworkDiagnostics> {
+  if (!isDesktopRuntime()) {
+    return browserNetworkDiagnostics;
+  }
+  return invoke<NetworkDiagnostics>("get_network_diagnostics");
 }
 
 export async function getDownloadDir(): Promise<string> {

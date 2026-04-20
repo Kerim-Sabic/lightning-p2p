@@ -5,7 +5,8 @@ use crate::node::FastDropNode;
 use crate::storage::history::{self, TransferRecord};
 use crate::transfer::metrics::{RouteKind, TransferMetrics};
 use crate::transfer::progress::{
-    EventReporter, ProgressHandle, ProgressSampler, TransferDirection,
+    EventReporter, FailureCategory, ProgressHandle, ProgressSampler, TransferDirection,
+    TransferPhase,
 };
 use futures_util::stream;
 use futures_util::StreamExt;
@@ -74,7 +75,11 @@ pub async fn send_files(
         plan.label.clone(),
         None,
     );
-    reporter.emit_started(plan.total_size, TransferMetrics::default())?;
+    reporter.emit_started(
+        plan.total_size,
+        TransferMetrics::default(),
+        TransferPhase::Preparing,
+    )?;
     let sampler = ProgressSampler::spawn(reporter.clone(), None);
     let progress = sampler.handle();
 
@@ -90,14 +95,17 @@ pub async fn send_files(
             progress.set(outcome.total_size, outcome.total_size);
             progress.set_metrics(metrics);
             sampler.finish().await?;
-            reporter.emit_completed(outcome.hash.to_string(), outcome.total_size, metrics)?;
+            reporter.emit_completed(outcome.hash.to_string(), outcome.total_size, metrics, None)?;
             save_send_record(node, &outcome)?;
             Ok(outcome)
         }
         Err(error) => {
             let _ = sampler.finish().await;
-            let _ =
-                reporter.emit_failed(&error.to_string(), progress.metrics_snapshot().route_kind);
+            let _ = reporter.emit_failed(
+                &error.to_string(),
+                progress.metrics_snapshot().route_kind,
+                Some(FailureCategory::Unknown),
+            );
             Err(error)
         }
     }

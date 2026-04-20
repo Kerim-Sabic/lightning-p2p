@@ -4,6 +4,23 @@ All notable changes to Lightning P2P are documented here. Format: [Keep a Change
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-04-20
+
+### Added
+- Settings diagnostics copy flow with app version, node ID, relay state, direct address count, LAN discovery status, download folder health, and latest route kind.
+- Transfer event metadata for user-visible phases, failure categories, and final receive output paths.
+- Benchmark report template under `docs/benchmark-report-template.md` for repeatable LAN, WAN, relay, large-file, and many-small-file measurements.
+- Stable release aliases planned for tagged release assets: `LightningP2PSetup.exe` and `LightningP2P.msi`.
+
+### Changed
+- Receive UX now shows clearer route and phase labels, plus saved output locations after completion.
+- Release workflow now copies latest NSIS/MSI installers to stable aliases while keeping versioned updater artifacts.
+
+### Fixed
+- Receive startup now preflights the configured destination folder before creating an active transfer.
+- Completed receives no longer risk overwriting existing files or folders; conflicting outputs are moved to a safe suffixed path.
+- Receive failures are categorized as unreachable, interrupted, cancelled, destination, disk-space, export, or unknown where possible.
+
 ## [0.3.2] - 2026-04-19
 
 ### Added

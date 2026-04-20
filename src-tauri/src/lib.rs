@@ -110,6 +110,7 @@ pub fn run() {
             commands::transfer::cancel_transfer,
             commands::transfer::get_active_transfers,
             commands::transfer::get_transfer_history,
+            commands::diagnostics::get_network_diagnostics,
             commands::peer::get_node_id,
             commands::peer::get_node_status,
             commands::settings::get_app_settings,

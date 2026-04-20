@@ -12,6 +12,17 @@ This checklist tracks release tasks that cannot be fully automated from the app 
 
 Before tagging a release, confirm the secret still exists under GitHub repository settings.
 
+## GitHub Release Asset Verification
+
+After the release workflow finishes, confirm the release contains:
+
+- Versioned NSIS installer and `.sig`
+- Versioned MSI installer and `.sig`
+- Stable aliases: `LightningP2PSetup.exe`, `LightningP2PSetup.exe.sig`, `LightningP2P.msi`, `LightningP2P.msi.sig`
+- Velopack `*-Setup.exe`, `*-full.nupkg`, and `RELEASES`
+- `latest.json`
+- `SHA256SUMS.txt`
+
 ## Velopack Clean VM Verification
 
 Run this on the next tagged release before announcing the Velopack installer as production-ready.

@@ -1,6 +1,6 @@
 [package]
 name = "fastdrop"
-version = "0.3.2"
+version = "0.4.0"
 edition = "2021"
 rust-version = "1.81"
 description = "Lightning P2P — P2P file sharing at maximum speed"
@@ -62,7 +62,10 @@ sha2 = "0.10"
 tempfile = "3"
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.59", features = ["Win32_Foundation"] }
+windows-sys = { version = "0.59", features = [
+  "Win32_Foundation",
+  "Win32_Storage_FileSystem",
+] }
 
 [features]
 default = ["custom-protocol"]

@@ -143,7 +143,7 @@ function navClass(active: boolean): string {
 }
 
 function statCardClass(): string {
-  return "relative overflow-hidden rounded-[10px] border border-white/10 bg-white/[0.03] px-5 py-6 backdrop-blur-sm transition-colors hover:border-emerald-300/25 hover:bg-white/[0.05]";
+  return "relative overflow-hidden rounded-[8px] border border-white/10 bg-white/[0.035] px-5 py-6 backdrop-blur-sm transition-colors hover:border-emerald-300/25 hover:bg-white/[0.06]";
 }
 
 export function WebLandingPage() {
@@ -155,8 +155,8 @@ export function WebLandingPage() {
   const navPages = webPages.filter((p) => p.inNav);
 
   return (
-    <div className="min-h-screen bg-[#08120f] text-white">
-      <header className="fixed inset-x-0 top-0 z-30 border-b border-white/10 bg-[#08120f]/82 backdrop-blur-xl">
+    <div className="min-h-screen bg-[#050706] text-white">
+      <header className="fixed inset-x-0 top-0 z-30 border-b border-white/10 bg-[#050706]/74 backdrop-blur-2xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
           <a href="/" className="flex min-w-0 items-center gap-3">
             <img
@@ -200,27 +200,19 @@ export function WebLandingPage() {
       </header>
 
       <main>
-        <section className="relative flex min-h-[92vh] items-end overflow-hidden pt-24">
-          <div className="absolute inset-0 bg-gradient-to-br from-[#06110d] via-[#08120f] to-[#041b14]" />
+        <section className="relative flex min-h-[92vh] items-end overflow-hidden bg-[#050706] pt-24">
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute inset-0 bg-[radial-gradient(1200px_circle_at_18%_10%,rgba(16,185,129,0.18),transparent_55%),radial-gradient(900px_circle_at_82%_92%,rgba(16,185,129,0.12),transparent_55%)]"
+            className="pointer-events-none absolute inset-0 bg-center bg-no-repeat opacity-42 [background-image:url('/web-hero.png')] [background-size:cover]"
           />
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute inset-0 bg-center bg-no-repeat opacity-25 mix-blend-screen [background-image:url('/web-hero.png')] [background-size:cover]"
+            className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(5,7,6,0.96)_0%,rgba(5,7,6,0.78)_48%,rgba(5,7,6,0.92)_100%)]"
           />
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-0 opacity-[0.035]"
-            style={{
-              backgroundImage:
-                "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>\")",
-            }}
-          />
+          <div className="absolute inset-x-0 bottom-0 h-px bg-white/12" />
           <div className="relative mx-auto grid w-full max-w-7xl gap-10 px-4 pb-14 sm:px-6 lg:grid-cols-[minmax(0,0.92fr)_minmax(320px,0.58fr)] lg:pb-20">
             <div className="max-w-4xl">
-              <p className="inline-flex items-center gap-2 rounded-full border border-emerald-300/20 bg-emerald-300/5 px-3 py-1 text-xs font-semibold uppercase tracking-[0.28em] text-emerald-200">
+              <p className="inline-flex items-center gap-2 rounded-full border border-white/16 bg-white/8 px-3 py-1 text-xs font-semibold uppercase tracking-[0.28em] text-emerald-100 backdrop-blur-xl">
                 <Sparkles className="h-3 w-3" />
                 {page.eyebrow}
               </p>
@@ -246,7 +238,7 @@ export function WebLandingPage() {
               <div className="mt-9 flex flex-wrap gap-3">
                 <a
                   href={EXE_DOWNLOAD_URL}
-                  className="inline-flex items-center gap-2 rounded-full bg-emerald-300 px-5 py-3 text-sm font-semibold text-emerald-950 shadow-lg shadow-emerald-500/20 transition-colors hover:bg-emerald-200"
+                className="inline-flex items-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-black/25 transition-colors hover:bg-emerald-100"
                 >
                   <Download className="h-4 w-4" />
                   Download for Windows
@@ -271,7 +263,7 @@ export function WebLandingPage() {
               <img
                 src={siteLogoUrl}
                 alt="Lightning P2P dark logo"
-                className="mb-6 aspect-square w-40 rounded-[8px] border border-white/10 object-cover shadow-2xl shadow-black/40 sm:w-52"
+                className="mb-6 aspect-square w-40 rounded-[8px] border border-white/12 object-cover shadow-2xl shadow-black/50 sm:w-52"
               />
               <p className="font-semibold text-white">Current launch target</p>
               <p className="mt-2">
@@ -286,6 +278,18 @@ export function WebLandingPage() {
                 Latest release v{APP_VERSION}
                 <ArrowRight className="h-3 w-3" />
               </a>
+              <div className="mt-6 grid gap-2">
+                {["Direct first", "BLAKE3 verified", "No cloud upload"].map(
+                  (item) => (
+                    <span
+                      key={item}
+                      className="rounded-full border border-white/12 bg-white/[0.06] px-3 py-1.5 text-xs font-medium text-slate-100 backdrop-blur-xl"
+                    >
+                      {item}
+                    </span>
+                  ),
+                )}
+              </div>
             </aside>
           </div>
         </section>
@@ -323,6 +327,52 @@ export function WebLandingPage() {
                   licensed on GitHub. Built with Rust, Tauri, iroh, and
                   iroh-blobs.
                 </p>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {isHome && (
+          <section
+            className="border-b border-white/8 bg-[#f7f8f5] px-4 py-16 text-[#101411] sm:px-6"
+            aria-labelledby="aeo-heading"
+          >
+            <div className="mx-auto max-w-5xl">
+              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[#4d6a3a]">
+                Quick answer
+              </p>
+              <h2
+                id="aeo-heading"
+                className="mt-3 max-w-3xl text-3xl font-semibold leading-tight"
+              >
+                Best P2P file transfer for Windows users who want no account,
+                no cloud upload, and verified bytes.
+              </h2>
+              <div className="mt-8 grid gap-3 md:grid-cols-3">
+                {[
+                  [
+                    "For large files",
+                    "Lightning P2P streams from disk instead of uploading to a storage bucket first.",
+                  ],
+                  [
+                    "For privacy",
+                    "Transfers use encrypted QUIC transport and BLAKE3 content verification.",
+                  ],
+                  [
+                    "For reliability",
+                    "iroh tries direct paths first and keeps relay-assisted reachability as fallback.",
+                  ],
+                ].map(([title, copy]) => (
+                  <article
+                    key={title}
+                    className="rounded-[8px] border border-[#dfe5dc] bg-white/70 p-5"
+                  >
+                    <h3 className="font-semibold">{title}</h3>
+                    <p className="mt-2 text-sm leading-6 text-[#435047]">
+                      {copy}
+                    </p>
+                  </article>
+                ))}
               </div>
             </div>
           </section>
@@ -674,9 +724,13 @@ export function WebLandingPage() {
               <ul className="mt-3 space-y-2">
                 {webPages
                   .filter((p) =>
-                    ["/", "/download", "/security", "/benchmarks"].includes(
-                      p.path,
-                    ),
+                    [
+                      "/",
+                      "/download",
+                      "/security",
+                      "/benchmarks",
+                      "/best-p2p-file-transfer",
+                    ].includes(p.path),
                   )
                   .map((item) => (
                     <li key={item.path}>

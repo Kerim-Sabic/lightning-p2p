@@ -1,8 +1,9 @@
 //! Commands for receiving files and querying transfer state.
 
 use crate::storage::history::{self, TransferRecord};
+use crate::transfer::export;
 use crate::transfer::metrics::RouteKind;
-use crate::transfer::progress::{TransferDirection, TransferInfo};
+use crate::transfer::progress::{TransferDirection, TransferInfo, TransferPhase};
 use crate::AppState;
 use iroh_blobs::ticket::BlobTicket;
 use std::path::PathBuf;
@@ -109,6 +110,9 @@ async fn start_receive_ticket(
     ticket: BlobTicket,
     destination: String,
 ) -> Result<String, String> {
+    let destination = PathBuf::from(destination);
+    export::preflight_destination(&destination).map_err(String::from)?;
+
     let transfer_id = state.transfers.next_transfer_id("recv");
     let (cancel_tx, cancel_rx) = watch::channel(false);
 
@@ -124,6 +128,9 @@ async fn start_receive_ticket(
                 total: 0,
                 speed_bps: 0,
                 route_kind: RouteKind::Unknown,
+                phase: TransferPhase::Connecting,
+                failure_category: None,
+                output_path: None,
                 connect_ms: 0,
                 download_ms: 0,
                 export_ms: 0,
@@ -134,7 +141,6 @@ async fn start_receive_ticket(
 
     let queue = state.transfers.clone();
     let window_clone = window.clone();
-    let destination = PathBuf::from(destination);
     let transfer_id_for_task = transfer_id.clone();
 
     tauri::async_runtime::spawn(async move {

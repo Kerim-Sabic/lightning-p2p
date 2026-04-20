@@ -22,10 +22,12 @@ export function App() {
       ? "desktop"
       : "browser";
     document.body.dataset.runtime = desktopRuntime ? "desktop" : "browser";
+    document.body.classList.add("app-hydrated");
 
     return () => {
       delete document.documentElement.dataset.runtime;
       delete document.body.dataset.runtime;
+      document.body.classList.remove("app-hydrated");
     };
   }, [desktopRuntime]);
 

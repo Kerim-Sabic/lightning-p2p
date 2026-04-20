@@ -179,8 +179,10 @@ jobs:
             | File | Description |
             |------|-------------|
             | `Lightning.P2P_${{ env.APP_VERSION }}_x64-setup.exe` | Windows NSIS installer (signed auto-updates via Tauri updater) |
+            | `LightningP2PSetup.exe` | Stable alias for the latest recommended NSIS installer |
             | `LightningP2P-win-Setup.exe` | Velopack installer (one-click, Discord-style delta updates) |
             | `Lightning.P2P_${{ env.APP_VERSION }}_x64_en-US.msi` | Windows MSI installer (managed environments) |
+            | `LightningP2P.msi` | Stable alias for the latest MSI installer |
             | `winget install lightning-p2p` | winget package (after manifest lands in `microsoft/winget-pkgs`) |
 
             SHA256 checksums are published alongside the installers.
@@ -209,6 +211,35 @@ jobs:
           includeUpdaterJson: true
           updaterJsonPreferNsis: true
           args: --ci --target x86_64-pc-windows-msvc --config src-tauri/tauri.release.conf.json
+
+      - name: Create stable installer aliases
+        shell: pwsh
+        run: |
+          $releaseRoot = "src-tauri/target/x86_64-pc-windows-msvc/release"
+          $bundleRoot = Join-Path $releaseRoot "bundle"
+          $nsis = Get-ChildItem -Path (Join-Path $bundleRoot "nsis") -Filter "*_x64-setup.exe" -File |
+            Sort-Object Name |
+            Select-Object -First 1
+          if (-not $nsis) {
+            throw "NSIS installer was not found; cannot create stable alias."
+          }
+          Copy-Item -LiteralPath $nsis.FullName -Destination (Join-Path $bundleRoot "LightningP2PSetup.exe") -Force
+          $nsisSig = "$($nsis.FullName).sig"
+          if (Test-Path $nsisSig) {
+            Copy-Item -LiteralPath $nsisSig -Destination (Join-Path $bundleRoot "LightningP2PSetup.exe.sig") -Force
+          }
+
+          $msi = Get-ChildItem -Path (Join-Path $bundleRoot "msi") -Filter "*_x64_en-US.msi" -File |
+            Sort-Object Name |
+            Select-Object -First 1
+          if (-not $msi) {
+            throw "MSI installer was not found; cannot create stable alias."
+          }
+          Copy-Item -LiteralPath $msi.FullName -Destination (Join-Path $bundleRoot "LightningP2P.msi") -Force
+          $msiSig = "$($msi.FullName).sig"
+          if (Test-Path $msiSig) {
+            Copy-Item -LiteralPath $msiSig -Destination (Join-Path $bundleRoot "LightningP2P.msi.sig") -Force
+          }
 
       - name: Setup .NET for Velopack
         uses: actions/setup-dotnet@v4
@@ -303,6 +334,10 @@ jobs:
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           files: |
+            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/LightningP2PSetup.exe
+            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/LightningP2PSetup.exe.sig
+            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/LightningP2P.msi
+            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/LightningP2P.msi.sig
             src-tauri/target/x86_64-pc-windows-msvc/release/velopack-releases/*-Setup.exe
             src-tauri/target/x86_64-pc-windows-msvc/release/velopack-releases/*-full.nupkg
             src-tauri/target/x86_64-pc-windows-msvc/release/velopack-releases/RELEASES
@@ -319,6 +354,10 @@ jobs:
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.zip
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.sig
+            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/LightningP2PSetup.exe
+            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/LightningP2PSetup.exe.sig
+            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/LightningP2P.msi
+            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/LightningP2P.msi.sig
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/SHA256SUMS.txt
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/**/*.zip
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/**/*.sig

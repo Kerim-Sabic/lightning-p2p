@@ -40,6 +40,7 @@
 - [Security model](https://lightning-p2p.netlify.app/security)
 - [Benchmarks methodology](https://lightning-p2p.netlify.app/benchmarks)
 - [How to send large files](https://lightning-p2p.netlify.app/how-to-send-large-files)
+- [Best P2P file transfer](https://lightning-p2p.netlify.app/best-p2p-file-transfer)
 - [WeTransfer alternative](https://lightning-p2p.netlify.app/wetransfer-alternative)
 - [Magic Wormhole alternative](https://lightning-p2p.netlify.app/wormhole-alternative)
 - [LocalSend comparison](https://lightning-p2p.netlify.app/localsend-vs-lightning-p2p)

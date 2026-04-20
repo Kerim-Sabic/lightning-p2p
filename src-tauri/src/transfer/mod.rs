@@ -1,6 +1,7 @@
 //! Transfer management — sending, receiving, progress tracking, and queuing.
 
-mod export;
+mod destination;
+pub(crate) mod export;
 pub mod metrics;
 
 pub mod progress;
