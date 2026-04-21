@@ -16,6 +16,7 @@ import {
   createDeepReceiveLink,
   ticketFromReceiveFragment,
 } from "../lib/shareLinks";
+import { writeClipboardText } from "../lib/tauri";
 
 const PENDING_TICKET_STORAGE_KEY = "lightning-p2p.pendingReceiveTicket";
 
@@ -110,7 +111,7 @@ export function ReceiveHandoffPage() {
     }
 
     try {
-      await navigator.clipboard.writeText(handoff.ticket);
+      await writeClipboardText(handoff.ticket);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1800);
     } catch {

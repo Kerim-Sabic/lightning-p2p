@@ -21,8 +21,10 @@ import { formatBytes } from "../lib/format";
 import { createReceiveHandoffLink } from "../lib/shareLinks";
 import {
   isDesktopRuntime,
+  isMobileRuntime,
   onWindowDragDropEvent,
   renderTicketQr,
+  writeClipboardText,
 } from "../lib/tauri";
 import { useLatestSendTransfer } from "../stores/transferSelectors";
 import { useTransferStore } from "../stores/transferStore";
@@ -89,7 +91,8 @@ export function SendView() {
   const shareSelection = useTransferStore((state) => state.shareSelection);
   const shareTicket = useTransferStore((state) => state.shareTicket);
   const sendTransfer = useLatestSendTransfer();
-  const desktopRuntime = isDesktopRuntime();
+  const nativeRuntime = isDesktopRuntime();
+  const mobileRuntime = isMobileRuntime();
   const [copied, setCopied] = useState<"link" | "ticket" | null>(null);
   const [isDragActive, setIsDragActive] = useState(false);
   const [qrSvg, setQrSvg] = useState<string | null>(null);
@@ -105,6 +108,10 @@ export function SendView() {
     : null;
 
   useEffect(() => {
+    if (!nativeRuntime || mobileRuntime) {
+      return;
+    }
+
     let unlisten: (() => void) | null = null;
 
     void onWindowDragDropEvent((event) => {
@@ -135,7 +142,7 @@ export function SendView() {
     return () => {
       unlisten?.();
     };
-  }, [prepareShareSelection, setError]);
+  }, [mobileRuntime, nativeRuntime, prepareShareSelection, setError]);
 
   useEffect(() => {
     let active = true;
@@ -170,7 +177,7 @@ export function SendView() {
     }
 
     try {
-      await navigator.clipboard.writeText(receiveHandoffLink);
+      await writeClipboardText(receiveHandoffLink);
       setCopied("link");
       window.setTimeout(() => setCopied(null), 1800);
     } catch (error) {
@@ -184,7 +191,7 @@ export function SendView() {
     }
 
     try {
-      await navigator.clipboard.writeText(shareTicket);
+      await writeClipboardText(shareTicket);
       setCopied("ticket");
       window.setTimeout(() => setCopied(null), 1800);
     } catch (error) {
@@ -193,7 +200,7 @@ export function SendView() {
   };
 
   const handlePrimaryStageAction = async (): Promise<void> => {
-    if (!desktopRuntime) {
+    if (!nativeRuntime) {
       return;
     }
 
@@ -246,10 +253,10 @@ export function SendView() {
           }`}
           onClick={handleDropZoneClick}
           onKeyDown={handleDropZoneKeyDown}
-          tabIndex={desktopRuntime ? 0 : -1}
-          role={desktopRuntime ? "button" : undefined}
+          tabIndex={nativeRuntime ? 0 : -1}
+          role={nativeRuntime ? "button" : undefined}
           aria-label={
-            desktopRuntime
+            nativeRuntime
               ? "Choose files to share or drop files here"
               : undefined
           }
@@ -263,11 +270,14 @@ export function SendView() {
               <h1 className="mt-2 text-[clamp(1.8rem,1.6rem+0.8vw,2.4rem)] font-semibold tracking-[-0.04em] text-white">
                 {isDragActive
                   ? "Release to stage files"
-                  : "Drop files to share"}
+                  : mobileRuntime
+                    ? "Pick files to share"
+                    : "Drop files to share"}
               </h1>
               <p className="meta-copy mt-3 max-w-[58ch]">
-                Choose files or a folder, then generate one receive link when
-                you are ready.
+                {mobileRuntime
+                  ? "Pick files from this phone, keep the app open, then generate one receive link when you are ready."
+                  : "Choose files or a folder, then generate one receive link when you are ready."}
               </p>
 
               <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-400">
@@ -290,7 +300,7 @@ export function SendView() {
             >
               <button
                 onClick={() => void pickShareFiles()}
-                disabled={!desktopRuntime}
+                disabled={!nativeRuntime}
                 className="btn-primary justify-center"
               >
                 <span className="relative inline-flex items-center gap-2">
@@ -298,18 +308,25 @@ export function SendView() {
                   Choose files
                 </span>
               </button>
-              <button
-                onClick={() => void pickShareFolder()}
-                disabled={!desktopRuntime}
-                className="glass-button inline-flex items-center justify-center gap-2 px-5 py-3 text-sm text-slate-100"
-              >
-                <Folder className="h-4 w-4" />
-                Choose folder
-              </button>
-              {!desktopRuntime ? (
+              {!mobileRuntime ? (
+                <button
+                  onClick={() => void pickShareFolder()}
+                  disabled={!nativeRuntime}
+                  className="glass-button inline-flex items-center justify-center gap-2 px-5 py-3 text-sm text-slate-100"
+                >
+                  <Folder className="h-4 w-4" />
+                  Choose folder
+                </button>
+              ) : null}
+              {!nativeRuntime ? (
                 <p className="text-xs leading-6 text-slate-500">
                   File and folder pickers require the native Lightning P2P
-                  desktop app runtime.
+                  app runtime.
+                </p>
+              ) : mobileRuntime ? (
+                <p className="text-xs leading-6 text-slate-500">
+                  Android alpha stages files in app-private storage. Keep this
+                  screen open until the receiver finishes.
                 </p>
               ) : null}
             </div>
@@ -341,7 +358,7 @@ export function SendView() {
               </button>
               <button
                 onClick={() => void createShare()}
-                disabled={isSharing || !desktopRuntime}
+                disabled={isSharing || !nativeRuntime}
                 className="btn-primary"
               >
                 <span className="relative inline-flex items-center gap-2">

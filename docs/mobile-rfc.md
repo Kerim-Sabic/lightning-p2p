@@ -3,6 +3,8 @@
 Status: **Draft** · Target: phase 2, after desktop P0/P1 PRs land
 Authors: @Kerim-Sabic
 
+Current update: Android alpha foundation is implemented on `main`. iOS remains prepared but not shipped.
+
 ## 1. Motivation
 
 Lightning P2P today is Windows-only. The single biggest asks from users are:
@@ -63,8 +65,7 @@ We keep the single Rust crate. `crate-type = ["lib", "staticlib", "cdylib"]` is 
 |---|---|---|
 | `tauri-plugin-os` | Platform detection, version reporting | None |
 | `tauri-plugin-clipboard-manager` | Clipboard read/write on mobile (the browser `navigator.clipboard` API is restricted on iOS) | None |
-| `tauri-plugin-share` | Hook into the OS share sheet | None |
-| `tauri-plugin-biometric` | Optional: biometric gate on first app launch | None |
+| `tauri-plugin-barcode-scanner` | QR receive flow on Android/iOS | None |
 
 All of these are additive. Desktop continues to call the same Tauri commands.
 

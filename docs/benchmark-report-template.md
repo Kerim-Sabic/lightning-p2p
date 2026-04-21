@@ -20,6 +20,10 @@ Use this template before publishing any "fastest" or "best" claim. Keep raw note
 | WAN direct | 1 GB single file | Direct | | | 5 | | |
 | WAN direct | 10 GB single file | Direct | | | 5 | | |
 | Relay fallback | 1 GB single file | Relay | | | 5 | | |
+| Android to Windows LAN direct | 1 GB single file | Direct | | | 5 | | |
+| Windows to Android LAN direct | 1 GB single file | Direct | | | 5 | | |
+| Android to Windows relay fallback | 1 GB single file | Relay | | | 5 | | |
+| Android to Android LAN direct | 1 GB single file | Direct | | | 5 | | |
 
 ## Hardware And Software
 
@@ -56,6 +60,9 @@ Use this template before publishing any "fastest" or "best" claim. Keep raw note
 - Slowest successful run:
 - Failure count and category:
 - Route badge observed in app:
+- Route kind from diagnostics:
+- Export time:
+- Battery / thermal notes:
 - Diagnostics copied before run:
 - Diagnostics copied after run:
 

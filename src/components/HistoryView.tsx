@@ -3,6 +3,7 @@ import { Clock3, Copy, Filter, History, RefreshCw, Search } from "lucide-react";
 import { useDeferredValue, useMemo, useState } from "react";
 import { formatBytes, formatTimestamp } from "../lib/format";
 import { createReceiveHandoffLink } from "../lib/shareLinks";
+import { writeClipboardText } from "../lib/tauri";
 import { useTransferStore } from "../stores/transferStore";
 
 type DirectionFilter = "all" | "send" | "receive";
@@ -89,9 +90,7 @@ export function HistoryView() {
     }
 
     try {
-      await navigator.clipboard.writeText(
-        createReceiveHandoffLink(resharedTicket),
-      );
+      await writeClipboardText(createReceiveHandoffLink(resharedTicket));
       setCopied("link");
       window.setTimeout(() => setCopied(null), 1800);
     } catch (error) {
@@ -105,7 +104,7 @@ export function HistoryView() {
     }
 
     try {
-      await navigator.clipboard.writeText(resharedTicket);
+      await writeClipboardText(resharedTicket);
       setCopied("ticket");
       window.setTimeout(() => setCopied(null), 1800);
     } catch (error) {

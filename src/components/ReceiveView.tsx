@@ -10,7 +10,13 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { extractBlobTicket } from "../lib/format";
-import { isDesktopRuntime, type NearbyShare } from "../lib/tauri";
+import {
+  isDesktopRuntime,
+  isMobileRuntime,
+  readClipboardText,
+  scanReceiveTicketQr,
+  type NearbyShare,
+} from "../lib/tauri";
 import { useNearbyShareStore } from "../stores/nearbyShareStore";
 import { useReceiveTransfers } from "../stores/transferSelectors";
 import { useTransferStore } from "../stores/transferStore";
@@ -51,8 +57,10 @@ export function ReceiveView() {
   );
   const receiveTransfers = useReceiveTransfers();
   const nearbyShares = useNearbyShareStore((state) => state.shares);
-  const desktopRuntime = isDesktopRuntime();
+  const nativeRuntime = isDesktopRuntime();
+  const mobileRuntime = isMobileRuntime();
   const [ticketInput, setTicketInput] = useState("");
+  const [isScanning, setIsScanning] = useState(false);
   const [clipboardSuggestion, setClipboardSuggestion] = useState<string | null>(
     null,
   );
@@ -63,11 +71,11 @@ export function ReceiveView() {
   const localDiscoveryEnabled = settings?.local_discovery_enabled ?? true;
 
   const probeClipboardForTicket = useCallback(async (): Promise<void> => {
-    if (!navigator?.clipboard?.readText) {
+    if (!nativeRuntime) {
       return;
     }
     try {
-      const text = (await navigator.clipboard.readText()).trim();
+      const text = (await readClipboardText()).trim();
       const ticket = extractBlobTicket(text);
       if (!ticket) {
         setClipboardSuggestion(null);
@@ -83,7 +91,7 @@ export function ReceiveView() {
       // Clipboard access can fail when the window isn't focused or on first
       // read; silently ignore - the user can still paste manually.
     }
-  }, []);
+  }, [nativeRuntime]);
 
   useEffect(() => {
     void probeClipboardForTicket();
@@ -143,10 +151,23 @@ export function ReceiveView() {
 
   const handlePaste = async (): Promise<void> => {
     try {
-      const clipboardText = await navigator.clipboard.readText();
+      const clipboardText = await readClipboardText();
       setTicketInput(extractBlobTicket(clipboardText) ?? clipboardText);
     } catch (error) {
       setError(error instanceof Error ? error.message : "Paste failed");
+    }
+  };
+
+  const handleScanQr = async (): Promise<void> => {
+    setIsScanning(true);
+    try {
+      const ticket = await scanReceiveTicketQr();
+      setTicketInput(ticket);
+      setClipboardSuggestion(null);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "QR scan failed");
+    } finally {
+      setIsScanning(false);
     }
   };
 
@@ -163,9 +184,9 @@ export function ReceiveView() {
               Receive from nearby senders first
             </h1>
             <p className="meta-copy mt-3 max-w-[58ch]">
-              Nearby shares should appear automatically on the same LAN. Receive
-              links and raw tickets stay available when discovery is
-              unavailable.
+              {mobileRuntime
+                ? "Receive links, QR scans, and nearby shares work in the foreground. Keep this app open until the transfer finishes."
+                : "Nearby shares should appear automatically on the same LAN. Receive links and raw tickets stay available when discovery is unavailable."}
             </p>
 
             <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-400">
@@ -184,7 +205,9 @@ export function ReceiveView() {
           </div>
 
           <div className="glass-subtle flex w-full max-w-[340px] flex-col gap-3 px-4 py-4">
-            <p className="metric-label">Receive folder</p>
+            <p className="metric-label">
+              {mobileRuntime ? "Android alpha storage" : "Receive folder"}
+            </p>
             <div className="flex items-start gap-3">
               <div className="glass-icon h-10 w-10 shrink-0">
                 <FolderSymlink className="h-4 w-4 text-emerald-200" />
@@ -193,9 +216,27 @@ export function ReceiveView() {
                 {downloadDir ?? "Resolving download directory..."}
               </p>
             </div>
+            {mobileRuntime ? (
+              <p className="text-xs leading-6 text-slate-400">
+                Files are saved inside Lightning P2P app storage for this alpha.
+              </p>
+            ) : null}
           </div>
         </div>
       </section>
+
+      {mobileRuntime ? (
+        <section className="glass-panel border-amber-300/14 bg-amber-500/[0.06] p-4">
+          <p className="text-sm font-semibold text-amber-100">
+            Foreground transfer alpha
+          </p>
+          <p className="mt-2 text-[13px] leading-6 text-amber-50/78">
+            Keep the screen awake, keep Lightning P2P open, and keep the sender
+            online. Android may pause or stop this alpha if the app is
+            backgrounded for too long.
+          </p>
+        </section>
+      ) : null}
 
       <section className="glass-panel p-5">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -239,7 +280,7 @@ export function ReceiveView() {
               <NearbyShareCard
                 key={share.share_id}
                 share={share}
-                disabled={!desktopRuntime || !downloadDir}
+                disabled={!nativeRuntime || !downloadDir}
                 onReceive={(nextShare) => void handleNearbyReceive(nextShare)}
               />
             ))
@@ -258,13 +299,25 @@ export function ReceiveView() {
               want the explicit manual path.
             </p>
           </div>
-          <button
-            onClick={() => void handlePaste()}
-            className="glass-button inline-flex items-center gap-2 px-4 py-2.5 text-sm text-slate-100"
-          >
-            <ClipboardPaste className="h-4 w-4" />
-            Paste from clipboard
-          </button>
+          <div className="flex flex-wrap gap-2">
+            {mobileRuntime ? (
+              <button
+                onClick={() => void handleScanQr()}
+                disabled={isScanning}
+                className="glass-button inline-flex items-center gap-2 px-4 py-2.5 text-sm text-slate-100"
+              >
+                <ScanSearch className="h-4 w-4" />
+                {isScanning ? "Scanning..." : "Scan QR"}
+              </button>
+            ) : null}
+            <button
+              onClick={() => void handlePaste()}
+              className="glass-button inline-flex items-center gap-2 px-4 py-2.5 text-sm text-slate-100"
+            >
+              <ClipboardPaste className="h-4 w-4" />
+              Paste from clipboard
+            </button>
+          </div>
         </div>
 
         <div className="mt-4 space-y-4">
@@ -311,7 +364,9 @@ export function ReceiveView() {
 
           <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
             <div>
-              <p className="metric-label">Export destination</p>
+              <p className="metric-label">
+                {mobileRuntime ? "Alpha save destination" : "Export destination"}
+              </p>
               <p className="mt-2 break-all font-mono text-sm leading-6 text-slate-100/88">
                 {downloadDir ?? "Resolving download directory..."}
               </p>
@@ -319,7 +374,7 @@ export function ReceiveView() {
 
             <button
               onClick={() => void handleReceive()}
-              disabled={!ticketLooksValid || !downloadDir || !desktopRuntime}
+              disabled={!ticketLooksValid || !downloadDir || !nativeRuntime}
               className="btn-success"
             >
               <span className="relative inline-flex items-center gap-2">

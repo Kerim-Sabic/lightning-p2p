@@ -2,6 +2,7 @@ import { isTauri } from "@tauri-apps/api/core";
 import { useEffect, useEffectEvent } from "react";
 import {
   desktopRuntimeMessage,
+  isMobileRuntime,
   onDiscoveredSharesUpdated,
   onTransferProgress,
   type NodeOnlineState,
@@ -44,7 +45,7 @@ export function useTransfer(): void {
     ]);
 
     const settings = useTransferStore.getState().settings;
-    if (settings?.auto_update_enabled) {
+    if (settings?.auto_update_enabled && !isMobileRuntime()) {
       await useTransferStore.getState().checkForUpdates(true);
     }
   });

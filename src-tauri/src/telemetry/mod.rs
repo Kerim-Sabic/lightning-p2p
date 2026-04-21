@@ -7,8 +7,8 @@ use tracing_subscriber::EnvFilter;
 /// Set `RUST_LOG=fastdrop=debug` for verbose output.
 /// Defaults to `info` level.
 pub fn init_tracing() {
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("fastdrop=info,iroh=warn"));
+    let filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(default_filter()));
 
     tracing_subscriber::fmt()
         .with_env_filter(filter)
@@ -18,4 +18,12 @@ pub fn init_tracing() {
         .init();
 
     tracing::info!("FastDrop tracing initialized");
+}
+
+fn default_filter() -> &'static str {
+    if cfg!(any(target_os = "android", target_os = "ios")) {
+        "fastdrop=warn,iroh=warn"
+    } else {
+        "fastdrop=info,iroh=warn"
+    }
 }

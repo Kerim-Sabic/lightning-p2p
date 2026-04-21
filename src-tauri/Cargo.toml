@@ -55,6 +55,9 @@ dirs = "6"
 hex = "0.4"
 qrcode = "0.14"
 socket2 = "0.5"
+tauri-plugin-os = "2.3.2"
+tauri-plugin-clipboard-manager = "2.3.2"
+tauri-plugin-barcode-scanner = "2.4.4"
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["async_tokio"] }

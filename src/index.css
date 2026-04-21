@@ -33,7 +33,11 @@ body,
 }
 
 html[data-runtime="desktop"],
-body[data-runtime="desktop"] {
+body[data-runtime="desktop"],
+html[data-runtime="android"],
+body[data-runtime="android"],
+html[data-runtime="ios"],
+body[data-runtime="ios"] {
   background: var(--canvas-0);
 }
 
@@ -274,6 +278,11 @@ body.app-hydrated .static-seo-fallback {
     border-color: rgba(255, 255, 255, 0.06);
   }
 
+  .app-shell-mobile {
+    @apply h-[100dvh] w-screen rounded-none border-0;
+    background: rgba(14, 18, 24, 0.99);
+  }
+
   .window-chrome {
     @apply relative flex h-[48px] items-center px-3.5 transition-opacity duration-150;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
@@ -407,6 +416,25 @@ body.app-hydrated .static-seo-fallback {
 
   .nav-icon-active {
     border-color: rgba(125, 211, 252, 0.18);
+    background: rgba(56, 189, 248, 0.1);
+    color: oklch(96% 0.016 230);
+  }
+
+  .mobile-tab-bar {
+    @apply fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 gap-1 px-2 pb-2 pt-2;
+    padding-bottom: calc(0.5rem + env(safe-area-inset-bottom));
+    border-top: 1px solid rgba(255, 255, 255, 0.07);
+    background: rgba(10, 14, 20, 0.96);
+    backdrop-filter: blur(22px);
+  }
+
+  .mobile-tab-button {
+    @apply flex min-h-[58px] flex-col items-center justify-center gap-1 rounded-[16px] text-slate-400 transition-colors duration-150;
+    border: 1px solid transparent;
+  }
+
+  .mobile-tab-button-active {
+    border-color: rgba(125, 211, 252, 0.14);
     background: rgba(56, 189, 248, 0.1);
     color: oklch(96% 0.016 230);
   }

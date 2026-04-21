@@ -78,6 +78,80 @@ fn register_deep_links<R: tauri::Runtime>(app: &tauri::App<R>) {
 #[cfg(not(windows))]
 fn register_deep_links<R: tauri::Runtime>(_app: &tauri::App<R>) {}
 
+fn app_builder() -> tauri::Builder<tauri::Wry> {
+    let builder = tauri::Builder::default()
+        .plugin(tauri_plugin_os::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_shell::init());
+
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    let builder = builder.plugin(tauri_plugin_barcode_scanner::init());
+
+    builder.plugin(tauri_plugin_updater::Builder::new().build())
+}
+
+fn spawn_node_startup(handle: tauri::AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        let state = handle.state::<AppState>();
+        let data_dir = state.data_dir.clone();
+        let settings = state.settings.snapshot().await;
+        let download_dir = settings.download_dir.clone();
+        state
+            .nearby_shares
+            .set_local_discovery_enabled(settings.local_discovery_enabled)
+            .await;
+        let nearby_protocol = Arc::new(NearbyShareProtocol::new(state.nearby_shares.clone()));
+
+        {
+            let mut runtime = state.node_runtime.write().await;
+            *runtime = NodeRuntimeStatus::starting();
+        }
+
+        let relay_url = match settings.resolved_custom_relay_url() {
+            Ok(relay_url) => relay_url,
+            Err(error) => {
+                tracing::error!("Invalid relay configuration: {error}");
+                let mut runtime = state.node_runtime.write().await;
+                *runtime = NodeRuntimeStatus::offline();
+                return;
+            }
+        };
+
+        match node::FastDropNode::start_with_dirs_and_relay(
+            data_dir,
+            download_dir,
+            relay_url,
+            nearby_protocol,
+        )
+        .await
+        {
+            Ok(node) => {
+                let runtime_status = node.runtime_status();
+                let endpoint = node.endpoint().clone();
+                let lan_flag = node.lan_discovery_flag();
+                let mut guard = state.node.write().await;
+                *guard = Some(Arc::new(node));
+                let mut runtime = state.node_runtime.write().await;
+                *runtime = runtime_status;
+                node::spawn_nearby_discovery_loop(
+                    handle.clone(),
+                    endpoint,
+                    state.nearby_shares.clone(),
+                    lan_flag,
+                );
+                tracing::info!("iroh node started successfully");
+            }
+            Err(error) => {
+                let mut runtime = state.node_runtime.write().await;
+                *runtime = NodeRuntimeStatus::offline();
+                tracing::error!("Failed to start iroh node: {error}");
+            }
+        }
+    });
+}
+
 /// Entry point: configures Tauri with plugins, state, and command handlers.
 ///
 /// # Panics
@@ -92,11 +166,7 @@ pub fn run() {
         SettingsState::load_or_create(&data_dir).expect("FastDrop could not load settings");
     let app_state = AppState::new(data_dir, settings);
 
-    tauri::Builder::default()
-        .plugin(tauri_plugin_deep_link::init())
-        .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
+    app_builder()
         .manage(app_state)
         .invoke_handler(tauri::generate_handler![
             commands::share::create_share,
@@ -125,66 +195,7 @@ pub fn run() {
         ])
         .setup(|app| {
             register_deep_links(app);
-
-            let handle = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
-                let state = handle.state::<AppState>();
-                let data_dir = state.data_dir.clone();
-                let settings = state.settings.snapshot().await;
-                let download_dir = settings.download_dir.clone();
-                state
-                    .nearby_shares
-                    .set_local_discovery_enabled(settings.local_discovery_enabled)
-                    .await;
-                let nearby_protocol =
-                    Arc::new(NearbyShareProtocol::new(state.nearby_shares.clone()));
-
-                {
-                    let mut runtime = state.node_runtime.write().await;
-                    *runtime = NodeRuntimeStatus::starting();
-                }
-
-                let relay_url = match settings.resolved_custom_relay_url() {
-                    Ok(relay_url) => relay_url,
-                    Err(error) => {
-                        tracing::error!("Invalid relay configuration: {error}");
-                        let mut runtime = state.node_runtime.write().await;
-                        *runtime = NodeRuntimeStatus::offline();
-                        return;
-                    }
-                };
-
-                match node::FastDropNode::start_with_dirs_and_relay(
-                    data_dir,
-                    download_dir,
-                    relay_url,
-                    nearby_protocol,
-                )
-                .await
-                {
-                    Ok(node) => {
-                        let runtime_status = node.runtime_status();
-                        let endpoint = node.endpoint().clone();
-                        let lan_flag = node.lan_discovery_flag();
-                        let mut guard = state.node.write().await;
-                        *guard = Some(Arc::new(node));
-                        let mut runtime = state.node_runtime.write().await;
-                        *runtime = runtime_status;
-                        node::spawn_nearby_discovery_loop(
-                            handle.clone(),
-                            endpoint,
-                            state.nearby_shares.clone(),
-                            lan_flag,
-                        );
-                        tracing::info!("iroh node started successfully");
-                    }
-                    Err(e) => {
-                        let mut runtime = state.node_runtime.write().await;
-                        *runtime = NodeRuntimeStatus::offline();
-                        tracing::error!("Failed to start iroh node: {e}");
-                    }
-                }
-            });
+            spawn_node_startup(app.handle().clone());
             Ok(())
         })
         .run(tauri::generate_context!())

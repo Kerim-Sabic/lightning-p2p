@@ -33,9 +33,10 @@ No cloud. No accounts. No file size limits. Just direct, encrypted, verified tra
 
 ## Current Status
 
-- **Windows desktop app:** available now; the next release pipeline requires Authenticode code signing plus signed Tauri updater metadata.
+- **Windows desktop app:** available now; the release pipeline supports Velopack-first installs, Authenticode signing hooks, and signed Tauri updater metadata.
+- **Android alpha foundation:** scaffolded for internal testing with Tauri mobile, foreground transfers, mobile clipboard/QR wrappers, app-private receive storage, and bottom-tab phone UI. See [docs/android-alpha.md](docs/android-alpha.md).
 - **Public website:** Netlify-ready landing and SEO pages for download, security, benchmarks, and AirDrop-for-Windows searches.
-- **Mobile/browser transfers:** planned, not shipped yet. The website works on mobile, but real transfers currently require the desktop app.
+- **iOS:** prepared but not shipped; it requires macOS, Xcode, Apple signing, and multicast entitlement work. See [docs/ios-testflight.md](docs/ios-testflight.md).
 - **Speed claims:** benchmark-backed only. The app is built for high throughput, but public "fastest" claims should reference repeatable results.
 
 ## Why Use Lightning P2P
@@ -55,7 +56,7 @@ To prevent disambiguation mistakes:
 - **Not a WebRTC app.** Transport is QUIC via iroh, not WebRTC data channels.
 - **Not an account-based service.** No paid tier, no sign-up, no email capture.
 - **Not a BitTorrent client, IPFS node, or Syncthing replacement.** Different protocols and use cases.
-- **Not cross-platform yet.** Windows-first; mobile RFC published, iOS and Android planned.
+- **Not publicly cross-platform yet.** Windows is the supported public release; Android is internal alpha only, and iOS is not shipped.
 
 ## Why Lightning P2P?
 
@@ -183,6 +184,19 @@ and then start the app:
 ```powershell
 pnpm tauri dev
 ```
+
+### Android alpha from source
+
+Android is internal alpha only. Install the Tauri mobile prerequisites, then use:
+
+```powershell
+rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
+pnpm android:init
+pnpm android:dev
+pnpm android:build:debug
+```
+
+Use [docs/android-alpha.md](docs/android-alpha.md) for SDK, NDK, signing, sideload, and Play Internal Testing steps.
 
 #### Troubleshooting
 

@@ -12,6 +12,7 @@ const APP_IDENTIFIER: &str = "com.lightningp2p.app";
 const DATA_DIR_ENV: &str = "FASTDROP_DATA_DIR";
 const PROFILE_ENV: &str = "FASTDROP_PROFILE";
 const SETTINGS_FILE_NAME: &str = "settings.json";
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 const DOWNLOADS_FOLDER_NAME: &str = "Lightning P2P";
 
 /// Relay configuration mode used for WAN connectivity.
@@ -218,6 +219,14 @@ pub fn resolve_app_data_dir() -> Result<PathBuf> {
 
 /// Returns the default download directory for this machine and profile.
 #[must_use]
+#[cfg(any(target_os = "android", target_os = "ios"))]
+pub fn default_download_dir(data_dir: &Path) -> PathBuf {
+    data_dir.join("downloads")
+}
+
+/// Returns the default download directory for this machine and profile.
+#[must_use]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn default_download_dir(data_dir: &Path) -> PathBuf {
     match dirs::download_dir() {
         Some(base_dir) => preferred_download_path(&base_dir),
@@ -301,6 +310,7 @@ fn normalize_download_dir(path: &Path) -> Result<PathBuf> {
     Ok(normalized)
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn preferred_download_path(base_dir: &Path) -> PathBuf {
     let preferred = base_dir.join(DOWNLOADS_FOLDER_NAME);
     if std::fs::create_dir_all(&preferred).is_ok() {

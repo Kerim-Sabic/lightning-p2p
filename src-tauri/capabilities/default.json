@@ -10,8 +10,12 @@
     "core:window:allow-minimize",
     "core:window:allow-toggle-maximize",
     "core:window:allow-start-dragging",
+    "barcode-scanner:default",
+    "clipboard-manager:allow-read-text",
+    "clipboard-manager:allow-write-text",
     "deep-link:default",
     "dialog:default",
+    "os:default",
     "shell:allow-open",
     "updater:default"
   ]

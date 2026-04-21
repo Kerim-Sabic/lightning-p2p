@@ -20,9 +20,11 @@ import { useEffect, useState } from "react";
 import {
   getNetworkDiagnostics,
   isDesktopRuntime,
+  isMobileRuntime,
   type NetworkDiagnostics,
   type NodeStatus,
   type RelayMode,
+  writeClipboardText,
 } from "../lib/tauri";
 import { useTransferStore, type UpdateState } from "../stores/transferStore";
 
@@ -153,7 +155,10 @@ export function SettingsView() {
   );
   const checkForUpdates = useTransferStore((state) => state.checkForUpdates);
   const installUpdate = useTransferStore((state) => state.installUpdate);
-  const desktopRuntime = isDesktopRuntime();
+  const nativeRuntime = isDesktopRuntime();
+  const mobileRuntime = isMobileRuntime();
+  const desktopStorageControlsEnabled = nativeRuntime && !mobileRuntime;
+  const desktopUpdateControlsEnabled = nativeRuntime && !mobileRuntime;
   const [customRelayUrl, setCustomRelayUrlInput] = useState("");
   const [diagnosticsState, setDiagnosticsState] = useState<
     "idle" | "copied" | "error"
@@ -181,7 +186,7 @@ export function SettingsView() {
   const copyDiagnostics = async (): Promise<void> => {
     try {
       const diagnostics = await getNetworkDiagnostics();
-      await navigator.clipboard.writeText(diagnosticsText(diagnostics));
+      await writeClipboardText(diagnosticsText(diagnostics));
       setDiagnosticsState("copied");
       window.setTimeout(() => setDiagnosticsState("idle"), 1800);
     } catch {
@@ -318,7 +323,9 @@ export function SettingsView() {
                 Download directory
               </p>
               <p className="text-[13px] text-slate-300/72">
-                Verified receives are exported here after integrity checks.
+                {mobileRuntime
+                  ? "Android alpha receives stay inside app-private storage."
+                  : "Verified receives are exported here after integrity checks."}
               </p>
             </div>
           </div>
@@ -335,7 +342,7 @@ export function SettingsView() {
           <div className="mt-3 flex flex-wrap gap-2">
             <button
               onClick={() => void pickDownloadDir()}
-              disabled={!desktopRuntime}
+              disabled={!desktopStorageControlsEnabled}
               className="glass-button inline-flex items-center gap-2 px-3.5 py-2 text-sm text-slate-100"
             >
               <FolderCog className="h-4 w-4" />
@@ -343,7 +350,7 @@ export function SettingsView() {
             </button>
             <button
               onClick={() => void openDownloadDir()}
-              disabled={!desktopRuntime}
+              disabled={!desktopStorageControlsEnabled}
               className="glass-button inline-flex items-center gap-2 px-3.5 py-2 text-sm text-slate-100"
             >
               <HardDriveDownload className="h-4 w-4" />
@@ -370,7 +377,7 @@ export function SettingsView() {
 
           <button
             onClick={() => void copyDiagnostics()}
-            disabled={!desktopRuntime}
+            disabled={!nativeRuntime}
             className="glass-button inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm text-slate-100"
           >
             {diagnosticsState === "copied" ? (
@@ -425,7 +432,7 @@ export function SettingsView() {
         <div className="mt-4 flex flex-wrap gap-2">
           <button
             onClick={() => void setRelayMode("public")}
-            disabled={!desktopRuntime}
+            disabled={!nativeRuntime}
             className={`rounded-2xl border px-4 py-2 text-sm transition-all disabled:cursor-not-allowed disabled:opacity-50 ${relayModeButtonClass(
               (settings?.relay_mode ?? "public") === "public",
             )}`}
@@ -434,7 +441,7 @@ export function SettingsView() {
           </button>
           <button
             onClick={() => void enableCustomRelay()}
-            disabled={!desktopRuntime}
+            disabled={!nativeRuntime}
             className={`rounded-2xl border px-4 py-2 text-sm transition-all disabled:cursor-not-allowed disabled:opacity-50 ${relayModeButtonClass(
               settings?.relay_mode === "custom",
             )}`}
@@ -457,17 +464,22 @@ export function SettingsView() {
           </label>
           <button
             onClick={() => void saveCustomRelay()}
-            disabled={!desktopRuntime}
+            disabled={!nativeRuntime}
             className="glass-button inline-flex items-center justify-center gap-2 px-4 py-3 text-sm text-slate-100"
           >
             <Globe className="h-4 w-4" />
             Save relay URL
           </button>
         </div>
-        {!desktopRuntime ? (
+        {!nativeRuntime ? (
           <p className="mt-3 text-xs leading-6 text-slate-400">
-            Relay and storage controls are available only in the native desktop
+            Relay and storage controls are available only in the native
             runtime.
+          </p>
+        ) : mobileRuntime ? (
+          <p className="mt-3 text-xs leading-6 text-slate-400">
+            Android alpha uses app-private storage; public Downloads export is a
+            later milestone.
           </p>
         ) : null}
 
@@ -492,7 +504,7 @@ export function SettingsView() {
                 !(settings?.local_discovery_enabled ?? true),
               )
             }
-            disabled={!desktopRuntime}
+            disabled={!nativeRuntime}
             className={`relative inline-flex h-6 w-11 items-center rounded-full border transition-all duration-200 ${
               settings?.local_discovery_enabled ?? true
                 ? "border-sky-300/20 bg-sky-500/20"
@@ -604,7 +616,7 @@ export function SettingsView() {
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <button
             onClick={() => void checkForUpdates()}
-            disabled={updateBusy || !desktopRuntime}
+            disabled={updateBusy || !desktopUpdateControlsEnabled}
             className="glass-button inline-flex items-center gap-2 px-4 py-2 text-sm text-slate-100 disabled:cursor-wait disabled:opacity-60"
           >
             <RefreshCw
@@ -614,7 +626,7 @@ export function SettingsView() {
           </button>
           <button
             onClick={() => void installUpdate()}
-            disabled={!canInstall || !desktopRuntime}
+            disabled={!canInstall || !desktopUpdateControlsEnabled}
             className="btn-success"
           >
             <span className="relative inline-flex items-center gap-2">
@@ -637,7 +649,7 @@ export function SettingsView() {
             onClick={() =>
               void setAutoUpdateEnabled(!settings?.auto_update_enabled)
             }
-            disabled={!desktopRuntime}
+            disabled={!desktopUpdateControlsEnabled}
             className={`relative inline-flex h-6 w-11 items-center rounded-full border transition-all duration-200 ${
               settings?.auto_update_enabled
                 ? "border-sky-300/20 bg-sky-500/20"

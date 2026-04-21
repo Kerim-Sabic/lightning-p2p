@@ -1,7 +1,18 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getVersion } from "@tauri-apps/api/app";
+import {
+  Format,
+  checkPermissions as checkBarcodePermissions,
+  requestPermissions as requestBarcodePermissions,
+  scan as scanBarcode,
+} from "@tauri-apps/plugin-barcode-scanner";
+import {
+  readText as readClipboardTextNative,
+  writeText as writeClipboardTextNative,
+} from "@tauri-apps/plugin-clipboard-manager";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { platform as nativePlatform } from "@tauri-apps/plugin-os";
 import {
   check,
   type DownloadEvent,
@@ -11,8 +22,10 @@ import {
   getCurrentWindow,
   type DragDropEvent,
 } from "@tauri-apps/api/window";
-import { DEEP_LINK_SCHEME } from "./shareLinks";
+import { extractBlobTicket } from "./format";
+import { DEEP_LINK_SCHEME, RECEIVE_PATH, SITE_URL } from "./shareLinks";
 
+export type RuntimeKind = "desktop" | "android" | "ios" | "browser";
 export type TransferDirection = "send" | "receive";
 export type NodeOnlineState =
   | "starting"
@@ -238,16 +251,57 @@ const browserNetworkDiagnostics: NetworkDiagnostics = {
   latest_route_kind: "unknown",
 };
 
-export function isDesktopRuntime(): boolean {
+function runtimeKindFromUserAgent(): RuntimeKind {
+  const userAgent = navigator.userAgent.toLowerCase();
+  if (userAgent.includes("android")) {
+    return "android";
+  }
+  if (/(iphone|ipad|ipod)/.test(userAgent)) {
+    return "ios";
+  }
+  return "desktop";
+}
+
+export function getRuntimeKind(): RuntimeKind {
+  if (!isTauri()) {
+    return "browser";
+  }
+
+  try {
+    const platform = nativePlatform();
+    if (platform === "android" || platform === "ios") {
+      return platform;
+    }
+  } catch {
+    return runtimeKindFromUserAgent();
+  }
+
+  return "desktop";
+}
+
+export function isNativeRuntime(): boolean {
   return isTauri();
 }
 
-export function desktopRuntimeMessage(feature = "This feature"): string {
-  return `${feature} requires the Lightning P2P desktop app runtime. Use \`pnpm tauri dev\` or the installed app instead of the browser preview.`;
+export function isDesktopPlatform(): boolean {
+  return getRuntimeKind() === "desktop";
 }
 
-function requireDesktopRuntime(feature: string): void {
-  if (!isDesktopRuntime()) {
+export function isMobileRuntime(): boolean {
+  const kind = getRuntimeKind();
+  return kind === "android" || kind === "ios";
+}
+
+export function isDesktopRuntime(): boolean {
+  return isNativeRuntime();
+}
+
+export function desktopRuntimeMessage(feature = "This feature"): string {
+  return `${feature} requires the native Lightning P2P app runtime. Use \`pnpm tauri dev\`, the installed Windows app, or an Android alpha build instead of the browser preview.`;
+}
+
+function requireNativeRuntime(feature: string): void {
+  if (!isNativeRuntime()) {
     throw new Error(desktopRuntimeMessage(feature));
   }
 }
@@ -258,15 +312,65 @@ function runtimeError(feature: string, error: unknown): Error {
       ? error.message
       : typeof error === "string"
         ? error
-        : "Unexpected desktop runtime error";
+        : "Unexpected native runtime error";
   return new Error(`${feature} failed: ${message}`);
+}
+
+export async function writeClipboardText(text: string): Promise<void> {
+  if (isNativeRuntime()) {
+    await writeClipboardTextNative(text);
+    return;
+  }
+
+  if (!navigator.clipboard?.writeText) {
+    throw new Error("Clipboard write is unavailable in this browser.");
+  }
+  await navigator.clipboard.writeText(text);
+}
+
+export async function readClipboardText(): Promise<string> {
+  if (isNativeRuntime()) {
+    return readClipboardTextNative();
+  }
+
+  if (!navigator.clipboard?.readText) {
+    throw new Error("Clipboard read is unavailable in this browser.");
+  }
+  return navigator.clipboard.readText();
+}
+
+export async function scanReceiveTicketQr(): Promise<string> {
+  requireNativeRuntime("QR scanning");
+  if (!isMobileRuntime()) {
+    throw new Error("QR scanning is available only in the mobile app runtime.");
+  }
+
+  let permission = await checkBarcodePermissions();
+  if (permission !== "granted") {
+    permission = await requestBarcodePermissions();
+  }
+  if (permission !== "granted") {
+    throw new Error("Camera permission is required to scan a receive QR code.");
+  }
+
+  const scanned = await scanBarcode({
+    cameraDirection: "back",
+    formats: [Format.QRCode],
+  });
+  const ticket = extractBlobTicket(scanned.content) ?? scanned.content.trim();
+  if (!ticket) {
+    throw new Error("The QR code did not contain a receive ticket.");
+  }
+  return ticket;
 }
 
 async function runDesktopWindowAction(
   feature: string,
   action: () => Promise<void>,
 ): Promise<void> {
-  requireDesktopRuntime(feature);
+  if (!isDesktopPlatform()) {
+    throw new Error(`${feature} is available only in the desktop window.`);
+  }
   try {
     await action();
   } catch (error) {
@@ -296,24 +400,24 @@ export async function getAppVersion(): Promise<string> {
 }
 
 export async function createShare(paths: string[]): Promise<string> {
-  requireDesktopRuntime("Share creation");
+  requireNativeRuntime("Share creation");
   return invoke<string>("create_share", { paths });
 }
 
 export async function describeSharePaths(
   paths: string[],
 ): Promise<SharePathInfo[]> {
-  requireDesktopRuntime("Share staging");
+  requireNativeRuntime("Share staging");
   return invoke<SharePathInfo[]>("describe_share_paths", { paths });
 }
 
 export async function getTicket(hash: string): Promise<string> {
-  requireDesktopRuntime("Ticket generation");
+  requireNativeRuntime("Ticket generation");
   return invoke<string>("get_ticket", { hash });
 }
 
 export async function renderTicketQr(ticket: string): Promise<string> {
-  requireDesktopRuntime("QR rendering");
+  requireNativeRuntime("QR rendering");
   return invoke<string>("render_ticket_qr", { ticket });
 }
 
@@ -321,7 +425,7 @@ export async function startReceive(
   ticket: string,
   destination: string,
 ): Promise<string> {
-  requireDesktopRuntime("Receiving transfers");
+  requireNativeRuntime("Receiving transfers");
   return invoke<string>("start_receive", { ticket, destination });
 }
 
@@ -329,7 +433,7 @@ export async function startReceiveDiscoveredShare(
   shareId: string,
   destination: string,
 ): Promise<string> {
-  requireDesktopRuntime("Receiving nearby shares");
+  requireNativeRuntime("Receiving nearby shares");
   return invoke<string>("start_receive_discovered_share", {
     shareId,
     destination,
@@ -337,7 +441,7 @@ export async function startReceiveDiscoveredShare(
 }
 
 export async function cancelTransfer(transferId: string): Promise<void> {
-  requireDesktopRuntime("Transfer cancellation");
+  requireNativeRuntime("Transfer cancellation");
   await invoke("cancel_transfer", { transferId });
 }
 
@@ -384,55 +488,55 @@ export async function getDownloadDir(): Promise<string> {
 }
 
 export async function setDownloadDir(path: string): Promise<AppSettings> {
-  requireDesktopRuntime("Changing the download folder");
+  requireNativeRuntime("Changing the download folder");
   return invoke<AppSettings>("set_download_dir", { path });
 }
 
 export async function setAutoUpdateEnabled(
   enabled: boolean,
 ): Promise<AppSettings> {
-  requireDesktopRuntime("Changing update settings");
+  requireNativeRuntime("Changing update settings");
   return invoke<AppSettings>("set_auto_update_enabled", { enabled });
 }
 
 export async function setRelayMode(relayMode: RelayMode): Promise<AppSettings> {
-  requireDesktopRuntime("Changing relay mode");
+  requireNativeRuntime("Changing relay mode");
   return invoke<AppSettings>("set_relay_mode", { relayMode });
 }
 
 export async function setCustomRelayUrl(
   relayUrl: string | null,
 ): Promise<AppSettings> {
-  requireDesktopRuntime("Saving a custom relay URL");
+  requireNativeRuntime("Saving a custom relay URL");
   return invoke<AppSettings>("set_custom_relay_url", { relayUrl });
 }
 
 export async function setLocalDiscoveryEnabled(
   enabled: boolean,
 ): Promise<AppSettings> {
-  requireDesktopRuntime("Changing local discovery settings");
+  requireNativeRuntime("Changing local discovery settings");
   return invoke<AppSettings>("set_local_discovery_enabled", { enabled });
 }
 
 export async function completeFirstRun(): Promise<AppSettings> {
-  requireDesktopRuntime("Completing setup");
+  requireNativeRuntime("Completing setup");
   return invoke<AppSettings>("complete_first_run");
 }
 
 export async function openDownloadDir(): Promise<void> {
-  requireDesktopRuntime("Opening the download folder");
+  requireNativeRuntime("Opening the download folder");
   await invoke("open_download_dir");
 }
 
 export async function clearActiveShare(): Promise<void> {
-  requireDesktopRuntime("Clearing the active share");
+  requireNativeRuntime("Clearing the active share");
   await invoke("clear_active_share");
 }
 
 export async function pickDirectory(
   defaultPath?: string,
 ): Promise<string | null> {
-  requireDesktopRuntime("Choosing a folder");
+  requireNativeRuntime("Choosing a folder");
   const selected = await openDialog({
     directory: true,
     multiple: false,
@@ -443,7 +547,7 @@ export async function pickDirectory(
 }
 
 export async function pickShareFiles(defaultPath?: string): Promise<string[]> {
-  requireDesktopRuntime("Choosing files");
+  requireNativeRuntime("Choosing files");
   const selected = await openDialog({
     directory: false,
     multiple: true,
@@ -461,7 +565,7 @@ export async function pickShareFiles(defaultPath?: string): Promise<string[]> {
 export async function pickShareFolder(
   defaultPath?: string,
 ): Promise<string | null> {
-  requireDesktopRuntime("Choosing a folder");
+  requireNativeRuntime("Choosing a folder");
   const selected = await openDialog({
     directory: true,
     multiple: false,
@@ -473,7 +577,7 @@ export async function pickShareFolder(
 }
 
 export async function checkForAppUpdate(): Promise<UpdateCheckResult> {
-  requireDesktopRuntime("Checking for updates");
+  requireNativeRuntime("Checking for updates");
   await disposePendingUpdate();
   const currentVersion = await getAppVersion();
   pendingUpdate = await check({ timeout: 30_000 });
@@ -490,7 +594,7 @@ export async function checkForAppUpdate(): Promise<UpdateCheckResult> {
 export async function installAppUpdate(
   onProgress?: (progress: UpdateProgress) => void,
 ): Promise<void> {
-  requireDesktopRuntime("Installing updates");
+  requireNativeRuntime("Installing updates");
   if (!pendingUpdate) {
     throw new Error("No update is available to install.");
   }
@@ -544,10 +648,20 @@ export function extractTicketFromDeepLink(url: string): string | null {
     return null;
   }
   if (parsed.protocol !== `${DEEP_LINK_SCHEME}:`) {
-    return null;
+    const siteUrl = new URL(SITE_URL);
+    const normalizedPath = parsed.pathname.endsWith("/")
+      ? parsed.pathname.slice(0, -1)
+      : parsed.pathname;
+    const webReceiveLink =
+      parsed.protocol === siteUrl.protocol &&
+      parsed.hostname === siteUrl.hostname &&
+      normalizedPath === RECEIVE_PATH;
+    if (!webReceiveLink) {
+      return null;
+    }
+    return extractBlobTicket(url);
   }
-  const ticket = parsed.searchParams.get("t") ?? parsed.searchParams.get("ticket");
-  return ticket ? ticket.trim() : null;
+  return extractBlobTicket(url);
 }
 
 export function onDeepLinkOpened(
@@ -569,7 +683,7 @@ export function onDeepLinkOpened(
 }
 
 export async function getDesktopWindowState(): Promise<DesktopWindowState> {
-  if (!isDesktopRuntime()) {
+  if (!isDesktopPlatform()) {
     return {
       focused: true,
       maximized: false,
@@ -591,7 +705,7 @@ export async function getDesktopWindowState(): Promise<DesktopWindowState> {
 export function onDesktopWindowResized(
   callback: () => void,
 ): Promise<UnlistenFn> {
-  if (!isDesktopRuntime()) {
+  if (!isDesktopPlatform()) {
     return Promise.resolve(() => {});
   }
 
@@ -603,7 +717,7 @@ export function onDesktopWindowResized(
 export function onDesktopWindowFocusChanged(
   callback: (focused: boolean) => void,
 ): Promise<UnlistenFn> {
-  if (!isDesktopRuntime()) {
+  if (!isDesktopPlatform()) {
     return Promise.resolve(() => {});
   }
 
@@ -615,7 +729,7 @@ export function onDesktopWindowFocusChanged(
 export function onWindowDragDropEvent(
   callback: (event: DragDropEvent) => void,
 ): Promise<UnlistenFn> {
-  if (!isDesktopRuntime()) {
+  if (!isDesktopPlatform()) {
     return Promise.resolve(() => {});
   }
 

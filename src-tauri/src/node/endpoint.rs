@@ -15,7 +15,9 @@ use iroh::{Endpoint, NodeAddr, NodeId, RelayMap, RelayMode, RelayUrl};
 use iroh_blobs::net_protocol::Blobs;
 use iroh_blobs::rpc::client::blobs::MemClient;
 use iroh_blobs::store::fs::Store as BlobStore;
+#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 use socket2::{Domain, Protocol, Socket, Type};
+#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -26,7 +28,9 @@ const RELAY_WAIT_TIMEOUT: Duration = Duration::from_secs(6);
 const MAX_CONCURRENT_STREAMS: u32 = 1024;
 const CONNECTION_WINDOW_BYTES: u32 = 268_435_456; // 256 MB
 const STREAM_WINDOW_BYTES: u32 = 67_108_864; // 64 MB
+#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 const MDNS_MULTICAST_ADDR: Ipv4Addr = Ipv4Addr::new(224, 0, 0, 251);
+#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 const MDNS_PORT: u16 = 5353;
 
 /// The running iroh node with blob transfer capability.
@@ -51,9 +55,9 @@ impl FastDropNode {
     /// Returns `FastDropError` if endpoint binding, storage creation, or
     /// protocol startup fails.
     pub async fn start_with_dirs(data_dir: PathBuf, download_dir: PathBuf) -> Result<Self> {
-        let nearby_protocol = Arc::new(NearbyShareProtocol::new(
-            super::NearbyShareRegistry::new(false),
-        ));
+        let nearby_protocol = Arc::new(NearbyShareProtocol::new(super::NearbyShareRegistry::new(
+            false,
+        )));
         Self::start_with_dirs_and_relay(data_dir, download_dir, None, nearby_protocol).await
     }
 
@@ -77,7 +81,8 @@ impl FastDropNode {
         let endpoint = bind_endpoint(relay_url).await?;
         tracing::info!(
             node_id = %endpoint.node_id(),
-            "iroh endpoint bound (n0-discovery=on, local-network-discovery=on)"
+            local_network_discovery = local_network_discovery_label(),
+            "iroh endpoint bound (n0-discovery=on)"
         );
 
         let blob_store = load_blob_store(&data_dir).await?;
@@ -208,9 +213,17 @@ async fn bind_endpoint(relay_url: Option<RelayUrl>) -> Result<Endpoint> {
         .map(RelayMap::from_url)
         .map_or(RelayMode::Default, RelayMode::Custom);
 
-    Endpoint::builder()
-        .discovery_n0()
-        .discovery_local_network()
+    let builder = Endpoint::builder().discovery_n0();
+
+    #[cfg(not(target_os = "ios"))]
+    let builder = builder.discovery_local_network();
+
+    #[cfg(target_os = "ios")]
+    tracing::warn!(
+        "local-network discovery disabled on iOS until the multicast entitlement is granted"
+    );
+
+    builder
         .relay_mode(relay_mode)
         .transport_config(tuned_transport_config())
         .bind()
@@ -218,10 +231,19 @@ async fn bind_endpoint(relay_url: Option<RelayUrl>) -> Result<Endpoint> {
         .map_err(FastDropError::Network)
 }
 
+fn local_network_discovery_label() -> &'static str {
+    if cfg!(target_os = "ios") {
+        "off-ios-entitlement-required"
+    } else {
+        "on"
+    }
+}
+
 /// Best-effort probe that binds a UDP socket on the mDNS port and joins the
 /// multicast group. If this fails (commonly: Windows Firewall, another mDNS
 /// responder, or insufficient privileges), LAN discovery will silently stop
 /// working — so we log a loud warning that explains exactly what to fix.
+#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 fn probe_mdns_socket() {
     let socket = match Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP)) {
         Ok(socket) => socket,
@@ -266,6 +288,11 @@ fn probe_mdns_socket() {
         group = %MDNS_MULTICAST_ADDR,
         "mDNS probe: OK (multicast join succeeded)"
     );
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
+fn probe_mdns_socket() {
+    tracing::debug!("mDNS socket probe skipped on mobile");
 }
 
 fn tuned_transport_config() -> TransportConfig {
