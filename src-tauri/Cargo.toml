@@ -60,7 +60,7 @@ tauri-plugin-clipboard-manager = "2.3.2"
 tauri-plugin-barcode-scanner = "2.4.4"
 
 [dev-dependencies]
-criterion = { version = "0.5", features = ["async_tokio"] }
+criterion = { version = "0.8", features = ["async_tokio"] }
 sha2 = "0.10"
 tempfile = "3"
 
