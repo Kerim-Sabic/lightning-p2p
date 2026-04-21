@@ -8,6 +8,9 @@ On-page SEO is in code (see `scripts/build-web-metadata.mjs` and `src/content/we
 
 - [ ] Google Search Console — add property for `lightning-p2p.netlify.app`, submit `sitemap.xml`.
 - [ ] Bing Webmaster Tools — same, submit `sitemap.xml`.
+- [ ] Confirm every sitemap URL resolves as `200` and uses the same no-trailing-slash canonical form.
+- [ ] Run Google Rich Results Test for `/`, `/download`, `/receive`, `/how-to-send-large-files`, and `/best-p2p-file-transfer`.
+- [ ] Validate that `/receive#t=example` does not send the ticket in HTTP requests; only `/receive` should appear in server logs.
 
 ### Directories and listings
 

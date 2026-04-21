@@ -2,6 +2,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Clock3, Copy, Filter, History, RefreshCw, Search } from "lucide-react";
 import { useDeferredValue, useMemo, useState } from "react";
 import { formatBytes, formatTimestamp } from "../lib/format";
+import { createReceiveHandoffLink } from "../lib/shareLinks";
 import { useTransferStore } from "../stores/transferStore";
 
 type DirectionFilter = "all" | "send" | "receive";
@@ -21,7 +22,7 @@ export function HistoryView() {
   const [query, setQuery] = useState("");
   const [resharedHash, setResharedHash] = useState<string | null>(null);
   const [resharedTicket, setResharedTicket] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<"link" | "ticket" | null>(null);
 
   const deferredQuery = useDeferredValue(query);
   const normalizedQuery = deferredQuery.trim().toLowerCase();
@@ -79,18 +80,34 @@ export function HistoryView() {
     }
     setResharedHash(hash);
     setResharedTicket(ticket);
-    setCopied(false);
+    setCopied(null);
   };
 
-  const handleCopy = async (): Promise<void> => {
+  const handleCopyShareLink = async (): Promise<void> => {
+    if (!resharedTicket) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(
+        createReceiveHandoffLink(resharedTicket),
+      );
+      setCopied("link");
+      window.setTimeout(() => setCopied(null), 1800);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Copy failed");
+    }
+  };
+
+  const handleCopyRawTicket = async (): Promise<void> => {
     if (!resharedTicket) {
       return;
     }
 
     try {
       await navigator.clipboard.writeText(resharedTicket);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1800);
+      setCopied("ticket");
+      window.setTimeout(() => setCopied(null), 1800);
     } catch (error) {
       setError(error instanceof Error ? error.message : "Copy failed");
     }
@@ -102,39 +119,33 @@ export function HistoryView() {
         <header className="glass-panel hero-panel relative overflow-hidden p-8">
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_84%_18%,rgba(56,189,248,0.08),transparent_24%),radial-gradient(circle_at_12%_100%,rgba(148,163,184,0.05),transparent_26%)]" />
           <div className="relative">
-          <div className="badge">
-            <Clock3 className="h-3 w-3 text-sky-200" />
-            History
-          </div>
-          <h1 className="page-title mt-6 max-w-[12ch]">
-            Review what moved and re-share it fast
-          </h1>
-          <p className="page-copy mt-4 max-w-[60ch]">
-            Transfer history is a working surface, not just a log. Filter by
-            direction, find past items quickly, and regenerate a ticket for any
-            stored send without reimporting the content.
-          </p>
+            <div className="badge">
+              <Clock3 className="h-3 w-3 text-sky-200" />
+              History
+            </div>
+            <h1 className="page-title mt-6 max-w-[12ch]">
+              Review what moved and re-share it fast
+            </h1>
+            <p className="page-copy mt-4 max-w-[60ch]">
+              Transfer history is a working surface, not just a log. Filter by
+              direction, find past items quickly, and regenerate a ticket for
+              any stored send without reimporting the content.
+            </p>
 
-          <div className="hero-metrics mt-7 grid gap-3 sm:grid-cols-3">
-            <div className="stat-card">
-              <p className="metric-label">Sends</p>
-              <p className="metric-value">
-                {totals.sentCount}
-              </p>
+            <div className="hero-metrics mt-7 grid gap-3 sm:grid-cols-3">
+              <div className="stat-card">
+                <p className="metric-label">Sends</p>
+                <p className="metric-value">{totals.sentCount}</p>
+              </div>
+              <div className="stat-card">
+                <p className="metric-label">Receives</p>
+                <p className="metric-value">{totals.receivedCount}</p>
+              </div>
+              <div className="stat-card">
+                <p className="metric-label">Total volume</p>
+                <p className="metric-value">{formatBytes(totals.totalBytes)}</p>
+              </div>
             </div>
-            <div className="stat-card">
-              <p className="metric-label">Receives</p>
-              <p className="metric-value">
-                {totals.receivedCount}
-              </p>
-            </div>
-            <div className="stat-card">
-              <p className="metric-label">Total volume</p>
-              <p className="metric-value">
-                {formatBytes(totals.totalBytes)}
-              </p>
-            </div>
-          </div>
           </div>
         </header>
 
@@ -203,23 +214,36 @@ export function HistoryView() {
             <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
               <div className="min-w-0">
                 <p className="text-sm font-medium text-white">
-                  Re-share ticket ready
+                  Re-share link ready
                 </p>
-                <p className="mt-2 break-all rounded-2xl border border-white/8 bg-black/35 p-4 font-mono text-xs leading-6 text-sky-50/88">
-                  {resharedTicket}
+                <p className="mt-2 break-all rounded-2xl border border-emerald-400/16 bg-emerald-500/[0.08] p-4 font-mono text-xs leading-6 text-emerald-50/90">
+                  {createReceiveHandoffLink(resharedTicket)}
                 </p>
               </div>
-              <button
-                onClick={() => void handleCopy()}
-                className={`glass-button inline-flex items-center gap-2 self-start px-4 py-2 text-sm transition-all duration-200 ${
-                  copied
-                    ? "border-emerald-400/20 bg-emerald-500/10 text-emerald-100"
-                    : "text-slate-100"
-                }`}
-              >
-                <Copy className="h-4 w-4" />
-                {copied ? "Copied" : "Copy ticket"}
-              </button>
+              <div className="flex shrink-0 flex-wrap gap-2">
+                <button
+                  onClick={() => void handleCopyShareLink()}
+                  className={`glass-button inline-flex items-center gap-2 self-start px-4 py-2 text-sm transition-all duration-200 ${
+                    copied === "link"
+                      ? "border-emerald-400/20 bg-emerald-500/10 text-emerald-100"
+                      : "text-slate-100"
+                  }`}
+                >
+                  <Copy className="h-4 w-4" />
+                  {copied === "link" ? "Link copied" : "Copy share link"}
+                </button>
+                <button
+                  onClick={() => void handleCopyRawTicket()}
+                  className={`glass-button inline-flex items-center gap-2 self-start px-4 py-2 text-sm transition-all duration-200 ${
+                    copied === "ticket"
+                      ? "border-emerald-400/20 bg-emerald-500/10 text-emerald-100"
+                      : "text-slate-100"
+                  }`}
+                >
+                  <Copy className="h-4 w-4" />
+                  {copied === "ticket" ? "Ticket copied" : "Raw ticket"}
+                </button>
+              </div>
             </div>
           </motion.section>
         ) : null}

@@ -9,7 +9,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { isProbablyBlobTicket } from "../lib/format";
+import { extractBlobTicket } from "../lib/format";
 import { isDesktopRuntime, type NearbyShare } from "../lib/tauri";
 import { useNearbyShareStore } from "../stores/nearbyShareStore";
 import { useReceiveTransfers } from "../stores/transferSelectors";
@@ -58,7 +58,8 @@ export function ReceiveView() {
   );
 
   const trimmedTicket = ticketInput.trim();
-  const ticketLooksValid = isProbablyBlobTicket(trimmedTicket);
+  const normalizedTicket = extractBlobTicket(trimmedTicket);
+  const ticketLooksValid = normalizedTicket !== null;
   const localDiscoveryEnabled = settings?.local_discovery_enabled ?? true;
 
   const probeClipboardForTicket = useCallback(async (): Promise<void> => {
@@ -67,19 +68,20 @@ export function ReceiveView() {
     }
     try {
       const text = (await navigator.clipboard.readText()).trim();
-      if (!isProbablyBlobTicket(text)) {
+      const ticket = extractBlobTicket(text);
+      if (!ticket) {
         setClipboardSuggestion(null);
         return;
       }
       setClipboardSuggestion((previous) => {
-        if (previous === text) {
+        if (previous === ticket) {
           return previous;
         }
-        return text;
+        return ticket;
       });
     } catch {
       // Clipboard access can fail when the window isn't focused or on first
-      // read; silently ignore — the user can still paste manually.
+      // read; silently ignore - the user can still paste manually.
     }
   }, []);
 
@@ -125,7 +127,11 @@ export function ReceiveView() {
       return;
     }
 
-    const transferId = await startReceive(trimmedTicket);
+    if (!normalizedTicket) {
+      return;
+    }
+
+    const transferId = await startReceive(normalizedTicket);
     if (transferId) {
       setTicketInput("");
     }
@@ -138,7 +144,7 @@ export function ReceiveView() {
   const handlePaste = async (): Promise<void> => {
     try {
       const clipboardText = await navigator.clipboard.readText();
-      setTicketInput(clipboardText);
+      setTicketInput(extractBlobTicket(clipboardText) ?? clipboardText);
     } catch (error) {
       setError(error instanceof Error ? error.message : "Paste failed");
     }
@@ -157,8 +163,9 @@ export function ReceiveView() {
               Receive from nearby senders first
             </h1>
             <p className="meta-copy mt-3 max-w-[58ch]">
-              Nearby shares should appear automatically on the same LAN. Manual
-              code entry stays available when discovery is unavailable.
+              Nearby shares should appear automatically on the same LAN. Receive
+              links and raw tickets stay available when discovery is
+              unavailable.
             </p>
 
             <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-400">
@@ -170,7 +177,9 @@ export function ReceiveView() {
                   ? "Nearby discovery enabled"
                   : "Nearby discovery disabled"}
               </span>
-              <span className="chrome-pill">{activeReceiveCount} active receive</span>
+              <span className="chrome-pill">
+                {activeReceiveCount} active receive
+              </span>
             </div>
           </div>
 
@@ -222,7 +231,7 @@ export function ReceiveView() {
               </p>
               <p className="meta-copy mt-2">
                 If a sender is active on this LAN and still does not appear,
-                fall back to a manual code below.
+                fall back to a receive link below.
               </p>
             </div>
           ) : (
@@ -241,7 +250,9 @@ export function ReceiveView() {
       <section className="glass-panel p-5">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <p className="text-sm font-semibold text-white">Paste a code instead</p>
+            <p className="text-sm font-semibold text-white">
+              Paste a receive link instead
+            </p>
             <p className="meta-copy mt-1">
               Use this when the sender is not visible on the LAN or when you
               want the explicit manual path.
@@ -268,7 +279,7 @@ export function ReceiveView() {
             >
               <Sparkles className="h-4 w-4 shrink-0 text-sky-200" />
               <span className="min-w-0 flex-1 truncate">
-                Ticket found on clipboard — tap to use it
+                Receive link found on clipboard - tap to use it
               </span>
               <span className="shrink-0 font-mono text-[11px] text-slate-400">
                 {clipboardSuggestion.slice(0, 10)}…
@@ -280,7 +291,7 @@ export function ReceiveView() {
               value={ticketInput}
               onChange={(event) => setTicketInput(event.target.value)}
               rows={4}
-              placeholder="Paste a blob ticket..."
+              placeholder="Paste a receive link or raw blob ticket..."
               className={`glass-input w-full resize-none rounded-[20px] px-4 py-4 pr-12 font-mono text-sm leading-6 text-slate-100 placeholder:text-slate-500 ${
                 trimmedTicket.length === 0
                   ? ""
@@ -332,7 +343,7 @@ export function ReceiveView() {
               No receive transfers yet
             </p>
             <p className="meta-copy mt-2">
-              Accept a nearby share above or paste a manual code to begin.
+              Accept a nearby share above or paste a receive link to begin.
             </p>
           </div>
         ) : (

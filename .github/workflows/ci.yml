@@ -120,6 +120,12 @@ jobs:
     env:
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
+      AZURE_TRUSTED_SIGNING_ACCOUNT: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT }}
+      AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE: ${{ secrets.AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE }}
     steps:
       - uses: actions/checkout@v4
 
@@ -136,6 +142,9 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-pc-windows-msvc
+
+      - name: Install Trusted Signing CLI
+        run: cargo install trusted-signing-cli --locked
 
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
@@ -159,7 +168,27 @@ jobs:
             throw "TAURI_SIGNING_PRIVATE_KEY is required for release builds so updater artifacts can be generated."
           }
 
-          Write-Host "Signing key detected. Release config will enable updater artifacts."
+          Write-Host "Tauri updater signing key detected. Release config will enable updater artifacts."
+
+      - name: Require Windows code signing secrets
+        shell: pwsh
+        run: |
+          $required = @(
+            "AZURE_CLIENT_ID",
+            "AZURE_CLIENT_SECRET",
+            "AZURE_TENANT_ID",
+            "AZURE_TRUSTED_SIGNING_ENDPOINT",
+            "AZURE_TRUSTED_SIGNING_ACCOUNT",
+            "AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE"
+          )
+
+          foreach ($name in $required) {
+            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) {
+              throw "$name is required for Authenticode code signing. Configure Microsoft Artifact Signing / Trusted Signing secrets before publishing this trust release."
+            }
+          }
+
+          Write-Host "Windows Authenticode signing secrets detected."
 
       - name: Build and create GitHub release
         uses: tauri-apps/tauri-action@v0.6.0
@@ -172,20 +201,20 @@ jobs:
           releaseBody: |
             ## Lightning P2P v${{ env.APP_VERSION }}
 
-            Direct peer-to-peer file transfer. No cloud. No accounts. No limits. Works across LAN and the public internet through iroh relay fallback.
+            Direct peer-to-peer file transfer for Windows. No cloud. No accounts. No limits. Works across LAN and the public internet through iroh relay fallback.
 
             ### Downloads
 
             | File | Description |
             |------|-------------|
-            | `Lightning.P2P_${{ env.APP_VERSION }}_x64-setup.exe` | Windows NSIS installer (signed auto-updates via Tauri updater) |
-            | `LightningP2PSetup.exe` | Stable alias for the latest recommended NSIS installer |
-            | `LightningP2P-win-Setup.exe` | Velopack installer (one-click, Discord-style delta updates) |
+            | `LightningP2P-win-Setup.exe` | Recommended Velopack installer (one-click, per-user install, delta-update ready) |
+            | `Lightning.P2P_${{ env.APP_VERSION }}_x64-setup.exe` | Classic NSIS installer with Tauri updater metadata |
+            | `LightningP2PSetup.exe` | Stable alias for the latest NSIS installer |
             | `Lightning.P2P_${{ env.APP_VERSION }}_x64_en-US.msi` | Windows MSI installer (managed environments) |
             | `LightningP2P.msi` | Stable alias for the latest MSI installer |
             | `winget install lightning-p2p` | winget package (after manifest lands in `microsoft/winget-pkgs`) |
 
-            SHA256 checksums are published alongside the installers.
+            Windows binaries are Authenticode code-signed through Microsoft Artifact Signing / Trusted Signing. Tauri updater signatures and SHA256 checksums are published alongside the installers.
 
             ### What's included
 
@@ -193,14 +222,15 @@ jobs:
             - BLAKE3 verified streaming with iroh-blobs
             - WAN reachability with direct and relay-assisted connectivity
             - Live progress tracking with speed and ETA
-            - QR code ticket sharing
+            - Receive handoff links and QR sharing
             - Transfer history with one-click re-share
-            - Signed auto-update support
+            - HTTPS receive handoff links: `https://lightning-p2p.netlify.app/receive#t=...`
+            - Code-signed Windows binaries and signed updater metadata
 
             ### Installation
 
-            1. Download the `.exe` installer above
-            2. Run the installer (you may need to click "More info" > "Run anyway" on SmartScreen)
+            1. Download the recommended `LightningP2P-win-Setup.exe` installer above
+            2. Run the installer
             3. Launch Lightning P2P from the Start Menu
 
             ---
@@ -279,6 +309,46 @@ jobs:
             --outputDir "$releasesDir" `
             --runtime "win-x64" `
             --noPortable
+
+      - name: Sign Velopack setup artifact
+        shell: pwsh
+        run: |
+          $releaseRoot = "src-tauri/target/x86_64-pc-windows-msvc/release"
+          $velopackRoot = Join-Path $releaseRoot "velopack-releases"
+          $setups = Get-ChildItem -Path $velopackRoot -Filter "*-Setup.exe" -File
+          if (-not $setups) {
+            throw "Velopack setup artifact was not found; cannot code-sign it."
+          }
+
+          foreach ($setup in $setups) {
+            ./src-tauri/windows/sign-windows.ps1 -Path $setup.FullName
+          }
+
+      - name: Verify Authenticode signatures
+        shell: pwsh
+        run: |
+          $releaseRoot = "src-tauri/target/x86_64-pc-windows-msvc/release"
+          $bundleRoot = Join-Path $releaseRoot "bundle"
+          $velopackRoot = Join-Path $releaseRoot "velopack-releases"
+          $signatureTargets = @()
+          $signatureTargets += Get-ChildItem -Path $releaseRoot -Filter "fastdrop.exe" -File
+          $signatureTargets += Get-ChildItem -Path (Join-Path $bundleRoot "nsis") -Filter "*.exe" -File
+          $signatureTargets += Get-ChildItem -Path (Join-Path $bundleRoot "msi") -Filter "*.msi" -File
+          $signatureTargets += Get-ChildItem -Path $bundleRoot -Filter "LightningP2PSetup.exe" -File
+          $signatureTargets += Get-ChildItem -Path $bundleRoot -Filter "LightningP2P.msi" -File
+          $signatureTargets += Get-ChildItem -Path $velopackRoot -Filter "*-Setup.exe" -File
+
+          if (-not $signatureTargets) {
+            throw "No Authenticode signature targets were found."
+          }
+
+          foreach ($target in $signatureTargets) {
+            $signature = Get-AuthenticodeSignature -FilePath $target.FullName
+            if ($signature.Status -ne "Valid") {
+              throw "Invalid Authenticode signature for $($target.Name): $($signature.Status) $($signature.StatusMessage)"
+            }
+            Write-Host "Valid Authenticode signature: $($target.Name)"
+          }
 
       - name: Generate SHA256 checksums
         shell: pwsh

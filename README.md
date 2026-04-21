@@ -33,7 +33,7 @@ No cloud. No accounts. No file size limits. Just direct, encrypted, verified tra
 
 ## Current Status
 
-- **Windows desktop app:** available now with signed release artifacts and auto-update metadata.
+- **Windows desktop app:** available now; the next release pipeline requires Authenticode code signing plus signed Tauri updater metadata.
 - **Public website:** Netlify-ready landing and SEO pages for download, security, benchmarks, and AirDrop-for-Windows searches.
 - **Mobile/browser transfers:** planned, not shipped yet. The website works on mobile, but real transfers currently require the desktop app.
 - **Speed claims:** benchmark-backed only. The app is built for high throughput, but public "fastest" claims should reference repeatable results.
@@ -79,33 +79,34 @@ Most file sharing tools route your data through the cloud, require accounts, or 
 - **End-to-end encrypted** via QUIC TLS 1.3 -- your files never touch a server
 - **Nearby sharing** -- senders on the same LAN appear automatically on the receiver, no codes to type
 - **QR code sharing** -- scan a code to start receiving on another device
-- **Deep links** -- open `lightning-p2p://receive?t=<ticket>` from chat or email and the app jumps straight to the receive screen
+- **Receive handoff links** -- share `https://lightning-p2p.netlify.app/receive#t=<ticket>` so receivers can open the app if installed or install it first
+- **Deep links** -- `lightning-p2p://receive?t=<ticket>` remains supported and opens the app straight to the receive screen
 - **Clipboard auto-detect** -- when a ticket is on the clipboard, Lightning P2P offers to paste it for you
 - **Live progress tracking** -- speed, ETA, and progress bar updated in real-time
 - **Transfer history** with one-click re-sharing of previously sent content
-- **Auto-updates** with signed releases delivered through GitHub Releases
-- **Four Windows install paths** -- NSIS (signed auto-updates), Velopack (modern one-click + delta updates), MSI (managed deployments), and winget
+- **Auto-updates** with signed Tauri updater metadata delivered through GitHub Releases
+- **Four Windows install paths** -- Velopack (recommended one-click + delta updates), NSIS (classic wizard + Tauri updater), MSI (managed deployments), and winget
 
 ## Download
 
 ### Windows
 
-Download the latest installer from [**GitHub Releases**](https://github.com/Kerim-Sabic/lightning-p2p/releases). Each release publishes installers, updater artifacts, signatures, and SHA256 checksums.
+Download the recommended installer from [**GitHub Releases**](https://github.com/Kerim-Sabic/lightning-p2p/releases). Each release publishes installers, Authenticode-signed Windows binaries when signing secrets are configured, Tauri updater signatures, and SHA256 checksums.
 
 | Installer | Description |
 |-----------|-------------|
-| [`Lightning.P2P_0.4.0_x64-setup.exe`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/Lightning.P2P_0.4.0_x64-setup.exe) | NSIS installer (recommended) — signed Tauri auto-updates, installs firewall rule |
-| [`LightningP2PSetup.exe`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2PSetup.exe) | Stable alias for the latest recommended NSIS installer |
-| [`LightningP2P-win-Setup.exe`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P-win-Setup.exe) | Velopack installer — modern one-click flow, delta updates, per-user install |
-| [`Lightning.P2P_0.4.0_x64_en-US.msi`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/Lightning.P2P_0.4.0_x64_en-US.msi) | MSI installer — for managed environments and Group Policy deployments |
+| [`LightningP2P-win-Setup.exe`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P-win-Setup.exe) | **Recommended** Velopack installer - modern one-click flow, per-user install, delta-update ready |
+| [`Lightning.P2P_0.4.0_x64-setup.exe`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/Lightning.P2P_0.4.0_x64-setup.exe) | NSIS installer - classic wizard, Tauri updater metadata, installs firewall rule |
+| [`LightningP2PSetup.exe`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2PSetup.exe) | Stable alias for the latest NSIS installer |
+| [`Lightning.P2P_0.4.0_x64_en-US.msi`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/Lightning.P2P_0.4.0_x64_en-US.msi) | MSI installer - for managed environments and Group Policy deployments |
 | [`LightningP2P.msi`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P.msi) | Stable alias for the latest MSI installer |
 | `winget install lightning-p2p` | Windows Package Manager (after the manifest lands in `microsoft/winget-pkgs`) |
 
-Same signed binary underneath all four — pick the install flow you prefer. The NSIS artifact is wired up to `tauri-plugin-updater` for background update checks; the Velopack artifact ships Velopack's own delta updater instead.
+Same Rust/Tauri app underneath all installers. Authenticode code signing proves the Windows binary publisher; Tauri updater signatures separately prove update metadata and packages for the NSIS updater path. The Velopack artifact is the primary user-facing installer after clean-VM verification.
 
 Verify the SHA256 checksum from the release notes before installing if you want to confirm the binary you downloaded.
 
-> **Note:** Windows may show a SmartScreen warning on first launch since the app is not yet code-signed. Click "More info" then "Run anyway".
+> **Note:** a new signing identity can still need SmartScreen reputation. If Windows shows a warning for a freshly code-signed release, verify the SHA256 checksum and Authenticode signature from the release page.
 
 ## Quick Start
 
@@ -264,6 +265,7 @@ The checked-in `netlify.toml` defines the build command, publish directory, Node
 
 - `/` — home
 - `/download` — Windows installer
+- `/receive` — receive handoff link that keeps tickets in the URL fragment
 - `/security` — private-by-design model
 - `/benchmarks` — methodology
 - `/alternatives/airdrop-for-windows` — AirDrop for Windows
@@ -274,7 +276,7 @@ The checked-in `netlify.toml` defines the build command, publish directory, Node
 - `/how-to-send-large-files` — how-to guide (with HowTo schema)
 - `/send-files-between-windows-computers` — Windows-to-Windows transfer
 
-Each page has a unique title, description, canonical URL, static fallback content, Open Graph/Twitter metadata, and relevant JSON-LD (`SoftwareApplication` on every page; `WebSite` and `Organization` on `/`; `BreadcrumbList` on non-home pages; `FAQPage` where applicable; `HowTo` on `/` and `/how-to-send-large-files`). `llms.txt` and `llms-full.txt` at the site root expose the project model to LLM crawlers.
+Each page has a unique title, description, canonical URL, static fallback content, Open Graph/Twitter metadata, and relevant JSON-LD (`SoftwareApplication` on every page; `WebSite` and `Organization` on `/`; `BreadcrumbList` on non-home pages; `FAQPage` where applicable; `HowTo` on `/` and `/how-to-send-large-files`). Canonicals and sitemap URLs use extensionless no-trailing-slash routes, with Netlify serving those routes directly. `llms.txt` and `llms-full.txt` at the site root expose the project model to LLM crawlers.
 
 ## How It Works
 
@@ -288,16 +290,16 @@ Sender                              Receiver
   |  3. Added to local blob store      |
   |  4. Ticket generated               |
   |                                    |
-  |  -------- share ticket -------->   |
+  |  ----- share receive link ----->   |
   |                                    |
-  |                                    |  5. Paste ticket
+  |                                    |  5. Open link / paste ticket
   |  <------- QUIC connection ------   |  6. Connect to sender
   |  ---- verified blob stream ---->   |  7. Stream with integrity check
   |                                    |  8. Export to disk
   |                                    |
 ```
 
-**Tickets** contain the sender's node ID, content hash, and relay info -- everything the receiver needs to connect directly and download.
+**Receive handoff links** use `https://lightning-p2p.netlify.app/receive#t=<ticket>`, so the ticket stays in the URL fragment and is not sent to the website server. The raw ticket contains the sender's node ID, content hash, and relay info -- everything the receiver needs to connect directly and download.
 
 ### WAN behavior
 
@@ -363,7 +365,7 @@ Full benchmark baselines:
 - Repository topics: `p2p`, `peer-to-peer`, `file-transfer`, `airdrop-alternative`, `wetransfer-alternative`, `magic-wormhole-alternative`, `localsend-alternative`, `tauri`, `rust`, `iroh`, `quic`, `blake3`, `windows`, `privacy`, `end-to-end-encryption`, `open-source`, `react`, `typescript`.
 - Upload `public/og-image.png` as the GitHub social preview image from repository settings.
 - Pin launch issues for benchmarks, mobile/browser transfer architecture, Linux/macOS packaging, and UX screenshots.
-- Launch only with honest claims: free, open-source, no account, direct-first transfer, signed Windows release, benchmark methodology published.
+- Launch only with honest claims: free, open-source, no account, direct-first transfer, code-signed Windows binaries, signed updater metadata, benchmark methodology published.
 
 ## Architecture
 
@@ -402,7 +404,7 @@ lightning-p2p/
 | **Styling** | Tailwind CSS v4, Framer Motion |
 | **Storage** | sled embedded database |
 | **Security** | QUIC TLS 1.3, Ed25519 keys in OS keychain |
-| **Packaging** | NSIS, Velopack, MSI, winget — signed auto-updates |
+| **Packaging** | Velopack, NSIS, MSI, winget - Authenticode code signing plus signed updater metadata |
 
 ## Development
 

@@ -8,13 +8,13 @@ const steps = [
   },
   {
     icon: LinkIcon,
-    title: "Share the ticket",
-    body: "Copy the ticket, show the QR code, or send a lightning-p2p:// link. No account, no upload.",
+    title: "Share the receive link",
+    body: "Copy the web handoff link, show the QR code, or copy the raw ticket fallback. No account, no upload.",
   },
   {
     icon: ClipboardCheck,
     title: "Receive directly",
-    body: "The receiver pastes the ticket. Files stream peer-to-peer over QUIC, verified with BLAKE3.",
+    body: "The receiver opens the link or pastes the ticket. Files stream peer-to-peer over QUIC, verified with BLAKE3.",
   },
 ];
 

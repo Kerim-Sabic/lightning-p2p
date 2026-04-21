@@ -6,7 +6,7 @@ transfer workflows (WeTransfer, Dropbox links, email attachments) with direct
 encrypted streams between devices.
 
 Project repository: https://github.com/Kerim-Sabic/lightning-p2p
-Public website: https://lightning-p2p.netlify.app
+Public website: https://lightning-p2p.netlify.app/
 License: MIT
 
 ## Core technology
@@ -32,15 +32,19 @@ License: MIT
 ## What the app does
 
 1. The sender drags files or a folder into the Send view.
-2. The app creates a BlobTicket: a short string (also rendered as a QR code) that
-   contains the sender's node ID, the content hashes, and relay hints.
-3. The receiver pastes the ticket or scans the QR. The app pulls the file directly
-   from the sender's device over QUIC.
+2. The app creates a BlobTicket and wraps it in a receive handoff link or QR code.
+   The raw ticket contains the sender's node ID, content hashes, and relay hints.
+3. The receiver opens the receive link, scans the QR, or pastes the raw ticket.
+   The app pulls the file directly from the sender's device over QUIC.
 4. Every byte is verified with BLAKE3 as it is written to the receiver's disk.
 5. Both sides get a content hash confirming byte-for-byte integrity.
 
-Deep links of the form `lightning-p2p://receive?t=<ticket>` open the app straight
-to the receive-confirm screen. The receive view also auto-detects tickets on the
+Senders can copy a web receive handoff link of the form
+`https://lightning-p2p.netlify.app/receive#t=<ticket>`. The ticket is stored in
+the URL fragment so it is not sent to the website server. The handoff page then
+opens the existing desktop deep link `lightning-p2p://receive?t=<ticket>` when
+the app is installed, or keeps the raw ticket available while the receiver
+installs Lightning P2P. The receive view also auto-detects tickets on the
 clipboard on focus.
 
 ## What it is not
@@ -59,7 +63,7 @@ clipboard on focus.
 
 - Same spirit: direct transfer, no intermediate server storing files.
 - Wormhole is a Python CLI with short human-readable codes; Lightning P2P is a
-  Windows desktop app with drag-and-drop, QR tickets, and a transfer history.
+  Windows desktop app with drag-and-drop, receive links, QR codes, and history.
 - Wormhole codes and Lightning P2P tickets are not interchangeable.
 
 ### vs LocalSend
@@ -98,8 +102,9 @@ Absolute "fastest" claims should wait for published repeatable benchmarks.
 
 Q: How do I send large files for free without uploading to the cloud?
 A: Install Lightning P2P on the sender and receiver, drag files into Send, share
-the generated ticket or QR code, and paste it into Receive. The bytes stream
-from device to device instead of being uploaded to a hosted storage link first.
+the generated receive handoff link or QR code, and open it on the receiver. The
+bytes stream from device to device instead of being uploaded to a hosted storage
+link first.
 
 Q: Is Lightning P2P better than WeTransfer for private large-file transfer?
 A: Use Lightning P2P when you do not want the file stored on a third-party cloud
@@ -110,8 +115,10 @@ direct peer-to-peer transfer with no account and no hosted retention window.
 
 Windows 10 or Windows 11 x64:
 
-- NSIS installer: https://github.com/Kerim-Sabic/lightning-p2p/releases/latest
-- MSI installer: available on the same releases page.
+- Recommended Velopack one-click installer:
+  https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P-win-Setup.exe
+- NSIS and MSI installers: available on the same releases page for classic and
+  managed deployment paths.
 - Installs under the current user profile; no admin elevation prompt on most
   systems.
 
@@ -119,7 +126,9 @@ Windows 10 or Windows 11 x64:
 
 - Transport: QUIC TLS 1.3 via iroh.
 - Integrity: BLAKE3 content addresses verified on every write.
-- Releases: signed; updater metadata checked against the release's public key.
+- Releases: Windows binaries are Authenticode code-signed when Trusted Signing
+  release secrets are configured; Tauri updater metadata is checked separately
+  against the release public key.
 - Telemetry: none.
 - Keys: Ed25519 identity in OS keychain.
 
@@ -141,7 +150,9 @@ Q: Do I need an account?
 A: No. There is no sign-in, no email capture, no paid tier.
 
 Q: Is it open source?
-A: Yes, MIT licensed, with public releases, checksums, and signatures.
+A: Yes, MIT licensed, with public releases, SHA256 checksums, Authenticode
+signatures for Windows binaries, and separate Tauri updater signatures when
+release signing is configured.
 
 Q: Is it available on macOS, Linux, iOS, Android?
 A: Not yet. Windows is the public target today. A public mobile RFC outlines iOS
@@ -151,6 +162,7 @@ and Android plans.
 
 - Home: https://lightning-p2p.netlify.app/
 - Download: https://lightning-p2p.netlify.app/download
+- Receive handoff: https://lightning-p2p.netlify.app/receive
 - Security: https://lightning-p2p.netlify.app/security
 - Benchmarks methodology: https://lightning-p2p.netlify.app/benchmarks
 - How to send large files: https://lightning-p2p.netlify.app/how-to-send-large-files

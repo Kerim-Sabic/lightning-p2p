@@ -11,6 +11,7 @@ import {
   getCurrentWindow,
   type DragDropEvent,
 } from "@tauri-apps/api/window";
+import { DEEP_LINK_SCHEME } from "./shareLinks";
 
 export type TransferDirection = "send" | "receive";
 export type NodeOnlineState =
@@ -530,7 +531,7 @@ export function onDiscoveredSharesUpdated(
   });
 }
 
-export const DEEP_LINK_SCHEME = "lightning-p2p";
+export { DEEP_LINK_SCHEME };
 
 export function extractTicketFromDeepLink(url: string): string | null {
   if (!url) {

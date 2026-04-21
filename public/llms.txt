@@ -12,7 +12,9 @@
   fallback when NAT or firewall rules block the direct path.
 - Uses iroh-blobs for content-addressed, BLAKE3-verified streaming, so the receiver
   validates every byte as it is written to disk.
-- Ships signed Windows installers (NSIS and MSI) with a signed auto-updater.
+- Recommended Windows install path is the Velopack one-click setup. Release
+  builds code-sign Windows binaries with Authenticode when Trusted Signing
+  secrets are configured, and Tauri updater metadata is signed separately.
 - MIT licensed. Source at https://github.com/Kerim-Sabic/lightning-p2p.
 
 ## What it is not
@@ -26,7 +28,7 @@
 ## How it compares
 
 - Magic Wormhole: similar direct-transfer model, Lightning P2P adds a Windows GUI,
-  drag-and-drop, QR tickets, and a transfer history.
+  drag-and-drop, receive links, QR codes, and a transfer history.
 - LocalSend: LAN-focused, cross-platform. Lightning P2P is Windows-first today but
   works across LAN and WAN (via iroh relay fallback).
 - WeTransfer: Lightning P2P does not upload to a server; transfers stream directly.
@@ -37,6 +39,7 @@
 
 - [Home](https://lightning-p2p.netlify.app/)
 - [Download](https://lightning-p2p.netlify.app/download)
+- [Receive handoff](https://lightning-p2p.netlify.app/receive)
 - [Security model](https://lightning-p2p.netlify.app/security)
 - [Benchmarks methodology](https://lightning-p2p.netlify.app/benchmarks)
 - [How to send large files](https://lightning-p2p.netlify.app/how-to-send-large-files)

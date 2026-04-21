@@ -1,3 +1,5 @@
+import { ticketFromReceiveFragment } from "./shareLinks";
+
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) {
     return `${bytes} B`;
@@ -75,4 +77,34 @@ export function formatDurationMs(durationMs: number): string {
 export function isProbablyBlobTicket(ticket: string): boolean {
   const value = ticket.trim();
   return /^blob[a-z0-9]+$/i.test(value) && value.length > 24;
+}
+
+function validBlobTicketOrNull(ticket: string | null): string | null {
+  const value = ticket?.trim() ?? "";
+  return isProbablyBlobTicket(value) ? value : null;
+}
+
+export function extractBlobTicket(input: string): string | null {
+  const value = input.trim();
+  const directTicket = validBlobTicketOrNull(value);
+  if (directTicket) {
+    return directTicket;
+  }
+
+  try {
+    const parsedUrl = new URL(value);
+    const fragmentTicket = validBlobTicketOrNull(
+      ticketFromReceiveFragment(parsedUrl.hash),
+    );
+    if (fragmentTicket) {
+      return fragmentTicket;
+    }
+
+    const queryParams = new URLSearchParams(parsedUrl.search);
+    return validBlobTicketOrNull(
+      queryParams.get("t") ?? queryParams.get("ticket"),
+    );
+  } catch {
+    return null;
+  }
 }

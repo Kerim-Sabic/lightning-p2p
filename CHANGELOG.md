@@ -4,6 +4,15 @@ All notable changes to Lightning P2P are documented here. Format: [Keep a Change
 
 ## [Unreleased]
 
+### Added
+- Browser receive handoff route at `/receive` for `https://lightning-p2p.netlify.app/receive#t=<ticket>` links that open the desktop deep link without sending tickets to the website server.
+- Windows Authenticode signing hook and release workflow checks for Microsoft Artifact Signing / Trusted Signing.
+
+### Changed
+- Velopack is now the primary download path in web metadata, landing page copy, README, release notes, and LLM context files.
+- Send and History copy actions now default to HTTPS receive handoff links while preserving raw ticket copy as a fallback.
+- Generated sitemap and canonical URLs now use the trailing-slash route form served by Netlify.
+
 ## [0.4.0] - 2026-04-20
 
 ### Added

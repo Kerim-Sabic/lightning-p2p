@@ -18,6 +18,7 @@ import {
   type MouseEvent,
 } from "react";
 import { formatBytes } from "../lib/format";
+import { createReceiveHandoffLink } from "../lib/shareLinks";
 import {
   isDesktopRuntime,
   onWindowDragDropEvent,
@@ -89,7 +90,7 @@ export function SendView() {
   const shareTicket = useTransferStore((state) => state.shareTicket);
   const sendTransfer = useLatestSendTransfer();
   const desktopRuntime = isDesktopRuntime();
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<"link" | "ticket" | null>(null);
   const [isDragActive, setIsDragActive] = useState(false);
   const [qrSvg, setQrSvg] = useState<string | null>(null);
 
@@ -99,6 +100,9 @@ export function SendView() {
   );
   const localDiscoveryEnabled = settings?.local_discovery_enabled ?? true;
   const visibleOnNetwork = Boolean(shareTicket) && localDiscoveryEnabled;
+  const receiveHandoffLink = shareTicket
+    ? createReceiveHandoffLink(shareTicket)
+    : null;
 
   useEffect(() => {
     let unlisten: (() => void) | null = null;
@@ -136,14 +140,14 @@ export function SendView() {
   useEffect(() => {
     let active = true;
 
-    if (!shareTicket) {
+    if (!receiveHandoffLink) {
       setQrSvg(null);
       return () => {
         active = false;
       };
     }
 
-    void renderTicketQr(shareTicket)
+    void renderTicketQr(receiveHandoffLink)
       .then((svg) => {
         if (active) {
           setQrSvg(svg);
@@ -158,17 +162,31 @@ export function SendView() {
     return () => {
       active = false;
     };
-  }, [shareTicket]);
+  }, [receiveHandoffLink]);
 
-  const handleCopy = async (): Promise<void> => {
+  const handleCopyReceiveLink = async (): Promise<void> => {
+    if (!receiveHandoffLink) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(receiveHandoffLink);
+      setCopied("link");
+      window.setTimeout(() => setCopied(null), 1800);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Copy failed");
+    }
+  };
+
+  const handleCopyRawTicket = async (): Promise<void> => {
     if (!shareTicket) {
       return;
     }
 
     try {
       await navigator.clipboard.writeText(shareTicket);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1800);
+      setCopied("ticket");
+      window.setTimeout(() => setCopied(null), 1800);
     } catch (error) {
       setError(error instanceof Error ? error.message : "Copy failed");
     }
@@ -231,7 +249,9 @@ export function SendView() {
           tabIndex={desktopRuntime ? 0 : -1}
           role={desktopRuntime ? "button" : undefined}
           aria-label={
-            desktopRuntime ? "Choose files to share or drop files here" : undefined
+            desktopRuntime
+              ? "Choose files to share or drop files here"
+              : undefined
           }
         >
           <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
@@ -241,10 +261,12 @@ export function SendView() {
               </div>
               <p className="page-eyebrow mt-5">Send</p>
               <h1 className="mt-2 text-[clamp(1.8rem,1.6rem+0.8vw,2.4rem)] font-semibold tracking-[-0.04em] text-white">
-                {isDragActive ? "Release to stage files" : "Drop files to share"}
+                {isDragActive
+                  ? "Release to stage files"
+                  : "Drop files to share"}
               </h1>
               <p className="meta-copy mt-3 max-w-[58ch]">
-                Choose files or a folder, then generate one share ticket when
+                Choose files or a folder, then generate one receive link when
                 you are ready.
               </p>
 
@@ -299,7 +321,9 @@ export function SendView() {
         <section className="glass-panel p-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <p className="text-sm font-semibold text-white">Staged selection</p>
+              <p className="text-sm font-semibold text-white">
+                Staged selection
+              </p>
               <p className="meta-copy mt-1">
                 {shareSelection.length} item
                 {shareSelection.length === 1 ? "" : "s"} ready |{" "}
@@ -322,7 +346,7 @@ export function SendView() {
               >
                 <span className="relative inline-flex items-center gap-2">
                   <Link2 className="h-4 w-4" />
-                  {isSharing ? "Generating ticket..." : "Generate ticket"}
+                  {isSharing ? "Generating link..." : "Generate receive link"}
                 </span>
               </button>
             </div>
@@ -365,22 +389,23 @@ export function SendView() {
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="text-sm font-semibold text-white">
-                    Share code ready
+                    Share link ready
                   </p>
                   <p className="meta-copy mt-1">
-                    Copy the code or scan the QR code on the receiving device.
+                    Copy the receive link or scan the QR code on the receiving
+                    device. The raw ticket stays available below.
                   </p>
                 </div>
                 <button
-                  onClick={() => void handleCopy()}
+                  onClick={() => void handleCopyReceiveLink()}
                   className={`glass-button inline-flex items-center gap-2 px-4 py-2 text-sm ${
-                    copied
+                    copied === "link"
                       ? "border-emerald-400/20 bg-emerald-500/10 text-emerald-100"
                       : "text-slate-100"
                   }`}
                 >
                   <Copy className="h-4 w-4" />
-                  {copied ? "Copied" : "Copy"}
+                  {copied === "link" ? "Link copied" : "Copy share link"}
                 </button>
               </div>
 
@@ -395,19 +420,44 @@ export function SendView() {
                   {visibleOnNetwork
                     ? "Nearby discovery is active"
                     : localDiscoveryEnabled
-                      ? "Share code is ready"
+                      ? "Share link is ready"
                       : "Nearby discovery is disabled"}
                 </p>
                 <p className="mt-2 leading-6">
                   {visibleOnNetwork
                     ? "Receivers on the same LAN should see this share automatically while it stays active."
                     : localDiscoveryEnabled
-                      ? "If the receiver does not appear automatically, they can still paste this code."
-                      : "Receivers will need the share code or QR code explicitly."}
+                      ? "If the receiver does not appear automatically, send them this receive link."
+                      : "Receivers will need the share link, raw ticket, or QR code explicitly."}
                 </p>
               </div>
 
+              {receiveHandoffLink ? (
+                <div className="overflow-hidden rounded-[20px] border border-emerald-400/16 bg-emerald-500/[0.08] p-4">
+                  <p className="metric-label text-emerald-100/80">
+                    Recommended receive link
+                  </p>
+                  <code className="mt-2 block break-all font-mono text-[13px] leading-7 text-emerald-50/90">
+                    {receiveHandoffLink}
+                  </code>
+                </div>
+              ) : null}
+
               <div className="overflow-hidden rounded-[20px] border border-white/[0.08] bg-black/25 p-4">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <p className="metric-label">Raw ticket</p>
+                  <button
+                    type="button"
+                    onClick={() => void handleCopyRawTicket()}
+                    className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                      copied === "ticket"
+                        ? "border-emerald-400/20 bg-emerald-500/10 text-emerald-100"
+                        : "border-white/10 bg-white/[0.04] text-slate-200 hover:bg-white/[0.08]"
+                    }`}
+                  >
+                    {copied === "ticket" ? "Ticket copied" : "Copy raw ticket"}
+                  </button>
+                </div>
                 <code className="block break-all font-mono text-[13px] leading-7 text-sky-50/88">
                   {shareTicket}
                 </code>
@@ -426,9 +476,12 @@ export function SendView() {
                 </div>
               )}
               <div>
-                <p className="text-sm font-semibold text-white">Scan to receive</p>
+                <p className="text-sm font-semibold text-white">
+                  Scan to receive
+                </p>
                 <p className="meta-copy mt-1">
-                  Nearby discovery and manual code entry both stay available.
+                  Opens the receive handoff page first; nearby discovery and
+                  manual ticket entry still work.
                 </p>
               </div>
             </div>

@@ -18,8 +18,18 @@
 import packageJson from "../../package.json";
 import siteLogoUrl from "../assets/lightning-p2p-site-logo.png";
 import pages from "../content/web-pages.json";
+import {
+  REPO_URL,
+  RELEASE_URL,
+  VELOPACK_DOWNLOAD_URL,
+  canonicalWebPath,
+  canonicalWebUrl,
+  versionedMsiDownloadUrl,
+  versionedNsisDownloadUrl,
+} from "../lib/shareLinks";
 import { ComparisonTable } from "./landing/ComparisonTable";
 import { HowItWorks } from "./landing/HowItWorks";
+import { ReceiveHandoffPage } from "./ReceiveHandoffPage";
 
 interface Faq {
   q: string;
@@ -42,13 +52,9 @@ interface WebPage {
   faqs?: Faq[];
 }
 
-const SITE_URL = "https://lightning-p2p.netlify.app";
 const APP_VERSION = packageJson.version;
-const RELEASE_URL = "https://github.com/Kerim-Sabic/lightning-p2p/releases/latest";
-const EXE_DOWNLOAD_URL = `https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/Lightning.P2P_${APP_VERSION}_x64-setup.exe`;
-const MSI_DOWNLOAD_URL = `https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/Lightning.P2P_${APP_VERSION}_x64_en-US.msi`;
-const VELOPACK_DOWNLOAD_URL = `https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P-win-Setup.exe`;
-const REPO_URL = "https://github.com/Kerim-Sabic/lightning-p2p";
+const EXE_DOWNLOAD_URL = versionedNsisDownloadUrl(APP_VERSION);
+const MSI_DOWNLOAD_URL = versionedMsiDownloadUrl(APP_VERSION);
 const GH_STARS_BADGE = `https://img.shields.io/github/stars/Kerim-Sabic/lightning-p2p?style=for-the-badge&logo=github&color=10B981&labelColor=08120f`;
 const webPages = pages as WebPage[];
 
@@ -148,11 +154,15 @@ function statCardClass(): string {
 
 export function WebLandingPage() {
   const page = currentPage();
-  const canonicalUrl = `${SITE_URL}${page.path === "/" ? "" : page.path}`;
+  const canonicalUrl = canonicalWebUrl(page.path);
   const homePage = webPages.find((p) => p.path === "/") ?? page;
   const faqs = page.faqs ?? homePage.faqs ?? fallbackFaqs;
   const isHome = page.path === "/";
   const navPages = webPages.filter((p) => p.inNav);
+
+  if (page.path === "/receive") {
+    return <ReceiveHandoffPage />;
+  }
 
   return (
     <div className="min-h-screen bg-[#050706] text-white">
@@ -172,7 +182,7 @@ export function WebLandingPage() {
             {navPages.map((item) => (
               <a
                 key={item.path}
-                href={item.path}
+                href={canonicalWebPath(item.path)}
                 className={navClass(item.path === page.path)}
               >
                 {item.label}
@@ -188,12 +198,12 @@ export function WebLandingPage() {
               <Github className="h-4 w-4" />
             </a>
             <a
-              href={EXE_DOWNLOAD_URL}
+              href={VELOPACK_DOWNLOAD_URL}
               className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-950 transition-colors hover:bg-emerald-100"
             >
               <Download className="h-4 w-4" />
               <span className="hidden sm:inline">Download</span>
-              <span className="sm:hidden">EXE</span>
+              <span className="sm:hidden">Setup</span>
             </a>
           </div>
         </div>
@@ -237,8 +247,8 @@ export function WebLandingPage() {
               </p>
               <div className="mt-9 flex flex-wrap gap-3">
                 <a
-                  href={EXE_DOWNLOAD_URL}
-                className="inline-flex items-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-black/25 transition-colors hover:bg-emerald-100"
+                  href={VELOPACK_DOWNLOAD_URL}
+                  className="inline-flex items-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-black/25 transition-colors hover:bg-emerald-100"
                 >
                   <Download className="h-4 w-4" />
                   Download for Windows
@@ -317,15 +327,14 @@ export function WebLandingPage() {
                   <strong className="text-white">Lightning P2P</strong> is a
                   free, open-source Windows app that sends files directly from
                   one device to another over QUIC. Bytes stream from the
-                  sender's disk, BLAKE3 verifies each chunk on the receiver,
-                  and no file is ever uploaded to a cloud server.
+                  sender's disk, BLAKE3 verifies each chunk on the receiver, and
+                  no file is ever uploaded to a cloud server.
                 </p>
                 <p className="text-slate-300">
                   It works as an AirDrop alternative for Windows, a WeTransfer
-                  alternative without the cloud upload, and a no-terminal way
-                  to send files directly with a polished desktop GUI. MIT
-                  licensed on GitHub. Built with Rust, Tauri, iroh, and
-                  iroh-blobs.
+                  alternative without the cloud upload, and a no-terminal way to
+                  send files directly with a polished desktop GUI. MIT licensed
+                  on GitHub. Built with Rust, Tauri, iroh, and iroh-blobs.
                 </p>
               </div>
             </div>
@@ -345,8 +354,8 @@ export function WebLandingPage() {
                 id="aeo-heading"
                 className="mt-3 max-w-3xl text-3xl font-semibold leading-tight"
               >
-                Best P2P file transfer for Windows users who want no account,
-                no cloud upload, and verified bytes.
+                Best P2P file transfer for Windows users who want no account, no
+                cloud upload, and verified bytes.
               </h2>
               <div className="mt-8 grid gap-3 md:grid-cols-3">
                 {[
@@ -384,7 +393,7 @@ export function WebLandingPage() {
               ["$0", "Free and open source"],
               ["No account", "No cloud login"],
               ["QUIC + BLAKE3", "Encrypted, verified"],
-              [`v${APP_VERSION}`, "Signed Windows release"],
+              [`v${APP_VERSION}`, "Code-signed release path"],
             ].map(([value, label]) => (
               <div key={label} className={statCardClass()}>
                 <div
@@ -409,12 +418,12 @@ export function WebLandingPage() {
                 Download
               </p>
               <h2 className="mt-4 text-4xl font-semibold leading-tight text-white">
-                Pick your install flavor.
+                Start with the modern installer.
               </h2>
               <p className="mt-5 text-base leading-7 text-slate-300">
-                Three official install paths for Windows. Same signed binary
-                underneath - pick the flow you prefer. MSI and checksums are in
-                the release page for managed environments.
+                Velopack is the recommended one-click Windows installer. NSIS,
+                MSI, checksums, and updater signatures stay available for users
+                who need the classic or managed deployment paths.
               </p>
             </div>
             <div className="mt-10 grid gap-4 md:grid-cols-3">
@@ -426,21 +435,21 @@ export function WebLandingPage() {
                   <Download className="h-5 w-5" />
                 </span>
                 <h3 className="mt-5 text-lg font-semibold text-white">
-                  NSIS setup
+                  Velopack setup
                 </h3>
                 <p className="mt-1 text-xs font-medium uppercase tracking-wider text-emerald-200/80">
-                  Classic installer / signed auto-updates
+                  Modern one-click / delta updates
                 </p>
                 <p className="mt-3 text-sm leading-6 text-slate-300">
-                  Familiar Windows installer flow, signed Tauri updater built
-                  in, adds firewall rules for direct peer connections.
+                  Fast per-user install, app launch after setup, and smaller
+                  delta updates once the Velopack feed is active.
                 </p>
                 <a
-                  href={EXE_DOWNLOAD_URL}
+                  href={VELOPACK_DOWNLOAD_URL}
                   className="mt-6 inline-flex items-center justify-center gap-2 rounded-full bg-emerald-300 px-5 py-3 text-sm font-semibold text-emerald-950 transition-colors hover:bg-emerald-200"
                 >
                   <Download className="h-4 w-4" />
-                  Download .exe (NSIS)
+                  Download Velopack .exe
                 </a>
               </article>
               <article className="flex flex-col rounded-[14px] border border-white/10 bg-white/[0.03] p-6 transition-colors hover:border-emerald-300/25 hover:bg-white/[0.05]">
@@ -448,21 +457,21 @@ export function WebLandingPage() {
                   <Download className="h-5 w-5" />
                 </span>
                 <h3 className="mt-5 text-lg font-semibold text-white">
-                  Velopack setup
+                  NSIS setup
                 </h3>
                 <p className="mt-1 text-xs font-medium uppercase tracking-wider text-slate-400">
-                  Modern one-click / delta updates
+                  Classic wizard / Tauri updater
                 </p>
                 <p className="mt-3 text-sm leading-6 text-slate-300">
-                  Discord-style splash, one-click install into your user
-                  profile, delta updates (smaller patches) on every release.
+                  Familiar installer flow with Tauri updater metadata and
+                  firewall rules for direct peer connections.
                 </p>
                 <a
-                  href={VELOPACK_DOWNLOAD_URL}
+                  href={EXE_DOWNLOAD_URL}
                   className="mt-6 inline-flex items-center justify-center gap-2 rounded-full border border-white/16 bg-white/8 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/14"
                 >
                   <Download className="h-4 w-4" />
-                  Download Velopack .exe
+                  Download NSIS .exe
                 </a>
               </article>
               <article className="flex flex-col rounded-[14px] border border-white/10 bg-white/[0.03] p-6 transition-colors hover:border-emerald-300/25 hover:bg-white/[0.05]">
@@ -477,7 +486,8 @@ export function WebLandingPage() {
                 </p>
                 <p className="mt-3 text-sm leading-6 text-slate-300">
                   For terminal regulars and IT provisioning. Pulls the signed
-                  installer and tracks updates via the Windows Package Manager.
+                  installer and tracks updates through Windows Package Manager
+                  after the package submission lands.
                 </p>
                 <code className="mt-6 inline-flex items-center justify-center gap-2 rounded-full border border-white/16 bg-black/40 px-5 py-3 text-sm font-mono text-emerald-200">
                   winget install lightning-p2p
@@ -544,7 +554,8 @@ export function WebLandingPage() {
                 </h2>
                 <p className="mt-5 text-base leading-7 text-[#425247]">
                   Lightning P2P avoids cloud file hosting, uses encrypted peer
-                  transport, verifies content with BLAKE3, and ships signed
+                  transport, verifies content with BLAKE3, and ships
+                  Authenticode-signed Windows binaries with separately signed
                   updater metadata. Those are concrete properties users can
                   inspect in the source and release artifacts.
                 </p>
@@ -553,8 +564,12 @@ export function WebLandingPage() {
                 {[
                   ["Transport", "QUIC TLS 1.3 through iroh"],
                   ["Integrity", "BLAKE3 verified iroh-blobs streaming"],
-                  ["Updates", "Signed Tauri updater releases on GitHub"],
-                  ["Storage", "No server-side file bucket in the transfer path"],
+                  ["Binaries", "Authenticode signing in release CI"],
+                  ["Updates", "Signed Tauri updater metadata on GitHub"],
+                  [
+                    "Storage",
+                    "No server-side file bucket in the transfer path",
+                  ],
                 ].map(([term, detail]) => (
                   <div
                     key={term}
@@ -677,10 +692,10 @@ export function WebLandingPage() {
                 <ArrowRight className="h-4 w-4" />
               </a>
               <a
-                href={EXE_DOWNLOAD_URL}
+                href={VELOPACK_DOWNLOAD_URL}
                 className="inline-flex items-center gap-2 rounded-full border border-white/16 bg-white/8 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/14"
               >
-                Get the EXE installer
+                Get the one-click installer
               </a>
             </div>
           </div>
@@ -727,6 +742,7 @@ export function WebLandingPage() {
                     [
                       "/",
                       "/download",
+                      "/receive",
                       "/security",
                       "/benchmarks",
                       "/best-p2p-file-transfer",
@@ -734,7 +750,10 @@ export function WebLandingPage() {
                   )
                   .map((item) => (
                     <li key={item.path}>
-                      <a href={item.path} className="hover:text-white">
+                      <a
+                        href={canonicalWebPath(item.path)}
+                        className="hover:text-white"
+                      >
                         {item.label}
                       </a>
                     </li>
@@ -754,7 +773,10 @@ export function WebLandingPage() {
                   )
                   .map((item) => (
                     <li key={item.path}>
-                      <a href={item.path} className="hover:text-white">
+                      <a
+                        href={canonicalWebPath(item.path)}
+                        className="hover:text-white"
+                      >
                         {item.label}
                       </a>
                     </li>

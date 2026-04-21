@@ -124,7 +124,8 @@ export function FirstRunOverlay() {
                     Node identity
                   </p>
                   <p className="text-[13px] text-slate-300/72">
-                    This is the sender identity embedded into your share ticket.
+                    This is the sender identity embedded into your transfer
+                    ticket.
                   </p>
                 </div>
               </div>

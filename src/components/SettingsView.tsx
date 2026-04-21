@@ -81,7 +81,7 @@ function relayModeLabel(relayMode: RelayMode): string {
 function updateStatusCopy(updateState: UpdateState): string {
   switch (updateState.phase) {
     case "checking":
-      return "Checking published signed releases for a newer build.";
+      return "Checking signed update metadata for a newer build.";
     case "available":
       return `Version ${updateState.availableVersion ?? "unknown"} is ready to install.`;
     case "upToDate":
@@ -205,7 +205,7 @@ export function SettingsView() {
           <p className="page-copy mt-4 max-w-[60ch]">
             These controls govern how Lightning P2P exposes routes, where
             verified files land, and how quickly this install picks up new
-            signed releases.
+            signed update packages.
           </p>
 
           <div className="hero-metrics mt-7 grid gap-3 sm:grid-cols-3">

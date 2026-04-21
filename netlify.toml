@@ -7,8 +7,85 @@
   SITE_URL = "https://lightning-p2p.netlify.app"
 
 [[redirects]]
+  from = "/download/"
+  to = "/download"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "/receive/"
+  to = "/receive"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "/security/"
+  to = "/security"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "/benchmarks/"
+  to = "/benchmarks"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "/alternatives/airdrop-for-windows/"
+  to = "/alternatives/airdrop-for-windows"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "/free-p2p-file-transfer/"
+  to = "/free-p2p-file-transfer"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "/best-p2p-file-transfer/"
+  to = "/best-p2p-file-transfer"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "/wormhole-alternative/"
+  to = "/wormhole-alternative"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "/wetransfer-alternative/"
+  to = "/wetransfer-alternative"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "/localsend-vs-lightning-p2p/"
+  to = "/localsend-vs-lightning-p2p"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "/how-to-send-large-files/"
+  to = "/how-to-send-large-files"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "/send-files-between-windows-computers/"
+  to = "/send-files-between-windows-computers"
+  status = 301
+  force = true
+
+[[redirects]]
   from = "/download"
   to = "/download/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/receive"
+  to = "/receive/index.html"
   status = 200
 
 [[redirects]]
@@ -29,6 +106,11 @@
 [[redirects]]
   from = "/free-p2p-file-transfer"
   to = "/free-p2p-file-transfer/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/best-p2p-file-transfer"
+  to = "/best-p2p-file-transfer/index.html"
   status = 200
 
 [[redirects]]

@@ -1,5 +1,8 @@
 {
   "bundle": {
-    "createUpdaterArtifacts": true
+    "createUpdaterArtifacts": true,
+    "windows": {
+      "signCommand": "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command \"$script = 'src-tauri/windows/sign-windows.ps1'; if (!(Test-Path -LiteralPath $script)) { $script = 'windows/sign-windows.ps1' }; & $script '%1'\""
+    }
   }
 }

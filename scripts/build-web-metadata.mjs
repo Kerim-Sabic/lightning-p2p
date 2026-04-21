@@ -40,6 +40,10 @@ function pageUrl(pagePath) {
   return pagePath === "/" ? `${siteUrl}/` : `${siteUrl}${pagePath}`;
 }
 
+function pageHref(pagePath) {
+  return pagePath;
+}
+
 function findPage(path) {
   return pages.find((p) => p.path === path);
 }
@@ -89,7 +93,7 @@ ${page.related
     if (!target) {
       return "";
     }
-    return `          <li><a href="${escapeHtml(path)}">${escapeHtml(
+    return `          <li><a href="${escapeHtml(pageHref(path))}">${escapeHtml(
       target.label,
     )} - ${escapeHtml(target.title)}</a></li>`;
   })
@@ -116,10 +120,11 @@ ${page.related
       <p>${escapeHtml(page.focus)}</p>
 ${body}
       <p>
-        Download the Windows <a href="${escapeHtml(exeDownloadUrl)}">EXE setup installer</a>,
-        <a href="${escapeHtml(velopackDownloadUrl)}">Velopack one-click installer</a>, or
-        <a href="${escapeHtml(msiDownloadUrl)}">MSI installer</a>. Release checksums and signatures
-        are available on <a href="${escapeHtml(releaseUrl)}">GitHub Releases</a>.
+        Download the recommended <a href="${escapeHtml(velopackDownloadUrl)}">Velopack one-click installer</a>,
+        the classic <a href="${escapeHtml(exeDownloadUrl)}">NSIS setup installer</a>, or the
+        <a href="${escapeHtml(msiDownloadUrl)}">MSI installer</a>. Code-signing status,
+        Tauri updater signatures, and SHA256 checksums are available on
+        <a href="${escapeHtml(releaseUrl)}">GitHub Releases</a>.
       </p>${faqs}${related}
       </section>
     </main>`;
@@ -138,10 +143,10 @@ function softwareApplicationJsonLd(page) {
     license: `${repoUrl}/blob/main/LICENSE`,
     codeRepository: repoUrl,
     url: siteUrl,
-    downloadUrl: exeDownloadUrl,
-    installUrl: releaseUrl,
+    downloadUrl: velopackDownloadUrl,
+    installUrl: `${siteUrl}/download`,
     screenshot: `${siteUrl}/og-image.png`,
-    softwareHelp: `${siteUrl}/security`,
+    softwareHelp: pageUrl("/security"),
     releaseNotes: `${repoUrl}/blob/main/CHANGELOG.md`,
     keywords:
       "p2p file transfer, peer to peer file transfer, free file transfer, AirDrop for Windows, WeTransfer alternative, LocalSend alternative, QUIC file transfer, BLAKE3 verification",
@@ -150,7 +155,7 @@ function softwareApplicationJsonLd(page) {
       "QUIC transport with relay-assisted fallback",
       "BLAKE3 verified streaming",
       "No account and no cloud file storage",
-      "Signed Windows installers and updater metadata",
+      "Code-signed Windows binaries with signed updater metadata",
     ],
     publisher: {
       "@type": "Organization",
@@ -241,7 +246,7 @@ function breadcrumbJsonLd(page) {
       "@type": "ListItem",
       position: index + 2,
       name: match?.label || segment,
-      item: `${siteUrl}${acc}`,
+      item: pageUrl(acc),
     });
   });
   return jsonLd({
