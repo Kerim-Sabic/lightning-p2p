@@ -22,7 +22,7 @@ tauri-plugin-updater = "2"
 
 # iroh P2P networking
 iroh = { version = "0.32", features = ["discovery-local-network"] }
-iroh-blobs = { version = "0.32", features = ["rpc"] }
+iroh-blobs = { version = "0.100", features = ["rpc"] }
 
 # Serialization
 serde = { version = "1", features = ["derive"] }
