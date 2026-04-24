@@ -191,7 +191,7 @@ jobs:
           Write-Host "Windows Authenticode signing secrets detected."
 
       - name: Build and create GitHub release
-        uses: tauri-apps/tauri-action@v0.6.0
+        uses: tauri-apps/tauri-action@v0.6.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
