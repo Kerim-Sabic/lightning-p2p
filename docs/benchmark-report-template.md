@@ -1,6 +1,6 @@
 # Lightning P2P Benchmark Report Template
 
-Use this template before publishing any "fastest" or "best" claim. Keep raw notes, failed attempts, and screenshots with the report so results can be repeated.
+Use this template before publishing any speed-leadership or "best" claim. Keep raw notes, failed attempts, and screenshots with the report so results can be repeated.
 
 ## Release Under Test
 
@@ -12,25 +12,25 @@ Use this template before publishing any "fastest" or "best" claim. Keep raw note
 
 ## Test Matrix
 
-| Scenario | File set | Route | Sender network | Receiver network | Runs | Median speed | Failures |
-|----------|----------|-------|----------------|------------------|------|--------------|----------|
-| LAN direct | 1 GB single file | Direct | | | 5 | | |
-| LAN direct | 10 GB single file | Direct | | | 5 | | |
-| LAN direct | Many small files | Direct | | | 5 | | |
-| WAN direct | 1 GB single file | Direct | | | 5 | | |
-| WAN direct | 10 GB single file | Direct | | | 5 | | |
-| Relay fallback | 1 GB single file | Relay | | | 5 | | |
-| Android to Windows LAN direct | 1 GB single file | Direct | | | 5 | | |
-| Windows to Android LAN direct | 1 GB single file | Direct | | | 5 | | |
-| Android to Windows relay fallback | 1 GB single file | Relay | | | 5 | | |
-| Android to Android LAN direct | 1 GB single file | Direct | | | 5 | | |
+| Scenario                          | File set          | Route  | Sender network | Receiver network | Runs | Median speed | Failures |
+| --------------------------------- | ----------------- | ------ | -------------- | ---------------- | ---- | ------------ | -------- |
+| LAN direct                        | 1 GB single file  | Direct |                |                  | 5    |              |          |
+| LAN direct                        | 10 GB single file | Direct |                |                  | 5    |              |          |
+| LAN direct                        | Many small files  | Direct |                |                  | 5    |              |          |
+| WAN direct                        | 1 GB single file  | Direct |                |                  | 5    |              |          |
+| WAN direct                        | 10 GB single file | Direct |                |                  | 5    |              |          |
+| Relay fallback                    | 1 GB single file  | Relay  |                |                  | 5    |              |          |
+| Android to Windows LAN direct     | 1 GB single file  | Direct |                |                  | 5    |              |          |
+| Windows to Android LAN direct     | 1 GB single file  | Direct |                |                  | 5    |              |          |
+| Android to Windows relay fallback | 1 GB single file  | Relay  |                |                  | 5    |              |          |
+| Android to Android LAN direct     | 1 GB single file  | Direct |                |                  | 5    |              |          |
 
 ## Hardware And Software
 
-| Device | CPU | RAM | Disk | OS | Network adapter | App versions |
-|--------|-----|-----|------|----|-----------------|--------------|
-| Sender | | | | | | |
-| Receiver | | | | | | |
+| Device   | CPU | RAM | Disk | OS  | Network adapter | App versions |
+| -------- | --- | --- | ---- | --- | --------------- | ------------ |
+| Sender   |     |     |      |     |                 |              |
+| Receiver |     |     |      |     |                 |              |
 
 ## Network Conditions
 
@@ -43,20 +43,20 @@ Use this template before publishing any "fastest" or "best" claim. Keep raw note
 
 ## Competitor Baselines
 
-| Tool | Version | Scenario | Median speed | Failures | Notes |
-|------|---------|----------|--------------|----------|-------|
-| LocalSend | | LAN direct | | | |
-| PairDrop | | Browser transfer | | | |
-| Snapdrop | | Browser/local transfer | | | |
-| Windows Nearby Sharing | | OS nearby sharing | | | |
-| Cloud upload/download | | Upload then download | | | |
-| Magic Wormhole | | CLI encrypted transfer baseline | | | |
+| Tool                   | Version | Scenario                        | Median speed | Failures | Notes |
+| ---------------------- | ------- | ------------------------------- | ------------ | -------- | ----- |
+| LocalSend              |         | LAN direct                      |              |          |       |
+| PairDrop               |         | Browser transfer                |              |          |       |
+| Snapdrop               |         | Browser/local transfer          |              |          |       |
+| Windows Nearby Sharing |         | OS nearby sharing               |              |          |       |
+| Cloud upload/download  |         | Upload then download            |              |          |       |
+| Magic Wormhole         |         | CLI encrypted transfer baseline |              |          |       |
 
 ## Result Notes
 
 - Median transfer time:
 - Median throughput:
-- Fastest run:
+- Highest-throughput run:
 - Slowest successful run:
 - Failure count and category:
 - Route badge observed in app:

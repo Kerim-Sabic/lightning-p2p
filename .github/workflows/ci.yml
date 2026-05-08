@@ -201,7 +201,7 @@ jobs:
           releaseBody: |
             ## Lightning P2P v${{ env.APP_VERSION }}
 
-            Direct peer-to-peer file transfer for Windows. No cloud. No accounts. No limits. Works across LAN and the public internet through iroh relay fallback.
+            Direct peer-to-peer file transfer for Windows. No cloud. No accounts. No artificial file-size cap. Works across LAN and the public internet through iroh relay fallback.
 
             ### Downloads
 
@@ -290,7 +290,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path $stageDir | Out-Null
           New-Item -ItemType Directory -Force -Path $releasesDir | Out-Null
 
-          Copy-Item -Path (Join-Path $releaseRoot "fastdrop.exe") -Destination $stageDir -Force
+          Copy-Item -Path (Join-Path $releaseRoot "lightning-p2p.exe") -Destination $stageDir -Force
           $webView = Join-Path $releaseRoot "WebView2Loader.dll"
           if (Test-Path $webView) {
             Copy-Item -Path $webView -Destination $stageDir -Force
@@ -302,7 +302,7 @@ jobs:
             --packId "LightningP2P" `
             --packVersion "$env:APP_VERSION" `
             --packDir "$stageDir" `
-            --mainExe "fastdrop.exe" `
+            --mainExe "lightning-p2p.exe" `
             --packTitle "Lightning P2P" `
             --packAuthors "Lightning P2P" `
             --icon "src-tauri/icons/icon.ico" `
@@ -331,7 +331,7 @@ jobs:
           $bundleRoot = Join-Path $releaseRoot "bundle"
           $velopackRoot = Join-Path $releaseRoot "velopack-releases"
           $signatureTargets = @()
-          $signatureTargets += Get-ChildItem -Path $releaseRoot -Filter "fastdrop.exe" -File
+          $signatureTargets += Get-ChildItem -Path $releaseRoot -Filter "lightning-p2p.exe" -File
           $signatureTargets += Get-ChildItem -Path (Join-Path $bundleRoot "nsis") -Filter "*.exe" -File
           $signatureTargets += Get-ChildItem -Path (Join-Path $bundleRoot "msi") -Filter "*.msi" -File
           $signatureTargets += Get-ChildItem -Path $bundleRoot -Filter "LightningP2PSetup.exe" -File

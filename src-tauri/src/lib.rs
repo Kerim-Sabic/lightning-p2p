@@ -1,7 +1,7 @@
 #![deny(clippy::all, clippy::pedantic)]
 #![allow(clippy::module_name_repetitions)]
 
-//! `FastDrop` — P2P file sharing at maximum speed.
+//! Lightning P2P direct peer-to-peer file sharing.
 //!
 //! Built on [iroh](https://iroh.computer) for P2P networking and
 //! [iroh-blobs](https://docs.rs/iroh-blobs) for content-addressed blob transfer.
@@ -14,8 +14,8 @@ pub mod storage;
 pub mod telemetry;
 pub mod transfer;
 
-use error::{FastDropError, Result};
-use node::{FastDropNode, NearbyShareProtocol, NearbyShareRegistry, NodeRuntimeStatus};
+use error::{LightningP2PError, Result};
+use node::{LightningP2PNode, NearbyShareProtocol, NearbyShareRegistry, NodeRuntimeStatus};
 use std::sync::Arc;
 use storage::settings::{resolve_app_data_dir, SettingsState};
 use tauri::Manager;
@@ -27,7 +27,7 @@ pub struct AppState {
     /// Resolved application data directory for this profile.
     pub data_dir: std::path::PathBuf,
     /// The iroh-backed P2P node.
-    pub node: Arc<RwLock<Option<Arc<FastDropNode>>>>,
+    pub node: Arc<RwLock<Option<Arc<LightningP2PNode>>>>,
     /// Last known node startup or reachability status.
     pub node_runtime: Arc<RwLock<NodeRuntimeStatus>>,
     /// Persisted user settings shared across sessions.
@@ -56,13 +56,13 @@ impl AppState {
     ///
     /// # Errors
     ///
-    /// Returns `FastDropError::Other` if the node is not ready yet.
-    pub async fn get_node(&self) -> Result<Arc<FastDropNode>> {
+    /// Returns `LightningP2PError::Other` if the node is not ready yet.
+    pub async fn get_node(&self) -> Result<Arc<LightningP2PNode>> {
         self.node
             .read()
             .await
             .clone()
-            .ok_or_else(|| FastDropError::Other("Node not initialized yet".into()))
+            .ok_or_else(|| LightningP2PError::Other("Node not initialized yet".into()))
     }
 }
 
@@ -119,7 +119,7 @@ fn spawn_node_startup(handle: tauri::AppHandle) {
             }
         };
 
-        match node::FastDropNode::start_with_dirs_and_relay(
+        match node::LightningP2PNode::start_with_dirs_and_relay(
             data_dir,
             download_dir,
             relay_url,
@@ -161,9 +161,9 @@ pub fn run() {
     telemetry::init_tracing();
 
     let data_dir =
-        resolve_app_data_dir().expect("FastDrop could not resolve an application data dir");
+        resolve_app_data_dir().expect("Lightning P2P could not resolve an application data dir");
     let settings =
-        SettingsState::load_or_create(&data_dir).expect("FastDrop could not load settings");
+        SettingsState::load_or_create(&data_dir).expect("Lightning P2P could not load settings");
     let app_state = AppState::new(data_dir, settings);
 
     app_builder()
@@ -183,6 +183,7 @@ pub fn run() {
             commands::diagnostics::get_network_diagnostics,
             commands::peer::get_node_id,
             commands::peer::get_node_status,
+            commands::platform::get_platform_profile,
             commands::settings::get_app_settings,
             commands::settings::get_download_dir,
             commands::settings::set_download_dir,

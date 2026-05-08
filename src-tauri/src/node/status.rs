@@ -107,12 +107,8 @@ mod tests {
 
     #[test]
     fn direct_addresses_take_priority_for_online_state() {
-        let status = NodeRuntimeStatus::from_network(
-            "node-1".into(),
-            Some("https://relay".into()),
-            2,
-            true,
-        );
+        let status =
+            NodeRuntimeStatus::from_network("node-1".into(), Some("https://relay".into()), 2, true);
         assert_eq!(status.online_state, NodeOnlineState::DirectReady);
         assert!(status.online);
         assert!(status.lan_discovery_active);

@@ -6,8 +6,6 @@
 )]
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use fastdrop_lib::node::FastDropNode;
-use fastdrop_lib::transfer::{receiver, sender};
 use iroh::endpoint::{RelayMode, TransportConfig};
 use iroh::protocol::Router;
 use iroh::Endpoint;
@@ -15,6 +13,8 @@ use iroh_blobs::net_protocol::Blobs;
 use iroh_blobs::rpc::client::blobs::{DownloadMode, DownloadOptions, MemClient};
 use iroh_blobs::ticket::BlobTicket;
 use iroh_blobs::util::SetTagOption;
+use lightning_p2p_lib::node::LightningP2PNode;
+use lightning_p2p_lib::transfer::{receiver, sender};
 use std::fs;
 use std::io::{BufWriter, Write};
 use std::net::{Ipv4Addr, SocketAddrV4};
@@ -33,8 +33,8 @@ const STREAM_WINDOW_BYTES: u32 = 4_194_304;
 
 struct AppFixture {
     _root: tempfile::TempDir,
-    sender_node: FastDropNode,
-    receiver_node: FastDropNode,
+    sender_node: LightningP2PNode,
+    receiver_node: LightningP2PNode,
     receive_dir: PathBuf,
     ticket: BlobTicket,
 }
@@ -68,13 +68,13 @@ impl AppFixture {
         let source_file = source_dir.join("payload.bin");
         create_pattern_file(&source_file, size).expect("source file");
 
-        let sender_node = FastDropNode::start_with_dirs(
+        let sender_node = LightningP2PNode::start_with_dirs(
             root.path().join("sender-data"),
             root.path().join("sender-downloads"),
         )
         .await
         .expect("sender node");
-        let receiver_node = FastDropNode::start_with_dirs(
+        let receiver_node = LightningP2PNode::start_with_dirs(
             root.path().join("receiver-data"),
             root.path().join("receiver-downloads"),
         )
@@ -288,7 +288,7 @@ async fn run_share_preparation(size: u64) -> Duration {
     let source_file = source_dir.join("payload.bin");
     create_pattern_file(&source_file, size).expect("source file");
 
-    let sender_node = FastDropNode::start_with_dirs(
+    let sender_node = LightningP2PNode::start_with_dirs(
         root.path().join("sender-data"),
         root.path().join("sender-downloads"),
     )
@@ -308,7 +308,7 @@ async fn run_directory_share_preparation(file_count: usize, file_size: u64) -> D
     let source_dir = root.path().join("source-tree");
     create_pattern_directory(&source_dir, file_count, file_size).expect("source tree");
 
-    let sender_node = FastDropNode::start_with_dirs(
+    let sender_node = LightningP2PNode::start_with_dirs(
         root.path().join("sender-data"),
         root.path().join("sender-downloads"),
     )
@@ -444,7 +444,7 @@ fn init_tracing() {
     static TRACING: OnceLock<()> = OnceLock::new();
     let _ = TRACING.get_or_init(|| {
         let _ = tracing_subscriber::fmt()
-            .with_env_filter("fastdrop=info,iroh=warn")
+            .with_env_filter("lightning_p2p=info,iroh=warn")
             .with_test_writer()
             .try_init();
     });

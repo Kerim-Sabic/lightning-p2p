@@ -1,7 +1,7 @@
 //! Receiver: downloads shared content from peers using blob tickets.
 
-use crate::error::{FastDropError, Result};
-use crate::node::FastDropNode;
+use crate::error::{LightningP2PError, Result};
+use crate::node::LightningP2PNode;
 use crate::storage::history::{self, TransferRecord};
 use crate::storage::peers::{self, PeerRecord};
 use crate::transfer::export;
@@ -78,10 +78,10 @@ pub struct ReceiveOutcome {
 ///
 /// # Errors
 ///
-/// Returns `FastDropError` if the download fails, the ticket is cancelled, or
+/// Returns `LightningP2PError` if the download fails, the ticket is cancelled, or
 /// the exported files cannot be written.
 pub async fn receive_blob(
-    node: &FastDropNode,
+    node: &LightningP2PNode,
     queue: TransferQueue,
     window: Window,
     transfer_id: String,
@@ -145,9 +145,9 @@ pub async fn receive_blob(
 ///
 /// # Errors
 ///
-/// Returns `FastDropError` if the download or final export fails.
+/// Returns `LightningP2PError` if the download or final export fails.
 pub async fn receive_ticket(
-    node: &FastDropNode,
+    node: &LightningP2PNode,
     ticket: BlobTicket,
     destination: PathBuf,
 ) -> Result<ReceiveOutcome> {
@@ -167,7 +167,7 @@ pub async fn receive_ticket(
 }
 
 async fn receive_core(
-    node: &FastDropNode,
+    node: &LightningP2PNode,
     ticket: &BlobTicket,
     destination: PathBuf,
     cancel_rx: &mut watch::Receiver<bool>,
@@ -204,7 +204,7 @@ async fn receive_core(
 }
 
 async fn download_to_store(
-    node: &FastDropNode,
+    node: &LightningP2PNode,
     ticket: &BlobTicket,
     cancel_rx: &mut watch::Receiver<bool>,
     progress: Option<&ProgressHandle>,
@@ -237,7 +237,7 @@ async fn download_to_store(
 }
 
 async fn start_download(
-    node: &FastDropNode,
+    node: &LightningP2PNode,
     ticket: &BlobTicket,
 ) -> Result<ClientDownloadProgress> {
     node.blobs_client()
@@ -263,7 +263,7 @@ async fn next_event(
         tokio::select! {
             changed = cancel_rx.changed() => {
                 if changed.is_ok() && *cancel_rx.borrow() {
-                    return Err(FastDropError::Other("Cancelled".into()));
+                    return Err(LightningP2PError::Other("Cancelled".into()));
                 }
             }
             item = tokio::time::timeout(DOWNLOAD_IDLE_TIMEOUT, stream.next()) => {
@@ -278,7 +278,7 @@ async fn next_event(
 }
 
 fn handle_download_event(
-    node: &FastDropNode,
+    node: &LightningP2PNode,
     ticket: &BlobTicket,
     state: &mut TransferState,
     lifecycle: &mut DownloadLifecycle,
@@ -324,7 +324,7 @@ fn update_progress(
 }
 
 fn mark_contacted(
-    node: &FastDropNode,
+    node: &LightningP2PNode,
     ticket: &BlobTicket,
     lifecycle: &mut DownloadLifecycle,
     started_at: Instant,
@@ -361,29 +361,29 @@ async fn drain_download_stream(stream: &mut ClientDownloadProgress) -> Result<()
     Ok(())
 }
 
-fn timeout_error(contacted_peer: bool) -> FastDropError {
+fn timeout_error(contacted_peer: bool) -> LightningP2PError {
     if contacted_peer {
-        FastDropError::Other("Transfer interrupted".into())
+        LightningP2PError::Other("Transfer interrupted".into())
     } else {
-        FastDropError::Other("Peer not reachable".into())
+        LightningP2PError::Other("Peer not reachable".into())
     }
 }
 
 fn stream_end_error() -> Result<DownloadSummary> {
-    Err(FastDropError::Blob(
+    Err(LightningP2PError::Blob(
         "Download stream closed unexpectedly".into(),
     ))
 }
 
-fn download_abort_error(message: String, lifecycle: DownloadLifecycle) -> FastDropError {
+fn download_abort_error(message: String, lifecycle: DownloadLifecycle) -> LightningP2PError {
     if lifecycle.contacted_peer {
-        FastDropError::Blob(message)
+        LightningP2PError::Blob(message)
     } else {
-        FastDropError::Other("Peer not reachable".into())
+        LightningP2PError::Other("Peer not reachable".into())
     }
 }
 
-fn categorize_receive_error(error: &FastDropError, phase: TransferPhase) -> FailureCategory {
+fn categorize_receive_error(error: &LightningP2PError, phase: TransferPhase) -> FailureCategory {
     let message = error.to_string().to_lowercase();
     if message.contains("cancelled") {
         return FailureCategory::Cancelled;
@@ -406,7 +406,7 @@ fn categorize_receive_error(error: &FastDropError, phase: TransferPhase) -> Fail
     if phase == TransferPhase::Verifying || message.contains("export") {
         return FailureCategory::Export;
     }
-    if matches!(error, FastDropError::Blob(_)) {
+    if matches!(error, LightningP2PError::Blob(_)) {
         return FailureCategory::Interrupted;
     }
     FailureCategory::Unknown
@@ -447,7 +447,7 @@ fn blob_progress_bytes(blob: &BlobState) -> u64 {
     }
 }
 
-fn save_peer_no_flush(node: &FastDropNode, peer: &str) -> Result<()> {
+fn save_peer_no_flush(node: &LightningP2PNode, peer: &str) -> Result<()> {
     peers::save_peer_no_flush(
         &node.db,
         &PeerRecord {
@@ -458,7 +458,7 @@ fn save_peer_no_flush(node: &FastDropNode, peer: &str) -> Result<()> {
     )
 }
 
-fn save_receive_record_no_flush(node: &FastDropNode, summary: &ReceiveSummary) -> Result<()> {
+fn save_receive_record_no_flush(node: &LightningP2PNode, summary: &ReceiveSummary) -> Result<()> {
     history::save_record_no_flush(
         &node.db,
         &TransferRecord {
@@ -472,8 +472,8 @@ fn save_receive_record_no_flush(node: &FastDropNode, summary: &ReceiveSummary) -
     )
 }
 
-fn blob_error(err: &impl ToString) -> FastDropError {
-    FastDropError::Blob(err.to_string())
+fn blob_error(err: &impl ToString) -> LightningP2PError {
+    LightningP2PError::Blob(err.to_string())
 }
 
 fn elapsed_ms(duration: std::time::Duration) -> u64 {
@@ -503,21 +503,21 @@ mod tests {
     fn receive_errors_are_categorized_for_ui() {
         assert_eq!(
             categorize_receive_error(
-                &FastDropError::Other("Cancelled".into()),
+                &LightningP2PError::Other("Cancelled".into()),
                 TransferPhase::Downloading
             ),
             FailureCategory::Cancelled
         );
         assert_eq!(
             categorize_receive_error(
-                &FastDropError::Other("Peer not reachable".into()),
+                &LightningP2PError::Other("Peer not reachable".into()),
                 TransferPhase::Connecting
             ),
             FailureCategory::Unreachable
         );
         assert_eq!(
             categorize_receive_error(
-                &FastDropError::Blob("disk write failed".into()),
+                &LightningP2PError::Blob("disk write failed".into()),
                 TransferPhase::Verifying
             ),
             FailureCategory::Export

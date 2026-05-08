@@ -5,7 +5,7 @@
 
 use super::status::NodeRuntimeStatus;
 use super::NearbyShareProtocol;
-use crate::error::{FastDropError, Result};
+use crate::error::{LightningP2PError, Result};
 use crate::storage::db::StorageDb;
 use crate::transfer::metrics::RouteKind;
 use iroh::endpoint::ConnectionType;
@@ -19,7 +19,7 @@ use iroh_blobs::store::fs::Store as BlobStore;
 use socket2::{Domain, Protocol, Socket, Type};
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -28,13 +28,15 @@ const RELAY_WAIT_TIMEOUT: Duration = Duration::from_secs(6);
 const MAX_CONCURRENT_STREAMS: u32 = 1024;
 const CONNECTION_WINDOW_BYTES: u32 = 268_435_456; // 256 MB
 const STREAM_WINDOW_BYTES: u32 = 67_108_864; // 64 MB
+const DB_FILE_NAME: &str = "lightning-p2p.db";
+const DEPRECATED_DB_FILE_NAME: &str = "fastdrop.db";
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 const MDNS_MULTICAST_ADDR: Ipv4Addr = Ipv4Addr::new(224, 0, 0, 251);
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 const MDNS_PORT: u16 = 5353;
 
 /// The running iroh node with blob transfer capability.
-pub struct FastDropNode {
+pub struct LightningP2PNode {
     endpoint: Endpoint,
     blobs: Blobs<BlobStore>,
     router: Router,
@@ -44,7 +46,7 @@ pub struct FastDropNode {
     pub db: StorageDb,
 }
 
-impl FastDropNode {
+impl LightningP2PNode {
     /// Starts the iroh node using explicit directories.
     ///
     /// This is used by the app and by integration tests that need isolated
@@ -52,7 +54,7 @@ impl FastDropNode {
     ///
     /// # Errors
     ///
-    /// Returns `FastDropError` if endpoint binding, storage creation, or
+    /// Returns `LightningP2PError` if endpoint binding, storage creation, or
     /// protocol startup fails.
     pub async fn start_with_dirs(data_dir: PathBuf, download_dir: PathBuf) -> Result<Self> {
         let nearby_protocol = Arc::new(NearbyShareProtocol::new(super::NearbyShareRegistry::new(
@@ -65,7 +67,7 @@ impl FastDropNode {
     ///
     /// # Errors
     ///
-    /// Returns `FastDropError` if endpoint binding, storage creation, or
+    /// Returns `LightningP2PError` if endpoint binding, storage creation, or
     /// protocol startup fails.
     pub async fn start_with_dirs_and_relay(
         data_dir: PathBuf,
@@ -92,8 +94,8 @@ impl FastDropNode {
             .accept(super::nearby_protocol::NEARBY_SHARE_ALPN, nearby_protocol)
             .spawn()
             .await
-            .map_err(FastDropError::Network)?;
-        let db = StorageDb::open(&data_dir.join("fastdrop.db"))?;
+            .map_err(LightningP2PError::Network)?;
+        let db = open_storage_db(&data_dir)?;
 
         Ok(Self {
             endpoint,
@@ -124,7 +126,7 @@ impl FastDropNode {
     ///
     /// # Errors
     ///
-    /// Returns `FastDropError` if direct addresses or the home relay are not
+    /// Returns `LightningP2PError` if direct addresses or the home relay are not
     /// ready in time.
     pub async fn ticket_addr(&self) -> Result<NodeAddr> {
         let direct_addresses = self
@@ -132,7 +134,7 @@ impl FastDropNode {
             .direct_addresses()
             .initialized()
             .await
-            .map_err(|err| FastDropError::Other(err.to_string()))?;
+            .map_err(|err| LightningP2PError::Other(err.to_string()))?;
         let relay_url = wait_for_home_relay(&self.endpoint).await?;
         Ok(NodeAddr::from_parts(
             self.node_id(),
@@ -202,9 +204,12 @@ impl FastDropNode {
     ///
     /// # Errors
     ///
-    /// Returns `FastDropError` if the iroh router shutdown fails.
+    /// Returns `LightningP2PError` if the iroh router shutdown fails.
     pub async fn shutdown(&self) -> Result<()> {
-        self.router.shutdown().await.map_err(FastDropError::Network)
+        self.router
+            .shutdown()
+            .await
+            .map_err(LightningP2PError::Network)
     }
 }
 
@@ -228,7 +233,7 @@ async fn bind_endpoint(relay_url: Option<RelayUrl>) -> Result<Endpoint> {
         .transport_config(tuned_transport_config())
         .bind()
         .await
-        .map_err(FastDropError::Network)
+        .map_err(LightningP2PError::Network)
 }
 
 fn local_network_discovery_label() -> &'static str {
@@ -309,15 +314,26 @@ fn tuned_transport_config() -> TransportConfig {
 async fn load_blob_store(data_dir: &std::path::Path) -> Result<BlobStore> {
     BlobStore::load(data_dir.join("blobs"))
         .await
-        .map_err(|err| FastDropError::Blob(err.to_string()))
+        .map_err(|err| LightningP2PError::Blob(err.to_string()))
+}
+
+fn open_storage_db(data_dir: &Path) -> Result<StorageDb> {
+    let db_path = data_dir.join(DB_FILE_NAME);
+    let deprecated_db_path = data_dir.join(DEPRECATED_DB_FILE_NAME);
+
+    if deprecated_db_path.exists() && !db_path.exists() {
+        std::fs::rename(&deprecated_db_path, &db_path)?;
+    }
+
+    StorageDb::open(&db_path)
 }
 
 async fn wait_for_home_relay(endpoint: &Endpoint) -> Result<iroh::RelayUrl> {
     let mut watcher = endpoint.home_relay();
     tokio::time::timeout(RELAY_WAIT_TIMEOUT, watcher.initialized())
         .await
-        .map_err(|_| FastDropError::Other("Home relay not ready yet".into()))?
-        .map_err(|err| FastDropError::Other(err.to_string()))
+        .map_err(|_| LightningP2PError::Other("Home relay not ready yet".into()))?
+        .map_err(|err| LightningP2PError::Other(err.to_string()))
 }
 
 fn map_connection_type(connection_type: &ConnectionType) -> RouteKind {
@@ -335,9 +351,22 @@ mod tests {
 
     #[test]
     fn default_download_dir_prefers_lightning_p2p_subdirectory() {
-        let data_dir = PathBuf::from("C:/tmp/fastdrop-test");
+        let data_dir = PathBuf::from("C:/tmp/lightning-p2p-test");
         let path = default_download_dir(&data_dir);
         assert!(path.ends_with("Lightning P2P") || path.ends_with("downloads"));
+    }
+
+    #[test]
+    fn storage_db_migrates_from_deprecated_fastdrop_name() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let old_db = root.path().join(DEPRECATED_DB_FILE_NAME);
+        let new_db = root.path().join(DB_FILE_NAME);
+        std::fs::create_dir(&old_db).expect("old db dir");
+
+        let _db = open_storage_db(root.path()).expect("db opens");
+
+        assert!(new_db.exists());
+        assert!(!old_db.exists());
     }
 
     #[test]

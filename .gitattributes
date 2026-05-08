@@ -1,0 +1,27 @@
+# GitHub Linguist should show hand-written product code, not generated shells,
+# binary assets, release metadata, or documentation.
+
+docs/** linguist-documentation=true
+*.md linguist-documentation=true
+CODE_OF_CONDUCT.md linguist-documentation=true
+CONTRIBUTING.md linguist-documentation=true
+README.md linguist-documentation=true
+CHANGELOG.md linguist-documentation=true
+CLAUDE.md linguist-documentation=true
+agents.md linguist-documentation=true
+
+public/llms*.txt linguist-documentation=true
+src/content/web-pages.json linguist-documentation=true
+
+src-tauri/gen/android/** linguist-generated=true
+dist/** linguist-generated=true
+public/404.html linguist-generated=true
+public/manifest.webmanifest linguist-generated=true
+pnpm-lock.yaml linguist-generated=true
+src-tauri/Cargo.lock linguist-generated=true
+
+*.png binary linguist-generated=true
+*.gif binary linguist-generated=true
+*.ico binary linguist-generated=true
+*.bmp binary linguist-generated=true
+*.jar binary linguist-vendored=true

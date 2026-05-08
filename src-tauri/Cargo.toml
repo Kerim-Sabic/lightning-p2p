@@ -1,12 +1,12 @@
 [package]
-name = "fastdrop"
-version = "0.4.0"
+name = "lightning-p2p"
+version = "0.4.1"
 edition = "2021"
 rust-version = "1.81"
-description = "Lightning P2P — P2P file sharing at maximum speed"
+description = "Lightning P2P - direct peer-to-peer file sharing for Windows"
 
 [lib]
-name = "fastdrop_lib"
+name = "lightning_p2p_lib"
 crate-type = ["lib", "staticlib", "cdylib"]
 
 [build-dependencies]

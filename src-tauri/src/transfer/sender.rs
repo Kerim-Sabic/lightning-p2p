@@ -1,7 +1,7 @@
 //! Sender: imports content into iroh-blobs and produces share tickets.
 
-use crate::error::{FastDropError, Result};
-use crate::node::FastDropNode;
+use crate::error::{LightningP2PError, Result};
+use crate::node::LightningP2PNode;
 use crate::storage::history::{self, TransferRecord};
 use crate::transfer::metrics::{RouteKind, TransferMetrics};
 use crate::transfer::progress::{
@@ -59,10 +59,10 @@ pub struct ShareOutcome {
 ///
 /// # Errors
 ///
-/// Returns `FastDropError` if the paths are invalid, the add operation fails,
+/// Returns `LightningP2PError` if the paths are invalid, the add operation fails,
 /// or the ticket cannot be generated.
 pub async fn send_files(
-    node: &FastDropNode,
+    node: &LightningP2PNode,
     window: Window,
     paths: Vec<PathBuf>,
 ) -> Result<ShareOutcome> {
@@ -115,22 +115,22 @@ pub async fn send_files(
 ///
 /// # Errors
 ///
-/// Returns `FastDropError` if the paths are invalid, the add operation fails,
+/// Returns `LightningP2PError` if the paths are invalid, the add operation fails,
 /// or the ticket cannot be generated.
-pub async fn create_share(node: &FastDropNode, paths: Vec<PathBuf>) -> Result<ShareOutcome> {
+pub async fn create_share(node: &LightningP2PNode, paths: Vec<PathBuf>) -> Result<ShareOutcome> {
     let plan = build_share_plan(paths)?;
     create_share_with_plan(node, plan, None).await
 }
 
 async fn create_share_with_plan(
-    node: &FastDropNode,
+    node: &LightningP2PNode,
     plan: SharePlan,
     progress: Option<ProgressHandle>,
 ) -> Result<ShareOutcome> {
     let imported = import_sources(node.blobs_client().clone(), &plan, progress).await?;
     let hash = persist_collection(node.blobs_client(), imported).await?;
     let ticket = build_ticket(node, hash).await?;
-    tracing::info!(ticket = %ticket, hash = %hash, "FastDrop share ticket created");
+    tracing::info!(ticket = %ticket, hash = %hash, "Lightning P2P share ticket created");
     Ok(ShareOutcome {
         hash,
         ticket,
@@ -152,11 +152,11 @@ fn build_share_plan(paths: Vec<PathBuf>) -> Result<SharePlan> {
 
 fn canonicalize_paths(paths: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
     if paths.is_empty() {
-        return Err(FastDropError::Other("No files selected".into()));
+        return Err(LightningP2PError::Other("No files selected".into()));
     }
     paths
         .into_iter()
-        .map(|path| path.canonicalize().map_err(FastDropError::from))
+        .map(|path| path.canonicalize().map_err(LightningP2PError::from))
         .collect()
 }
 
@@ -164,11 +164,11 @@ fn collect_sources(paths: &[PathBuf]) -> Result<Vec<DataSource>> {
     let mut sources = Vec::new();
     for path in paths {
         let mut scanned = scan_path(path.clone(), WrapOption::Wrap { name: None })
-            .map_err(|err| FastDropError::Blob(err.to_string()))?;
+            .map_err(|err| LightningP2PError::Blob(err.to_string()))?;
         sources.append(&mut scanned);
     }
     if sources.is_empty() {
-        return Err(FastDropError::Other(
+        return Err(LightningP2PError::Other(
             "Cannot share an empty directory".into(),
         ));
     }
@@ -181,7 +181,7 @@ fn ensure_unique_names(sources: &[DataSource]) -> Result<()> {
     for source in sources {
         let name = source.name().into_owned();
         if !names.insert(name.clone()) {
-            return Err(FastDropError::Other(format!(
+            return Err(LightningP2PError::Other(format!(
                 "Duplicate share path name: {name}"
             )));
         }
@@ -297,7 +297,7 @@ async fn import_source(
         }
     }
 
-    Err(FastDropError::Blob(
+    Err(LightningP2PError::Blob(
         "Import stream ended before completion".into(),
     ))
 }
@@ -325,7 +325,7 @@ fn handle_add_progress(
                 tag,
             }))
         }
-        AddProgress::Abort(error) => Err(FastDropError::Blob(error.to_string())),
+        AddProgress::Abort(error) => Err(LightningP2PError::Blob(error.to_string())),
     }
 }
 
@@ -351,7 +351,7 @@ async fn persist_collection(client: &MemClient, imported: Vec<ImportedSource>) -
         .map_err(|err| blob_error(&err))
 }
 
-async fn build_ticket(node: &FastDropNode, hash: Hash) -> Result<BlobTicket> {
+async fn build_ticket(node: &LightningP2PNode, hash: Hash) -> Result<BlobTicket> {
     BlobTicket::new(
         node.ticket_addr().await?,
         hash,
@@ -360,7 +360,7 @@ async fn build_ticket(node: &FastDropNode, hash: Hash) -> Result<BlobTicket> {
     .map_err(|err| blob_error(&err))
 }
 
-fn save_send_record(node: &FastDropNode, outcome: &ShareOutcome) -> Result<()> {
+fn save_send_record(node: &LightningP2PNode, outcome: &ShareOutcome) -> Result<()> {
     history::save_record(
         &node.db,
         &TransferRecord {
@@ -374,8 +374,8 @@ fn save_send_record(node: &FastDropNode, outcome: &ShareOutcome) -> Result<()> {
     )
 }
 
-fn blob_error(err: &impl ToString) -> FastDropError {
-    FastDropError::Blob(err.to_string())
+fn blob_error(err: &impl ToString) -> LightningP2PError {
+    LightningP2PError::Blob(err.to_string())
 }
 
 fn unix_timestamp() -> u64 {

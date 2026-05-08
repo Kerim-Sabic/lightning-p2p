@@ -1,6 +1,6 @@
 //! Persistent application settings for packaged and development builds.
 
-use crate::error::{FastDropError, Result};
+use crate::error::{LightningP2PError, Result};
 use iroh::RelayUrl;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -9,8 +9,10 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 const APP_IDENTIFIER: &str = "com.lightningp2p.app";
-const DATA_DIR_ENV: &str = "FASTDROP_DATA_DIR";
-const PROFILE_ENV: &str = "FASTDROP_PROFILE";
+const DATA_DIR_ENV: &str = "LIGHTNING_P2P_DATA_DIR";
+const DEPRECATED_DATA_DIR_ENV: &str = "FASTDROP_DATA_DIR";
+const PROFILE_ENV: &str = "LIGHTNING_P2P_PROFILE";
+const DEPRECATED_PROFILE_ENV: &str = "FASTDROP_PROFILE";
 const SETTINGS_FILE_NAME: &str = "settings.json";
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 const DOWNLOADS_FOLDER_NAME: &str = "Lightning P2P";
@@ -59,19 +61,19 @@ impl AppSettings {
     ///
     /// # Errors
     ///
-    /// Returns `FastDropError` if custom relay mode is enabled without a valid URL.
+    /// Returns `LightningP2PError` if custom relay mode is enabled without a valid URL.
     pub fn resolved_custom_relay_url(&self) -> Result<Option<RelayUrl>> {
         match self.relay_mode {
             RelayModeSetting::Public => Ok(None),
             RelayModeSetting::Custom => {
                 let Some(url) = self.custom_relay_url.as_deref() else {
-                    return Err(FastDropError::Other(
+                    return Err(LightningP2PError::Other(
                         "Custom relay mode requires a relay URL".into(),
                     ));
                 };
                 RelayUrl::from_str(url)
                     .map(Some)
-                    .map_err(|err| FastDropError::Other(format!("Invalid relay URL: {err}")))
+                    .map_err(|err| LightningP2PError::Other(format!("Invalid relay URL: {err}")))
             }
         }
     }
@@ -89,7 +91,7 @@ impl SettingsState {
     ///
     /// # Errors
     ///
-    /// Returns `FastDropError` if the app data directory cannot be prepared.
+    /// Returns `LightningP2PError` if the app data directory cannot be prepared.
     pub fn load_or_create(data_dir: &Path) -> Result<Self> {
         std::fs::create_dir_all(data_dir)?;
         let path = data_dir.join(SETTINGS_FILE_NAME);
@@ -111,7 +113,7 @@ impl SettingsState {
     ///
     /// # Errors
     ///
-    /// Returns `FastDropError` if the path is invalid or persistence fails.
+    /// Returns `LightningP2PError` if the path is invalid or persistence fails.
     pub async fn set_download_dir(&self, path: PathBuf) -> Result<AppSettings> {
         let normalized = normalize_download_dir(&path)?;
         {
@@ -125,7 +127,7 @@ impl SettingsState {
     ///
     /// # Errors
     ///
-    /// Returns `FastDropError` if the updated settings cannot be written.
+    /// Returns `LightningP2PError` if the updated settings cannot be written.
     pub async fn set_auto_update_enabled(&self, enabled: bool) -> Result<AppSettings> {
         {
             let mut guard = self.current.write().await;
@@ -138,7 +140,7 @@ impl SettingsState {
     ///
     /// # Errors
     ///
-    /// Returns `FastDropError` if the updated settings cannot be written.
+    /// Returns `LightningP2PError` if the updated settings cannot be written.
     pub async fn mark_first_run_complete(&self) -> Result<AppSettings> {
         {
             let mut guard = self.current.write().await;
@@ -151,7 +153,7 @@ impl SettingsState {
     ///
     /// # Errors
     ///
-    /// Returns `FastDropError` if custom mode is selected without a valid custom URL.
+    /// Returns `LightningP2PError` if custom mode is selected without a valid custom URL.
     pub async fn set_relay_mode(&self, relay_mode: RelayModeSetting) -> Result<AppSettings> {
         {
             let mut guard = self.current.write().await;
@@ -165,7 +167,7 @@ impl SettingsState {
     ///
     /// # Errors
     ///
-    /// Returns `FastDropError` if the URL is invalid or missing while custom mode is enabled.
+    /// Returns `LightningP2PError` if the URL is invalid or missing while custom mode is enabled.
     pub async fn set_custom_relay_url(&self, relay_url: Option<String>) -> Result<AppSettings> {
         {
             let mut guard = self.current.write().await;
@@ -179,7 +181,7 @@ impl SettingsState {
     ///
     /// # Errors
     ///
-    /// Returns `FastDropError` if the updated settings cannot be written.
+    /// Returns `LightningP2PError` if the updated settings cannot be written.
     pub async fn set_local_discovery_enabled(&self, enabled: bool) -> Result<AppSettings> {
         {
             let mut guard = self.current.write().await;
@@ -199,20 +201,18 @@ impl SettingsState {
 ///
 /// # Errors
 ///
-/// Returns `FastDropError` if the current working directory cannot be used as a
+/// Returns `LightningP2PError` if the current working directory cannot be used as a
 /// fallback when the OS-specific directory is unavailable.
 pub fn resolve_app_data_dir() -> Result<PathBuf> {
-    if let Some(path) = std::env::var_os(DATA_DIR_ENV) {
+    if let Some(path) = env_var(DATA_DIR_ENV).or_else(|| env_var(DEPRECATED_DATA_DIR_ENV)) {
         return Ok(PathBuf::from(path));
     }
 
     let mut dir = dirs::data_local_dir()
         .unwrap_or(std::env::current_dir()?)
         .join(APP_IDENTIFIER);
-    if let Some(profile) = std::env::var_os(PROFILE_ENV) {
-        if !profile.is_empty() {
-            dir = dir.join(profile);
-        }
+    if let Some(profile) = env_var(PROFILE_ENV).or_else(|| env_var(DEPRECATED_PROFILE_ENV)) {
+        dir = dir.join(profile);
     }
     Ok(dir)
 }
@@ -241,7 +241,7 @@ fn load_settings_file(path: &Path, data_dir: &Path) -> Result<AppSettings> {
 
     match std::fs::read_to_string(path) {
         Ok(contents) => serde_json::from_str(&contents)
-            .map_err(FastDropError::from)
+            .map_err(LightningP2PError::from)
             .or_else(|err| {
                 tracing::warn!("settings file invalid, regenerating defaults: {err}");
                 Ok(AppSettings::defaults(data_dir))
@@ -270,26 +270,26 @@ fn normalize_custom_relay_url(relay_url: Option<String>) -> Result<Option<String
     }
 
     let parsed = RelayUrl::from_str(trimmed)
-        .map_err(|err| FastDropError::Other(format!("Invalid relay URL: {err}")))?;
+        .map_err(|err| LightningP2PError::Other(format!("Invalid relay URL: {err}")))?;
     Ok(Some(parsed.to_string()))
 }
 
 fn validate_relay_settings(settings: &AppSettings) -> Result<()> {
     if settings.relay_mode == RelayModeSetting::Custom {
         let Some(url) = settings.custom_relay_url.as_deref() else {
-            return Err(FastDropError::Other(
+            return Err(LightningP2PError::Other(
                 "Custom relay mode requires a relay URL".into(),
             ));
         };
         RelayUrl::from_str(url)
-            .map_err(|err| FastDropError::Other(format!("Invalid relay URL: {err}")))?;
+            .map_err(|err| LightningP2PError::Other(format!("Invalid relay URL: {err}")))?;
     }
     Ok(())
 }
 
 fn normalize_download_dir(path: &Path) -> Result<PathBuf> {
     if path.as_os_str().is_empty() {
-        return Err(FastDropError::Other(
+        return Err(LightningP2PError::Other(
             "Download directory cannot be empty".into(),
         ));
     }
@@ -302,7 +302,7 @@ fn normalize_download_dir(path: &Path) -> Result<PathBuf> {
 
     std::fs::create_dir_all(&normalized)?;
     if !normalized.is_dir() {
-        return Err(FastDropError::Other(
+        return Err(LightningP2PError::Other(
             "Download directory must point to a folder".into(),
         ));
     }
@@ -320,6 +320,10 @@ fn preferred_download_path(base_dir: &Path) -> PathBuf {
     }
 }
 
+fn env_var(name: &str) -> Option<std::ffi::OsString> {
+    std::env::var_os(name).filter(|value| !value.is_empty())
+}
+
 fn default_local_discovery_enabled() -> bool {
     true
 }
@@ -327,11 +331,17 @@ fn default_local_discovery_enabled() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Mutex, OnceLock};
 
     fn temp_settings_state() -> (SettingsState, tempfile::TempDir) {
         let dir = tempfile::tempdir().expect("tempdir should be created");
         let state = SettingsState::load_or_create(dir.path()).expect("settings should load");
         (state, dir)
+    }
+
+    fn env_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
     }
 
     #[tokio::test]
@@ -406,5 +416,37 @@ mod tests {
         let reloaded = SettingsState::load_or_create(dir.path()).expect("settings reload");
         let snapshot = reloaded.snapshot().await;
         assert!(!snapshot.local_discovery_enabled);
+    }
+
+    #[test]
+    fn resolve_app_data_dir_prefers_lightning_p2p_env() {
+        let _guard = env_lock().lock().expect("env lock");
+        let new_dir = tempfile::tempdir().expect("new dir");
+        let old_dir = tempfile::tempdir().expect("old dir");
+        std::env::set_var(DATA_DIR_ENV, new_dir.path());
+        std::env::set_var(DEPRECATED_DATA_DIR_ENV, old_dir.path());
+        std::env::remove_var(PROFILE_ENV);
+        std::env::remove_var(DEPRECATED_PROFILE_ENV);
+
+        let resolved = resolve_app_data_dir().expect("data dir");
+
+        std::env::remove_var(DATA_DIR_ENV);
+        std::env::remove_var(DEPRECATED_DATA_DIR_ENV);
+        assert_eq!(resolved, new_dir.path());
+    }
+
+    #[test]
+    fn resolve_app_data_dir_accepts_deprecated_fastdrop_env() {
+        let _guard = env_lock().lock().expect("env lock");
+        let old_dir = tempfile::tempdir().expect("old dir");
+        std::env::remove_var(DATA_DIR_ENV);
+        std::env::set_var(DEPRECATED_DATA_DIR_ENV, old_dir.path());
+        std::env::remove_var(PROFILE_ENV);
+        std::env::remove_var(DEPRECATED_PROFILE_ENV);
+
+        let resolved = resolve_app_data_dir().expect("data dir");
+
+        std::env::remove_var(DEPRECATED_DATA_DIR_ENV);
+        assert_eq!(resolved, old_dir.path());
     }
 }

@@ -37,6 +37,7 @@ export function useTransfer(): void {
     const store = useTransferStore.getState();
 
     await Promise.all([
+      store.refreshPlatformProfile(),
       store.refreshNodeStatus(),
       store.refreshSettings(),
       store.refreshActiveTransfers(),

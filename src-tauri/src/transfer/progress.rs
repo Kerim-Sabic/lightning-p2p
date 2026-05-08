@@ -1,6 +1,6 @@
 //! Transfer event payloads and throttled event emission helpers.
 
-use crate::error::{FastDropError, Result};
+use crate::error::{LightningP2PError, Result};
 use crate::transfer::metrics::{RouteKind, TransferMetrics};
 use crate::transfer::queue::TransferQueue;
 use serde::{Deserialize, Serialize};
@@ -275,7 +275,7 @@ impl EventReporter {
     ///
     /// # Errors
     ///
-    /// Returns `FastDropError` if the Tauri event cannot be emitted.
+    /// Returns `LightningP2PError` if the Tauri event cannot be emitted.
     pub fn emit_started(
         &self,
         total: u64,
@@ -300,7 +300,7 @@ impl EventReporter {
     ///
     /// # Errors
     ///
-    /// Returns `FastDropError` if the Tauri event cannot be emitted.
+    /// Returns `LightningP2PError` if the Tauri event cannot be emitted.
     pub fn emit_progress(&self, update: ProgressUpdate) -> Result<()> {
         self.emit(TransferEvent::Progress {
             transfer_id: self.transfer_id.clone(),
@@ -319,7 +319,7 @@ impl EventReporter {
     ///
     /// # Errors
     ///
-    /// Returns `FastDropError` if the Tauri event cannot be emitted.
+    /// Returns `LightningP2PError` if the Tauri event cannot be emitted.
     pub fn emit_completed(
         &self,
         hash: String,
@@ -348,7 +348,7 @@ impl EventReporter {
     ///
     /// # Errors
     ///
-    /// Returns `FastDropError` if the Tauri event cannot be emitted.
+    /// Returns `LightningP2PError` if the Tauri event cannot be emitted.
     pub fn emit_failed(
         &self,
         error: &str,
@@ -372,7 +372,7 @@ impl EventReporter {
     fn emit(&self, event: TransferEvent) -> Result<()> {
         self.window
             .emit("transfer-progress", event)
-            .map_err(|err| FastDropError::Other(err.to_string()))
+            .map_err(|err| LightningP2PError::Other(err.to_string()))
     }
 }
 
@@ -532,14 +532,14 @@ impl ProgressSampler {
     ///
     /// # Errors
     ///
-    /// Returns `FastDropError` if the sampler task fails.
+    /// Returns `LightningP2PError` if the sampler task fails.
     pub async fn finish(mut self) -> Result<()> {
         if let Some(stop_tx) = self.stop_tx.take() {
             let _ = stop_tx.send(());
         }
         self.task
             .await
-            .map_err(|error| FastDropError::Other(error.to_string()))?
+            .map_err(|error| LightningP2PError::Other(error.to_string()))?
     }
 }
 

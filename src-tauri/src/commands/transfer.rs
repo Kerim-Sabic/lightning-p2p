@@ -106,7 +106,7 @@ pub async fn get_transfer_history(
 async fn start_receive_ticket(
     state: State<'_, AppState>,
     window: tauri::Window,
-    node: std::sync::Arc<crate::node::FastDropNode>,
+    node: std::sync::Arc<crate::node::LightningP2PNode>,
     ticket: BlobTicket,
     destination: String,
 ) -> Result<String, String> {

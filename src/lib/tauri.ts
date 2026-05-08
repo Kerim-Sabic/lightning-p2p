@@ -18,14 +18,28 @@ import {
   type DownloadEvent,
   type Update,
 } from "@tauri-apps/plugin-updater";
-import {
-  getCurrentWindow,
-  type DragDropEvent,
-} from "@tauri-apps/api/window";
+import { getCurrentWindow, type DragDropEvent } from "@tauri-apps/api/window";
 import { extractBlobTicket } from "./format";
 import { DEEP_LINK_SCHEME, RECEIVE_PATH, SITE_URL } from "./shareLinks";
 
 export type RuntimeKind = "desktop" | "android" | "ios" | "browser";
+export type NativePlatformKind =
+  | "windows"
+  | "macos"
+  | "linux"
+  | "android"
+  | "ios"
+  | "unknown";
+export type PlatformKind = NativePlatformKind | "browser";
+export type RuntimeFamily = "desktop" | "android" | "ios" | "browser";
+export type StorageModel = "user_selected" | "app_private" | "handoff_only";
+export type ReleaseSupport =
+  | "public_windows"
+  | "source_build"
+  | "android_alpha"
+  | "ios_prepared"
+  | "unsupported"
+  | "web_handoff_only";
 export type TransferDirection = "send" | "receive";
 export type NodeOnlineState =
   | "starting"
@@ -126,6 +140,45 @@ export interface NetworkDiagnostics {
   local_discovery_enabled: boolean;
   download_dir_status: DownloadDirectoryDiagnostics;
   latest_route_kind: RouteKind;
+}
+
+export interface PlatformCapabilities {
+  native_runtime: boolean;
+  send_files: boolean;
+  send_folders: boolean;
+  receive_files: boolean;
+  scan_receive_qr: boolean;
+  local_discovery: boolean;
+  relay_fallback: boolean;
+  custom_relay: boolean;
+  custom_receive_dir: boolean;
+  public_downloads_export: boolean;
+  auto_update: boolean;
+  deep_link_receive: boolean;
+  web_handoff_receive: boolean;
+  background_transfer: boolean;
+  browser_transfer: boolean;
+  benchmark_required_for_speed_claims: boolean;
+}
+
+export interface PlatformGuidance {
+  storage_notice: string;
+  transfer_notice: string;
+  online_notice: string;
+  release_notice: string;
+  benchmark_notice: string;
+}
+
+export interface PlatformProfile {
+  platform_kind: PlatformKind;
+  runtime_family: RuntimeFamily;
+  target_os: string;
+  transfer_engine: string;
+  online_handoff_model: string;
+  storage_model: StorageModel;
+  release_support: ReleaseSupport;
+  capabilities: PlatformCapabilities;
+  guidance: PlatformGuidance;
 }
 
 export interface NearbyShare {
@@ -249,6 +302,46 @@ const browserNetworkDiagnostics: NetworkDiagnostics = {
     status: "desktop_runtime_required",
   },
   latest_route_kind: "unknown",
+};
+
+export const browserPlatformProfile: PlatformProfile = {
+  platform_kind: "browser",
+  runtime_family: "browser",
+  target_os: "browser",
+  transfer_engine: "native iroh app required",
+  online_handoff_model: "web_handoff_to_native_iroh",
+  storage_model: "handoff_only",
+  release_support: "web_handoff_only",
+  capabilities: {
+    native_runtime: false,
+    send_files: false,
+    send_folders: false,
+    receive_files: false,
+    scan_receive_qr: false,
+    local_discovery: false,
+    relay_fallback: false,
+    custom_relay: false,
+    custom_receive_dir: false,
+    public_downloads_export: false,
+    auto_update: false,
+    deep_link_receive: false,
+    web_handoff_receive: true,
+    background_transfer: false,
+    browser_transfer: false,
+    benchmark_required_for_speed_claims: true,
+  },
+  guidance: {
+    storage_notice:
+      "The browser page only preserves receive tickets and points users to the native app.",
+    transfer_notice:
+      "Browser preview cannot send or receive files because transfers stay inside native Tauri IPC and Rust.",
+    online_notice:
+      "Online sharing is a handoff link into the native iroh app. No WebRTC, HTTP transfer server, or WebSocket transfer path is used.",
+    release_notice:
+      "Use the signed Windows app or Android alpha build for real transfers.",
+    benchmark_notice:
+      "Do not claim speed leadership until repeatable benchmark results are published.",
+  },
 };
 
 function runtimeKindFromUserAgent(): RuntimeKind {
@@ -478,6 +571,13 @@ export async function getNetworkDiagnostics(): Promise<NetworkDiagnostics> {
     return browserNetworkDiagnostics;
   }
   return invoke<NetworkDiagnostics>("get_network_diagnostics");
+}
+
+export async function getPlatformProfile(): Promise<PlatformProfile> {
+  if (!isNativeRuntime()) {
+    return browserPlatformProfile;
+  }
+  return invoke<PlatformProfile>("get_platform_profile");
 }
 
 export async function getDownloadDir(): Promise<string> {

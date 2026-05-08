@@ -61,7 +61,7 @@ Run this on the next tagged release before announcing the Velopack installer as 
 2. Download the `*-Setup.exe` Velopack asset from the GitHub release. This is
    the primary public installer after signing and clean-VM verification.
 3. Run the installer and confirm the app installs per-user, launches, and appears in Apps & Features.
-4. Confirm the installed executable exists under `%LOCALAPPDATA%\LightningP2P\current\fastdrop.exe`.
+4. Confirm the installed executable exists under `%LOCALAPPDATA%\LightningP2P\current\lightning-p2p.exe`.
 5. Confirm the deep link is registered after first launch:
 
    ```powershell
@@ -75,7 +75,7 @@ Run this on the next tagged release before announcing the Velopack installer as 
    netsh advfirewall firewall show rule name="Lightning P2P"
    ```
 
-   The inbound and outbound rules should point at the installed `fastdrop.exe`.
+   The inbound and outbound rules should point at the installed `lightning-p2p.exe`.
 
 7. Uninstall from Windows Settings and confirm the firewall rule is removed:
 

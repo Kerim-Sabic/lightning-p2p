@@ -14,7 +14,7 @@ impl StorageDb {
     ///
     /// # Errors
     ///
-    /// Returns `FastDropError::Storage` if sled cannot open the path.
+    /// Returns `LightningP2PError::Storage` if sled cannot open the path.
     pub fn open(path: &Path) -> Result<Self> {
         let db = sled::open(path)?;
         Ok(Self { db })
@@ -24,7 +24,7 @@ impl StorageDb {
     ///
     /// # Errors
     ///
-    /// Returns `FastDropError::Storage` if the tree cannot be opened.
+    /// Returns `LightningP2PError::Storage` if the tree cannot be opened.
     pub fn tree(&self, name: &str) -> Result<sled::Tree> {
         let tree = self.db.open_tree(name)?;
         Ok(tree)
@@ -34,7 +34,7 @@ impl StorageDb {
     ///
     /// # Errors
     ///
-    /// Returns `FastDropError::Storage` on flush failure.
+    /// Returns `LightningP2PError::Storage` on flush failure.
     pub fn flush(&self) -> Result<()> {
         self.db.flush()?;
         Ok(())

@@ -116,8 +116,8 @@ const fallbackFaqs: Faq[] = [
     a: "The public website works on mobile, but real transfers currently require the Windows desktop app. Browser and native mobile transfer support are planned as separate workstreams.",
   },
   {
-    q: "Why not promise the fastest transfer app immediately?",
-    a: "The app is designed for high-throughput P2P transfer, but public fastest claims should be backed by repeatable tests with hardware, network route, file size, and version details.",
+    q: "Why not promise speed leadership immediately?",
+    a: "The app is designed for high-throughput P2P transfer, but public speed claims should be backed by repeatable tests with hardware, network route, file size, and version details.",
   },
   {
     q: "Does relay fallback mean my files are stored on a server?",
@@ -591,12 +591,12 @@ export function WebLandingPage() {
                 Benchmark plan
               </p>
               <h2 className="mt-4 text-4xl font-semibold leading-tight text-white">
-                The growth story should be credible before it is loud.
+                The benchmark story should be credible before it is loud.
               </h2>
               <p className="mt-5 text-base leading-7 text-slate-300">
                 Lightning P2P can target searches like free P2P file transfer,
                 AirDrop alternative for Windows, and transfer large files free.
-                The strongest speed claims should wait for repeatable published
+                Strong speed claims should wait for repeatable published
                 measurements.
               </p>
             </div>

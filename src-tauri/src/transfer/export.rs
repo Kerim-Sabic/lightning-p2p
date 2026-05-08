@@ -4,7 +4,7 @@ pub(crate) use super::destination::preflight_destination;
 use super::destination::{
     ensure_enough_space, next_available_path, safe_collection_label, staging_dir_name,
 };
-use crate::error::{FastDropError, Result};
+use crate::error::{LightningP2PError, Result};
 use iroh_blobs::rpc::client::blobs::{BlobStatus, MemClient};
 use iroh_blobs::store::{ExportFormat, ExportMode};
 use iroh_blobs::ticket::BlobTicket;
@@ -31,7 +31,7 @@ pub struct ExportSummary {
 ///
 /// # Errors
 ///
-/// Returns `FastDropError` if the ticket cannot be exported to disk.
+/// Returns `LightningP2PError` if the ticket cannot be exported to disk.
 pub async fn export_ticket(
     client: &MemClient,
     ticket: &BlobTicket,
@@ -62,7 +62,7 @@ pub async fn export_ticket(
 ///
 /// # Errors
 ///
-/// Returns `FastDropError` if collection metadata cannot be read.
+/// Returns `LightningP2PError` if collection metadata cannot be read.
 pub async fn resolve_label(client: &MemClient, ticket: &BlobTicket) -> Result<String> {
     if !ticket.recursive() {
         return Ok(ticket.hash().to_string());
@@ -171,11 +171,11 @@ async fn move_staged_collection(
         let source = entries
             .into_iter()
             .next()
-            .ok_or_else(|| FastDropError::Other("Export staging directory is empty".into()))?;
+            .ok_or_else(|| LightningP2PError::Other("Export staging directory is empty".into()))?;
         let file_name = source
             .file_name()
             .map(OsString::from)
-            .ok_or_else(|| FastDropError::Other("Export output has no filename".into()))?;
+            .ok_or_else(|| LightningP2PError::Other("Export output has no filename".into()))?;
         let target = next_available_path(&destination.join(file_name));
         tokio::fs::rename(&source, &target).await?;
         let _ = tokio::fs::remove_dir(staging_dir).await;
@@ -205,12 +205,12 @@ async fn blob_size(client: &MemClient, hash: Hash) -> Result<u64> {
     {
         BlobStatus::Complete { size } => Ok(size),
         BlobStatus::Partial { size } => Ok(size.value()),
-        BlobStatus::NotFound => Err(FastDropError::Blob(format!("Missing blob {hash}"))),
+        BlobStatus::NotFound => Err(LightningP2PError::Blob(format!("Missing blob {hash}"))),
     }
 }
 
-fn blob_error(err: &impl ToString) -> FastDropError {
-    FastDropError::Blob(err.to_string())
+fn blob_error(err: &impl ToString) -> LightningP2PError {
+    LightningP2PError::Blob(err.to_string())
 }
 
 #[cfg(test)]

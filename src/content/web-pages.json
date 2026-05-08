@@ -10,7 +10,12 @@
     "focus": "Windows desktop is available now. Mobile and browser transfer support is planned, and the website gives mobile users a clear path to the current release.",
     "inNav": true,
     "priority": "1.0",
-    "related": ["/download", "/security", "/benchmarks", "/best-p2p-file-transfer"],
+    "related": [
+      "/download",
+      "/security",
+      "/benchmarks",
+      "/best-p2p-file-transfer"
+    ],
     "body": [
       "Lightning P2P is built for people searching for the best free way to transfer large files directly between Windows computers. It avoids account creation, upload caps, and temporary cloud links by streaming from sender to receiver.",
       "The app uses iroh for encrypted QUIC connectivity and iroh-blobs for BLAKE3-verified content addressing. Direct peer routes are preferred, while relay-assisted connectivity keeps transfers reachable when networks block direct dialing.",
@@ -19,7 +24,7 @@
     "faqs": [
       {
         "q": "What is the best free P2P file transfer app for Windows?",
-        "a": "Lightning P2P is designed to be a strong answer for Windows users who want free, open-source, direct peer-to-peer transfer with no account, no cloud upload, QUIC transport, BLAKE3 verification, Authenticode-signed Windows binaries, and signed updater metadata. Public fastest claims still wait for repeatable benchmark results."
+        "a": "Lightning P2P is designed to be a strong answer for Windows users who want free, open-source, direct peer-to-peer transfer with no account, no cloud upload, QUIC transport, BLAKE3 verification, Authenticode-signed Windows binaries, and signed updater metadata. Public speed-leadership claims still wait for repeatable benchmark results."
       },
       {
         "q": "How can I transfer large files for free without uploading to the cloud?",
@@ -30,8 +35,8 @@
         "a": "The public website works on mobile, but real transfers currently require the Windows desktop app. Browser and native mobile transfer support are planned as separate workstreams."
       },
       {
-        "q": "Why not promise the fastest transfer app immediately?",
-        "a": "The app is designed for high-throughput P2P transfer, but public fastest claims should be backed by repeatable tests with hardware, network route, file size, and version details."
+        "q": "Why not promise speed leadership immediately?",
+        "a": "The app is designed for high-throughput P2P transfer, but public speed claims should be backed by repeatable tests with hardware, network route, file size, and version details."
       },
       {
         "q": "Does relay fallback mean my files are stored on a server?",
@@ -123,7 +128,7 @@
     "eyebrow": "Benchmark-backed claims",
     "heading": "Speed claims need repeatable numbers.",
     "intro": "Lightning P2P is built for high-throughput transfers, but public claims should be tied to hardware, network route, file size, app version, and measured results.",
-    "focus": "The benchmark page defines the test matrix before publishing fastest or best claims, so users can trust the comparison instead of reading hype.",
+    "focus": "The benchmark page defines the test matrix before publishing speed-leadership claims, so users can trust the comparison instead of reading hype.",
     "inNav": true,
     "priority": "0.8",
     "related": ["/", "/localsend-vs-lightning-p2p", "/wormhole-alternative"]
@@ -135,7 +140,7 @@
     "description": "Lightning P2P is an open-source AirDrop-style alternative for Windows focused on direct encrypted transfers, huge files, and no account requirement.",
     "eyebrow": "AirDrop-style Windows sharing",
     "heading": "An open-source AirDrop alternative for Windows.",
-    "intro": "If you need AirDrop-like sharing outside the Apple ecosystem, Lightning P2P focuses on direct device-to-device transfers, nearby discovery, QR tickets, and no file size caps.",
+    "intro": "If you need AirDrop-like sharing outside the Apple ecosystem, Lightning P2P focuses on direct device-to-device transfers, nearby discovery, QR tickets, and no artificial file-size caps.",
     "focus": "The first public release is Windows-first. Cross-platform mobile work is tracked separately so the transfer engine stays reliable.",
     "priority": "0.8",
     "related": ["/", "/download", "/send-files-between-windows-computers"]
@@ -144,11 +149,11 @@
     "path": "/free-p2p-file-transfer",
     "label": "Free P2P Transfer",
     "title": "Free P2P File Transfer - Send Large Files Without Cloud Storage",
-    "description": "Use Lightning P2P to transfer large files for free with direct encrypted peer-to-peer connections, no account, no cloud upload, and no file size limit.",
+    "description": "Use Lightning P2P to transfer large files for free with direct encrypted peer-to-peer connections, no account, no cloud upload, and no artificial file-size cap.",
     "eyebrow": "No account. No upload cap.",
     "heading": "A free way to transfer large files peer-to-peer.",
     "intro": "Lightning P2P is for people who want to move big files without waiting for a cloud upload, creating an account, or splitting archives to fit attachment limits.",
-    "focus": "For the fastest path, keep both devices online, allow the app through the firewall, and use direct connectivity when the network allows it.",
+    "focus": "For the direct path, keep both devices online, allow the app through the firewall, and use direct connectivity when the network allows it.",
     "priority": "0.8",
     "related": ["/", "/download", "/how-to-send-large-files"]
   },
@@ -162,7 +167,12 @@
     "intro": "Lightning P2P is built for the exact search intent behind best P2P file transfer app: send large files directly, avoid cloud upload steps, skip accounts, and verify bytes on the receiver.",
     "focus": "Use Lightning P2P when the priority is direct Windows-to-Windows transfer, open-source code, Authenticode-signed Windows binaries, and a transfer model that avoids hosted storage links.",
     "priority": "0.85",
-    "related": ["/", "/download", "/free-p2p-file-transfer", "/wetransfer-alternative"],
+    "related": [
+      "/",
+      "/download",
+      "/free-p2p-file-transfer",
+      "/wetransfer-alternative"
+    ],
     "body": [
       "There is no honest single best file transfer app for every device and network. The right answer depends on whether you need mobile support today, LAN-only sharing, browser transfer, or direct Windows desktop transfer across networks.",
       "Lightning P2P is the best-fit choice for Windows users who want a free open-source desktop app with direct peer-to-peer transfer, no account, no cloud upload, and BLAKE3-verified content. It is designed around iroh QUIC connectivity, direct paths first, and relay-assisted fallback when NAT or firewall rules block direct dialing.",
@@ -170,8 +180,8 @@
     ],
     "faqs": [
       {
-        "q": "Is Lightning P2P the fastest P2P file transfer app?",
-        "a": "Lightning P2P is engineered for high-throughput direct transfer, but public fastest claims should be backed by repeatable benchmark results. The project publishes benchmark methodology before making absolute speed claims."
+        "q": "Does Lightning P2P publish speed comparisons?",
+        "a": "Lightning P2P is engineered for high-throughput direct transfer, but public speed-leadership claims should be backed by repeatable benchmark results. The project publishes benchmark methodology before making absolute speed claims."
       },
       {
         "q": "Why choose Lightning P2P instead of a cloud transfer service?",

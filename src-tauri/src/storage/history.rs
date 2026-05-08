@@ -28,7 +28,7 @@ pub struct TransferRecord {
 ///
 /// # Errors
 ///
-/// Returns `FastDropError` if serialization or storage fails.
+/// Returns `LightningP2PError` if serialization or storage fails.
 pub fn save_record(db: &StorageDb, record: &TransferRecord) -> Result<()> {
     save_record_no_flush(db, record)?;
     db.flush()?;
@@ -41,7 +41,7 @@ pub fn save_record(db: &StorageDb, record: &TransferRecord) -> Result<()> {
 ///
 /// # Errors
 ///
-/// Returns `FastDropError` if serialization or storage fails.
+/// Returns `LightningP2PError` if serialization or storage fails.
 pub fn save_record_no_flush(db: &StorageDb, record: &TransferRecord) -> Result<()> {
     let tree = db.tree(TREE_NAME)?;
     let value = serde_json::to_vec(record)?;
@@ -53,7 +53,7 @@ pub fn save_record_no_flush(db: &StorageDb, record: &TransferRecord) -> Result<(
 ///
 /// # Errors
 ///
-/// Returns `FastDropError` if deserialization fails.
+/// Returns `LightningP2PError` if deserialization fails.
 pub fn load_all(db: &StorageDb) -> Result<Vec<TransferRecord>> {
     let tree = db.tree(TREE_NAME)?;
     let mut records = Vec::new();
@@ -70,7 +70,7 @@ pub fn load_all(db: &StorageDb) -> Result<Vec<TransferRecord>> {
 ///
 /// # Errors
 ///
-/// Returns `FastDropError` if deserialization fails while scanning history.
+/// Returns `LightningP2PError` if deserialization fails while scanning history.
 pub fn latest_send_by_hash(db: &StorageDb, hash: &str) -> Result<Option<TransferRecord>> {
     let records = load_all(db)?;
     Ok(records

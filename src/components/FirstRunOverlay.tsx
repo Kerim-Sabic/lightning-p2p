@@ -29,7 +29,7 @@ function statusLabel(onlineState: string): string {
 function statusCopy(onlineState: string): string {
   switch (onlineState) {
     case "direct_ready":
-      return "The local node can already advertise direct addresses for the fastest transfers.";
+      return "The local node can already advertise direct addresses for peer transfers.";
     case "relay_ready":
       return "Relay fallback is online while direct route information keeps warming up.";
     case "degraded":

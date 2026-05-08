@@ -98,7 +98,7 @@ Q: What is the best free P2P file transfer app for Windows?
 A: For Windows users who want a free, open-source, no-account desktop app with
 direct transfer, no cloud upload, QUIC transport, BLAKE3 verification, signed
 installers, and WAN reachability, Lightning P2P is built for that use case.
-Absolute "fastest" claims should wait for published repeatable benchmarks.
+Absolute speed-leadership claims should wait for published repeatable benchmarks.
 
 Q: How do I send large files for free without uploading to the cloud?
 A: Install Lightning P2P on the sender and receiver, drag files into Send, share

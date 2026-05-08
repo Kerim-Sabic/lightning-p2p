@@ -4,7 +4,7 @@ use tracing_subscriber::EnvFilter;
 
 /// Initializes the `tracing` subscriber with env-filter support.
 ///
-/// Set `RUST_LOG=fastdrop=debug` for verbose output.
+/// Set `RUST_LOG=lightning_p2p=debug` for verbose output.
 /// Defaults to `info` level.
 pub fn init_tracing() {
     let filter =
@@ -17,13 +17,13 @@ pub fn init_tracing() {
         .with_file(false)
         .init();
 
-    tracing::info!("FastDrop tracing initialized");
+    tracing::info!("Lightning P2P tracing initialized");
 }
 
 fn default_filter() -> &'static str {
     if cfg!(any(target_os = "android", target_os = "ios")) {
-        "fastdrop=warn,iroh=warn"
+        "lightning_p2p=warn,iroh=warn"
     } else {
-        "fastdrop=info,iroh=warn"
+        "lightning_p2p=info,iroh=warn"
     }
 }

@@ -21,7 +21,7 @@ pub struct PeerRecord {
 ///
 /// # Errors
 ///
-/// Returns `FastDropError` if serialization or storage fails.
+/// Returns `LightningP2PError` if serialization or storage fails.
 pub fn save_peer(db: &StorageDb, peer: &PeerRecord) -> Result<()> {
     save_peer_no_flush(db, peer)?;
     db.flush()?;
@@ -34,7 +34,7 @@ pub fn save_peer(db: &StorageDb, peer: &PeerRecord) -> Result<()> {
 ///
 /// # Errors
 ///
-/// Returns `FastDropError` if serialization or storage fails.
+/// Returns `LightningP2PError` if serialization or storage fails.
 pub fn save_peer_no_flush(db: &StorageDb, peer: &PeerRecord) -> Result<()> {
     let tree = db.tree(TREE_NAME)?;
     let value = serde_json::to_vec(peer)?;
@@ -46,7 +46,7 @@ pub fn save_peer_no_flush(db: &StorageDb, peer: &PeerRecord) -> Result<()> {
 ///
 /// # Errors
 ///
-/// Returns `FastDropError` if deserialization fails.
+/// Returns `LightningP2PError` if deserialization fails.
 pub fn load_all(db: &StorageDb) -> Result<Vec<PeerRecord>> {
     let tree = db.tree(TREE_NAME)?;
     let mut peers = Vec::new();

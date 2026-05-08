@@ -47,7 +47,7 @@ We keep the single Rust crate. `crate-type = ["lib", "staticlib", "cdylib"]` is 
 ### Changes required in the Rust crate
 
 - `src/node/endpoint.rs`: gate `discovery_local_network()` behind a `#[cfg(not(target_os = "ios"))]` fallback, or catch its multicast bind failure gracefully and log clearly. On iOS without the multicast entitlement, the app must still function with relay-assisted WAN transfers.
-- `src/storage/settings.rs`: on mobile, `dirs::data_dir()` returns the sandboxed app data path — verify the `resolve_app_data_dir()` helper behaves correctly on iOS/Android. The `FASTDROP_PROFILE` env var is moot on mobile; confirm the default path is writable.
+- `src/storage/settings.rs`: on mobile, `dirs::data_dir()` returns the sandboxed app data path — verify the `resolve_app_data_dir()` helper behaves correctly on iOS/Android. The `LIGHTNING_P2P_PROFILE` env var is moot on mobile; confirm the default path is writable.
 - `src/telemetry.rs`: reduce default log level on mobile to `warn` to avoid log spam in TestFlight crash reports.
 - `keyring`: wrap in a trait so we can swap implementations per target. On Android, v1 can fall back to a file-backed encrypted key if Keystore wiring slips.
 

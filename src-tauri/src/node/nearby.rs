@@ -1,7 +1,7 @@
 //! Nearby-share discovery state and LAN polling.
 
 use super::nearby_protocol::{fetch_remote_shares, RemoteAdvertisedShare};
-use crate::error::{FastDropError, Result};
+use crate::error::{LightningP2PError, Result};
 use futures_util::{stream, StreamExt};
 use iroh::{
     discovery::{local_swarm_discovery, DiscoveryItem},
@@ -183,7 +183,10 @@ impl NearbyShareRegistry {
         shares: Vec<NearbyShareRecord>,
     ) -> Option<Vec<NearbyShare>> {
         let next = normalized_records(shares);
-        let next_public = next.iter().map(|record| record.public.clone()).collect::<Vec<_>>();
+        let next_public = next
+            .iter()
+            .map(|record| record.public.clone())
+            .collect::<Vec<_>>();
         let mut guard = self.discovered_shares.write().await;
         let current_public = guard
             .iter()
@@ -200,16 +203,19 @@ impl NearbyShareRegistry {
     ///
     /// # Errors
     ///
-    /// Returns `FastDropError` if the nearby share is no longer cached.
+    /// Returns `LightningP2PError` if the nearby share is no longer cached.
     pub async fn ticket_for_share(&self, share_id: &str) -> Result<BlobTicket> {
         let guard = self.discovered_shares.read().await;
-        let Some(record) = guard.iter().find(|record| record.public.share_id == share_id) else {
-            return Err(FastDropError::Other(
+        let Some(record) = guard
+            .iter()
+            .find(|record| record.public.share_id == share_id)
+        else {
+            return Err(LightningP2PError::Other(
                 "Nearby share is no longer available. Refresh and try again.".into(),
             ));
         };
         BlobTicket::new(record.node_addr.clone(), record.hash, record.format)
-            .map_err(|error| FastDropError::Blob(error.to_string()))
+            .map_err(|error| LightningP2PError::Blob(error.to_string()))
     }
 }
 
@@ -238,9 +244,7 @@ pub fn spawn_nearby_discovery_loop(
             None
         }
     } else {
-        tracing::warn!(
-            "LAN discovery unavailable: endpoint has no discovery service configured"
-        );
+        tracing::warn!("LAN discovery unavailable: endpoint has no discovery service configured");
         None
     };
 
@@ -287,13 +291,20 @@ pub fn spawn_nearby_discovery_loop(
             }
 
             interval.tick().await;
-            if let Err(error) = refresh_candidates(&app_handle, &endpoint, &registry, &mut candidates, &stream_seen).await {
+            if let Err(error) = refresh_candidates(
+                &app_handle,
+                &endpoint,
+                &registry,
+                &mut candidates,
+                &stream_seen,
+            )
+            .await
+            {
                 tracing::debug!("nearby share refresh failed: {error}");
             }
         }
     });
 }
-
 
 async fn refresh_candidates(
     app_handle: &AppHandle,
@@ -348,7 +359,7 @@ fn emit_if_changed(app_handle: &AppHandle, shares: Option<Vec<NearbyShare>>) -> 
     if let Some(shares) = shares {
         app_handle
             .emit(DISCOVERED_SHARES_UPDATED_EVENT, shares)
-            .map_err(|error| FastDropError::Other(error.to_string()))?;
+            .map_err(|error| LightningP2PError::Other(error.to_string()))?;
     }
     Ok(())
 }

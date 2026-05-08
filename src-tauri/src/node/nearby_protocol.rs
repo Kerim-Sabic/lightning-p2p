@@ -1,13 +1,9 @@
 //! Lightweight LAN protocol used to query nearby active shares.
 
 use super::nearby::{ActiveShare, NearbyShareRegistry};
-use crate::error::{FastDropError, Result};
+use crate::error::{LightningP2PError, Result};
 use anyhow::Result as AnyhowResult;
-use iroh::{
-    endpoint::Connecting,
-    protocol::ProtocolHandler,
-    Endpoint, NodeAddr,
-};
+use iroh::{endpoint::Connecting, protocol::ProtocolHandler, Endpoint, NodeAddr};
 use iroh_blobs::{BlobFormat, Hash};
 use n0_future::boxed::BoxFuture;
 use serde::{Deserialize, Serialize};
@@ -72,7 +68,7 @@ impl NearbyShareProtocol {
     async fn response_bytes(&self, request_bytes: Vec<u8>) -> Result<Vec<u8>> {
         let request: NearbyShareRequest = serde_json::from_slice(&request_bytes)?;
         if request.protocol_version != PROTOCOL_VERSION {
-            return Err(FastDropError::Other(
+            return Err(LightningP2PError::Other(
                 "Unsupported nearby-share protocol version".into(),
             ));
         }
@@ -93,7 +89,7 @@ impl NearbyShareProtocol {
             device_name: local_device_name(),
             shares,
         };
-        serde_json::to_vec(&response).map_err(FastDropError::from)
+        serde_json::to_vec(&response).map_err(LightningP2PError::from)
     }
 }
 
@@ -145,7 +141,7 @@ impl WireBlobFormat {
 
 impl RemoteAdvertisedShare {
     pub(crate) fn hash(&self) -> Result<Hash> {
-        Hash::from_str(&self.hash).map_err(|error| FastDropError::Blob(error.to_string()))
+        Hash::from_str(&self.hash).map_err(|error| LightningP2PError::Blob(error.to_string()))
     }
 
     pub(crate) fn blob_format(&self) -> BlobFormat {
@@ -157,7 +153,7 @@ impl RemoteAdvertisedShare {
 ///
 /// # Errors
 ///
-/// Returns `FastDropError` if the peer cannot be reached or the response is invalid.
+/// Returns `LightningP2PError` if the peer cannot be reached or the response is invalid.
 pub(crate) async fn fetch_remote_shares(
     endpoint: &Endpoint,
     node_addr: NodeAddr,
@@ -165,23 +161,23 @@ pub(crate) async fn fetch_remote_shares(
     let connection = endpoint
         .connect(node_addr, NEARBY_SHARE_ALPN)
         .await
-        .map_err(|error| FastDropError::Other(error.to_string()))?;
+        .map_err(|error| LightningP2PError::Other(error.to_string()))?;
     let (mut send, mut recv) = connection
         .open_bi()
         .await
-        .map_err(|error| FastDropError::Other(error.to_string()))?;
+        .map_err(|error| LightningP2PError::Other(error.to_string()))?;
     let request = serde_json::to_vec(&NearbyShareRequest {
         protocol_version: PROTOCOL_VERSION,
     })?;
     send.write_all(&request)
         .await
-        .map_err(|error| FastDropError::Other(error.to_string()))?;
+        .map_err(|error| LightningP2PError::Other(error.to_string()))?;
     send.finish()
-        .map_err(|error| FastDropError::Other(error.to_string()))?;
+        .map_err(|error| LightningP2PError::Other(error.to_string()))?;
     let response = recv
         .read_to_end(MAX_MESSAGE_BYTES)
         .await
-        .map_err(|error| FastDropError::Other(error.to_string()))?;
+        .map_err(|error| LightningP2PError::Other(error.to_string()))?;
     let parsed: NearbyShareResponse = serde_json::from_slice(&response)?;
     Ok(RemoteShareEnvelope {
         device_name: parsed.device_name,

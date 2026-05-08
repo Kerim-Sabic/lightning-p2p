@@ -11,9 +11,9 @@ if (-not $installDir) {
     $installDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 }
 
-$exePath = Join-Path $installDir "current\fastdrop.exe"
+$exePath = Join-Path $installDir "current\lightning-p2p.exe"
 if (-not (Test-Path $exePath)) {
-    $fallback = Join-Path $installDir "fastdrop.exe"
+    $fallback = Join-Path $installDir "lightning-p2p.exe"
     if (Test-Path $fallback) {
         $exePath = $fallback
     }

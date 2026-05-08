@@ -37,25 +37,25 @@ On-page SEO is in code (see `scripts/build-web-metadata.mjs` and `src/content/we
 
 - [ ] Repo description tightened to match landing page hero.
 - [ ] Website field set to `https://lightning-p2p.netlify.app`.
-- [ ] Topics updated (see README "GitHub Growth Checklist").
+- [ ] Topics updated (see [launch-checklist.md](launch-checklist.md)).
 - [ ] Social preview image (Settings → Options → Social preview) set to `public/og-image.png`.
-- [ ] Pin launch issues for benchmarks, mobile RFC, cross-platform packaging.
+- [ ] Pin launch issues for benchmarks, winget, cross-platform packaging, pause/resume, and threat-model documentation.
 - [ ] Enable Discussions (Q&A + Ideas).
 
 ## Keyword baseline
 
 Track month-over-month position for these queries. Free tools: Google Search Console, Bing Webmaster Tools. Optional paid: Ahrefs, Semrush.
 
-| Query | Intent | Baseline date | Current position |
-|-------|--------|---------------|------------------|
-| `p2p file transfer` | Navigational | TBD | TBD |
-| `peer to peer file transfer` | Navigational | TBD | TBD |
-| `airdrop for windows` | Navigational | TBD | TBD |
-| `wetransfer alternative` | Commercial | TBD | TBD |
-| `magic wormhole alternative` | Navigational | TBD | TBD |
-| `localsend alternative` | Navigational | TBD | TBD |
-| `send large files peer to peer` | Navigational | TBD | TBD |
-| `free p2p file transfer` | Commercial | TBD | TBD |
+| Query                           | Intent       | Baseline date | Current position |
+| ------------------------------- | ------------ | ------------- | ---------------- |
+| `p2p file transfer`             | Navigational | TBD           | TBD              |
+| `peer to peer file transfer`    | Navigational | TBD           | TBD              |
+| `airdrop for windows`           | Navigational | TBD           | TBD              |
+| `wetransfer alternative`        | Commercial   | TBD           | TBD              |
+| `magic wormhole alternative`    | Navigational | TBD           | TBD              |
+| `localsend alternative`         | Navigational | TBD           | TBD              |
+| `send large files peer to peer` | Navigational | TBD           | TBD              |
+| `free p2p file transfer`        | Commercial   | TBD           | TBD              |
 
 Recheck at `+4 weeks`, `+12 weeks`, `+26 weeks`.
 

@@ -1,492 +1,177 @@
-<div align="center">
-
-<br />
-
-<img src="https://img.shields.io/badge/Rust-1.81+-000000?style=for-the-badge&logo=rust&logoColor=white" alt="Rust 1.81+" />
-<img src="https://img.shields.io/badge/Tauri-v2-24C8DB?style=for-the-badge&logo=tauri&logoColor=white" alt="Tauri v2" />
-<img src="https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black" alt="React 19" />
-<img src="https://img.shields.io/badge/TypeScript-Strict-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript Strict" />
-<img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="MIT License" />
-
-<br /><br />
-
 # Lightning P2P
 
-### Free, open-source peer-to-peer file transfer for Windows.
+Free, open-source peer-to-peer file transfer for Windows.
 
-**Lightning P2P** is a desktop peer-to-peer file transfer app built with Rust, iroh, and Tauri v2.<br />
-No cloud. No accounts. No file size limits. Just direct, encrypted, verified transfers over LAN or the public internet.
+No cloud upload. No account. No artificial file-size cap. Direct encrypted transfers over LAN or the public internet.
 
-<sub>Looking for an <strong>AirDrop alternative for Windows</strong>, a <strong>WeTransfer alternative</strong>, a <strong>Magic Wormhole alternative</strong> with a GUI, or a <strong>LocalSend alternative</strong> that works across WAN — Lightning P2P covers those use cases.</sub>
+[Download Windows Installer](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P-win-Setup.exe) | [Watch Demo](#demo) | [Security Model](#security-model) | [Benchmarks](#benchmarks) | [Star Repo](https://github.com/Kerim-Sabic/lightning-p2p)
 
-<br />
+## Demo
 
-[Website](https://lightning-p2p.netlify.app) &nbsp;&middot;&nbsp; [Download for Windows](#download) &nbsp;&middot;&nbsp; [Benchmarks](#benchmark-methodology) &nbsp;&middot;&nbsp; [Security](#security) &nbsp;&middot;&nbsp; [Contributing](#contributing)
+<img src="./public/demo-lightning-p2p.gif" alt="Lightning P2P demo showing a sender creating a receive link and QR code, then a receiver completing a transfer" width="900" />
 
-<br />
+## Why This Exists
 
-<img src="./public/og-image.png" alt="Lightning P2P website preview showing direct peer-to-peer file transfer" width="900" />
+Sending large files is still weirdly annoying:
 
-</div>
+- cloud tools upload your files to someone else's server
+- many tools need accounts or links that expire
+- LAN-only tools break when people are not on the same network
+- CLI tools are powerful but not friendly for normal users
 
----
+Lightning P2P is a native Windows app built with Rust, Tauri, iroh, QUIC, and BLAKE3.
 
-## Current Status
+## What You Get
 
-- **Windows desktop app:** available now; the release pipeline supports Velopack-first installs, Authenticode signing hooks, and signed Tauri updater metadata.
-- **Android alpha foundation:** scaffolded for internal testing with Tauri mobile, foreground transfers, mobile clipboard/QR wrappers, app-private receive storage, and bottom-tab phone UI. See [docs/android-alpha.md](docs/android-alpha.md).
-- **Public website:** Netlify-ready landing and SEO pages for download, security, benchmarks, and AirDrop-for-Windows searches.
-- **iOS:** prepared but not shipped; it requires macOS, Xcode, Apple signing, and multicast entitlement work. See [docs/ios-testflight.md](docs/ios-testflight.md).
-- **Speed claims:** benchmark-backed only. The app is built for high throughput, but public "fastest" claims should reference repeatable results.
+| Feature                | Lightning P2P            |
+| ---------------------- | ------------------------ |
+| No account             | Yes                      |
+| No cloud storage       | Yes                      |
+| Direct P2P transfer    | Yes                      |
+| Works across WAN       | Yes, with relay fallback |
+| Integrity verification | BLAKE3                   |
+| Native Windows app     | Yes                      |
+| Open source            | MIT                      |
 
-## Why Use Lightning P2P
+## Install
 
-- **No account, no sign-in, no email capture.** Install and send.
-- **No file size cap.** Streams directly from disk; not buffered in memory.
-- **No cloud upload.** The file never leaves your machine for a third-party bucket.
-- **Verified bytes.** BLAKE3 content addressing means every byte is checked on the receiver before it lands on disk.
-- **Works across WAN, not just LAN.** Direct QUIC when reachable; iroh relay-assisted fallback when NAT or firewalls block the direct path.
-- **MIT-licensed, auditable, Rust-native.** No proprietary SDK, no closed transport stack.
+Download the latest Windows installer from [GitHub Releases](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest).
 
-## What Lightning P2P Is Not
+Recommended:
 
-To prevent disambiguation mistakes:
+- [`LightningP2P-win-Setup.exe`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P-win-Setup.exe)
 
-- **Not a cloud file host.** No storage bucket, no retention window, no public link.
-- **Not a WebRTC app.** Transport is QUIC via iroh, not WebRTC data channels.
-- **Not an account-based service.** No paid tier, no sign-up, no email capture.
-- **Not a BitTorrent client, IPFS node, or Syncthing replacement.** Different protocols and use cases.
-- **Not publicly cross-platform yet.** Windows is the supported public release; Android is internal alpha only, and iOS is not shipped.
+Optional:
 
-## Why Lightning P2P?
-
-Most file sharing tools route your data through the cloud, require accounts, or cap file sizes. Lightning P2P takes a different approach:
-
-| Feature | Lightning P2P | Cloud Services | Other P2P Tools |
-|---------|:---:|:---:|:---:|
-| Direct device-to-device | **Yes** | No | Sometimes |
-| End-to-end encrypted | **QUIC TLS 1.3** | Varies | Varies |
-| No file size limit | **Yes** | Usually capped | Sometimes |
-| No account required | **Yes** | No | Usually |
-| Verified integrity | **BLAKE3** | Rarely | Rarely |
-| NAT traversal built-in | **Yes** | N/A | Sometimes |
-| Open source | **Yes** | Rarely | Sometimes |
-| Native desktop app | **Yes** | Web only | Web/CLI |
-
-## Key Features
-
-- **Instant P2P transfers** using [iroh](https://iroh.computer) for QUIC networking, NAT traversal, and relay fallback
-- **BLAKE3 verified streaming** with [iroh-blobs](https://docs.rs/iroh-blobs) -- every byte is cryptographically verified during transfer
-- **End-to-end encrypted** via QUIC TLS 1.3 -- your files never touch a server
-- **Nearby sharing** -- senders on the same LAN appear automatically on the receiver, no codes to type
-- **QR code sharing** -- scan a code to start receiving on another device
-- **Receive handoff links** -- share `https://lightning-p2p.netlify.app/receive#t=<ticket>` so receivers can open the app if installed or install it first
-- **Deep links** -- `lightning-p2p://receive?t=<ticket>` remains supported and opens the app straight to the receive screen
-- **Clipboard auto-detect** -- when a ticket is on the clipboard, Lightning P2P offers to paste it for you
-- **Live progress tracking** -- speed, ETA, and progress bar updated in real-time
-- **Transfer history** with one-click re-sharing of previously sent content
-- **Auto-updates** with signed Tauri updater metadata delivered through GitHub Releases
-- **Four Windows install paths** -- Velopack (recommended one-click + delta updates), NSIS (classic wizard + Tauri updater), MSI (managed deployments), and winget
-
-## Download
-
-### Windows
-
-Download the recommended installer from [**GitHub Releases**](https://github.com/Kerim-Sabic/lightning-p2p/releases). Each release publishes installers, Authenticode-signed Windows binaries when signing secrets are configured, Tauri updater signatures, and SHA256 checksums.
-
-| Installer | Description |
-|-----------|-------------|
-| [`LightningP2P-win-Setup.exe`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P-win-Setup.exe) | **Recommended** Velopack installer - modern one-click flow, per-user install, delta-update ready |
-| [`Lightning.P2P_0.4.0_x64-setup.exe`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/Lightning.P2P_0.4.0_x64-setup.exe) | NSIS installer - classic wizard, Tauri updater metadata, installs firewall rule |
-| [`LightningP2PSetup.exe`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2PSetup.exe) | Stable alias for the latest NSIS installer |
-| [`Lightning.P2P_0.4.0_x64_en-US.msi`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/Lightning.P2P_0.4.0_x64_en-US.msi) | MSI installer - for managed environments and Group Policy deployments |
-| [`LightningP2P.msi`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P.msi) | Stable alias for the latest MSI installer |
-| `winget install lightning-p2p` | Windows Package Manager (after the manifest lands in `microsoft/winget-pkgs`) |
-
-Same Rust/Tauri app underneath all installers. Authenticode code signing proves the Windows binary publisher; Tauri updater signatures separately prove update metadata and packages for the NSIS updater path. The Velopack artifact is the primary user-facing installer after clean-VM verification.
-
-Verify the SHA256 checksum from the release notes before installing if you want to confirm the binary you downloaded.
-
-> **Note:** a new signing identity can still need SmartScreen reputation. If Windows shows a warning for a freshly code-signed release, verify the SHA256 checksum and Authenticode signature from the release page.
-
-## Quick Start
-
-### Windows from source
-
-Lightning P2P is currently documented primarily for Windows development. Tauri needs more than Node packages alone, so make sure the native prerequisites are installed before you run `pnpm tauri dev`.
-
-#### 1. Install the native prerequisites
-
-1. Install **Microsoft C++ Build Tools** and select **Desktop development with C++** during setup.
-2. Make sure **Microsoft Edge WebView2 Runtime** is available.
-   - It is usually already installed on Windows 10 version 1803+ and Windows 11.
-   - If you are unsure, install the Evergreen Bootstrapper from Microsoft anyway.
-3. Install **Rust** with `rustup`.
-   - PowerShell: `winget install --id Rustlang.Rustup`
-   - In the Rust installer, keep the **MSVC** toolchain selected.
-4. Restart PowerShell, Windows Terminal, and VS Code after the Rust install so `cargo` is added to `PATH`.
-5. Ensure the MSVC toolchain is active:
-
-```powershell
-rustup default stable-msvc
-```
-
-#### 2. Install the JavaScript tooling
-
-Install:
-
-- [Node.js 20+](https://nodejs.org/)
-- [pnpm](https://pnpm.io/) or enable it through Corepack:
-
-```powershell
-corepack enable
-```
-
-#### 3. Verify your toolchain
-
-Run these commands in a fresh terminal before cloning or starting the app:
-
-```powershell
-node -v
-pnpm -v
-cargo --version
-rustc -vV
-```
-
-On Windows, `rustc -vV` should report a host triple ending in `windows-msvc`.
-
-#### 4. Clone the repo and install dependencies
-
-```powershell
-git clone https://github.com/Kerim-Sabic/lightning-p2p.git
-cd lightning-p2p
-pnpm install
-```
-
-#### 5. Start the app in development mode
-
-```powershell
-pnpm tauri dev
-```
-
-The first run can take a while because Cargo needs to resolve and compile the Rust dependencies in `src-tauri`.
-
-#### 6. Optional: confirm the Rust side builds cleanly first
-
-If you want to separate Rust setup issues from frontend issues, run:
-
-```powershell
-cargo build --manifest-path src-tauri/Cargo.toml
-```
-
-and then start the app:
-
-```powershell
-pnpm tauri dev
-```
-
-### Android alpha from source
-
-Android is internal alpha only. Install the Tauri mobile prerequisites, then use:
-
-```powershell
-rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
-pnpm android:init
-pnpm android:dev
-pnpm android:build:debug
-```
-
-Use [docs/android-alpha.md](docs/android-alpha.md) for SDK, NDK, signing, sideload, and Play Internal Testing steps.
-
-#### Troubleshooting
-
-If you see this error:
-
-```text
-failed to run 'cargo metadata' command to get workspace directory:
-failed to run command cargo metadata --no-deps --format-version 1: program not found
-```
-
-that means `cargo` is not available in the terminal running Tauri. In practice, one of these is usually true:
-
-1. Rust was not installed yet.
-2. Rust was installed, but you did not restart the terminal afterward.
-3. The wrong Windows toolchain is active.
-
-Fix it with:
-
-```powershell
-winget install --id Rustlang.Rustup
-rustup default stable-msvc
-cargo --version
-```
-
-Then close the terminal, open a new one in the project root, and run:
-
-```powershell
-pnpm tauri dev
-```
-
-If `winget` says Rustup is already installed but `rustup` and `cargo` are still "not recognized", the install is usually fine and only `PATH` is stale in the current shell. First close PowerShell completely and open a fresh one.
-
-If you want to verify that directly, check for the default install location:
-
-```powershell
-Test-Path "$env:USERPROFILE\.cargo\bin\rustup.exe"
-Test-Path "$env:USERPROFILE\.cargo\bin\cargo.exe"
-```
-
-If both commands return `True`, temporarily fix the current shell with:
-
-```powershell
-$env:Path = "$env:USERPROFILE\.cargo\bin;$env:Path"
-cargo --version
-rustup default stable-msvc
-pnpm tauri dev
-```
-
-#### Official prerequisite references
-
-- Tauri prerequisites: https://v2.tauri.app/start/prerequisites/
-- Rust installer: https://rustup.rs/
-
-### Build Windows installers
-
-```bash
-pnpm build:windows
-```
-
-Output: `src-tauri/target/x86_64-pc-windows-msvc/release/bundle/`
-
-Release and package-manager operations are tracked in [docs/release-operations.md](docs/release-operations.md).
-
-## Website and Netlify
-
-The browser build is a public website and download funnel, not the transfer engine. Desktop/Tauri runtime still opens the app shell; normal browsers open the SEO landing experience.
-
-### Deploy to Netlify
-
-1. Create a Netlify site from the GitHub repository.
-2. Use branch `main`.
-3. Use build command `pnpm build`.
-4. Use publish directory `dist`.
-5. Keep `SITE_URL=https://lightning-p2p.netlify.app` until a custom domain is connected.
-6. After deploy, submit `https://lightning-p2p.netlify.app/sitemap.xml` in Google Search Console.
-
-The checked-in `netlify.toml` defines the build command, publish directory, Node 22, explicit route rewrites, cache headers, and crawlable SEO metadata output.
-
-### SEO pages
-
-- `/` — home
-- `/download` — Windows installer
-- `/receive` — receive handoff link that keeps tickets in the URL fragment
-- `/security` — private-by-design model
-- `/benchmarks` — methodology
-- `/alternatives/airdrop-for-windows` — AirDrop for Windows
-- `/free-p2p-file-transfer` — free P2P transfer
-- `/wormhole-alternative` — Magic Wormhole alternative
-- `/wetransfer-alternative` — WeTransfer alternative
-- `/localsend-vs-lightning-p2p` — LocalSend comparison
-- `/how-to-send-large-files` — how-to guide (with HowTo schema)
-- `/send-files-between-windows-computers` — Windows-to-Windows transfer
-
-Each page has a unique title, description, canonical URL, static fallback content, Open Graph/Twitter metadata, and relevant JSON-LD (`SoftwareApplication` on every page; `WebSite` and `Organization` on `/`; `BreadcrumbList` on non-home pages; `FAQPage` where applicable; `HowTo` on `/` and `/how-to-send-large-files`). Canonicals and sitemap URLs use extensionless no-trailing-slash routes, with Netlify serving those routes directly. `llms.txt` and `llms-full.txt` at the site root expose the project model to LLM crawlers.
+- [`LightningP2PSetup.exe`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2PSetup.exe) for the classic NSIS installer
+- [`LightningP2P.msi`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P.msi) for managed deployments
+- source build for developers
 
 ## How It Works
 
-Lightning P2P uses **iroh** for peer-to-peer networking and **iroh-blobs** for content-addressed blob transfer. The entire transfer flow is:
+1. Sender drops a file.
+2. App hashes it with BLAKE3.
+3. Sender shares a ticket, link, or QR code.
+4. Receiver opens it.
+5. Devices connect directly when possible.
+6. Transfer streams and verifies bytes before saving.
 
-```
-Sender                              Receiver
-  |                                    |
-  |  1. Drop files into Lightning P2P  |
-  |  2. Files hashed with BLAKE3       |
-  |  3. Added to local blob store      |
-  |  4. Ticket generated               |
-  |                                    |
-  |  ----- share receive link ----->   |
-  |                                    |
-  |                                    |  5. Open link / paste ticket
-  |  <------- QUIC connection ------   |  6. Connect to sender
-  |  ---- verified blob stream ---->   |  7. Stream with integrity check
-  |                                    |  8. Export to disk
-  |                                    |
-```
+Receive handoff links use `https://lightning-p2p.netlify.app/receive#t=<ticket>`, so the ticket stays in the URL fragment and is not sent to the website server. The raw ticket contains the sender node ID, content hash, and relay info needed to connect while the sender is online.
 
-**Receive handoff links** use `https://lightning-p2p.netlify.app/receive#t=<ticket>`, so the ticket stays in the URL fragment and is not sent to the website server. The raw ticket contains the sender's node ID, content hash, and relay info -- everything the receiver needs to connect directly and download.
+## Security Model
 
-### WAN behavior
+Lightning P2P is private by design, but tickets are capability tokens. Anyone with a valid ticket can request that transfer while the sender is online and the content remains available.
 
-Lightning P2P is not LAN-only. If both peers can reach each other directly, transfers stay on the fastest path possible. If a direct path is blocked by NAT or firewall rules, iroh falls back to relay-assisted connectivity so the transfer can still complete across the public internet.
+- QUIC TLS 1.3 transport through iroh
+- BLAKE3 content verification through iroh-blobs
+- Ed25519 identity keys stored through the OS keychain
+- no third-party cloud bucket in the transfer path
+- no telemetry without explicit opt-in
 
-For best speed:
+See [SECURITY.md](SECURITY.md) for the threat model and reporting policy.
 
-- prefer a direct connection when both peers are reachable
-- allow the app through your firewall on both devices
-- keep both peers on a stable network when sending very large files
-- treat relay fallback as the compatibility path, not the fastest path
+## Status
 
-### Performance
+- Windows: public release
+- Android: alpha/internal
+- macOS/Linux: planned
+- iOS: not shipped
 
-The transfer pipeline is tuned for maximum throughput:
+## Roadmap
 
-- **256 MB** QUIC connection window with **64 MB** per-stream windows
-- **1024** concurrent QUIC streams
-- **Up to 128 parallel blob imports** -- the import stage is I/O-bound, so parallelism scales with batch size rather than CPU count
-- **Fat LTO + panic=abort** in release builds for smaller, faster binaries
-- **Direct download mode** skips relay when peers can connect directly
-- **Streaming export** writes to disk during transfer, no full-file buffering
-- **10 Hz** progress sampling with exponential moving average smoothing
-- **6 s** relay-readiness timeout on cold start so ticket generation is never blocked by a slow relay handshake
+- Better benchmark reports
+- macOS/Linux packaging
+- Android public alpha
+- Pause/resume transfers
+- Transfer diagnostics
 
-## Benchmark Methodology
+## Benchmarks
 
-Lightning P2P should only claim "fastest" beside repeatable measurements. Publish benchmark results with:
+Lightning P2P should not claim speed leadership until repeatable results are published. Use [docs/benchmark-report-template.md](docs/benchmark-report-template.md) for every public result so the hardware, route, app version, transfer size, failure count, and export time stay attached to the claim.
 
-- app versions and commit hashes
-- sender and receiver hardware
-- operating system versions
-- file sizes and file counts
-- LAN, direct WAN, or relay route type
-- median transfer time, throughput, and failed attempts
+Benchmark comparison targets:
 
-Use [`docs/benchmark-report-template.md`](docs/benchmark-report-template.md) for every published result so the hardware, route, app version, and failure count stay attached to the claim.
-
-Homepage comparison set:
-
-| Tool | Why compare |
-|------|-------------|
-| WeTransfer | Common cloud-upload workflow Lightning P2P replaces |
-| Windows Nearby Sharing | Built-in proximity transfer without Lightning-style WAN tickets |
-| Quick Share for Windows | Ecosystem nearby sharing with narrower openness and reachability |
-| PairDrop | Browser-based WebRTC transfer baseline |
-| Snapdrop | Widely known browser local-share baseline |
-| LocalSend | Popular LAN-first cross-platform transfer app |
-
-Full benchmark baselines:
-
-| Tool | Why compare |
-|------|-------------|
-| LocalSend | Popular open-source cross-platform local transfer app |
-| PairDrop | Browser-based WebRTC transfer baseline |
-| Snapdrop | Widely known browser local-share baseline |
-| Magic Wormhole | Trusted encrypted transfer baseline |
-| Cloud upload/download | Common non-P2P workflow users are trying to avoid |
-
-## GitHub Growth Checklist
-
-- Repository homepage is set to `https://lightning-p2p.netlify.app`.
-- Repository topics: `p2p`, `peer-to-peer`, `file-transfer`, `airdrop-alternative`, `wetransfer-alternative`, `magic-wormhole-alternative`, `localsend-alternative`, `tauri`, `rust`, `iroh`, `quic`, `blake3`, `windows`, `privacy`, `end-to-end-encryption`, `open-source`, `react`, `typescript`.
-- Upload `public/og-image.png` as the GitHub social preview image from repository settings.
-- Pin launch issues for benchmarks, mobile/browser transfer architecture, Linux/macOS packaging, and UX screenshots.
-- Launch only with honest claims: free, open-source, no account, direct-first transfer, code-signed Windows binaries, signed updater metadata, benchmark methodology published.
+- LocalSend
+- PairDrop
+- Snapdrop
+- Magic Wormhole
+- Windows Nearby Sharing
+- cloud upload/download workflows
 
 ## Architecture
 
 ```
 lightning-p2p/
   src/                  React 19 + TypeScript frontend
-    components/         UI views (Send, Receive, History, Settings)
-    stores/             Zustand state management
-    hooks/              Transfer event subscriptions
-    lib/                Typed Tauri IPC wrappers
-  src-tauri/            Rust backend
-    src/commands/       Tauri command handlers
-    src/node/           iroh endpoint + QUIC transport
-    src/transfer/       Send, receive, progress, export pipeline
-    src/storage/        sled database (history, peers, settings)
-    benches/            Criterion transfer benchmarks
-    tests/              Integration tests
+  src-tauri/            Rust backend and Tauri commands
+  docs/                 release, SEO, mobile, benchmark, and launch docs
+  scripts/              packaging and metadata helpers
 ```
 
-### Design principles
+Design rules:
 
-1. **iroh handles all networking.** No raw sockets, no WebRTC, no HTTP transfers.
-2. **iroh-blobs handles all blob transfer.** No custom chunking or hashing.
-3. **Tauri IPC is the only bridge.** No HTTP servers between frontend and backend.
-4. **Frontend is purely presentational.** Zero business logic in TypeScript.
-5. **Every command returns a typed Result.** No panics in library code.
-
-## Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| **Networking** | iroh (QUIC, NAT traversal, relay, WAN reachability) |
-| **Transfer** | iroh-blobs (BLAKE3 verified streaming) |
-| **Backend** | Rust, Tauri v2, tokio |
-| **Frontend** | React 19, TypeScript (strict), Zustand |
-| **Styling** | Tailwind CSS v4, Framer Motion |
-| **Storage** | sled embedded database |
-| **Security** | QUIC TLS 1.3, Ed25519 keys in OS keychain |
-| **Packaging** | Velopack, NSIS, MSI, winget - Authenticode code signing plus signed updater metadata |
+1. Networking uses iroh only.
+2. Blob transfer uses iroh-blobs only.
+3. Frontend and backend communicate through Tauri IPC only.
+4. React stays presentational; transfer logic lives in Rust.
+5. Expected failures return `Result` types instead of panicking.
 
 ## Development
 
-### Quality gates
-
-```bash
-pnpm lint              # ESLint (strict, no any)
-pnpm typecheck         # TypeScript strict mode
-cargo test             # Rust unit + integration tests
-cargo clippy -- -D warnings  # Rust linting
-```
-
-### Benchmarks
-
-```bash
-cargo bench --manifest-path src-tauri/Cargo.toml --bench transfer_bench -- --noplot
-```
-
-### Same-machine testing
-
-Test end-to-end on a single machine using separate profiles:
+Install dependencies:
 
 ```powershell
-# Terminal 1 (sender)
-$env:FASTDROP_PROFILE="alice"
-.\src-tauri\target\release\fastdrop.exe
-
-# Terminal 2 (receiver)
-$env:FASTDROP_PROFILE="bob"
-.\src-tauri\target\release\fastdrop.exe
+pnpm install
+cargo build --manifest-path src-tauri/Cargo.toml
 ```
 
-## Security
+Run the app:
 
-- **End-to-end encryption** via QUIC TLS 1.3 (handled by iroh)
-- **Ed25519 identity keys** stored in the OS keychain via the `keyring` crate
-- **BLAKE3 content verification** -- every chunk is verified during streaming
-- **Tickets are capability tokens** -- treat them as secrets
-- **No telemetry** without explicit opt-in
+```powershell
+pnpm tauri dev
+```
+
+Run checks:
+
+```powershell
+pnpm lint
+pnpm typecheck
+cargo test --manifest-path src-tauri/Cargo.toml
+cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+```
+
+Build Windows installers:
+
+```powershell
+pnpm build:windows
+```
+
+Same-machine transfer testing:
+
+```powershell
+# Terminal 1: sender
+$env:LIGHTNING_P2P_PROFILE="alice"
+.\src-tauri\target\release\lightning-p2p.exe
+
+# Terminal 2: receiver
+$env:LIGHTNING_P2P_PROFILE="bob"
+.\src-tauri\target\release\lightning-p2p.exe
+```
+
+Deprecated compatibility env vars `FASTDROP_PROFILE` and `FASTDROP_DATA_DIR` are still accepted, but new scripts should use `LIGHTNING_P2P_PROFILE` and `LIGHTNING_P2P_DATA_DIR`.
+
+## Website
+
+The browser build is a public website and receive-link handoff surface, not the transfer engine. The native Rust/Tauri app performs transfers with iroh. See [docs/online-handoff.md](docs/online-handoff.md).
 
 ## Contributing
 
-Contributions that improve transfer reliability, performance, UX, packaging, or test coverage are welcome.
+Contributions that improve transfer reliability, performance measurement, UX, packaging, docs, or test coverage are welcome.
 
-1. Read [CONTRIBUTING.md](./CONTRIBUTING.md)
-2. Open an issue or discuss before large changes
-3. Follow conventional commits: `feat:`, `fix:`, `refactor:`, `test:`, `docs:`
-
-### Good first issues
-
-- README hero screenshot or GIF
-- GitHub repository topics and social preview image
-- Pause/resume transfers
-- Broader integration test coverage
-- Linux/macOS packaging spikes
-- Relay diagnostics dashboards
-- GitHub Discussions enablement and community docs
+1. Read [CONTRIBUTING.md](CONTRIBUTING.md).
+2. Open an issue or discuss before large changes.
+3. Follow conventional commits: `feat:`, `fix:`, `refactor:`, `test:`, `docs:`.
 
 ## License
 
 MIT
-
----
-
-<div align="center">
-
-Built with [iroh](https://iroh.computer), [Tauri](https://tauri.app), and [React](https://react.dev).
-
-**[Star this repo](https://github.com/Kerim-Sabic/lightning-p2p)** if you find it useful.
-
-</div>

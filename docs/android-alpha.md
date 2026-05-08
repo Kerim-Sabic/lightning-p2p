@@ -92,7 +92,7 @@ pnpm android:build:aab
 
 2. Upload the generated AAB in Play Console.
 3. Use Internal testing first. Do not promote to closed/open testing until Android-to-Windows and Windows-to-Android transfers have benchmark notes.
-4. The Play listing must not claim "fastest in the world" until the benchmark matrix is filled.
+4. The Play listing must not claim speed leadership until the benchmark matrix is filled.
 
 ## Alpha Constraints
 

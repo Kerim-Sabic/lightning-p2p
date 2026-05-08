@@ -7,7 +7,7 @@ fn main() {
         return;
     }
 
-    fastdrop_lib::run();
+    lightning_p2p_lib::run();
 }
 
 #[cfg(windows)]

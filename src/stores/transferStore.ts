@@ -10,6 +10,7 @@ import type {
   TransferDirection,
   TransferEvent,
   FailureCategory,
+  PlatformProfile,
   TransferPhase,
   TransferRecord,
   UpdateCheckResult,
@@ -66,6 +67,7 @@ export interface UpdateState {
 
 interface TransferStore {
   nodeStatus: NodeStatus;
+  platformProfile: PlatformProfile;
   settings: AppSettings | null;
   downloadDir: string | null;
   updateState: UpdateState;
@@ -85,6 +87,7 @@ interface TransferStore {
   pickShareFiles: () => Promise<void>;
   pickShareFolder: () => Promise<void>;
   refreshNodeStatus: () => Promise<void>;
+  refreshPlatformProfile: () => Promise<void>;
   refreshSettings: () => Promise<void>;
   refreshDownloadDir: () => Promise<void>;
   refreshActiveTransfers: () => Promise<void>;
@@ -307,6 +310,7 @@ function sameTransferProgress(
 
 export const useTransferStore = create<TransferStore>((set, get) => ({
   nodeStatus: defaultNodeStatus,
+  platformProfile: tauri.browserPlatformProfile,
   settings: null,
   downloadDir: null,
   updateState: defaultUpdateState,
@@ -386,6 +390,15 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
       set((state) =>
         sameNodeStatus(state.nodeStatus, nodeStatus) ? state : { nodeStatus },
       );
+    } catch (error) {
+      set({ error: toErrorMessage(error) });
+    }
+  },
+
+  refreshPlatformProfile: async () => {
+    try {
+      const platformProfile = await tauri.getPlatformProfile();
+      set({ platformProfile });
     } catch (error) {
       set({ error: toErrorMessage(error) });
     }

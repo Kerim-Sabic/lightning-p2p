@@ -18,11 +18,13 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
+  getPlatformProfile,
   getNetworkDiagnostics,
   isDesktopRuntime,
   isMobileRuntime,
   type NetworkDiagnostics,
   type NodeStatus,
+  type PlatformProfile,
   type RelayMode,
   writeClipboardText,
 } from "../lib/tauri";
@@ -63,7 +65,7 @@ function onlineStateLabel(onlineState: NodeStatus["online_state"]): string {
 function onlineStateCopy(nodeStatus: NodeStatus): string {
   switch (nodeStatus.online_state) {
     case "direct_ready":
-      return "The node has direct addresses and can advertise the fastest route to peers immediately.";
+      return "The node has direct addresses and can advertise a direct route to peers immediately.";
     case "relay_ready":
       return "Relay fallback is live while direct addresses continue warming up.";
     case "degraded":
@@ -118,10 +120,57 @@ function relayModeButtonClass(active: boolean): string {
     : "border-white/10 bg-white/[0.04] text-slate-300";
 }
 
-function diagnosticsText(diagnostics: NetworkDiagnostics): string {
+function platformLabel(profile: PlatformProfile): string {
+  switch (profile.platform_kind) {
+    case "windows":
+      return "Windows";
+    case "macos":
+      return "macOS";
+    case "linux":
+      return "Linux";
+    case "android":
+      return "Android alpha";
+    case "ios":
+      return "iOS prepared";
+    case "browser":
+      return "Web handoff";
+    case "unknown":
+    default:
+      return "Unknown";
+  }
+}
+
+function storageModelLabel(profile: PlatformProfile): string {
+  switch (profile.storage_model) {
+    case "app_private":
+      return "App-private";
+    case "handoff_only":
+      return "Handoff only";
+    case "user_selected":
+    default:
+      return "User-selected";
+  }
+}
+
+function capabilityLabel(enabled: boolean): string {
+  return enabled ? "Enabled" : "Disabled";
+}
+
+function diagnosticsText(
+  diagnostics: NetworkDiagnostics,
+  platformProfile: PlatformProfile,
+): string {
   return [
     "Lightning P2P diagnostics",
     `App version: ${diagnostics.app_version}`,
+    `Platform: ${platformProfile.platform_kind}`,
+    `Runtime family: ${platformProfile.runtime_family}`,
+    `Transfer engine: ${platformProfile.transfer_engine}`,
+    `Online handoff model: ${platformProfile.online_handoff_model}`,
+    `Storage model: ${platformProfile.storage_model}`,
+    `Release support: ${platformProfile.release_support}`,
+    `Background transfer: ${platformProfile.capabilities.background_transfer ? "yes" : "no"}`,
+    `Browser transfer: ${platformProfile.capabilities.browser_transfer ? "yes" : "no"}`,
     `Node ID: ${diagnostics.node_id ?? "not ready"}`,
     `Online state: ${diagnostics.online_state}`,
     `Relay mode: ${diagnostics.relay_mode}`,
@@ -140,6 +189,7 @@ export function SettingsView() {
   const settings = useTransferStore((state) => state.settings);
   const downloadDir = useTransferStore((state) => state.downloadDir);
   const nodeStatus = useTransferStore((state) => state.nodeStatus);
+  const platformProfile = useTransferStore((state) => state.platformProfile);
   const updateState = useTransferStore((state) => state.updateState);
   const pickDownloadDir = useTransferStore((state) => state.pickDownloadDir);
   const openDownloadDir = useTransferStore((state) => state.openDownloadDir);
@@ -185,8 +235,13 @@ export function SettingsView() {
 
   const copyDiagnostics = async (): Promise<void> => {
     try {
-      const diagnostics = await getNetworkDiagnostics();
-      await writeClipboardText(diagnosticsText(diagnostics));
+      const [diagnostics, latestPlatformProfile] = await Promise.all([
+        getNetworkDiagnostics(),
+        getPlatformProfile(),
+      ]);
+      await writeClipboardText(
+        diagnosticsText(diagnostics, latestPlatformProfile),
+      );
       setDiagnosticsState("copied");
       window.setTimeout(() => setDiagnosticsState("idle"), 1800);
     } catch {
@@ -200,39 +255,39 @@ export function SettingsView() {
         <header className="glass-panel hero-panel relative overflow-hidden p-8">
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_86%_18%,rgba(56,189,248,0.08),transparent_24%),radial-gradient(circle_at_12%_100%,rgba(148,163,184,0.05),transparent_28%)]" />
           <div className="relative">
-          <div className="badge">
-            <Settings2 className="h-3 w-3 text-slate-200" />
-            Settings
-          </div>
-          <h1 className="page-title mt-6 max-w-[14ch]">
-            Tune reachability, storage, and update flow
-          </h1>
-          <p className="page-copy mt-4 max-w-[60ch]">
-            These controls govern how Lightning P2P exposes routes, where
-            verified files land, and how quickly this install picks up new
-            signed update packages.
-          </p>
+            <div className="badge">
+              <Settings2 className="h-3 w-3 text-slate-200" />
+              Settings
+            </div>
+            <h1 className="page-title mt-6 max-w-[14ch]">
+              Tune reachability, storage, and update flow
+            </h1>
+            <p className="page-copy mt-4 max-w-[60ch]">
+              These controls govern how Lightning P2P exposes routes, where
+              verified files land, and how quickly this install picks up new
+              signed update packages.
+            </p>
 
-          <div className="hero-metrics mt-7 grid gap-3 sm:grid-cols-3">
-            <div className="stat-card">
-              <p className="metric-label">Node state</p>
-              <p className="mt-2 text-[15px] font-semibold tracking-[-0.02em] text-white">
-                {onlineStateLabel(nodeStatus.online_state)}
-              </p>
+            <div className="hero-metrics mt-7 grid gap-3 sm:grid-cols-3">
+              <div className="stat-card">
+                <p className="metric-label">Node state</p>
+                <p className="mt-2 text-[15px] font-semibold tracking-[-0.02em] text-white">
+                  {onlineStateLabel(nodeStatus.online_state)}
+                </p>
+              </div>
+              <div className="stat-card">
+                <p className="metric-label">Relay mode</p>
+                <p className="mt-2 text-[15px] font-semibold tracking-[-0.02em] text-white">
+                  {relayModeLabel(settings?.relay_mode ?? "public")}
+                </p>
+              </div>
+              <div className="stat-card">
+                <p className="metric-label">App version</p>
+                <p className="mt-2 text-[15px] font-semibold tabular-nums tracking-[-0.02em] text-white">
+                  {updateState.currentVersion ?? "Unknown"}
+                </p>
+              </div>
             </div>
-            <div className="stat-card">
-              <p className="metric-label">Relay mode</p>
-              <p className="mt-2 text-[15px] font-semibold tracking-[-0.02em] text-white">
-                {relayModeLabel(settings?.relay_mode ?? "public")}
-              </p>
-            </div>
-            <div className="stat-card">
-              <p className="metric-label">App version</p>
-              <p className="mt-2 text-[15px] font-semibold tabular-nums tracking-[-0.02em] text-white">
-                {updateState.currentVersion ?? "Unknown"}
-              </p>
-            </div>
-          </div>
           </div>
         </header>
 
@@ -418,6 +473,73 @@ export function SettingsView() {
       <section className="glass-panel p-6">
         <div className="flex items-center gap-3">
           <div className="glass-icon">
+            <Waypoints className="h-5 w-5 text-emerald-200" />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-white">
+              Runtime capabilities
+            </p>
+            <p className="text-[13px] text-slate-300/72">
+              Current platform rules for storage, discovery, handoff, and update
+              availability.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+          <div className="stat-card">
+            <p className="metric-label">Runtime</p>
+            <p className="mt-1.5 text-sm font-semibold text-white">
+              {platformLabel(platformProfile)}
+            </p>
+          </div>
+          <div className="stat-card">
+            <p className="metric-label">Storage</p>
+            <p className="mt-1.5 text-sm font-semibold text-white">
+              {storageModelLabel(platformProfile)}
+            </p>
+          </div>
+          <div className="stat-card">
+            <p className="metric-label">Nearby discovery</p>
+            <p className="mt-1.5 text-sm font-semibold text-white">
+              {capabilityLabel(platformProfile.capabilities.local_discovery)}
+            </p>
+          </div>
+          <div className="stat-card">
+            <p className="metric-label">Web transfer</p>
+            <p className="mt-1.5 text-sm font-semibold text-white">
+              {platformProfile.capabilities.browser_transfer
+                ? "Native web"
+                : "Handoff only"}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-2 xl:grid-cols-3">
+          <div className="stat-card">
+            <p className="metric-label">Engine</p>
+            <p className="mt-1.5 text-sm leading-6 text-white">
+              {platformProfile.transfer_engine}
+            </p>
+          </div>
+          <div className="stat-card">
+            <p className="metric-label">Online model</p>
+            <p className="mt-1.5 text-sm leading-6 text-white">
+              {platformProfile.guidance.online_notice}
+            </p>
+          </div>
+          <div className="stat-card">
+            <p className="metric-label">Release state</p>
+            <p className="mt-1.5 text-sm leading-6 text-white">
+              {platformProfile.guidance.release_notice}
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section className="glass-panel p-6">
+        <div className="flex items-center gap-3">
+          <div className="glass-icon">
             <Waypoints className="h-5 w-5 text-sky-200" />
           </div>
           <div>
@@ -473,8 +595,7 @@ export function SettingsView() {
         </div>
         {!nativeRuntime ? (
           <p className="mt-3 text-xs leading-6 text-slate-400">
-            Relay and storage controls are available only in the native
-            runtime.
+            Relay and storage controls are available only in the native runtime.
           </p>
         ) : mobileRuntime ? (
           <p className="mt-3 text-xs leading-6 text-slate-400">
@@ -506,7 +627,7 @@ export function SettingsView() {
             }
             disabled={!nativeRuntime}
             className={`relative inline-flex h-6 w-11 items-center rounded-full border transition-all duration-200 ${
-              settings?.local_discovery_enabled ?? true
+              (settings?.local_discovery_enabled ?? true)
                 ? "border-sky-300/20 bg-sky-500/20"
                 : "border-white/10 bg-white/[0.04]"
             } disabled:cursor-not-allowed disabled:opacity-50`}
@@ -521,9 +642,8 @@ export function SettingsView() {
                   : "bg-slate-300"
               }`}
               style={{
-                marginLeft: (settings?.local_discovery_enabled ?? true)
-                  ? "22px"
-                  : "3px",
+                marginLeft:
+                  (settings?.local_discovery_enabled ?? true) ? "22px" : "3px",
               }}
             />
           </button>

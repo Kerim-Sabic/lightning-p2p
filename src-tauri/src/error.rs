@@ -1,10 +1,10 @@
-//! Centralized error types for `FastDrop`.
+//! Centralized error types for `Lightning P2P`.
 
 use thiserror::Error;
 
-/// Top-level error type for the `FastDrop` application.
+/// Top-level error type for the `Lightning P2P` application.
 #[derive(Debug, Error)]
-pub enum FastDropError {
+pub enum LightningP2PError {
     /// iroh endpoint or networking error.
     #[error("Network error: {0}")]
     Network(#[from] anyhow::Error),
@@ -38,15 +38,15 @@ pub enum FastDropError {
     Other(String),
 }
 
-/// Converts `FastDropError` into a string for Tauri command results.
-impl From<FastDropError> for String {
-    fn from(err: FastDropError) -> Self {
+/// Converts `LightningP2PError` into a string for Tauri command results.
+impl From<LightningP2PError> for String {
+    fn from(err: LightningP2PError) -> Self {
         err.to_string()
     }
 }
 
 /// Convenience alias used throughout the crate.
-pub type Result<T> = std::result::Result<T, FastDropError>;
+pub type Result<T> = std::result::Result<T, LightningP2PError>;
 
 #[cfg(test)]
 mod tests {
@@ -54,13 +54,13 @@ mod tests {
 
     #[test]
     fn error_display() {
-        let err = FastDropError::Other("test error".into());
+        let err = LightningP2PError::Other("test error".into());
         assert_eq!(err.to_string(), "test error");
     }
 
     #[test]
     fn error_converts_to_string() {
-        let err = FastDropError::Blob("chunk failed".into());
+        let err = LightningP2PError::Blob("chunk failed".into());
         let s: String = err.into();
         assert_eq!(s, "Blob error: chunk failed");
     }

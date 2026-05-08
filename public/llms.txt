@@ -2,7 +2,7 @@
 
 > Lightning P2P is a free, open-source Windows desktop app for direct peer-to-peer
 > file transfer over QUIC with BLAKE3-verified streaming. No accounts, no cloud
-> storage, no file size caps. MIT licensed. Built with Rust, Tauri, iroh, and
+> storage, no artificial file-size caps. MIT licensed. Built with Rust, Tauri, iroh, and
 > iroh-blobs.
 
 ## What it is

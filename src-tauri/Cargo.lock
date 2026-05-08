@@ -1648,43 +1648,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2acce4a10f12dc2fb14a218589d4f1f62ef011b2d0cc4b3cb1bba8e94da14649"
 
 [[package]]
-name = "fastdrop"
-version = "0.4.0"
-dependencies = [
- "anyhow",
- "clap",
- "criterion",
- "dirs",
- "futures-util",
- "hex",
- "iroh",
- "iroh-blobs",
- "keyring",
- "n0-future",
- "qrcode",
- "serde",
- "serde_json",
- "sha2",
- "sled",
- "socket2 0.5.10",
- "tauri",
- "tauri-build",
- "tauri-plugin-barcode-scanner",
- "tauri-plugin-clipboard-manager",
- "tauri-plugin-deep-link",
- "tauri-plugin-dialog",
- "tauri-plugin-os",
- "tauri-plugin-shell",
- "tauri-plugin-updater",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "windows-sys 0.59.0",
-]
-
-[[package]]
 name = "fastrand"
 version = "2.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3530,6 +3493,43 @@ dependencies = [
  "libc",
  "plain",
  "redox_syscall 0.7.3",
+]
+
+[[package]]
+name = "lightning-p2p"
+version = "0.4.1"
+dependencies = [
+ "anyhow",
+ "clap",
+ "criterion",
+ "dirs",
+ "futures-util",
+ "hex",
+ "iroh",
+ "iroh-blobs",
+ "keyring",
+ "n0-future",
+ "qrcode",
+ "serde",
+ "serde_json",
+ "sha2",
+ "sled",
+ "socket2 0.5.10",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-barcode-scanner",
+ "tauri-plugin-clipboard-manager",
+ "tauri-plugin-deep-link",
+ "tauri-plugin-dialog",
+ "tauri-plugin-os",
+ "tauri-plugin-shell",
+ "tauri-plugin-updater",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]

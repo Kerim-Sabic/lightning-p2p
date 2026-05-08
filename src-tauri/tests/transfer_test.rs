@@ -1,8 +1,8 @@
 #![allow(clippy::cast_possible_truncation, clippy::ignored_unit_patterns)]
 
-use fastdrop_lib::node::FastDropNode;
-use fastdrop_lib::transfer::{receiver, sender};
 use iroh_blobs::ticket::BlobTicket;
+use lightning_p2p_lib::node::LightningP2PNode;
+use lightning_p2p_lib::transfer::{receiver, sender};
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::io::{BufReader, BufWriter, Read, Write};
@@ -17,8 +17,8 @@ type TestResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 struct TransferFixture {
     _root: tempfile::TempDir,
-    sender_node: FastDropNode,
-    receiver_node: FastDropNode,
+    sender_node: LightningP2PNode,
+    receiver_node: LightningP2PNode,
     source_path: PathBuf,
     receive_dir: PathBuf,
 }
@@ -179,13 +179,15 @@ async fn run_file_transfer_smoke_test(size: u64, sparse: bool) -> TestResult<()>
     Ok(())
 }
 
-async fn start_nodes(root: &Path) -> TestResult<(FastDropNode, FastDropNode)> {
+async fn start_nodes(root: &Path) -> TestResult<(LightningP2PNode, LightningP2PNode)> {
     let sender_node =
-        FastDropNode::start_with_dirs(root.join("sender-data"), root.join("sender-downloads"))
+        LightningP2PNode::start_with_dirs(root.join("sender-data"), root.join("sender-downloads"))
             .await?;
-    let receiver_node =
-        FastDropNode::start_with_dirs(root.join("receiver-data"), root.join("receiver-downloads"))
-            .await?;
+    let receiver_node = LightningP2PNode::start_with_dirs(
+        root.join("receiver-data"),
+        root.join("receiver-downloads"),
+    )
+    .await?;
     Ok((sender_node, receiver_node))
 }
 
@@ -328,7 +330,7 @@ fn init_tracing() {
     static TRACING: OnceLock<()> = OnceLock::new();
     let _ = TRACING.get_or_init(|| {
         let _ = tracing_subscriber::fmt()
-            .with_env_filter("fastdrop=info,iroh=warn")
+            .with_env_filter("lightning_p2p=info,iroh=warn")
             .with_test_writer()
             .try_init();
     });

@@ -1,6 +1,6 @@
 //! Receive destination preflight and safe output path helpers.
 
-use crate::error::{FastDropError, Result};
+use crate::error::{LightningP2PError, Result};
 use iroh_blobs::Hash;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -22,23 +22,23 @@ pub(crate) struct DestinationPreflight {
 ///
 /// # Errors
 ///
-/// Returns `FastDropError` if the destination cannot be created, is not a
+/// Returns `LightningP2PError` if the destination cannot be created, is not a
 /// directory, or is not writable.
 pub(crate) fn preflight_destination(destination: &Path) -> Result<DestinationPreflight> {
     if destination.as_os_str().is_empty() {
-        return Err(FastDropError::Other(
+        return Err(LightningP2PError::Other(
             "Download folder cannot be empty".into(),
         ));
     }
 
     std::fs::create_dir_all(destination).map_err(|error| {
-        FastDropError::Other(format!(
+        LightningP2PError::Other(format!(
             "Download folder is missing and could not be created: {error}"
         ))
     })?;
 
     if !destination.is_dir() {
-        return Err(FastDropError::Other(
+        return Err(LightningP2PError::Other(
             "Download destination must be a folder".into(),
         ));
     }
@@ -61,7 +61,7 @@ pub(crate) fn ensure_enough_space(destination: &Path, size: u64) -> Result<()> {
     };
     let required = size.saturating_add(DISK_SPACE_HEADROOM_BYTES);
     if available_bytes < required {
-        return Err(FastDropError::Other(format!(
+        return Err(LightningP2PError::Other(format!(
             "Not enough free disk space in the download folder. Required at least {required} bytes, available {available_bytes} bytes."
         )));
     }
@@ -132,7 +132,7 @@ fn write_probe(destination: &Path) -> Result<()> {
         .create_new(true)
         .open(&probe_path)
         .map_err(|error| {
-            FastDropError::Other(format!("Download folder is not writable: {error}"))
+            LightningP2PError::Other(format!("Download folder is not writable: {error}"))
         })?;
     drop(file);
     let _ = std::fs::remove_file(probe_path);

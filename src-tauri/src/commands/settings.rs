@@ -166,7 +166,10 @@ pub async fn set_local_discovery_enabled(
         .set_local_discovery_enabled(enabled)
         .await
         .map_err(String::from)?;
-    state.nearby_shares.set_local_discovery_enabled(enabled).await;
+    state
+        .nearby_shares
+        .set_local_discovery_enabled(enabled)
+        .await;
     if !enabled {
         let shares = state.nearby_shares.clear_discovered_shares().await;
         if let Some(shares) = shares {
@@ -194,7 +197,7 @@ fn open_path(path: &Path) -> crate::error::Result<()> {
     if status.success() {
         Ok(())
     } else {
-        Err(crate::error::FastDropError::Other(
+        Err(crate::error::LightningP2PError::Other(
             "Failed to open the download directory".into(),
         ))
     }
@@ -223,7 +226,7 @@ fn open_command(path: &Path) -> crate::error::Result<std::process::Command> {
     };
 
     if path.as_os_str().is_empty() {
-        return Err(crate::error::FastDropError::Other(
+        return Err(crate::error::LightningP2PError::Other(
             "Download directory cannot be empty".into(),
         ));
     }
