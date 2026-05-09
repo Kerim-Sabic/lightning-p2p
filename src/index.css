@@ -49,7 +49,8 @@ html[data-runtime="browser"] #root {
 }
 
 body[data-runtime="browser"] {
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   background: #08120f;
 }
 
@@ -258,6 +259,160 @@ body.app-hydrated .static-seo-fallback {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes marketing-grid-drift {
+  0% {
+    background-position:
+      0 0,
+      0 0;
+  }
+  100% {
+    background-position:
+      72px 72px,
+      0 0;
+  }
+}
+
+@keyframes transfer-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: translateX(-8%);
+  }
+  50% {
+    opacity: 1;
+    transform: translateX(8%);
+  }
+}
+
+@keyframes transfer-flight {
+  0%,
+  100% {
+    opacity: 0.72;
+    transform: translate(-92%, -52%) scale(0.98);
+  }
+  45%,
+  55% {
+    opacity: 1;
+    transform: translate(-50%, -52%) scale(1);
+  }
+  75% {
+    opacity: 0.86;
+    transform: translate(-8%, -52%) scale(0.99);
+  }
+}
+
+@keyframes transfer-progress {
+  0% {
+    transform: scaleX(0.08);
+  }
+  58% {
+    transform: scaleX(0.78);
+  }
+  100% {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes verification-pop {
+  0%,
+  48% {
+    opacity: 0;
+    transform: translateY(6px) scale(0.96);
+  }
+  58%,
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.marketing-grid-bg {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
+  background-size: 72px 72px;
+  mask-image: radial-gradient(circle at 50% 18%, black, transparent 72%);
+  animation: marketing-grid-drift 22s linear infinite;
+}
+
+.transfer-noise {
+  background:
+    radial-gradient(
+      circle at 28% 24%,
+      rgba(110, 231, 183, 0.12),
+      transparent 26%
+    ),
+    radial-gradient(
+      circle at 74% 72%,
+      rgba(56, 189, 248, 0.1),
+      transparent 24%
+    ),
+    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+  background-size:
+    auto,
+    auto,
+    44px 44px,
+    44px 44px;
+}
+
+.transfer-line {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(45, 212, 191, 0.22),
+    rgba(134, 239, 172, 0.82),
+    rgba(45, 212, 191, 0.22),
+    transparent
+  );
+  box-shadow: 0 0 34px rgba(45, 212, 191, 0.38);
+}
+
+.transfer-line::before {
+  content: "";
+  position: absolute;
+  inset: -1px 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.9),
+    transparent
+  );
+  animation: transfer-pulse 2.8s ease-in-out infinite;
+}
+
+.marketing-file-card {
+  animation: transfer-flight 4.2s ease-in-out infinite;
+}
+
+.transfer-progress {
+  transform-origin: left;
+  animation: transfer-progress 4.2s ease-in-out infinite;
+}
+
+.verification-pop {
+  animation: verification-pop 4.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+
+  .marketing-file-card {
+    transform: translate(-50%, -52%) !important;
+  }
+
+  .transfer-progress {
+    transform: scaleX(1) !important;
   }
 }
 

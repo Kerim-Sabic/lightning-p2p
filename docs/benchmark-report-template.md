@@ -1,6 +1,6 @@
 # Lightning P2P Benchmark Report Template
 
-Use this template before publishing any speed-leadership or "best" claim. Keep raw notes, failed attempts, and screenshots with the report so results can be repeated.
+Use this template before publishing any strong speed or "best" claim. Keep raw notes, failed attempts, and screenshots with the report so results can be repeated.
 
 ## Release Under Test
 

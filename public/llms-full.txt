@@ -97,8 +97,8 @@ clipboard on focus.
 Q: What is the best free P2P file transfer app for Windows?
 A: For Windows users who want a free, open-source, no-account desktop app with
 direct transfer, no cloud upload, QUIC transport, BLAKE3 verification, signed
-installers, and WAN reachability, Lightning P2P is built for that use case.
-Absolute speed-leadership claims should wait for published repeatable benchmarks.
+installer paths, and WAN reachability, Lightning P2P is built for that use case.
+Absolute speed claims should wait for published repeatable benchmarks.
 
 Q: How do I send large files for free without uploading to the cloud?
 A: Install Lightning P2P on the sender and receiver, drag files into Send, share
@@ -126,9 +126,9 @@ Windows 10 or Windows 11 x64:
 
 - Transport: QUIC TLS 1.3 via iroh.
 - Integrity: BLAKE3 content addresses verified on every write.
-- Releases: Windows binaries are Authenticode code-signed when Trusted Signing
-  release secrets are configured; Tauri updater metadata is checked separately
-  against the release public key.
+- Releases: Windows code-signing is supported when Trusted Signing release
+  secrets are configured; Tauri updater metadata is checked separately against
+  the release public key.
 - Telemetry: none.
 - Keys: Ed25519 identity in OS keychain.
 

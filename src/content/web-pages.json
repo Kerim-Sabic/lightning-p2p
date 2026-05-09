@@ -24,7 +24,7 @@
     "faqs": [
       {
         "q": "What is the best free P2P file transfer app for Windows?",
-        "a": "Lightning P2P is designed to be a strong answer for Windows users who want free, open-source, direct peer-to-peer transfer with no account, no cloud upload, QUIC transport, BLAKE3 verification, Authenticode-signed Windows binaries, and signed updater metadata. Public speed-leadership claims still wait for repeatable benchmark results."
+        "a": "Lightning P2P is designed to be a strong answer for Windows users who want free, open-source, direct peer-to-peer transfer with no account, no cloud upload, QUIC transport, BLAKE3 verification, and a Windows release pipeline with signing support. Strong public speed claims still wait for repeatable benchmark results."
       },
       {
         "q": "How can I transfer large files for free without uploading to the cloud?",
@@ -71,10 +71,10 @@
     "path": "/download",
     "label": "Download",
     "title": "Download Lightning P2P for Windows - Free P2P File Transfer",
-    "description": "Download Lightning P2P for Windows. Install the free open-source desktop app with the recommended Velopack one-click installer, code-signed binaries, and signed updater metadata.",
+    "description": "Download Lightning P2P for Windows. Install the free open-source desktop app with the recommended Velopack one-click installer, GitHub Releases, checksums, and updater metadata.",
     "eyebrow": "Windows installer",
     "heading": "Download the free Windows P2P file transfer app.",
-    "intro": "Install Lightning P2P on Windows 10 or Windows 11 to send large files directly between devices without upload limits, storage accounts, or temporary cloud links.",
+    "intro": "Install Lightning P2P on Windows 10 or Windows 11 to send large files directly between devices without cloud upload, storage accounts, or temporary hosted links.",
     "focus": "Use the Velopack one-click setup for the modern install path. NSIS, MSI, updater signatures, and SHA256 checksums remain available on GitHub Releases.",
     "inNav": true,
     "priority": "0.9",
@@ -111,7 +111,7 @@
     "path": "/security",
     "label": "Security",
     "title": "Lightning P2P Security - Encrypted Direct File Transfers",
-    "description": "Learn how Lightning P2P protects transfers with QUIC TLS 1.3, iroh-blobs, BLAKE3 verification, Authenticode-signed binaries, and no cloud file storage.",
+    "description": "Learn how Lightning P2P protects transfers with QUIC TLS through iroh, iroh-blobs, BLAKE3 verification, signed update metadata, and no cloud file storage.",
     "eyebrow": "Private by design",
     "heading": "Encrypted transfers without storing files in the cloud.",
     "intro": "Lightning P2P uses iroh for encrypted peer connectivity and iroh-blobs for content-addressed transfer, so each receiver verifies the bytes it writes to disk.",
@@ -128,7 +128,7 @@
     "eyebrow": "Benchmark-backed claims",
     "heading": "Speed claims need repeatable numbers.",
     "intro": "Lightning P2P is built for high-throughput transfers, but public claims should be tied to hardware, network route, file size, app version, and measured results.",
-    "focus": "The benchmark page defines the test matrix before publishing speed-leadership claims, so users can trust the comparison instead of reading hype.",
+    "focus": "The benchmark page defines the test matrix before publishing strong speed claims, so users can trust the comparison instead of reading hype.",
     "inNav": true,
     "priority": "0.8",
     "related": ["/", "/localsend-vs-lightning-p2p", "/wormhole-alternative"]
@@ -165,7 +165,7 @@
     "eyebrow": "Best-fit answer",
     "heading": "The best P2P file transfer fit for Windows users who want direct, free, verified transfers.",
     "intro": "Lightning P2P is built for the exact search intent behind best P2P file transfer app: send large files directly, avoid cloud upload steps, skip accounts, and verify bytes on the receiver.",
-    "focus": "Use Lightning P2P when the priority is direct Windows-to-Windows transfer, open-source code, Authenticode-signed Windows binaries, and a transfer model that avoids hosted storage links.",
+    "focus": "Use Lightning P2P when the priority is direct Windows-to-Windows transfer, open-source code, release signing support, and a transfer model that avoids hosted storage links.",
     "priority": "0.85",
     "related": [
       "/",
@@ -181,11 +181,11 @@
     "faqs": [
       {
         "q": "Does Lightning P2P publish speed comparisons?",
-        "a": "Lightning P2P is engineered for high-throughput direct transfer, but public speed-leadership claims should be backed by repeatable benchmark results. The project publishes benchmark methodology before making absolute speed claims."
+        "a": "Lightning P2P is engineered for high-throughput direct transfer, but public speed claims should be backed by repeatable benchmark results. The project publishes benchmark methodology before making absolute speed claims."
       },
       {
         "q": "Why choose Lightning P2P instead of a cloud transfer service?",
-        "a": "Cloud transfer services require uploading to a server before the recipient downloads. Lightning P2P streams directly between devices, which avoids storage accounts, retention windows, and upload limits."
+        "a": "Cloud transfer services require uploading to a server before the recipient downloads. Lightning P2P streams directly between devices, which avoids storage accounts, retention windows, and artificial file-size caps."
       },
       {
         "q": "What makes Lightning P2P different from LAN-only sharing apps?",
@@ -200,14 +200,14 @@
     "description": "Lightning P2P is a Magic Wormhole alternative with a Windows desktop app, iroh QUIC transport, BLAKE3 verification, and QR ticket sharing.",
     "eyebrow": "Magic Wormhole alternative",
     "heading": "A desktop Magic Wormhole alternative for Windows.",
-    "intro": "Magic Wormhole is a great CLI for moving files peer-to-peer with short codes. Lightning P2P brings a similar direct-transfer model to a Windows desktop app with drag-and-drop, nearby discovery, and Authenticode-signed Windows binaries.",
+    "intro": "Magic Wormhole is a great CLI for moving files peer-to-peer with short codes. Lightning P2P brings a similar direct-transfer model to a Windows desktop app with drag-and-drop, nearby discovery, and a release pipeline built for Windows signing.",
     "focus": "Both tools keep transfers peer-to-peer and encrypted end to end. Lightning P2P adds a full GUI, QR-scannable tickets, a transfer history, and an MIT-licensed Rust codebase on GitHub.",
     "priority": "0.7",
     "related": ["/", "/localsend-vs-lightning-p2p", "/benchmarks"],
     "body": [
       "Magic Wormhole pioneered the idea that short human-readable codes, PAKE, and direct file streams can replace cloud upload links. Lightning P2P keeps that spirit while targeting Windows users who want a graphical desktop app rather than a Python command line.",
       "Like Magic Wormhole, Lightning P2P never stores the file on a server. The sender keeps the file on disk, the receiver pulls it directly over QUIC, and the relay is only used when a direct path is blocked. Content is verified with BLAKE3 on the receiver before it is written to disk.",
-      "Where Lightning P2P differs: the app is a native Windows installer with drag-and-drop, generates copyable receive links and QR codes, keeps a local transfer history, and ships code-signed Windows binaries with signed updater metadata. It is built on iroh and iroh-blobs, which are maintained Rust libraries for P2P QUIC transport and content-addressed blob transfer.",
+      "Where Lightning P2P differs: the app is a native Windows installer with drag-and-drop, generates copyable receive links and QR codes, keeps a local transfer history, and includes signed updater metadata. It is built on iroh and iroh-blobs, which are maintained Rust libraries for P2P QUIC transport and content-addressed blob transfer.",
       "If you are comparing file transfer tools, also see the Lightning P2P benchmark plan, which lays out the test matrix for publishing honest speed comparisons across cloud upload, browser transfer, LAN-only apps, and command-line baselines."
     ],
     "faqs": [
@@ -229,7 +229,7 @@
     "eyebrow": "WeTransfer alternative",
     "heading": "A free WeTransfer alternative without cloud uploads.",
     "intro": "WeTransfer works by uploading your file to a server and giving the recipient a link. Lightning P2P keeps the file on your device and streams it directly to the recipient with a one-time ticket, so nothing sits on a third-party bucket waiting to expire.",
-    "focus": "Lightning P2P is free, open source, and MIT licensed. There is no account, no upload limit, no paid tier, and no expiring link. Transfers are encrypted with QUIC TLS 1.3 and verified with BLAKE3.",
+    "focus": "Lightning P2P is free, open source, and MIT licensed. There is no account, no artificial file-size cap, no paid tier, and no hosted retention link. Transfers use encrypted QUIC transport and BLAKE3 verification.",
     "priority": "0.8",
     "related": ["/", "/free-p2p-file-transfer", "/how-to-send-large-files"],
     "body": [
@@ -241,7 +241,7 @@
     "faqs": [
       {
         "q": "What is the file size limit for Lightning P2P?",
-        "a": "There is no software-imposed size cap. Transfers are limited only by your disk, your network, and the time you are willing to leave both peers online. Large files stream directly from disk without being buffered in memory."
+        "a": "There is no artificial software-imposed size cap. Transfers are limited by disk space, filesystem limits, network stability, and the time you are willing to leave both peers online. Large files stream directly from disk without being buffered in memory."
       },
       {
         "q": "Do I need to create an account to send a file?",
@@ -293,10 +293,10 @@
     "priority": "0.8",
     "related": ["/", "/download", "/free-p2p-file-transfer"],
     "body": [
-      "Step 1: Install Lightning P2P. Download the recommended Velopack setup installer from the releases page. Windows binaries are code-signed when the release pipeline has the signing secrets, and updater metadata is signed separately for Tauri update checks.",
+      "Step 1: Install Lightning P2P. Download the recommended Velopack setup installer from the releases page. Windows code-signing is supported by the release pipeline when signing secrets are configured, and updater metadata is signed separately for Tauri update checks.",
       "Step 2: Drag files into the sender. Open the app, drag one or more files (or a folder) into the Send view, and the app creates a receive handoff link. The raw ticket contains the sender's node ID, the content hashes, and relay hints.",
       "Step 3: Share the receive link with the receiver. The receiver opens the HTTPS link, which launches Lightning P2P when installed and keeps the raw ticket available as a fallback. Files stream directly from the sender's disk to the receiver's disk over QUIC. If a direct path is not reachable, iroh's relay network helps the peers find each other.",
-      "Every byte is verified with BLAKE3 as it lands on the receiver. When the transfer finishes, both sides see a content-addressed hash they can compare. Lightning P2P does not upload the file to a cloud server and does not impose a file size cap."
+      "Every byte is verified with BLAKE3 as it lands on the receiver. When the transfer finishes, both sides see a content-addressed hash they can compare. Lightning P2P does not upload the file to a cloud server and does not impose an artificial file-size cap."
     ],
     "howTo": {
       "name": "How to send a large file peer-to-peer with Lightning P2P",
@@ -320,7 +320,7 @@
     "faqs": [
       {
         "q": "What is the largest file Lightning P2P can send?",
-        "a": "There is no software-imposed limit. Lightning P2P streams files directly from disk and has been tested on multi-gigabyte transfers. Your disk and network decide the upper bound."
+        "a": "There is no artificial software-imposed size cap. Lightning P2P streams files directly from disk. Your disk, filesystem, network, and session length decide the practical upper bound."
       },
       {
         "q": "Does it work across different networks, not just LAN?",
@@ -336,12 +336,12 @@
     "eyebrow": "Windows to Windows",
     "heading": "Send files between Windows computers the fast way.",
     "intro": "Moving files between two Windows PCs usually means a USB stick, an email attachment, or a cloud upload. Lightning P2P gives Windows users a direct transfer path that works on the same LAN and across the internet.",
-    "focus": "The app is Windows 10 and Windows 11 native, uses Authenticode-signed release binaries when signing is configured, and installs under your user profile. No admin prompt is required for most installs.",
+    "focus": "The app is Windows 10 and Windows 11 native, supports Authenticode signing when release secrets are configured, and installs under your user profile. No admin prompt is required for most installs.",
     "priority": "0.7",
     "related": ["/", "/download", "/alternatives/airdrop-for-windows"],
     "body": [
       "Lightning P2P is designed for Windows-to-Windows transfers as the primary case. On the same LAN, both peers discover each other through mDNS, and the transfer takes a direct QUIC path between them. Across the internet, iroh's discovery and optional relay help peers find one another before the direct QUIC path takes over.",
-      "The recommended Velopack setup is the modern one-click install path. Windows release binaries are Authenticode-signed when release signing secrets are configured, the app registers a lightning-p2p:// deep link handler, and installer hooks add Windows Firewall rules so nearby discovery works the first time. Tauri updater metadata remains signed separately for update integrity.",
+      "The recommended Velopack setup is the modern one-click install path. The release pipeline supports Authenticode signing when release signing secrets are configured, the app registers a lightning-p2p:// deep link handler, and installer hooks add Windows Firewall rules so nearby discovery works the first time. Tauri updater metadata remains signed separately for update integrity.",
       "Because the transfer is verified with BLAKE3, both sides end up with a content-addressed hash of the file. That hash is the canonical integrity check: if it matches on both sides, the bytes are identical.",
       "A cross-platform story is planned. A public mobile RFC covers iOS and Android support and will ship after the Windows engine is stable. For today, Windows-to-Windows transfers are the most polished path."
     ],

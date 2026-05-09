@@ -4,6 +4,8 @@ export const RELEASE_URL = `${REPO_URL}/releases/latest`;
 export const DEEP_LINK_SCHEME = "lightning-p2p";
 export const RECEIVE_PATH = "/receive";
 export const VELOPACK_DOWNLOAD_URL = `${RELEASE_URL}/download/LightningP2P-win-Setup.exe`;
+export const NSIS_DOWNLOAD_URL = `${RELEASE_URL}/download/LightningP2PSetup.exe`;
+export const MSI_DOWNLOAD_URL = `${RELEASE_URL}/download/LightningP2P.msi`;
 
 export function versionedNsisDownloadUrl(version: string): string {
   return `${RELEASE_URL}/download/Lightning.P2P_${version}_x64-setup.exe`;

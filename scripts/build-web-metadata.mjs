@@ -19,8 +19,8 @@ const packageJson = JSON.parse(await readFile(join(repoRoot, "package.json"), "u
 const appVersion = packageJson.version;
 const repoUrl = "https://github.com/Kerim-Sabic/lightning-p2p";
 const releaseUrl = `${repoUrl}/releases/latest`;
-const exeDownloadUrl = `${repoUrl}/releases/latest/download/Lightning.P2P_${appVersion}_x64-setup.exe`;
-const msiDownloadUrl = `${repoUrl}/releases/latest/download/Lightning.P2P_${appVersion}_x64_en-US.msi`;
+const exeDownloadUrl = `${repoUrl}/releases/latest/download/LightningP2PSetup.exe`;
+const msiDownloadUrl = `${repoUrl}/releases/latest/download/LightningP2P.msi`;
 const velopackDownloadUrl = `${repoUrl}/releases/latest/download/LightningP2P-win-Setup.exe`;
 const siteLogoUrl = `${siteUrl}/site-logo.png`;
 
@@ -155,7 +155,7 @@ function softwareApplicationJsonLd(page) {
       "QUIC transport with relay-assisted fallback",
       "BLAKE3 verified streaming",
       "No account and no cloud file storage",
-      "Code-signed Windows binaries with signed updater metadata",
+      "Signed updater metadata and Windows code-signing support",
     ],
     publisher: {
       "@type": "Organization",

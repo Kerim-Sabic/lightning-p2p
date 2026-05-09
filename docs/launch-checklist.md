@@ -22,7 +22,7 @@ Internal checklist for repository promotion work. Keep this out of the README so
 
 - [x] Add a 15-30 second README demo asset near the top.
 - [ ] Replace the generated demo asset with a captured app recording when local recording tooling is available.
-- [ ] Publish benchmark reports before making speed-leadership claims.
+- [ ] Publish benchmark reports before making strong speed claims.
 - [ ] Keep README wording private-by-design and ticket-based, not absolute-access-proof.
 
 ## Launch Issues

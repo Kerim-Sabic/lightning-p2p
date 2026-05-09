@@ -15,13 +15,13 @@
     },
     {
       "src": "/site-logo.png",
-      "sizes": "1024x1024",
+      "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
       "src": "/og-image.png",
-      "sizes": "1280x640",
+      "sizes": "1200x630",
       "type": "image/png",
       "purpose": "any"
     }

@@ -338,7 +338,7 @@ export const browserPlatformProfile: PlatformProfile = {
     online_notice:
       "Online sharing is a handoff link into the native iroh app. No WebRTC, HTTP transfer server, or WebSocket transfer path is used.",
     release_notice:
-      "Use the signed Windows app or Android alpha build for real transfers.",
+      "Use the Windows app or Android alpha build for real transfers.",
     benchmark_notice:
       "Do not claim speed leadership until repeatable benchmark results are published.",
   },
