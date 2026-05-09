@@ -393,6 +393,12 @@ body.app-hydrated .static-seo-fallback {
   animation: transfer-progress 4.2s ease-in-out infinite;
 }
 
+.marketing-progress-fill {
+  transform-origin: left;
+  background: linear-gradient(90deg, rgba(56, 189, 248, 0.95), rgba(110, 231, 183, 0.96));
+  animation: transfer-progress 4.2s ease-in-out infinite;
+}
+
 .verification-pop {
   animation: verification-pop 4.2s ease-in-out infinite;
 }
@@ -412,6 +418,10 @@ body.app-hydrated .static-seo-fallback {
   }
 
   .transfer-progress {
+    transform: scaleX(1) !important;
+  }
+
+  .marketing-progress-fill {
     transform: scaleX(1) !important;
   }
 }

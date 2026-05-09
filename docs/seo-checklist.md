@@ -1,24 +1,24 @@
 # SEO Checklist
 
-On-page SEO is in code (see `scripts/build-web-metadata.mjs` and `src/content/web-pages.json`). This file tracks the off-page work that lives outside the repo.
+On-page SEO is in code (see `scripts/build-web-metadata.mjs` and `src/content/web-pages.json`). Launch operations live in [launch-checklist.md](launch-checklist.md). This file tracks off-page SEO work that lives outside the repo.
 
 ## Submission checklist
 
 ### Search engines
 
-- [ ] Google Search Console — add property for `lightning-p2p.netlify.app`, submit `sitemap.xml`.
-- [ ] Bing Webmaster Tools — same, submit `sitemap.xml`.
+- [ ] Google Search Console - add property for `lightning-p2p.netlify.app`, submit `sitemap.xml`.
+- [ ] Bing Webmaster Tools - same, submit `sitemap.xml`.
 - [ ] Confirm every sitemap URL resolves as `200` and uses the same no-trailing-slash canonical form.
 - [ ] Run Google Rich Results Test for `/`, `/download`, `/receive`, `/how-to-send-large-files`, and `/best-p2p-file-transfer`.
 - [ ] Validate that `/receive#t=example` does not send the ticket in HTTP requests; only `/receive` should appear in server logs.
 
 ### Directories and listings
 
-- [ ] [AlternativeTo](https://alternativeto.net) — list Lightning P2P under WeTransfer, Magic Wormhole, LocalSend, AirDrop alternatives.
-- [ ] [awesome-tauri](https://github.com/tauri-apps/awesome-tauri) — PR to add under "File Sharing" or equivalent section.
-- [ ] [awesome-rust](https://github.com/rust-unofficial/awesome-rust) — PR under "Applications written in Rust".
-- [ ] [awesome-selfhosted](https://github.com/awesome-selfhosted/awesome-selfhosted) — PR under "File Transfer & Synchronization" (if criteria met).
-- [ ] [Product Hunt](https://www.producthunt.com/) — launch draft.
+- [ ] [AlternativeTo](https://alternativeto.net) - list Lightning P2P under WeTransfer, Magic Wormhole, LocalSend, AirDrop alternatives.
+- [ ] [awesome-tauri](https://github.com/tauri-apps/awesome-tauri) - PR to add under "File Sharing" or equivalent section.
+- [ ] [awesome-rust](https://github.com/rust-unofficial/awesome-rust) - PR under "Applications written in Rust".
+- [ ] [awesome-selfhosted](https://github.com/awesome-selfhosted/awesome-selfhosted) - PR under "File Transfer & Synchronization" if criteria are met.
+- [ ] [Product Hunt](https://www.producthunt.com/) - launch draft.
 
 ### Package managers
 
@@ -28,17 +28,17 @@ On-page SEO is in code (see `scripts/build-web-metadata.mjs` and `src/content/we
 
 ### Community
 
-- [ ] r/rust — "Show & tell" post after next visible release.
-- [ ] r/selfhosted — positioning as AirDrop/WeTransfer replacement.
-- [ ] r/opensource — general awareness post.
-- [ ] Hacker News — "Show HN: Lightning P2P — direct peer-to-peer file transfer on Windows" draft.
+- [ ] r/rust - "Show & tell" post after next visible release.
+- [ ] r/selfhosted - positioning as AirDrop/WeTransfer replacement.
+- [ ] r/opensource - general awareness post.
+- [ ] Hacker News - "Show HN: Lightning P2P - direct peer-to-peer file transfer on Windows" draft.
 
 ### GitHub repo settings (manual)
 
 - [ ] Repo description tightened to match landing page hero.
 - [ ] Website field set to `https://lightning-p2p.netlify.app`.
 - [ ] Topics updated (see [launch-checklist.md](launch-checklist.md)).
-- [ ] Social preview image (Settings → Options → Social preview) set to `public/og-image.png`.
+- [ ] Social preview image in GitHub Settings set to `public/github-social-preview.png`.
 - [ ] Pin launch issues for benchmarks, winget, cross-platform packaging, pause/resume, and threat-model documentation.
 - [ ] Enable Discussions (Q&A + Ideas).
 

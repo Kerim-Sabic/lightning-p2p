@@ -23,7 +23,7 @@ If applicable, add screenshots.
 
 **Environment**
 - OS: [e.g. Windows 11]
-- Lightning P2P version: [e.g. 0.2.0]
+- Lightning P2P version: [e.g. 0.4.0]
 - Network: [LAN / Internet]
 - Route: [Direct / Relay / Unknown]
 

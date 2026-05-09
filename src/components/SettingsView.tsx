@@ -686,7 +686,8 @@ export function SettingsView() {
           <div>
             <p className="text-sm font-medium text-white">Updates</p>
             <p className="text-[13px] text-slate-300/72">
-              Signed releases are distributed through GitHub Releases.
+              Update metadata and public release artifacts are distributed
+              through GitHub Releases.
             </p>
           </div>
         </div>

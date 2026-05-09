@@ -5,8 +5,8 @@ Internal checklist for repository promotion work. Keep this out of the README so
 ## Repository
 
 - [x] Repository homepage is set to `https://lightning-p2p.netlify.app`.
-- [x] Repository topics include `p2p`, `peer-to-peer`, `file-transfer`, `windows`, `airdrop-alternative`, `wetransfer-alternative`, `localsend-alternative`, `magic-wormhole-alternative`, `rust`, `tauri`, `iroh`, `quic`, `blake3`, `privacy`, `end-to-end-encryption`, `open-source`, `desktop-app`, `react`, and `typescript`.
-- [ ] Upload `public/og-image.png` as the GitHub social preview image from repository settings.
+- [x] Repository topics include `p2p`, `peer-to-peer`, `file-transfer`, `windows`, `airdrop-alternative`, `wetransfer-alternative`, `localsend-alternative`, `magic-wormhole-alternative`, `rust`, `tauri`, `iroh`, `quic`, `blake3`, `privacy`, `open-source`, `desktop-app`, `react`, and `typescript`.
+- [ ] Upload `public/github-social-preview.png` as the GitHub social preview image from repository settings.
 - [x] Pin the maximum supported launch issues: GitHub currently allows 3 pinned issues per repository, so `#17`, `#18`, and `#19` are pinned.
 - [ ] Enable Discussions with Q&A and Ideas categories.
 

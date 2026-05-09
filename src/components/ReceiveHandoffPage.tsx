@@ -241,6 +241,34 @@ export function ReceiveHandoffPage() {
             </aside>
           </div>
         </section>
+        <section className="border-t border-white/10 px-4 py-12 sm:px-6">
+          <div className="mx-auto grid max-w-6xl gap-4 lg:grid-cols-[1fr_0.82fr]">
+            <article className="rounded-[18px] border border-white/10 bg-white/[0.04] p-6">
+              <p className="text-xs font-semibold uppercase tracking-[0.26em] text-emerald-200">
+                Direct answer
+              </p>
+              <h2 className="mt-4 text-2xl font-semibold tracking-[-0.03em]">
+                Receive handoff keeps the ticket in your browser.
+              </h2>
+              <p className="mt-4 text-sm leading-7 text-slate-300">
+                Lightning P2P receive links use `/receive#t=&lt;ticket&gt;`, so
+                the ticket stays in the URL fragment instead of being sent to
+                the website server. The browser page opens the native app; the
+                desktop app performs the transfer.
+              </p>
+            </article>
+            <aside className="rounded-[18px] border border-white/10 bg-white/[0.04] p-6">
+              <p className="text-sm font-semibold text-white">Key facts</p>
+              <ul className="mt-4 grid gap-2 text-sm leading-6 text-slate-300">
+                <li>Ticket location: URL fragment</li>
+                <li>Native app link: `lightning-p2p://receive`</li>
+                <li>Transfer engine: Rust/Tauri app</li>
+                <li>Sender requirement: sender stays online</li>
+                <li>Ticket model: capability token</li>
+              </ul>
+            </aside>
+          </div>
+        </section>
       </main>
     </div>
   );

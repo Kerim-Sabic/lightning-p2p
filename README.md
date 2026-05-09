@@ -1,149 +1,141 @@
 # Lightning P2P
 
-Free, open-source peer-to-peer file transfer for Windows.
+Open-source AirDrop for Windows.
 
-No cloud upload. No account. No artificial file-size cap. Direct encrypted transfers over LAN or the public internet.
+Free, open-source peer-to-peer file transfer for Windows. No cloud upload, no account, no artificial file-size cap. Built with Rust, Tauri, iroh, QUIC, and BLAKE3.
 
-[Download Windows Installer](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P-win-Setup.exe) | [Watch Demo](#demo) | [Security Model](#security-model) | [Benchmarks](#benchmarks) | [Star Repo](https://github.com/Kerim-Sabic/lightning-p2p)
+![MIT license](https://img.shields.io/badge/license-MIT-7ce7b2)
+![Windows](https://img.shields.io/badge/platform-Windows-7ce7b2)
+![Rust](https://img.shields.io/badge/Rust-native-f97316)
+![Tauri](https://img.shields.io/badge/Tauri-v2-38bdf8)
+![BLAKE3](https://img.shields.io/badge/integrity-BLAKE3-7ce7b2)
+
+[Download for Windows](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P-win-Setup.exe) · [Website](https://lightning-p2p.netlify.app/) · [Security](SECURITY.md) · [Benchmarks](docs/benchmark-report-template.md) · [GitHub Releases](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest) · [Contribute](CONTRIBUTING.md)
 
 ## Demo
 
 <img src="./public/demo-lightning-p2p.gif" alt="Lightning P2P demo showing a sender creating a receive link and QR code, then a receiver completing a transfer" width="900" />
 
-## Why This Exists
+## What is Lightning P2P?
 
-Sending large files is still weirdly annoying:
+Lightning P2P is a free open-source P2P file transfer app for Windows. It sends files directly between devices using iroh and QUIC, verifies content with BLAKE3, and does not require cloud upload, accounts, or artificial file-size caps.
 
-- cloud tools upload your files to someone else's server
-- many tools need accounts or links that expire
-- LAN-only tools break when people are not on the same network
-- CLI tools are powerful but not friendly for normal users
+## Why this exists
 
-Lightning P2P is a native Windows app built with Rust, Tauri, iroh, QUIC, and BLAKE3.
+Sending large files is still more complicated than it should be.
 
-## What You Get
+- Cloud tools upload private files before the receiver downloads them.
+- LAN-only tools fail when devices are on different networks.
+- CLI tools are powerful but not friendly for normal Windows users.
+- Email and chat apps hit file-size limits quickly.
 
-| Feature                | Lightning P2P            |
-| ---------------------- | ------------------------ |
-| No account             | Yes                      |
-| No cloud storage       | Yes                      |
-| Direct P2P transfer    | Yes                      |
-| Works across WAN       | Yes, with relay fallback |
-| Integrity verification | BLAKE3                   |
-| Native Windows app     | Yes                      |
-| Open source            | MIT                      |
+Lightning P2P keeps the workflow simple and removes the cloud file-hosting middleman.
+
+## What you get
+
+| Feature | Lightning P2P |
+| --- | --- |
+| No account | Yes |
+| No cloud upload | Yes |
+| Direct-first transfer | Yes |
+| WAN-capable fallback | Yes, with relay fallback |
+| BLAKE3 verification | Yes |
+| Native Windows app | Yes |
+| QR/link receive handoff | Yes |
+| Nearby LAN discovery | Yes |
+| Open source | Yes |
+| MIT license | Yes |
 
 ## Install
 
-Download the latest Windows installer from [GitHub Releases](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest).
+Download the latest public Windows release from [GitHub Releases](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest).
 
 Recommended:
 
-- [`LightningP2P-win-Setup.exe`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P-win-Setup.exe)
+- [`LightningP2P-win-Setup.exe`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P-win-Setup.exe) - one-click Windows installer
 
 Optional:
 
-- [`LightningP2PSetup.exe`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2PSetup.exe) for the classic NSIS installer
-- [`LightningP2P.msi`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P.msi) for managed deployments
-- source build for developers
+- [`LightningP2PSetup.exe`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2PSetup.exe) - classic NSIS installer
+- [`LightningP2P.msi`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P.msi) - MSI for managed deployments
+- Source build for developers
 
-## How It Works
+Requirements:
 
-1. Sender drops a file.
-2. App hashes it with BLAKE3.
-3. Sender shares a ticket, link, or QR code.
-4. Receiver opens it.
-5. Devices connect directly when possible.
-6. Transfer streams and verifies bytes before saving.
+- Windows 10 or Windows 11 x64
+- Microsoft Edge WebView2 Runtime, installed by the app bundle when needed
+- Firewall permission for nearby LAN discovery if Windows prompts for it
 
-Receive handoff links use `https://lightning-p2p.netlify.app/receive#t=<ticket>`, so the ticket stays in the URL fragment and is not sent to the website server. The raw ticket contains the sender node ID, content hash, and relay info needed to connect while the sender is online.
+## How it works
 
-## Security Model
+1. Sender selects files or a folder.
+2. Lightning P2P prepares the content locally.
+3. The app creates a receive ticket, link, and QR code.
+4. Receiver opens the handoff link or scans the QR.
+5. Peers connect directly when possible.
+6. Relay fallback helps when direct connectivity is blocked.
+7. Receiver streams and verifies bytes with BLAKE3.
 
-Lightning P2P is private by design, but tickets are capability tokens. Anyone with a valid ticket can request that transfer while the sender is online and the content remains available.
+Receive handoff links use `https://lightning-p2p.netlify.app/receive#t=<ticket>`, so the ticket stays in the URL fragment instead of being sent to the website server.
 
-- QUIC TLS 1.3 transport through iroh
-- BLAKE3 content verification through iroh-blobs
+## Security model
+
+Lightning P2P avoids cloud file hosting, but receive tickets are capability tokens. Anyone with a valid ticket can request that transfer while the sender is online and the content remains available.
+
+- QUIC TLS through iroh
+- BLAKE3 verification through iroh-blobs
 - Ed25519 identity keys stored through the OS keychain
-- no third-party cloud bucket in the transfer path
-- no telemetry without explicit opt-in
+- No third-party cloud bucket in the transfer path
+- Relay fallback helps connectivity but is not storage
+- No telemetry without explicit opt-in
+- Sender must stay online
 
 See [SECURITY.md](SECURITY.md) for the threat model and reporting policy.
 
-## Status
+## Platform status
 
-- Windows: public release
-- Android: alpha/internal
-- macOS/Linux: planned
-- iOS: not shipped
-
-## Roadmap
-
-- Better benchmark reports
-- macOS/Linux packaging
-- Android public alpha
-- Pause/resume transfers
-- Transfer diagnostics
+| Platform | Status |
+| --- | --- |
+| Windows | Public release |
+| Android | Alpha/internal foundation |
+| macOS/Linux | Planned |
+| iOS | Not shipped |
+| Browser | Receive handoff and marketing only, not the transfer engine |
 
 ## Benchmarks
 
-Lightning P2P should not claim speed leadership until repeatable results are published. Use [docs/benchmark-report-template.md](docs/benchmark-report-template.md) for every public result so the hardware, route, app version, transfer size, failure count, and export time stay attached to the claim.
+Lightning P2P should not claim speed leadership until repeatable public benchmark results are published.
 
-Benchmark comparison targets:
-
-- LocalSend
-- PairDrop
-- Snapdrop
-- Magic Wormhole
-- Windows Nearby Sharing
-- cloud upload/download workflows
+Use [docs/benchmark-report-template.md](docs/benchmark-report-template.md) for LAN direct, WAN direct, relay fallback, many-small-file, and large-single-file reports.
 
 ## Architecture
 
-```
+```text
 lightning-p2p/
-  src/                  React 19 + TypeScript frontend
-  src-tauri/            Rust backend and Tauri commands
-  docs/                 release, SEO, mobile, benchmark, and launch docs
-  scripts/              packaging and metadata helpers
+  src/        React 19 + TypeScript presentation layer
+  src-tauri/  Rust backend, Tauri commands, iroh transfer engine
+  docs/       release, security, SEO, mobile, and benchmark docs
+  scripts/    packaging and metadata helpers
 ```
 
-Design rules:
+Project rules:
 
-1. Networking uses iroh only.
-2. Blob transfer uses iroh-blobs only.
-3. Frontend and backend communicate through Tauri IPC only.
-4. React stays presentational; transfer logic lives in Rust.
-5. Expected failures return `Result` types instead of panicking.
+- Networking uses iroh.
+- Blob transfer uses iroh-blobs.
+- Frontend and backend communicate through Tauri IPC.
+- React stays presentation-focused.
+- Rust owns transfer logic, persistence, and validation.
 
 ## Development
 
-Install dependencies:
-
 ```powershell
 pnpm install
-cargo build --manifest-path src-tauri/Cargo.toml
-```
-
-Run the app:
-
-```powershell
 pnpm tauri dev
-```
-
-Run checks:
-
-```powershell
+pnpm build
 pnpm lint
 pnpm typecheck
 cargo test --manifest-path src-tauri/Cargo.toml
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
-```
-
-Build Windows installers:
-
-```powershell
-pnpm build:windows
 ```
 
 Same-machine transfer testing:
@@ -158,20 +150,14 @@ $env:LIGHTNING_P2P_PROFILE="bob"
 .\src-tauri\target\release\lightning-p2p.exe
 ```
 
-Deprecated compatibility env vars `FASTDROP_PROFILE` and `FASTDROP_DATA_DIR` are still accepted, but new scripts should use `LIGHTNING_P2P_PROFILE` and `LIGHTNING_P2P_DATA_DIR`.
-
-## Website
-
-The browser build is a public website and receive-link handoff surface, not the transfer engine. The native Rust/Tauri app performs transfers with iroh. See [docs/online-handoff.md](docs/online-handoff.md).
+Deprecated compatibility env vars `FASTDROP_PROFILE` and `FASTDROP_DATA_DIR` are still accepted. New scripts should use `LIGHTNING_P2P_PROFILE` and `LIGHTNING_P2P_DATA_DIR`.
 
 ## Contributing
 
-Contributions that improve transfer reliability, performance measurement, UX, packaging, docs, or test coverage are welcome.
+Contributions improving transfer reliability, diagnostics, packaging, docs, tests, or UX are welcome.
 
-1. Read [CONTRIBUTING.md](CONTRIBUTING.md).
-2. Open an issue or discuss before large changes.
-3. Follow conventional commits: `feat:`, `fix:`, `refactor:`, `test:`, `docs:`.
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before larger changes.
 
 ## License
 
-MIT
+MIT. See [LICENSE](LICENSE).

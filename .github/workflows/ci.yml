@@ -93,6 +93,7 @@ jobs:
 
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
+        continue-on-error: true
         with:
           workspaces: ./src-tauri -> target
 
@@ -148,6 +149,7 @@ jobs:
 
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
+        continue-on-error: true
         with:
           workspaces: ./src-tauri -> target
 
@@ -201,7 +203,7 @@ jobs:
           releaseBody: |
             ## Lightning P2P v${{ env.APP_VERSION }}
 
-            Direct peer-to-peer file transfer for Windows. No cloud. No accounts. No artificial file-size cap. Works across LAN and the public internet through iroh relay fallback.
+            Direct peer-to-peer file transfer for Windows. No cloud upload. No accounts. No artificial file-size cap. Direct-first across LAN and WAN with iroh relay fallback when needed.
 
             ### Downloads
 
@@ -212,13 +214,13 @@ jobs:
             | `LightningP2PSetup.exe` | Stable alias for the latest NSIS installer |
             | `Lightning.P2P_${{ env.APP_VERSION }}_x64_en-US.msi` | Windows MSI installer (managed environments) |
             | `LightningP2P.msi` | Stable alias for the latest MSI installer |
-            | `winget install lightning-p2p` | winget package (after manifest lands in `microsoft/winget-pkgs`) |
+            | winget manifest | Planned; publish after the package is accepted in `microsoft/winget-pkgs` |
 
             Windows binaries are Authenticode code-signed through Microsoft Artifact Signing / Trusted Signing. Tauri updater signatures and SHA256 checksums are published alongside the installers.
 
             ### What's included
 
-            - End-to-end encrypted transfers via QUIC TLS 1.3
+            - Encrypted peer transport through iroh / QUIC TLS 1.3
             - BLAKE3 verified streaming with iroh-blobs
             - WAN reachability with direct and relay-assisted connectivity
             - Live progress tracking with speed and ETA

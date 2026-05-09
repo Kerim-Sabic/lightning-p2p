@@ -7,136 +7,148 @@
   SITE_URL = "https://lightning-p2p.netlify.app"
 
 [[redirects]]
-  from = "/download/"
-  to = "/download"
-  status = 301
-  force = true
-
-[[redirects]]
-  from = "/receive/"
-  to = "/receive"
-  status = 301
-  force = true
-
-[[redirects]]
-  from = "/security/"
-  to = "/security"
-  status = 301
-  force = true
-
-[[redirects]]
-  from = "/benchmarks/"
-  to = "/benchmarks"
-  status = 301
-  force = true
-
-[[redirects]]
-  from = "/alternatives/airdrop-for-windows/"
-  to = "/alternatives/airdrop-for-windows"
-  status = 301
-  force = true
-
-[[redirects]]
-  from = "/free-p2p-file-transfer/"
-  to = "/free-p2p-file-transfer"
-  status = 301
-  force = true
-
-[[redirects]]
-  from = "/best-p2p-file-transfer/"
-  to = "/best-p2p-file-transfer"
-  status = 301
-  force = true
-
-[[redirects]]
-  from = "/wormhole-alternative/"
-  to = "/wormhole-alternative"
-  status = 301
-  force = true
-
-[[redirects]]
-  from = "/wetransfer-alternative/"
-  to = "/wetransfer-alternative"
-  status = 301
-  force = true
-
-[[redirects]]
-  from = "/localsend-vs-lightning-p2p/"
-  to = "/localsend-vs-lightning-p2p"
-  status = 301
-  force = true
-
-[[redirects]]
-  from = "/how-to-send-large-files/"
-  to = "/how-to-send-large-files"
-  status = 301
-  force = true
-
-[[redirects]]
-  from = "/send-files-between-windows-computers/"
-  to = "/send-files-between-windows-computers"
-  status = 301
-  force = true
-
-[[redirects]]
   from = "/download"
   to = "/download/index.html"
   status = 200
+  force = true
+
+[[redirects]]
+  from = "/download/"
+  to = "/download/index.html"
+  status = 200
+  force = true
 
 [[redirects]]
   from = "/receive"
   to = "/receive/index.html"
   status = 200
+  force = true
+
+[[redirects]]
+  from = "/receive/"
+  to = "/receive/index.html"
+  status = 200
+  force = true
 
 [[redirects]]
   from = "/security"
   to = "/security/index.html"
   status = 200
+  force = true
+
+[[redirects]]
+  from = "/security/"
+  to = "/security/index.html"
+  status = 200
+  force = true
 
 [[redirects]]
   from = "/benchmarks"
   to = "/benchmarks/index.html"
   status = 200
+  force = true
+
+[[redirects]]
+  from = "/benchmarks/"
+  to = "/benchmarks/index.html"
+  status = 200
+  force = true
 
 [[redirects]]
   from = "/alternatives/airdrop-for-windows"
   to = "/alternatives/airdrop-for-windows/index.html"
   status = 200
+  force = true
+
+[[redirects]]
+  from = "/alternatives/airdrop-for-windows/"
+  to = "/alternatives/airdrop-for-windows/index.html"
+  status = 200
+  force = true
 
 [[redirects]]
   from = "/free-p2p-file-transfer"
   to = "/free-p2p-file-transfer/index.html"
   status = 200
+  force = true
+
+[[redirects]]
+  from = "/free-p2p-file-transfer/"
+  to = "/free-p2p-file-transfer/index.html"
+  status = 200
+  force = true
 
 [[redirects]]
   from = "/best-p2p-file-transfer"
   to = "/best-p2p-file-transfer/index.html"
   status = 200
+  force = true
+
+[[redirects]]
+  from = "/best-p2p-file-transfer/"
+  to = "/best-p2p-file-transfer/index.html"
+  status = 200
+  force = true
 
 [[redirects]]
   from = "/wormhole-alternative"
   to = "/wormhole-alternative/index.html"
   status = 200
+  force = true
+
+[[redirects]]
+  from = "/wormhole-alternative/"
+  to = "/wormhole-alternative/index.html"
+  status = 200
+  force = true
 
 [[redirects]]
   from = "/wetransfer-alternative"
   to = "/wetransfer-alternative/index.html"
   status = 200
+  force = true
+
+[[redirects]]
+  from = "/wetransfer-alternative/"
+  to = "/wetransfer-alternative/index.html"
+  status = 200
+  force = true
 
 [[redirects]]
   from = "/localsend-vs-lightning-p2p"
   to = "/localsend-vs-lightning-p2p/index.html"
   status = 200
+  force = true
+
+[[redirects]]
+  from = "/localsend-vs-lightning-p2p/"
+  to = "/localsend-vs-lightning-p2p/index.html"
+  status = 200
+  force = true
 
 [[redirects]]
   from = "/how-to-send-large-files"
   to = "/how-to-send-large-files/index.html"
   status = 200
+  force = true
+
+[[redirects]]
+  from = "/how-to-send-large-files/"
+  to = "/how-to-send-large-files/index.html"
+  status = 200
+  force = true
 
 [[redirects]]
   from = "/send-files-between-windows-computers"
   to = "/send-files-between-windows-computers/index.html"
   status = 200
+  force = true
+
+[[redirects]]
+  from = "/send-files-between-windows-computers/"
+  to = "/send-files-between-windows-computers/index.html"
+  status = 200
+  force = true
 
 # No SPA catch-all: every real route has an explicit rewrite above, so unknown
 # paths fall through to Netlify's default /404.html handler with a real 404

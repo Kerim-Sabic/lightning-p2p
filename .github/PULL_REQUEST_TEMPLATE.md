@@ -13,6 +13,8 @@ Brief description of the changes.
 - [ ] README and docs updated for any visible branding or behavior change
 - [ ] Release notes or installer text updated if packaging changed
 - [ ] SHA256 checksum or release asset notes updated if applicable
+- [ ] Website route metadata, AEO copy, and internal links updated if public copy changed
+- [ ] Security wording stays precise: no fake speed, privacy, audit, or signing claims
 
 ## Checklist
 
@@ -20,4 +22,4 @@ Brief description of the changes.
 - [ ] `cargo test` passes
 - [ ] `pnpm lint && pnpm typecheck` passes
 - [ ] Tested manually in dev mode (`pnpm tauri dev`)
-- [ ] No internal identifiers were renamed unless explicitly planned
+- [ ] Browser/native runtime split and `/receive#t=<ticket>` handoff still work

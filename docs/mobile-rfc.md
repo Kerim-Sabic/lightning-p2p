@@ -83,7 +83,7 @@ Peer-to-peer apps occasionally draw scrutiny around:
 
 - Guideline 4.2 (minimum functionality) — we ship a real, differentiated feature, low risk
 - Guideline 5.2 (intellectual property) — "file transfer" is a broad category, low risk
-- Guideline 1.5 (safety) — because the app accepts arbitrary incoming data, reviewers may ask about virus scanning / content moderation. Answer: transfers are strictly peer-initiated and cryptographically verified end-to-end. No server, no moderation surface.
+- Guideline 1.5 (safety) — because the app accepts arbitrary incoming data, reviewers may ask about virus scanning / content moderation. Answer: transfers are peer-initiated, content-addressed, and verified with BLAKE3. Lightning P2P is not a hosted cloud file bucket or moderation surface.
 
 Budget: **one to two re-submissions**, 2–3 weeks of calendar time for the first approval.
 
@@ -158,7 +158,7 @@ Each milestone is a merge-ready slice of work.
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
 | Apple multicast entitlement denied | Medium | High (LAN discovery off on iOS) | Relay fallback; clearly documented limitation |
-| App Store rejection for content moderation | Low | Medium (2–3 week delay) | Prepared response citing E2E encryption + peer-initiated model |
+| App Store rejection for content moderation | Low | Medium (2-3 week delay) | Prepared response citing peer-initiated transfer and BLAKE3 content verification |
 | `keyring` crate gap on Android | Medium | Low (key storage fallback) | File-backed encrypted key as interim |
 | iroh 0.32 mobile regression | Low | High (blocks entire RFC) | Pin iroh version; track n0 team support channels |
 | Responsive pass drifts from desktop design | Medium | Medium | Visual regression tests at desktop breakpoint; strict additive-only on phone CSS |
