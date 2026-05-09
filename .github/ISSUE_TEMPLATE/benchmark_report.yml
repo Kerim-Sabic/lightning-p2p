@@ -1,0 +1,55 @@
+name: Benchmark report
+description: Share repeatable Lightning P2P benchmark data.
+title: "[Benchmark] "
+labels: ["benchmark"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this when you have repeatable file-transfer measurements. Do not use this issue type for unmeasured speed claims.
+  - type: input
+    id: lightning-version
+    attributes:
+      label: Lightning P2P version
+      placeholder: "0.4.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: route
+    attributes:
+      label: Route type
+      options:
+        - LAN direct
+        - WAN direct
+        - Relay fallback
+        - Unknown
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Hardware, OS, and network
+      description: Include sender and receiver CPU, RAM, disk type, OS version, network adapters, and connection type.
+    validations:
+      required: true
+  - type: textarea
+    id: file-set
+    attributes:
+      label: File set
+      description: Include total size, number of files, and whether this was one large file or many small files.
+    validations:
+      required: true
+  - type: textarea
+    id: results
+    attributes:
+      label: Results
+      description: Include run count, median transfer time, median throughput, failures, and route badge observed in the app.
+    validations:
+      required: true
+  - type: textarea
+    id: baselines
+    attributes:
+      label: Baselines
+      description: Optional comparison data for LocalSend, PairDrop, Magic Wormhole, cloud upload/download, or Windows Nearby Sharing.
+    validations:
+      required: false

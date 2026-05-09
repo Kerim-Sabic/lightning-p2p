@@ -15,8 +15,7 @@ const siteUrl = (process.env.SITE_URL || "https://lightning-p2p.netlify.app").re
 const pages = JSON.parse(
   await readFile(join(repoRoot, "src", "content", "web-pages.json"), "utf8"),
 );
-const packageJson = JSON.parse(await readFile(join(repoRoot, "package.json"), "utf8"));
-const appVersion = packageJson.version;
+const publicReleaseVersion = "0.4.0";
 const repoUrl = "https://github.com/Kerim-Sabic/lightning-p2p";
 const releaseUrl = `${repoUrl}/releases/latest`;
 const exeDownloadUrl = `${repoUrl}/releases/latest/download/LightningP2PSetup.exe`;
@@ -48,6 +47,60 @@ function findPage(path) {
   return pages.find((p) => p.path === path);
 }
 
+const baseKeyFacts = [
+  ["Product", "Lightning P2P"],
+  ["Category", "peer-to-peer file transfer app"],
+  ["Platform", "Windows public release"],
+  ["License", "MIT"],
+  ["Account required", "no"],
+  ["Cloud upload", "no"],
+  ["Artificial file-size cap", "no"],
+  ["Transfer model", "direct-first P2P"],
+  ["Transport", "iroh / QUIC"],
+  ["Verification", "BLAKE3"],
+  ["Source code", "GitHub"],
+  ["Cost", "free"],
+];
+
+const baseCaveats = [
+  "Sender must stay online until the receiver finishes.",
+  "Tickets are capability tokens and should be treated as secrets.",
+  "Relay fallback helps connectivity, but it is not cloud storage.",
+  "Browser website is receive handoff and marketing, not the transfer engine.",
+  "Public speed leadership claims require repeatable benchmark results.",
+];
+
+function answerForPath(page) {
+  const answers = {
+    "/":
+      "Lightning P2P is a free open-source peer-to-peer file transfer app for Windows. It sends files directly between devices using iroh and QUIC, verifies content with BLAKE3, and does not require cloud upload, accounts, or artificial file-size caps.",
+    "/download":
+      "Download Lightning P2P from GitHub Releases when you want the public Windows installer for direct-first P2P file transfer. The recommended asset is the one-click Windows setup, with NSIS and MSI options available for alternate deployment paths.",
+    "/security":
+      "Lightning P2P avoids cloud file hosting, uses encrypted peer transport through iroh, verifies content with BLAKE3, and treats tickets as capability tokens.",
+    "/benchmarks":
+      "Lightning P2P is designed for high-throughput direct transfer, but public speed claims should be tied to repeatable benchmark reports.",
+    "/alternatives/airdrop-for-windows":
+      "Lightning P2P is an open-source AirDrop-style file transfer app for Windows, focused on direct-first transfers, QR/link handoff, no account, and no cloud upload.",
+    "/free-p2p-file-transfer":
+      "Lightning P2P is a free P2P file transfer app for Windows with no account, no cloud upload, no artificial file-size cap, direct-first transfer, and BLAKE3 verification.",
+    "/best-p2p-file-transfer":
+      "Lightning P2P is a strong best-fit P2P file transfer choice for Windows users who want a free open-source desktop app, direct-first LAN and WAN transfer, no cloud upload, and verified content.",
+    "/wetransfer-alternative":
+      "WeTransfer is useful for hosted cloud links. Lightning P2P is better when you want to avoid uploading files to a cloud storage service and transfer directly from sender to receiver.",
+    "/wormhole-alternative":
+      "Magic Wormhole is a strong CLI file transfer tool. Lightning P2P serves users who want a graphical Windows app with link and QR handoff, iroh connectivity, and BLAKE3 verification.",
+    "/localsend-vs-lightning-p2p":
+      "LocalSend is best for cross-platform LAN sharing today. Lightning P2P is Windows-first and focuses on direct-first LAN and WAN transfers with iroh, QUIC, relay fallback, and BLAKE3 verification.",
+    "/how-to-send-large-files":
+      "To send large files peer-to-peer on Windows, install Lightning P2P, drop files into the Send view, share the receive link or QR, and keep the sender online while the receiver streams verified bytes to disk.",
+    "/send-files-between-windows-computers":
+      "Lightning P2P sends files between Windows computers through a native desktop app with no account, no cloud upload, no artificial file-size cap, direct-first connectivity, and BLAKE3 verification.",
+  };
+
+  return answers[page.path] || `${page.intro} ${page.focus}`;
+}
+
 function replaceTag(html, pattern, replacement) {
   if (!pattern.test(html)) {
     throw new Error(`Missing metadata pattern: ${pattern}`);
@@ -61,6 +114,28 @@ function jsonLd(object) {
 }
 
 function staticSeoContent(page) {
+  const answer = answerForPath(page);
+  const keyFacts = `
+      <section>
+        <h2>Key facts</h2>
+        <dl>
+${baseKeyFacts
+  .map(
+    ([label, value]) =>
+      `          <dt>${escapeHtml(label)}</dt>\n          <dd>${escapeHtml(value)}</dd>`,
+  )
+  .join("\n")}
+        </dl>
+      </section>`;
+  const caveats = `
+      <section>
+        <h2>Important caveats</h2>
+        <ul>
+${baseCaveats
+  .map((caveat) => `          <li>${escapeHtml(caveat)}</li>`)
+  .join("\n")}
+        </ul>
+      </section>`;
   const body = Array.isArray(page.body)
     ? page.body
         .map((paragraph) => `      <p>${escapeHtml(paragraph)}</p>`)
@@ -116,6 +191,10 @@ ${page.related
       <section class="static-seo-copy">
       <p>${escapeHtml(page.eyebrow)}</p>
       <h2>${escapeHtml(page.heading)}</h2>
+      <section>
+        <h2>Direct answer</h2>
+        <p>${escapeHtml(answer)}</p>
+      </section>
       <p>${escapeHtml(page.intro)}</p>
       <p>${escapeHtml(page.focus)}</p>
 ${body}
@@ -125,7 +204,8 @@ ${body}
         <a href="${escapeHtml(msiDownloadUrl)}">MSI installer</a>. Code-signing status,
         Tauri updater signatures, and SHA256 checksums are available on
         <a href="${escapeHtml(releaseUrl)}">GitHub Releases</a>.
-      </p>${faqs}${related}
+        Latest public release: v${escapeHtml(publicReleaseVersion)}.
+      </p>${keyFacts}${caveats}${faqs}${related}
       </section>
     </main>`;
 }
@@ -138,7 +218,7 @@ function softwareApplicationJsonLd(page) {
     applicationCategory: "UtilitiesApplication",
     operatingSystem: "Windows 10, Windows 11",
     description: page.description,
-    softwareVersion: appVersion,
+    softwareVersion: publicReleaseVersion,
     isAccessibleForFree: true,
     license: `${repoUrl}/blob/main/LICENSE`,
     codeRepository: repoUrl,
@@ -155,7 +235,7 @@ function softwareApplicationJsonLd(page) {
       "QUIC transport with relay-assisted fallback",
       "BLAKE3 verified streaming",
       "No account and no cloud file storage",
-      "Signed updater metadata and Windows code-signing support",
+      "Release pipeline support for updater metadata signatures and Windows code-signing",
     ],
     publisher: {
       "@type": "Organization",
@@ -172,6 +252,23 @@ function softwareApplicationJsonLd(page) {
       "@type": "Offer",
       price: "0",
       priceCurrency: "USD",
+    },
+  });
+}
+
+function softwareSourceCodeJsonLd() {
+  return jsonLd({
+    "@context": "https://schema.org",
+    "@type": "SoftwareSourceCode",
+    name: "Lightning P2P",
+    codeRepository: repoUrl,
+    license: `${repoUrl}/blob/main/LICENSE`,
+    programmingLanguage: ["Rust", "TypeScript"],
+    runtimePlatform: "Windows",
+    targetProduct: {
+      "@type": "SoftwareApplication",
+      name: "Lightning P2P",
+      operatingSystem: "Windows 10, Windows 11",
     },
   });
 }
@@ -275,6 +372,7 @@ function buildAdditionalJsonLd(page) {
   if (page.path === "/") {
     blocks.push({ id: "website-jsonld", json: websiteJsonLd() });
     blocks.push({ id: "organization-jsonld", json: organizationJsonLd() });
+    blocks.push({ id: "source-code-jsonld", json: softwareSourceCodeJsonLd() });
   }
   const breadcrumb = breadcrumbJsonLd(page);
   if (breadcrumb) {

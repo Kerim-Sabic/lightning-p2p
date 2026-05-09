@@ -1,7 +1,7 @@
 {
   "name": "Lightning P2P",
   "short_name": "Lightning P2P",
-  "description": "Direct peer-to-peer file transfer for Windows. Free, open-source, no account.",
+  "description": "Open-source AirDrop for Windows. No cloud upload, no account, no artificial file-size cap.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#08120f",
@@ -16,12 +16,6 @@
     {
       "src": "/site-logo.png",
       "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/og-image.png",
-      "sizes": "1200x630",
       "type": "image/png",
       "purpose": "any"
     }

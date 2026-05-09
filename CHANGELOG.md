@@ -4,9 +4,7 @@ All notable changes to Lightning P2P are documented here. Format: [Keep a Change
 
 ## [Unreleased]
 
-No changes yet.
-
-## [0.4.1] - 2026-05-08
+These changes are staged for the next `v0.4.1` polish release. The latest public GitHub Release remains `v0.4.0` until signed Windows assets publish successfully.
 
 ### Added
 

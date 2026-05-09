@@ -335,7 +335,7 @@ export function ReceiveView() {
                 Receive link found on clipboard - tap to use it
               </span>
               <span className="shrink-0 font-mono text-[11px] text-slate-400">
-                {clipboardSuggestion.slice(0, 10)}…
+                {clipboardSuggestion.slice(0, 10)}...
               </span>
             </button>
           ) : null}
