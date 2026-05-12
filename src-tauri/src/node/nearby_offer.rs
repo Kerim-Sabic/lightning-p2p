@@ -140,7 +140,7 @@ impl OfferInbox {
             .values()
             .map(|pending| pending.offer.clone())
             .collect::<Vec<_>>();
-        snapshot.sort_by(|left, right| right.received_at_unix.cmp(&left.received_at_unix));
+        snapshot.sort_by_key(|offer| std::cmp::Reverse(offer.received_at_unix));
         snapshot
     }
 
