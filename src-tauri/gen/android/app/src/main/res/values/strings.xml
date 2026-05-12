@@ -1,4 +1,11 @@
 <resources>
     <string name="app_name">Lightning P2P</string>
     <string name="main_activity_title">Lightning P2P</string>
+    <string name="transfer_notification_title">Lightning P2P transfers</string>
+    <string name="transfer_notification_channel_name">Active transfers</string>
+    <string name="transfer_notification_channel_description">Keeps Lightning P2P running so file transfers continue while the app is in the background.</string>
+    <plurals name="transfer_notification_active">
+        <item quantity="one">%d active transfer</item>
+        <item quantity="other">%d active transfers</item>
+    </plurals>
 </resources>

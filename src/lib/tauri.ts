@@ -66,6 +66,9 @@ export type FailureCategory =
   | "export"
   | "unknown";
 export type NearbyRouteHint = "unknown" | "direct" | "relay" | "mixed";
+export type NearbyTransport = "wifi_mdns" | "ble" | "both";
+export type OfferDecision = "accepted" | "rejected" | "expired";
+export type WireBlobFormat = "raw" | "hash_seq";
 export type RelayMode = "public" | "custom";
 
 export interface NodeStatus {
@@ -192,6 +195,39 @@ export interface NearbyShare {
   direct_address_count: number;
   freshness_seconds: number;
   published_at: number;
+}
+
+export interface NearbyDevice {
+  node_id: string;
+  device_name: string;
+  last_seen_unix: number;
+  transport: NearbyTransport;
+  route_hint: NearbyRouteHint;
+  direct_address_count: number;
+  has_active_share: boolean;
+}
+
+export interface IncomingOffer {
+  offer_id: string;
+  sender_node_id: string;
+  sender_device_name: string;
+  label: string;
+  size: number;
+  blob_hash: string;
+  blob_format: WireBlobFormat;
+  received_at_unix: number;
+}
+
+export interface OfferResolved {
+  offer_id: string;
+  outcome: OfferDecision;
+  receiver_node_id: string;
+}
+
+export interface LocalDeviceIdentity {
+  device_name: string;
+  short_node_id: string;
+  node_id: string;
 }
 
 export interface UpdateCheckResult {
@@ -478,6 +514,13 @@ export async function getNodeId(): Promise<string> {
   return invoke<string>("get_node_id");
 }
 
+export async function getLocalDeviceIdentity(): Promise<LocalDeviceIdentity | null> {
+  if (!isDesktopRuntime()) {
+    return null;
+  }
+  return invoke<LocalDeviceIdentity>("get_local_device_identity");
+}
+
 export async function getNodeStatus(): Promise<NodeStatus> {
   if (!isDesktopRuntime()) {
     return browserNodeStatus;
@@ -522,6 +565,29 @@ export async function startReceive(ticket: string): Promise<string> {
 export async function startReceiveDiscoveredShare(shareId: string): Promise<string> {
   requireNativeRuntime("Receiving nearby shares");
   return invoke<string>("start_receive_discovered_share", { shareId });
+}
+
+export async function getNearbyDevices(): Promise<NearbyDevice[]> {
+  if (!isDesktopRuntime()) {
+    return [];
+  }
+  return invoke<NearbyDevice[]>("get_nearby_devices");
+}
+
+export async function offerShareToPeer(
+  nodeId: string,
+  paths: string[],
+): Promise<string> {
+  requireNativeRuntime("Sending a nearby offer");
+  return invoke<string>("offer_share_to_peer", { nodeId, paths });
+}
+
+export async function respondToOffer(
+  offerId: string,
+  accept: boolean,
+): Promise<string | null> {
+  requireNativeRuntime("Responding to a nearby offer");
+  return invoke<string | null>("respond_to_offer", { offerId, accept });
 }
 
 export async function cancelTransfer(transferId: string): Promise<void> {
@@ -722,6 +788,42 @@ export function onDiscoveredSharesUpdated(
   }
 
   return listen<NearbyShare[]>("discovered-shares-updated", ({ payload }) => {
+    callback(payload);
+  });
+}
+
+export function onNearbyDevicesUpdated(
+  callback: (devices: NearbyDevice[]) => void,
+): Promise<UnlistenFn> {
+  if (!isDesktopRuntime()) {
+    return Promise.resolve(() => {});
+  }
+
+  return listen<NearbyDevice[]>("nearby-devices-updated", ({ payload }) => {
+    callback(payload);
+  });
+}
+
+export function onIncomingOffer(
+  callback: (offer: IncomingOffer) => void,
+): Promise<UnlistenFn> {
+  if (!isDesktopRuntime()) {
+    return Promise.resolve(() => {});
+  }
+
+  return listen<IncomingOffer>("nearby-offer-received", ({ payload }) => {
+    callback(payload);
+  });
+}
+
+export function onOfferResolved(
+  callback: (resolution: OfferResolved) => void,
+): Promise<UnlistenFn> {
+  if (!isDesktopRuntime()) {
+    return Promise.resolve(() => {});
+  }
+
+  return listen<OfferResolved>("nearby-offer-resolved", ({ payload }) => {
     callback(payload);
   });
 }

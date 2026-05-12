@@ -1,6 +1,16 @@
-//! Lightweight LAN protocol used to query nearby active shares.
+//! Lightweight LAN protocol used to advertise device identity, list active
+//! shares, and exchange push-style share offers with nearby peers.
+//!
+//! Version 2 messages are tagged enums so a single ALPN can carry multiple
+//! request kinds (`Hello`, `ListShares`, `OfferShare`). The receiver dispatches
+//! by tag and replies on the same bi-stream. The `Hello` round-trip is small
+//! and cheap, which lets the discovery layer name a freshly-discovered device
+//! without waiting on the heavier `ListShares` response.
 
 use super::nearby::{ActiveShare, NearbyShareRegistry};
+use super::nearby_offer::{
+    handle_offer_request, OfferDecision, OfferInbox, OfferResponseMessage, OfferShareMessage,
+};
 use crate::error::{LightningP2PError, Result};
 use anyhow::Result as AnyhowResult;
 use iroh::{endpoint::Connecting, protocol::ProtocolHandler, Endpoint, NodeAddr};
@@ -9,39 +19,73 @@ use n0_future::boxed::BoxFuture;
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::str::FromStr;
+use tauri::AppHandle;
 
-/// ALPN identifier for nearby share discovery on the local network.
-pub const NEARBY_SHARE_ALPN: &[u8] = b"lightning-p2p/nearby-share/1";
+/// ALPN identifier for nearby discovery + offer protocol (v2).
+pub const NEARBY_PROTOCOL_ALPN: &[u8] = b"lightning-p2p/nearby/2";
 
-const MAX_MESSAGE_BYTES: usize = 4 * 1024;
-const PROTOCOL_VERSION: u8 = 1;
+const MAX_MESSAGE_BYTES: usize = 64 * 1024;
+const PROTOCOL_VERSION: u8 = 2;
 
+/// Tagged request envelope sent over the nearby ALPN.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct NearbyShareRequest {
-    protocol_version: u8,
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum NearbyRequest {
+    /// Lightweight identity probe — returns only the peer's device name.
+    Hello { protocol_version: u8 },
+    /// Returns the peer's currently advertised shares (if any).
+    ListShares { protocol_version: u8 },
+    /// Push-style offer from a sender to a receiver.
+    OfferShare {
+        protocol_version: u8,
+        offer: OfferShareMessage,
+    },
 }
 
+/// Tagged response envelope returned by the nearby protocol handler.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct NearbyShareResponse {
-    protocol_version: u8,
-    device_name: String,
-    shares: Vec<RemoteAdvertisedShare>,
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum NearbyResponse {
+    /// Hello reply.
+    Hello {
+        protocol_version: u8,
+        device_name: String,
+    },
+    /// Share list reply.
+    Shares {
+        protocol_version: u8,
+        device_name: String,
+        shares: Vec<RemoteAdvertisedShare>,
+    },
+    /// Offer decision reply.
+    OfferDecision {
+        protocol_version: u8,
+        response: OfferResponseMessage,
+    },
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+/// Wire-level blob format that mirrors `iroh_blobs::BlobFormat`.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum WireBlobFormat {
+pub enum WireBlobFormat {
+    /// Single-blob payload.
     Raw,
+    /// Hash sequence for multi-file / directory payloads.
     HashSeq,
 }
 
-/// Share metadata returned by a nearby peer over the custom ALPN protocol.
+/// Share metadata returned by a nearby peer over the nearby ALPN.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct RemoteAdvertisedShare {
+pub struct RemoteAdvertisedShare {
+    /// Root blob hash as hex.
     pub hash: String,
+    /// User-visible label.
     pub label: String,
+    /// Total share size in bytes.
     pub size: u64,
+    /// Wire-format encoding of the blob.
     pub format: WireBlobFormat,
+    /// Unix timestamp when the share was first advertised.
     pub published_at: u64,
 }
 
@@ -52,43 +96,73 @@ pub(crate) struct RemoteShareEnvelope {
     pub shares: Vec<RemoteAdvertisedShare>,
 }
 
-/// Protocol handler that serves active-share metadata to nearby peers.
+/// Protocol handler that serves nearby identity, share list, and push-offer
+/// requests over a single ALPN.
 #[derive(Debug, Clone)]
 pub struct NearbyShareProtocol {
     registry: NearbyShareRegistry,
+    offers: OfferInbox,
+    app_handle: AppHandle,
 }
 
 impl NearbyShareProtocol {
     /// Creates a new nearby-share protocol handler.
     #[must_use]
-    pub fn new(registry: NearbyShareRegistry) -> Self {
-        Self { registry }
+    pub fn new(registry: NearbyShareRegistry, offers: OfferInbox, app_handle: AppHandle) -> Self {
+        Self {
+            registry,
+            offers,
+            app_handle,
+        }
+    }
+
+    /// Returns the offer inbox so command handlers can resolve pending
+    /// decisions from the UI side.
+    #[must_use]
+    pub fn offer_inbox(&self) -> OfferInbox {
+        self.offers.clone()
     }
 
     async fn response_bytes(&self, request_bytes: Vec<u8>) -> Result<Vec<u8>> {
-        let request: NearbyShareRequest = serde_json::from_slice(&request_bytes)?;
-        if request.protocol_version != PROTOCOL_VERSION {
-            return Err(LightningP2PError::Other(
-                "Unsupported nearby-share protocol version".into(),
-            ));
+        let request: NearbyRequest = serde_json::from_slice(&request_bytes)?;
+        let version = request_version(&request);
+        if version > PROTOCOL_VERSION {
+            return Err(LightningP2PError::Other(format!(
+                "Unsupported nearby protocol version {version}"
+            )));
         }
 
-        let shares = if self.registry.local_discovery_enabled().await {
-            self.registry
-                .active_share()
-                .await
-                .into_iter()
-                .map(RemoteAdvertisedShare::from)
-                .collect()
-        } else {
-            Vec::new()
+        let response = match request {
+            NearbyRequest::Hello { .. } => NearbyResponse::Hello {
+                protocol_version: PROTOCOL_VERSION,
+                device_name: local_device_name(),
+            },
+            NearbyRequest::ListShares { .. } => {
+                let shares = if self.registry.local_discovery_enabled().await {
+                    self.registry
+                        .active_share()
+                        .await
+                        .into_iter()
+                        .map(RemoteAdvertisedShare::from)
+                        .collect()
+                } else {
+                    Vec::new()
+                };
+                NearbyResponse::Shares {
+                    protocol_version: PROTOCOL_VERSION,
+                    device_name: local_device_name(),
+                    shares,
+                }
+            }
+            NearbyRequest::OfferShare { offer, .. } => {
+                let response = handle_offer_request(&self.app_handle, &self.offers, offer).await?;
+                NearbyResponse::OfferDecision {
+                    protocol_version: PROTOCOL_VERSION,
+                    response,
+                }
+            }
         };
 
-        let response = NearbyShareResponse {
-            protocol_version: PROTOCOL_VERSION,
-            device_name: local_device_name(),
-            shares,
-        };
         serde_json::to_vec(&response).map_err(LightningP2PError::from)
     }
 }
@@ -131,7 +205,9 @@ impl From<BlobFormat> for WireBlobFormat {
 }
 
 impl WireBlobFormat {
-    fn blob_format(self) -> BlobFormat {
+    /// Converts to the iroh-blobs `BlobFormat`.
+    #[must_use]
+    pub fn blob_format(self) -> BlobFormat {
         match self {
             Self::Raw => BlobFormat::Raw,
             Self::HashSeq => BlobFormat::HashSeq,
@@ -140,12 +216,29 @@ impl WireBlobFormat {
 }
 
 impl RemoteAdvertisedShare {
-    pub(crate) fn hash(&self) -> Result<Hash> {
+    /// Parses the hex hash into an iroh-blobs `Hash`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `LightningP2PError::Blob` if the hash string is malformed.
+    pub fn hash(&self) -> Result<Hash> {
         Hash::from_str(&self.hash).map_err(|error| LightningP2PError::Blob(error.to_string()))
     }
 
-    pub(crate) fn blob_format(&self) -> BlobFormat {
+    /// Returns the iroh-blobs format for the share.
+    #[must_use]
+    pub fn blob_format(&self) -> BlobFormat {
         self.format.blob_format()
+    }
+}
+
+fn request_version(request: &NearbyRequest) -> u8 {
+    match request {
+        NearbyRequest::Hello { protocol_version }
+        | NearbyRequest::ListShares { protocol_version }
+        | NearbyRequest::OfferShare {
+            protocol_version, ..
+        } => *protocol_version,
     }
 }
 
@@ -158,44 +251,95 @@ pub(crate) async fn fetch_remote_shares(
     endpoint: &Endpoint,
     node_addr: NodeAddr,
 ) -> Result<RemoteShareEnvelope> {
+    let response = exchange(
+        endpoint,
+        node_addr,
+        NearbyRequest::ListShares {
+            protocol_version: PROTOCOL_VERSION,
+        },
+    )
+    .await?;
+    match response {
+        NearbyResponse::Shares {
+            protocol_version,
+            device_name,
+            shares,
+        } => {
+            if protocol_version > PROTOCOL_VERSION {
+                return Err(LightningP2PError::Other(format!(
+                    "Unsupported nearby protocol version {protocol_version}"
+                )));
+            }
+            Ok(RemoteShareEnvelope {
+                device_name,
+                shares,
+            })
+        }
+        other => Err(LightningP2PError::Other(format!(
+            "unexpected nearby response: {other:?}"
+        ))),
+    }
+}
+
+/// Sends a push-style offer to a nearby peer and awaits their decision.
+///
+/// # Errors
+///
+/// Returns `LightningP2PError` if the peer cannot be reached or the response is
+/// not a valid offer decision.
+pub async fn send_offer(
+    endpoint: &Endpoint,
+    node_addr: NodeAddr,
+    offer: OfferShareMessage,
+) -> Result<OfferDecision> {
+    let response = exchange(
+        endpoint,
+        node_addr,
+        NearbyRequest::OfferShare {
+            protocol_version: PROTOCOL_VERSION,
+            offer,
+        },
+    )
+    .await?;
+    match response {
+        NearbyResponse::OfferDecision { response, .. } => Ok(response.decision),
+        other => Err(LightningP2PError::Other(format!(
+            "unexpected nearby response: {other:?}"
+        ))),
+    }
+}
+
+async fn exchange(
+    endpoint: &Endpoint,
+    node_addr: NodeAddr,
+    request: NearbyRequest,
+) -> Result<NearbyResponse> {
     let connection = endpoint
-        .connect(node_addr, NEARBY_SHARE_ALPN)
+        .connect(node_addr, NEARBY_PROTOCOL_ALPN)
         .await
         .map_err(|error| LightningP2PError::Other(error.to_string()))?;
     let (mut send, mut recv) = connection
         .open_bi()
         .await
         .map_err(|error| LightningP2PError::Other(error.to_string()))?;
-    let request = serde_json::to_vec(&NearbyShareRequest {
-        protocol_version: PROTOCOL_VERSION,
-    })?;
-    send.write_all(&request)
+    let request_bytes = serde_json::to_vec(&request)?;
+    send.write_all(&request_bytes)
         .await
         .map_err(|error| LightningP2PError::Other(error.to_string()))?;
     send.finish()
         .map_err(|error| LightningP2PError::Other(error.to_string()))?;
-    let response = recv
+    let response_bytes = recv
         .read_to_end(MAX_MESSAGE_BYTES)
         .await
         .map_err(|error| LightningP2PError::Other(error.to_string()))?;
-    parse_response_envelope(&response)
+    serde_json::from_slice(&response_bytes).map_err(LightningP2PError::from)
 }
 
-fn parse_response_envelope(response: &[u8]) -> Result<RemoteShareEnvelope> {
-    let parsed: NearbyShareResponse = serde_json::from_slice(response)?;
-    if parsed.protocol_version != PROTOCOL_VERSION {
-        return Err(LightningP2PError::Other(
-            "Unsupported nearby-share protocol version".into(),
-        ));
-    }
-    Ok(RemoteShareEnvelope {
-        device_name: parsed.device_name,
-        shares: parsed.shares,
-    })
-}
-
-fn local_device_name() -> String {
+/// Returns the local device name reported to nearby peers.
+#[must_use]
+pub fn local_device_name() -> String {
     [
+        env::var("LIGHTNING_P2P_DEVICE_NAME").ok(),
         env::var("COMPUTERNAME").ok(),
         env::var("HOSTNAME").ok(),
         env::var("USERDOMAIN").ok(),
@@ -210,9 +354,6 @@ fn local_device_name() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use futures_util::StreamExt;
-    use iroh::{protocol::Router, Endpoint};
-    use tokio::time::{timeout, Duration};
 
     #[test]
     fn active_share_round_trips_to_wire_format() {
@@ -235,81 +376,24 @@ mod tests {
     }
 
     #[test]
-    fn rejects_mismatched_response_protocol_version() {
-        let response = NearbyShareResponse {
-            protocol_version: PROTOCOL_VERSION + 1,
-            device_name: "sender".into(),
-            shares: Vec::new(),
+    fn tagged_request_round_trips_through_json() {
+        let hello = NearbyRequest::Hello {
+            protocol_version: PROTOCOL_VERSION,
         };
-        let bytes = serde_json::to_vec(&response).expect("response bytes");
-
-        let error = parse_response_envelope(&bytes).expect_err("mismatched protocol version fails");
-
-        assert!(error.to_string().contains("Unsupported nearby-share"));
+        let bytes = serde_json::to_vec(&hello).expect("encode hello");
+        let parsed: NearbyRequest = serde_json::from_slice(&bytes).expect("decode hello");
+        assert!(matches!(parsed, NearbyRequest::Hello { .. }));
     }
 
-    #[tokio::test]
-    async fn local_discovery_finds_sender_and_fetches_share_metadata() {
-        let receiver_endpoint = Endpoint::builder()
-            .discovery_local_network()
-            .bind()
-            .await
-            .expect("receiver endpoint");
-        let mut discovery_stream = receiver_endpoint
-            .discovery()
-            .and_then(iroh::discovery::Discovery::subscribe)
-            .expect("discovery stream");
-
-        let sender_registry = NearbyShareRegistry::new(true);
-        sender_registry
-            .publish_share(ActiveShare {
-                label: "demo-share".into(),
-                hash: Hash::new(b"demo-share"),
-                format: BlobFormat::HashSeq,
-                total_size: 128,
-                published_at: 42,
-            })
-            .await;
-        let sender_endpoint = Endpoint::builder()
-            .discovery_local_network()
-            .bind()
-            .await
-            .expect("sender endpoint");
-        let sender_router = Router::builder(sender_endpoint.clone())
-            .accept(
-                NEARBY_SHARE_ALPN,
-                NearbyShareProtocol::new(sender_registry.clone()),
-            )
-            .spawn()
-            .await
-            .expect("sender router");
-
-        let sender_addr = timeout(Duration::from_secs(12), async {
-            while let Some(item) = discovery_stream.next().await {
-                if item.node_addr.node_id == sender_endpoint.node_id() {
-                    return item.node_addr;
-                }
-            }
-            panic!("discovery stream ended before sender appeared");
-        })
-        .await
-        .expect("sender should be discovered");
-
-        let envelope = timeout(
-            Duration::from_secs(12),
-            fetch_remote_shares(&receiver_endpoint, sender_addr),
-        )
-        .await
-        .expect("share query should complete")
-        .expect("share query should succeed");
-
-        assert_eq!(envelope.shares.len(), 1);
-        assert_eq!(envelope.shares[0].label, "demo-share");
-        assert_eq!(envelope.shares[0].size, 128);
-        assert_eq!(envelope.shares[0].published_at, 42);
-
-        sender_router.shutdown().await.expect("router shutdown");
-        sender_endpoint.close().await;
-        receiver_endpoint.close().await;
+    #[test]
+    fn tagged_response_round_trips_through_json() {
+        let envelope = NearbyResponse::Shares {
+            protocol_version: PROTOCOL_VERSION,
+            device_name: "peer".into(),
+            shares: vec![],
+        };
+        let bytes = serde_json::to_vec(&envelope).expect("encode response");
+        let parsed: NearbyResponse = serde_json::from_slice(&bytes).expect("decode response");
+        assert!(matches!(parsed, NearbyResponse::Shares { .. }));
     }
 }

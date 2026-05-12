@@ -100,6 +100,23 @@ pub async fn get_transfer_history(
     history::load_all(node.db()).map_err(String::from)
 }
 
+/// Shared helper that powers both the regular ticket-receive path and the
+/// accept-an-offer path, so the queue + progress + cancellation wiring lives
+/// in one place.
+///
+/// # Errors
+///
+/// Returns an error string if the destination is invalid or the transfer
+/// cannot be queued.
+pub(crate) async fn start_receive_from_offer(
+    state: State<'_, AppState>,
+    window: tauri::Window,
+    node: std::sync::Arc<crate::node::LightningP2PNode>,
+    ticket: BlobTicket,
+) -> Result<String, String> {
+    start_receive_ticket(state, window, node, ticket).await
+}
+
 async fn start_receive_ticket(
     state: State<'_, AppState>,
     window: tauri::Window,

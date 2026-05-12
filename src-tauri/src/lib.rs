@@ -15,7 +15,9 @@ pub mod telemetry;
 pub mod transfer;
 
 use error::{LightningP2PError, Result};
-use node::{LightningP2PNode, NearbyShareProtocol, NearbyShareRegistry, NodeRuntimeStatus};
+use node::{
+    LightningP2PNode, NearbyShareProtocol, NearbyShareRegistry, NodeRuntimeStatus, OfferInbox,
+};
 use std::sync::Arc;
 use storage::settings::{resolve_app_data_dir, SettingsState};
 use tauri::Manager;
@@ -36,6 +38,8 @@ pub struct AppState {
     pub transfers: TransferQueue,
     /// Nearby-share discovery state for LAN-based receive flows.
     pub nearby_shares: NearbyShareRegistry,
+    /// Inbox of inbound push-share offers awaiting a user decision.
+    pub offer_inbox: OfferInbox,
 }
 
 impl AppState {
@@ -49,6 +53,7 @@ impl AppState {
             settings,
             transfers: TransferQueue::new(),
             nearby_shares: NearbyShareRegistry::new(true),
+            offer_inbox: OfferInbox::new(),
         }
     }
 
@@ -102,7 +107,11 @@ fn spawn_node_startup(handle: tauri::AppHandle) {
             .nearby_shares
             .set_local_discovery_enabled(settings.local_discovery_enabled)
             .await;
-        let nearby_protocol = Arc::new(NearbyShareProtocol::new(state.nearby_shares.clone()));
+        let nearby_protocol = Arc::new(NearbyShareProtocol::new(
+            state.nearby_shares.clone(),
+            state.offer_inbox.clone(),
+            handle.clone(),
+        ));
 
         {
             let mut runtime = state.node_runtime.write().await;
@@ -123,7 +132,7 @@ fn spawn_node_startup(handle: tauri::AppHandle) {
             data_dir,
             download_dir,
             relay_url,
-            nearby_protocol,
+            Some(nearby_protocol),
         )
         .await
         {
@@ -181,9 +190,13 @@ pub fn run() {
             commands::transfer::cancel_transfer,
             commands::transfer::get_active_transfers,
             commands::transfer::get_transfer_history,
+            commands::nearby::get_nearby_devices,
+            commands::nearby::offer_share_to_peer,
+            commands::nearby::respond_to_offer,
             commands::diagnostics::get_network_diagnostics,
             commands::peer::get_node_id,
             commands::peer::get_node_status,
+            commands::peer::get_local_device_identity,
             commands::platform::get_platform_profile,
             commands::settings::get_app_settings,
             commands::settings::get_download_dir,

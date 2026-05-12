@@ -96,12 +96,14 @@ pnpm android:build:aab
 
 ## Alpha Constraints
 
-- Foreground-only transfers. Keep the app open, the screen awake, and the sender online.
+- Transfers can now run while the app is backgrounded thanks to the foreground service declared in `AndroidManifest.xml` and started by `MainActivity.kt`. A persistent low-importance notification stays in the shade while Lightning P2P is open. Killing the app from Recents still kills transfers — there is no resume yet.
+- mDNS multicast is gated on `WifiManager.MulticastLock`; `MainActivity` acquires the lock on `onCreate` and releases it on `onDestroy`. Without this lock most Android devices silently drop the multicast packets iroh's discovery relies on.
 - Receives save to Lightning P2P app-private storage for the alpha.
 - Public Downloads export is a later milestone.
 - Identity keys prefer platform keychain storage, but the current alpha can fall back to an app-private `iroh-secret-key.hex` file when keychain access is unavailable. This is not production-grade Android Keystore integration yet.
-- Networking stays iroh plus iroh-blobs. No HTTP server, WebSocket server, or custom transfer protocol.
-- Android local discovery remains enabled; relay fallback must also be tested.
+- Networking stays iroh plus iroh-blobs. No HTTP server, WebSocket server, or custom transfer protocol. Bluetooth permissions are declared for future BLE-based proximity discovery but the BLE scanner/advertiser is not yet wired up.
+- Android local discovery is enabled; relay fallback must also be tested.
+- Storage Access Framework: the dialog plugin normally resolves `content://` URIs to file paths before they reach the sender. If a URI slips through, the sender surfaces a clear error ("Copy the file into the Lightning P2P app folder and try again") instead of crashing. Full SAF-stream-to-cache support is tracked in the mobile RFC.
 
 ## Acceptance Checklist
 

@@ -160,7 +160,24 @@ fn canonicalize_paths(paths: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
     }
     paths
         .into_iter()
-        .map(|path| path.canonicalize().map_err(LightningP2PError::from))
+        .map(|path| {
+            #[cfg(target_os = "android")]
+            if path.to_string_lossy().starts_with("content://") {
+                // Android's Storage Access Framework hands the picker back
+                // `content://...` URIs. `tauri-plugin-dialog` normally resolves
+                // those into real file paths before we see them, but if a URI
+                // slips through we surface a clear error instead of an opaque
+                // "no such file" from `canonicalize`. Full SAF streaming
+                // (ContentResolver -> app-private cache) needs a JNI shim that
+                // lives outside this module — track under the mobile RFC.
+                return Err(LightningP2PError::Other(
+                    "Android did not give us a regular file path for this pick. \
+                     Copy the file into the Lightning P2P app folder and try again."
+                        .into(),
+                ));
+            }
+            path.canonicalize().map_err(LightningP2PError::from)
+        })
         .collect()
 }
 
