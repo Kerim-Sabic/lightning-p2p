@@ -84,11 +84,12 @@ Lightning P2P avoids cloud file hosting, but receive tickets are capability toke
 
 - QUIC TLS through iroh
 - BLAKE3 verification through iroh-blobs
-- Ed25519 identity keys stored through the OS keychain
+- Ed25519 identity keys prefer the OS keychain, with an app-data fallback when keychain storage is unavailable
 - No third-party cloud bucket in the transfer path
 - Relay fallback helps connectivity but is not storage
 - No telemetry without explicit opt-in
 - Sender must stay online
+- Nearby discovery exposes active-share metadata to peers on trusted local networks
 
 See [SECURITY.md](SECURITY.md) for the threat model and reporting policy.
 
@@ -126,6 +127,8 @@ Project rules:
 - React stays presentation-focused.
 - Rust owns transfer logic, persistence, and validation.
 
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for module boundaries, the transfer flow, and the Android foundation plan.
+
 ## Development
 
 ```powershell
@@ -157,6 +160,13 @@ Deprecated compatibility env vars `FASTDROP_PROFILE` and `FASTDROP_DATA_DIR` are
 Contributions improving transfer reliability, diagnostics, packaging, docs, tests, or UX are welcome.
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md) before larger changes.
+
+Useful project docs:
+
+- [Docs index](docs/README.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Code quality notes](docs/CODE_QUALITY_NOTES.md)
+- [Roadmap](docs/ROADMAP.md)
 
 ## License
 

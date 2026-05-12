@@ -116,7 +116,7 @@ pub async fn receive_blob(
             sampler.finish().await?;
             save_peer_no_flush(node, &summary.peer)?;
             save_receive_record_no_flush(node, &summary)?;
-            node.db.flush()?;
+            node.db().flush()?;
             reporter.emit_completed(
                 summary.hash,
                 summary.size,
@@ -449,7 +449,7 @@ fn blob_progress_bytes(blob: &BlobState) -> u64 {
 
 fn save_peer_no_flush(node: &LightningP2PNode, peer: &str) -> Result<()> {
     peers::save_peer_no_flush(
-        &node.db,
+        node.db(),
         &PeerRecord {
             node_id: peer.to_string(),
             nickname: None,
@@ -460,7 +460,7 @@ fn save_peer_no_flush(node: &LightningP2PNode, peer: &str) -> Result<()> {
 
 fn save_receive_record_no_flush(node: &LightningP2PNode, summary: &ReceiveSummary) -> Result<()> {
     history::save_record_no_flush(
-        &node.db,
+        node.db(),
         &TransferRecord {
             hash: summary.hash.clone(),
             filename: summary.label.clone(),

@@ -130,7 +130,11 @@ async fn create_share_with_plan(
     let imported = import_sources(node.blobs_client().clone(), &plan, progress).await?;
     let hash = persist_collection(node.blobs_client(), imported).await?;
     let ticket = build_ticket(node, hash).await?;
-    tracing::info!(ticket = %ticket, hash = %hash, "Lightning P2P share ticket created");
+    tracing::info!(
+        hash = %hash,
+        total_size = plan.total_size,
+        "Lightning P2P share ticket created"
+    );
     Ok(ShareOutcome {
         hash,
         ticket,
@@ -362,7 +366,7 @@ async fn build_ticket(node: &LightningP2PNode, hash: Hash) -> Result<BlobTicket>
 
 fn save_send_record(node: &LightningP2PNode, outcome: &ShareOutcome) -> Result<()> {
     history::save_record(
-        &node.db,
+        node.db(),
         &TransferRecord {
             hash: outcome.hash.to_string(),
             filename: outcome.label.clone(),

@@ -99,6 +99,7 @@ pnpm android:build:aab
 - Foreground-only transfers. Keep the app open, the screen awake, and the sender online.
 - Receives save to Lightning P2P app-private storage for the alpha.
 - Public Downloads export is a later milestone.
+- Identity keys prefer platform keychain storage, but the current alpha can fall back to an app-private `iroh-secret-key.hex` file when keychain access is unavailable. This is not production-grade Android Keystore integration yet.
 - Networking stays iroh plus iroh-blobs. No HTTP server, WebSocket server, or custom transfer protocol.
 - Android local discovery remains enabled; relay fallback must also be tested.
 

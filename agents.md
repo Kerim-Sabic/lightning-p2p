@@ -13,8 +13,12 @@ pnpm install
 cargo build --manifest-path src-tauri/Cargo.toml
 
 # Run checks (DO THIS BEFORE EVERY COMMIT)
+pnpm check
+
+# Equivalent expanded checks
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 cargo test --manifest-path src-tauri/Cargo.toml
+pnpm build
 pnpm lint
 pnpm typecheck
 

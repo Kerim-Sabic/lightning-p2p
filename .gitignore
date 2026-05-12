@@ -24,6 +24,10 @@ Thumbs.db
 # Logs
 *.log
 
+# Local identity fallback material
+iroh-secret-key.hex
+iroh-secret-key.hex.tmp
+
 # Tauri
 src-tauri/gen/*
 !src-tauri/gen/android/

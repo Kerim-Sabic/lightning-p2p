@@ -27,7 +27,7 @@ Lightning P2P is a free open-source P2P file transfer app for Windows. It sends 
 - Blob transfer: iroh-blobs
 - Integrity: BLAKE3
 - Local storage: sled
-- Identity keys: OS keychain
+- Identity keys: OS keychain preferred; app-data fallback key file when keychain storage is unavailable
 
 ## Installation
 
@@ -70,6 +70,8 @@ Important caveats:
 - Sender must stay online.
 - Tickets are capability tokens and should be treated as secrets.
 - Relay fallback is connectivity help, not cloud storage.
+- Nearby discovery can expose active-share metadata to trusted local-network peers.
+- Local logs, history, peer cache, blob store, and fallback key files are local sensitive artifacts.
 - Lightning P2P does not scan received files for malware.
 - Lightning P2P has not published a third-party security audit.
 - Public speed leadership claims require repeatable benchmark reports.

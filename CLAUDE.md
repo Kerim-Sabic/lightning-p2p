@@ -60,7 +60,7 @@ The public product, Rust package, library crate, and generated executable now us
 ## Security
 
 - QUIC TLS 1.3 through iroh
-- Ed25519 identity keypair stored in OS keychain through `keyring`
+- Ed25519 identity keypair stored in OS keychain through `keyring` when available, with profile-scoped app-data fallback when unavailable
 - Tickets are capability tokens; treat them as secrets
 - No telemetry without explicit opt-in
 
@@ -68,6 +68,7 @@ The public product, Rust package, library crate, and generated executable now us
 
 ```powershell
 pnpm tauri dev
+pnpm check
 pnpm lint
 pnpm typecheck
 cargo test --manifest-path src-tauri/Cargo.toml

@@ -280,7 +280,7 @@ export function ReceiveView() {
               <NearbyShareCard
                 key={share.share_id}
                 share={share}
-                disabled={!nativeRuntime || !downloadDir}
+                disabled={!nativeRuntime}
                 onReceive={(nextShare) => void handleNearbyReceive(nextShare)}
               />
             ))
@@ -374,7 +374,7 @@ export function ReceiveView() {
 
             <button
               onClick={() => void handleReceive()}
-              disabled={!ticketLooksValid || !downloadDir || !nativeRuntime}
+              disabled={!ticketLooksValid || !nativeRuntime}
               className="btn-success"
             >
               <span className="relative inline-flex items-center gap-2">

@@ -2,11 +2,19 @@
   "name": "lightning-p2p",
   "private": true,
   "version": "0.4.1",
+  "packageManager": "pnpm@10.33.0",
   "type": "module",
+  "engines": {
+    "node": ">=22",
+    "pnpm": ">=10 <11"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build && node scripts/build-web-metadata.mjs",
     "build:windows": "pnpm tauri build --target x86_64-pc-windows-msvc",
+    "check": "pnpm check:frontend && pnpm check:rust",
+    "check:frontend": "pnpm lint && pnpm typecheck && pnpm build",
+    "check:rust": "cargo test --manifest-path src-tauri/Cargo.toml && cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings",
     "android:init": "pnpm tauri android init --ci",
     "android:dev": "pnpm tauri android dev",
     "android:run": "pnpm tauri android run",

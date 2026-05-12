@@ -6,7 +6,6 @@ use crate::transfer::metrics::RouteKind;
 use crate::transfer::progress::{TransferDirection, TransferInfo, TransferPhase};
 use crate::AppState;
 use iroh_blobs::ticket::BlobTicket;
-use std::path::PathBuf;
 use std::str::FromStr;
 use tauri::State;
 use tokio::sync::watch;
@@ -22,12 +21,11 @@ pub async fn start_receive(
     window: tauri::Window,
     state: State<'_, AppState>,
     ticket: String,
-    destination: String,
 ) -> Result<String, String> {
     let node = state.get_node().await.map_err(String::from)?;
     let ticket = BlobTicket::from_str(&ticket)
         .map_err(|_err| "Invalid ticket. Check the share code and try again.".to_string())?;
-    start_receive_ticket(state, window, node, ticket, destination).await
+    start_receive_ticket(state, window, node, ticket).await
 }
 
 /// Returns the current LAN-discovered nearby shares.
@@ -52,7 +50,6 @@ pub async fn start_receive_discovered_share(
     window: tauri::Window,
     state: State<'_, AppState>,
     share_id: String,
-    destination: String,
 ) -> Result<String, String> {
     let node = state.get_node().await.map_err(String::from)?;
     let ticket = state
@@ -60,7 +57,7 @@ pub async fn start_receive_discovered_share(
         .ticket_for_share(&share_id)
         .await
         .map_err(String::from)?;
-    start_receive_ticket(state, window, node, ticket, destination).await
+    start_receive_ticket(state, window, node, ticket).await
 }
 
 /// Cancels an in-progress transfer.
@@ -100,7 +97,7 @@ pub async fn get_transfer_history(
     state: State<'_, AppState>,
 ) -> Result<Vec<TransferRecord>, String> {
     let node = state.get_node().await.map_err(String::from)?;
-    history::load_all(&node.db).map_err(String::from)
+    history::load_all(node.db()).map_err(String::from)
 }
 
 async fn start_receive_ticket(
@@ -108,9 +105,8 @@ async fn start_receive_ticket(
     window: tauri::Window,
     node: std::sync::Arc<crate::node::LightningP2PNode>,
     ticket: BlobTicket,
-    destination: String,
 ) -> Result<String, String> {
-    let destination = PathBuf::from(destination);
+    let destination = state.settings.snapshot().await.download_dir;
     export::preflight_destination(&destination).map_err(String::from)?;
 
     let transfer_id = state.transfers.next_transfer_id("recv");

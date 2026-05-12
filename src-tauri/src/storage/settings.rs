@@ -3,9 +3,11 @@
 use crate::error::{LightningP2PError, Result};
 use iroh::RelayUrl;
 use serde::{Deserialize, Serialize};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
 
 const APP_IDENTIFIER: &str = "com.lightningp2p.app";
@@ -116,11 +118,11 @@ impl SettingsState {
     /// Returns `LightningP2PError` if the path is invalid or persistence fails.
     pub async fn set_download_dir(&self, path: PathBuf) -> Result<AppSettings> {
         let normalized = normalize_download_dir(&path)?;
-        {
-            let mut guard = self.current.write().await;
-            guard.download_dir = normalized;
-        }
-        self.persist().await
+        self.update_settings(|settings| {
+            settings.download_dir = normalized;
+            Ok(())
+        })
+        .await
     }
 
     /// Enables or disables startup update checks.
@@ -129,11 +131,11 @@ impl SettingsState {
     ///
     /// Returns `LightningP2PError` if the updated settings cannot be written.
     pub async fn set_auto_update_enabled(&self, enabled: bool) -> Result<AppSettings> {
-        {
-            let mut guard = self.current.write().await;
-            guard.auto_update_enabled = enabled;
-        }
-        self.persist().await
+        self.update_settings(|settings| {
+            settings.auto_update_enabled = enabled;
+            Ok(())
+        })
+        .await
     }
 
     /// Marks first-run setup as completed.
@@ -142,11 +144,11 @@ impl SettingsState {
     ///
     /// Returns `LightningP2PError` if the updated settings cannot be written.
     pub async fn mark_first_run_complete(&self) -> Result<AppSettings> {
-        {
-            let mut guard = self.current.write().await;
-            guard.first_run_complete = true;
-        }
-        self.persist().await
+        self.update_settings(|settings| {
+            settings.first_run_complete = true;
+            Ok(())
+        })
+        .await
     }
 
     /// Updates the relay mode.
@@ -155,12 +157,11 @@ impl SettingsState {
     ///
     /// Returns `LightningP2PError` if custom mode is selected without a valid custom URL.
     pub async fn set_relay_mode(&self, relay_mode: RelayModeSetting) -> Result<AppSettings> {
-        {
-            let mut guard = self.current.write().await;
-            guard.relay_mode = relay_mode;
-            validate_relay_settings(&guard)?;
-        }
-        self.persist().await
+        self.update_settings(|settings| {
+            settings.relay_mode = relay_mode;
+            validate_relay_settings(settings)
+        })
+        .await
     }
 
     /// Updates the custom relay URL used when custom relay mode is enabled.
@@ -169,12 +170,11 @@ impl SettingsState {
     ///
     /// Returns `LightningP2PError` if the URL is invalid or missing while custom mode is enabled.
     pub async fn set_custom_relay_url(&self, relay_url: Option<String>) -> Result<AppSettings> {
-        {
-            let mut guard = self.current.write().await;
-            guard.custom_relay_url = normalize_custom_relay_url(relay_url)?;
-            validate_relay_settings(&guard)?;
-        }
-        self.persist().await
+        self.update_settings(|settings| {
+            settings.custom_relay_url = normalize_custom_relay_url(relay_url)?;
+            validate_relay_settings(settings)
+        })
+        .await
     }
 
     /// Enables or disables nearby-share discovery on the local network.
@@ -183,17 +183,23 @@ impl SettingsState {
     ///
     /// Returns `LightningP2PError` if the updated settings cannot be written.
     pub async fn set_local_discovery_enabled(&self, enabled: bool) -> Result<AppSettings> {
-        {
-            let mut guard = self.current.write().await;
-            guard.local_discovery_enabled = enabled;
-        }
-        self.persist().await
+        self.update_settings(|settings| {
+            settings.local_discovery_enabled = enabled;
+            Ok(())
+        })
+        .await
     }
 
-    async fn persist(&self) -> Result<AppSettings> {
-        let snapshot = self.snapshot().await;
-        write_settings_file(&self.path, &snapshot)?;
-        Ok(snapshot)
+    async fn update_settings(
+        &self,
+        update: impl FnOnce(&mut AppSettings) -> Result<()>,
+    ) -> Result<AppSettings> {
+        let mut guard = self.current.write().await;
+        let mut next = guard.clone();
+        update(&mut next)?;
+        write_settings_file(&self.path, &next)?;
+        *guard = next.clone();
+        Ok(next)
     }
 }
 
@@ -243,7 +249,8 @@ fn load_settings_file(path: &Path, data_dir: &Path) -> Result<AppSettings> {
         Ok(contents) => serde_json::from_str(&contents)
             .map_err(LightningP2PError::from)
             .or_else(|err| {
-                tracing::warn!("settings file invalid, regenerating defaults: {err}");
+                tracing::warn!("settings file invalid, preserving corrupt copy: {err}");
+                preserve_corrupt_settings(path)?;
                 Ok(AppSettings::defaults(data_dir))
             }),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
@@ -255,7 +262,55 @@ fn load_settings_file(path: &Path, data_dir: &Path) -> Result<AppSettings> {
 
 fn write_settings_file(path: &Path, settings: &AppSettings) -> Result<()> {
     let serialized = serde_json::to_vec_pretty(settings)?;
-    std::fs::write(path, serialized)?;
+    let tmp_path = path.with_extension("json.tmp");
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .open(&tmp_path)?;
+    file.write_all(&serialized)?;
+    file.sync_all()?;
+    drop(file);
+    replace_file(&tmp_path, path)?;
+    Ok(())
+}
+
+#[cfg(windows)]
+fn replace_file(from: &Path, to: &Path) -> Result<()> {
+    let backup = to.with_extension("json.replace-bak");
+    if backup.exists() {
+        std::fs::remove_file(&backup)?;
+    }
+    if to.exists() {
+        std::fs::rename(to, &backup)?;
+    }
+    if let Err(error) = std::fs::rename(from, to) {
+        if backup.exists() {
+            let _ = std::fs::rename(&backup, to);
+        }
+        return Err(error.into());
+    }
+    if backup.exists() {
+        std::fs::remove_file(backup)?;
+    }
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn replace_file(from: &Path, to: &Path) -> Result<()> {
+    std::fs::rename(from, to)?;
+    Ok(())
+}
+
+fn preserve_corrupt_settings(path: &Path) -> Result<()> {
+    if !path.exists() {
+        return Ok(());
+    }
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |duration| duration.as_secs());
+    let backup = path.with_file_name(format!("{SETTINGS_FILE_NAME}.corrupt-{timestamp}"));
+    std::fs::copy(path, backup)?;
     Ok(())
 }
 
@@ -403,6 +458,73 @@ mod tests {
             .await
             .expect_err("custom relay mode without url should fail");
         assert!(err.to_string().contains("requires a relay URL"));
+        assert_eq!(state.snapshot().await.relay_mode, RelayModeSetting::Public);
+    }
+
+    #[tokio::test]
+    async fn failed_custom_relay_url_update_leaves_snapshot_unchanged() {
+        let (state, _dir) = temp_settings_state();
+        state
+            .set_custom_relay_url(Some("https://relay.example.com".into()))
+            .await
+            .expect("initial relay url");
+        state
+            .set_relay_mode(RelayModeSetting::Custom)
+            .await
+            .expect("custom relay mode");
+        let before = state.snapshot().await;
+
+        let err = state
+            .set_custom_relay_url(None)
+            .await
+            .expect_err("custom mode requires url");
+
+        assert!(err.to_string().contains("requires a relay URL"));
+        assert_eq!(state.snapshot().await, before);
+    }
+
+    #[tokio::test]
+    async fn concurrent_settings_updates_preserve_both_changes() {
+        let (state, _dir) = temp_settings_state();
+        let first = state.clone();
+        let second = state.clone();
+
+        let (auto_update, first_run) = tokio::join!(
+            first.set_auto_update_enabled(true),
+            second.mark_first_run_complete()
+        );
+
+        auto_update.expect("auto update update");
+        first_run.expect("first run update");
+        let snapshot = state.snapshot().await;
+        assert!(snapshot.auto_update_enabled);
+        assert!(snapshot.first_run_complete);
+    }
+
+    #[test]
+    fn invalid_settings_json_is_preserved_before_defaults_are_written() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let settings_path = dir.path().join(SETTINGS_FILE_NAME);
+        std::fs::write(&settings_path, "{ not valid json").expect("write corrupt settings");
+
+        let state = SettingsState::load_or_create(dir.path()).expect("settings recover");
+        let backup_count = std::fs::read_dir(dir.path())
+            .expect("read settings dir")
+            .filter_map(std::result::Result::ok)
+            .filter(|entry| {
+                entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("settings.json.corrupt-")
+            })
+            .count();
+
+        let saved = std::fs::read_to_string(&settings_path).expect("settings rewritten");
+        let recovered: AppSettings = serde_json::from_str(&saved).expect("valid settings json");
+
+        assert_eq!(backup_count, 1);
+        assert_eq!(state.path, settings_path);
+        assert!(recovered.local_discovery_enabled);
     }
 
     #[tokio::test]

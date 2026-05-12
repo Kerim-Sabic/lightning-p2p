@@ -5,6 +5,7 @@
 
 use super::status::NodeRuntimeStatus;
 use super::NearbyShareProtocol;
+use crate::crypto::load_or_create_secret_key;
 use crate::error::{LightningP2PError, Result};
 use crate::storage::db::StorageDb;
 use crate::transfer::metrics::RouteKind;
@@ -17,8 +18,9 @@ use iroh_blobs::rpc::client::blobs::MemClient;
 use iroh_blobs::store::fs::Store as BlobStore;
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 use socket2::{Domain, Protocol, Socket, Type};
+use std::net::SocketAddr;
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
-use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
+use std::net::{Ipv4Addr, SocketAddrV4};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -43,7 +45,7 @@ pub struct LightningP2PNode {
     /// Shared flag toggled by the LAN discovery loop when the subscription is live.
     lan_discovery_active: Arc<AtomicBool>,
     /// Local sled database.
-    pub db: StorageDb,
+    db: StorageDb,
 }
 
 impl LightningP2PNode {
@@ -80,7 +82,7 @@ impl LightningP2PNode {
 
         probe_mdns_socket();
 
-        let endpoint = bind_endpoint(relay_url).await?;
+        let endpoint = bind_endpoint(relay_url, &data_dir).await?;
         tracing::info!(
             node_id = %endpoint.node_id(),
             local_network_discovery = local_network_discovery_label(),
@@ -122,24 +124,24 @@ impl LightningP2PNode {
         self.endpoint.node_id()
     }
 
-    /// Returns a relay-backed `NodeAddr` suitable for share tickets.
+    /// Returns a reachable `NodeAddr` suitable for share tickets.
     ///
     /// # Errors
     ///
-    /// Returns `LightningP2PError` if direct addresses or the home relay are not
-    /// ready in time.
+    /// Returns `LightningP2PError` if neither direct addresses nor a home relay
+    /// are ready in time.
     pub async fn ticket_addr(&self) -> Result<NodeAddr> {
-        let direct_addresses = self
-            .endpoint
-            .direct_addresses()
-            .initialized()
-            .await
-            .map_err(|err| LightningP2PError::Other(err.to_string()))?;
-        let relay_url = wait_for_home_relay(&self.endpoint).await?;
+        let direct_addresses = wait_for_ticket_direct_addresses(&self.endpoint).await;
+        let relay_url = wait_for_optional_home_relay(&self.endpoint).await;
+        if direct_addresses.is_empty() && relay_url.is_none() {
+            return Err(LightningP2PError::Other(
+                "No peer route is ready yet. Keep the app open and try again in a moment.".into(),
+            ));
+        }
         Ok(NodeAddr::from_parts(
             self.node_id(),
-            Some(relay_url),
-            direct_addresses.into_iter().map(|addr| addr.addr),
+            relay_url,
+            direct_addresses,
         ))
     }
 
@@ -200,6 +202,12 @@ impl LightningP2PNode {
         self.blobs.client()
     }
 
+    /// Returns the local storage database handle.
+    #[must_use]
+    pub fn db(&self) -> &StorageDb {
+        &self.db
+    }
+
     /// Shuts the node down cleanly.
     ///
     /// # Errors
@@ -213,12 +221,13 @@ impl LightningP2PNode {
     }
 }
 
-async fn bind_endpoint(relay_url: Option<RelayUrl>) -> Result<Endpoint> {
+async fn bind_endpoint(relay_url: Option<RelayUrl>, data_dir: &Path) -> Result<Endpoint> {
     let relay_mode = relay_url
         .map(RelayMap::from_url)
         .map_or(RelayMode::Default, RelayMode::Custom);
+    let secret_key = load_or_create_secret_key(data_dir)?;
 
-    let builder = Endpoint::builder().discovery_n0();
+    let builder = Endpoint::builder().secret_key(secret_key).discovery_n0();
 
     #[cfg(not(target_os = "ios"))]
     let builder = builder.discovery_local_network();
@@ -328,12 +337,34 @@ fn open_storage_db(data_dir: &Path) -> Result<StorageDb> {
     StorageDb::open(&db_path)
 }
 
-async fn wait_for_home_relay(endpoint: &Endpoint) -> Result<iroh::RelayUrl> {
+async fn wait_for_ticket_direct_addresses(endpoint: &Endpoint) -> Vec<SocketAddr> {
+    let mut watcher = endpoint.direct_addresses();
+    match tokio::time::timeout(RELAY_WAIT_TIMEOUT, watcher.initialized()).await {
+        Ok(Ok(addresses)) => addresses.into_iter().map(|addr| addr.addr).collect(),
+        Ok(Err(error)) => {
+            tracing::debug!(error = %error, "direct addresses not ready for ticket");
+            Vec::new()
+        }
+        Err(_) => {
+            tracing::debug!("timed out waiting for direct addresses for ticket");
+            Vec::new()
+        }
+    }
+}
+
+async fn wait_for_optional_home_relay(endpoint: &Endpoint) -> Option<iroh::RelayUrl> {
     let mut watcher = endpoint.home_relay();
-    tokio::time::timeout(RELAY_WAIT_TIMEOUT, watcher.initialized())
-        .await
-        .map_err(|_| LightningP2PError::Other("Home relay not ready yet".into()))?
-        .map_err(|err| LightningP2PError::Other(err.to_string()))
+    match tokio::time::timeout(RELAY_WAIT_TIMEOUT, watcher.initialized()).await {
+        Ok(Ok(relay_url)) => Some(relay_url),
+        Ok(Err(error)) => {
+            tracing::debug!(error = %error, "home relay not ready for ticket");
+            None
+        }
+        Err(_) => {
+            tracing::debug!("timed out waiting for home relay for ticket");
+            None
+        }
+    }
 }
 
 fn map_connection_type(connection_type: &ConnectionType) -> RouteKind {

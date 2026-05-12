@@ -157,6 +157,7 @@ fn spawn_node_startup(handle: tauri::AppHandle) {
 /// # Panics
 ///
 /// Panics if Tauri fails to build (unrecoverable).
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     telemetry::init_tracing();
 

@@ -229,31 +229,6 @@ function withSettings(settings: AppSettings) {
   };
 }
 
-async function resolveReceiveDestination(
-  settings: AppSettings | null,
-  downloadDir: string | null,
-): Promise<{ destination: string; settings: AppSettings | null }> {
-  if (settings?.download_dir) {
-    return {
-      destination: settings.download_dir,
-      settings,
-    };
-  }
-
-  if (downloadDir) {
-    return {
-      destination: downloadDir,
-      settings,
-    };
-  }
-
-  const nextSettings = await tauri.getAppSettings();
-  return {
-    destination: nextSettings.download_dir,
-    settings: nextSettings,
-  };
-}
-
 function updateDownloadProgress(
   current: UpdateState,
   progress: UpdateProgress,
@@ -506,15 +481,10 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
     set({ error: null });
 
     try {
-      const resolved = await resolveReceiveDestination(
-        get().settings,
-        get().downloadDir,
-      );
-      if (resolved.settings) {
-        set(withSettings(resolved.settings));
+      if (!get().settings) {
+        set(withSettings(await tauri.getAppSettings()));
       }
-      const destination = resolved.destination;
-      const transferId = await tauri.startReceive(ticket, destination);
+      const transferId = await tauri.startReceive(ticket);
       set((state) => ({
         transfers: {
           ...state.transfers,
@@ -539,18 +509,10 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
     set({ error: null });
 
     try {
-      const resolved = await resolveReceiveDestination(
-        get().settings,
-        get().downloadDir,
-      );
-      if (resolved.settings) {
-        set(withSettings(resolved.settings));
+      if (!get().settings) {
+        set(withSettings(await tauri.getAppSettings()));
       }
-      const destination = resolved.destination;
-      const transferId = await tauri.startReceiveDiscoveredShare(
-        share.share_id,
-        destination,
-      );
+      const transferId = await tauri.startReceiveDiscoveredShare(share.share_id);
       set((state) => ({
         transfers: {
           ...state.transfers,

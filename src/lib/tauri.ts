@@ -514,23 +514,14 @@ export async function renderTicketQr(ticket: string): Promise<string> {
   return invoke<string>("render_ticket_qr", { ticket });
 }
 
-export async function startReceive(
-  ticket: string,
-  destination: string,
-): Promise<string> {
+export async function startReceive(ticket: string): Promise<string> {
   requireNativeRuntime("Receiving transfers");
-  return invoke<string>("start_receive", { ticket, destination });
+  return invoke<string>("start_receive", { ticket });
 }
 
-export async function startReceiveDiscoveredShare(
-  shareId: string,
-  destination: string,
-): Promise<string> {
+export async function startReceiveDiscoveredShare(shareId: string): Promise<string> {
   requireNativeRuntime("Receiving nearby shares");
-  return invoke<string>("start_receive_discovered_share", {
-    shareId,
-    destination,
-  });
+  return invoke<string>("start_receive_discovered_share", { shareId });
 }
 
 export async function cancelTransfer(transferId: string): Promise<void> {

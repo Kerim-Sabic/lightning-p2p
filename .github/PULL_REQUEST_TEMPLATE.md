@@ -18,8 +18,10 @@ Brief description of the changes.
 
 ## Checklist
 
-- [ ] `cargo clippy` passes with no warnings
-- [ ] `cargo test` passes
-- [ ] `pnpm lint && pnpm typecheck` passes
+- [ ] `pnpm check` passes, or equivalent targeted checks are listed below
+- [ ] `pnpm build` passes if the website, metadata, or release surface changed
+- [ ] `cargo test --manifest-path src-tauri/Cargo.toml` passes for Rust changes
+- [ ] `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings` passes for Rust changes
+- [ ] `pnpm lint && pnpm typecheck` passes for frontend changes
 - [ ] Tested manually in dev mode (`pnpm tauri dev`)
 - [ ] Browser/native runtime split and `/receive#t=<ticket>` handoff still work

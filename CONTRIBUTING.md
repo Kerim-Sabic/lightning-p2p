@@ -10,6 +10,8 @@ Before making changes, read:
 
 - [`agents.md`](./agents.md)
 - [`README.md`](./README.md)
+- [`docs/README.md`](./docs/README.md)
+- [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md)
 
 ## Project Rules
 
@@ -37,6 +39,7 @@ Also install:
 
 - Microsoft C++ Build Tools with `Desktop development with C++`
 - Microsoft Edge WebView2 Runtime
+- Node.js 22.x with Corepack-enabled pnpm 10.x
 
 After installing Rust, restart your terminal and verify:
 
@@ -63,10 +66,17 @@ pnpm tauri dev
 Run all required checks:
 
 ```powershell
+pnpm build
 pnpm lint
 pnpm typecheck
 cargo test --manifest-path src-tauri/Cargo.toml
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+```
+
+The same sequence is available as:
+
+```powershell
+pnpm check
 ```
 
 If you change transfer performance or transport behavior, also run:

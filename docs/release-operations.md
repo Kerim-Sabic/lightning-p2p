@@ -4,7 +4,8 @@ This checklist tracks release tasks that cannot be fully automated from the app 
 
 ## Winget
 
-- First package submission: https://github.com/microsoft/winget-pkgs/pull/362516
+- First package submission https://github.com/microsoft/winget-pkgs/pull/362516 closed unmerged on May 2, 2026.
+- Next action: resubmit after the next signed public release assets are published and verified.
 - Package identifier: `LightningP2P.LightningP2P`
 - Installer source: the NSIS release asset matching `_x64-setup.exe`
 - Follow-up releases: `.github/workflows/winget.yml` opens the auto-PR after each published GitHub release.
