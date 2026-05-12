@@ -852,32 +852,44 @@ fn candidate_from_discovery_item(
 }
 
 async fn query_candidate(endpoint: Endpoint, candidate: RemoteCandidate) -> CandidateQueryResult {
+    let node_id = candidate.node_id;
     let queried = tokio::time::timeout(
         NODE_QUERY_TIMEOUT,
         fetch_remote_shares(&endpoint, candidate.node_addr.clone()),
     )
     .await;
     match queried {
-        Ok(Ok(envelope)) => CandidateQueryResult {
-            responded: true,
-            records: envelope
-                .shares
-                .into_iter()
-                .filter_map(|share| discovered_record(&candidate, &envelope.device_name, &share))
-                .collect(),
-        },
+        Ok(Ok(envelope)) => {
+            let device_name = envelope.device_name.clone();
+            CandidateQueryResult {
+                node_id,
+                responded: true,
+                device_name,
+                records: envelope
+                    .shares
+                    .into_iter()
+                    .filter_map(|share| {
+                        discovered_record(&candidate, &envelope.device_name, &share)
+                    })
+                    .collect(),
+            }
+        }
         Ok(Err(error)) => {
             tracing::debug!(
                 node_id = %candidate.node_id,
                 "nearby share query failed: {error}"
             );
             CandidateQueryResult {
+                node_id,
                 responded: false,
+                device_name: String::new(),
                 records: Vec::new(),
             }
         }
         Err(_) => CandidateQueryResult {
+            node_id,
             responded: false,
+            device_name: String::new(),
             records: Vec::new(),
         },
     }
