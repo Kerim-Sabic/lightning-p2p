@@ -15,10 +15,10 @@ const SHORT_NODE_ID_LEN: usize = 12;
 pub struct LocalDeviceIdentity {
     /// Human-readable device name reported to peers via the nearby Hello probe.
     pub device_name: String,
-    /// First `SHORT_NODE_ID_LEN` characters of the iroh NodeId, for at-a-glance
+    /// First `SHORT_NODE_ID_LEN` characters of the iroh `NodeId`, for at-a-glance
     /// confirmation that this matches what peers see.
     pub short_node_id: String,
-    /// Full hex NodeId.
+    /// Full hex `NodeId`.
     pub node_id: String,
 }
 
