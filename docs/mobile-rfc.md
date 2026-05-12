@@ -3,7 +3,7 @@
 Status: **Historical / in progress** · Target: phase 2 after desktop reliability work
 Authors: @Kerim-Sabic
 
-Current update: Android alpha foundation is implemented and documented in [android-alpha.md](android-alpha.md). iOS remains prepared but not shipped.
+Current update: Android alpha foundation is implemented and documented in [android-alpha.md](android-alpha.md). The AirDrop-style nearby push flow (devices list + tap-to-accept offer) and Android background-safe transfers (foreground service + MulticastLock) are now in tree. BLE-based proximity discovery is permissioned in the Android manifest but the scanner/advertiser is not yet wired up. iOS remains prepared but not shipped.
 
 ## 1. Motivation
 
@@ -128,7 +128,11 @@ Each milestone is a merge-ready slice of work.
 - [ ] Visual regression: desktop layout pixel-identical at `lg` and above
 
 ### M3 — Android internal alpha
-- [ ] Gradle signing config + debug build
+- [x] Gradle signing config + debug build
+- [x] `WifiManager.MulticastLock` acquired in `MainActivity.onCreate` so iroh mDNS actually receives packets on Android
+- [x] Foreground service (`TransferForegroundService`) keeps the process alive while transfers are in flight
+- [x] Push-style "tap to send to nearby device" flow wired end-to-end (`offer_share_to_peer`, `respond_to_offer`, `OfferPrompt` overlay)
+- [ ] BLE proximity discovery wired (permissions declared; scanner/advertiser deferred — see Risks)
 - [ ] First successful transfer: Android → Windows on same LAN
 - [ ] First successful transfer: Android → Windows across WAN (via relay)
 - [ ] Internal track submission to Play Console
@@ -162,6 +166,9 @@ Each milestone is a merge-ready slice of work.
 | `keyring` crate gap on Android | Medium | Low (key storage fallback) | File-backed encrypted key as interim |
 | iroh 0.32 mobile regression | Low | High (blocks entire RFC) | Pin iroh version; track n0 team support channels |
 | Responsive pass drifts from desktop design | Medium | Medium | Visual regression tests at desktop breakpoint; strict additive-only on phone CSS |
+| BLE proximity discovery never wired | Medium | Low for v1 (mDNS covers same-Wi-Fi) | Permissions in place; pick `btleplug = "0.11"` + a Kotlin advertiser/scanner in a follow-up; keep the `register_ble_candidate` registry entry point so wire-up is local |
+| SAF content URIs leak past the dialog plugin | Low | Medium (the share fails) | Sender returns a clear error; full ContentResolver → cache streaming via JNI is tracked as follow-up |
+| Offer-spam from a malicious nearby peer | Low | Low (UI only — no bytes flow without accept) | OfferPrompt shows one offer at a time; receivers reject without round-tripping data; consider per-NodeId rate limit in the offer inbox before public release |
 
 ## 10. Decision log
 

@@ -4,10 +4,15 @@ import {
   desktopRuntimeMessage,
   isMobileRuntime,
   onDiscoveredSharesUpdated,
+  onIncomingOffer,
+  onNearbyDevicesUpdated,
+  onOfferResolved,
   onTransferProgress,
   type NodeOnlineState,
   type TransferEvent,
 } from "../lib/tauri";
+import { useIncomingOfferStore } from "../stores/incomingOfferStore";
+import { useNearbyDeviceStore } from "../stores/nearbyDeviceStore";
 import { useNearbyShareStore } from "../stores/nearbyShareStore";
 import { useTransferStore } from "../stores/transferStore";
 
@@ -43,6 +48,7 @@ export function useTransfer(): void {
       store.refreshActiveTransfers(),
       store.refreshHistory(),
       useNearbyShareStore.getState().refreshShares(),
+      useNearbyDeviceStore.getState().refreshDevices(),
     ]);
 
     const settings = useTransferStore.getState().settings;
@@ -166,6 +172,66 @@ export function useTransfer(): void {
 
     void onDiscoveredSharesUpdated((shares) => {
       useNearbyShareStore.getState().applySharesUpdated(shares);
+    })
+      .then((fn) => {
+        unlisten = fn;
+      })
+      .catch(handleSubscriptionError);
+
+    return () => {
+      unlisten?.();
+    };
+  }, [handleSubscriptionError, inTauriRuntime]);
+
+  useEffect(() => {
+    if (!inTauriRuntime) {
+      return;
+    }
+
+    let unlisten: (() => void) | null = null;
+
+    void onNearbyDevicesUpdated((devices) => {
+      useNearbyDeviceStore.getState().applyDevicesUpdated(devices);
+    })
+      .then((fn) => {
+        unlisten = fn;
+      })
+      .catch(handleSubscriptionError);
+
+    return () => {
+      unlisten?.();
+    };
+  }, [handleSubscriptionError, inTauriRuntime]);
+
+  useEffect(() => {
+    if (!inTauriRuntime) {
+      return;
+    }
+
+    let unlisten: (() => void) | null = null;
+
+    void onIncomingOffer((offer) => {
+      useIncomingOfferStore.getState().pushIncoming(offer);
+    })
+      .then((fn) => {
+        unlisten = fn;
+      })
+      .catch(handleSubscriptionError);
+
+    return () => {
+      unlisten?.();
+    };
+  }, [handleSubscriptionError, inTauriRuntime]);
+
+  useEffect(() => {
+    if (!inTauriRuntime) {
+      return;
+    }
+
+    let unlisten: (() => void) | null = null;
+
+    void onOfferResolved((resolved) => {
+      useIncomingOfferStore.getState().applyOfferResolved(resolved);
     })
       .then((fn) => {
         unlisten = fn;

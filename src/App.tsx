@@ -1,8 +1,10 @@
 import { startTransition, useEffect, useMemo, useState } from "react";
+import { DevicesView } from "./components/DevicesView";
 import { FirstRunOverlay } from "./components/FirstRunOverlay";
 import { HistoryView } from "./components/HistoryView";
 import { InlineAlert } from "./components/InlineAlert";
 import { MobileTabBar } from "./components/MobileTabBar";
+import { OfferPrompt } from "./components/OfferPrompt";
 import { ReceiveView } from "./components/ReceiveView";
 import { SendView } from "./components/SendView";
 import { SettingsView } from "./components/SettingsView";
@@ -17,7 +19,7 @@ import {
 } from "./lib/tauri";
 import { useTransferStore } from "./stores/transferStore";
 
-export type View = "send" | "receive" | "history" | "settings";
+export type View = "send" | "devices" | "receive" | "history" | "settings";
 
 export function App() {
   const runtimeKind = getRuntimeKind();
@@ -81,6 +83,8 @@ function NativeAppShell({ runtimeKind }: NativeAppShellProps) {
 
   const content = useMemo(() => {
     switch (view) {
+      case "devices":
+        return <DevicesView />;
       case "receive":
         return <ReceiveView />;
       case "history":
@@ -129,6 +133,7 @@ function NativeAppShell({ runtimeKind }: NativeAppShellProps) {
           ) : null}
         </div>
       </div>
+      <OfferPrompt />
     </div>
   );
 }

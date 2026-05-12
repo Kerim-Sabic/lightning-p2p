@@ -51,21 +51,22 @@ pub struct LightningP2PNode {
 impl LightningP2PNode {
     /// Starts the iroh node using explicit directories.
     ///
-    /// This is used by the app and by integration tests that need isolated
-    /// in-process nodes.
+    /// Used by integration tests and benches that need isolated in-process
+    /// nodes without a full Tauri runtime. No nearby protocol is registered in
+    /// this variant since it requires a `tauri::AppHandle` for event emission.
     ///
     /// # Errors
     ///
     /// Returns `LightningP2PError` if endpoint binding, storage creation, or
     /// protocol startup fails.
     pub async fn start_with_dirs(data_dir: PathBuf, download_dir: PathBuf) -> Result<Self> {
-        let nearby_protocol = Arc::new(NearbyShareProtocol::new(super::NearbyShareRegistry::new(
-            false,
-        )));
-        Self::start_with_dirs_and_relay(data_dir, download_dir, None, nearby_protocol).await
+        Self::start_with_dirs_and_relay(data_dir, download_dir, None, None).await
     }
 
     /// Starts the iroh node with an optional custom relay URL.
+    ///
+    /// When `nearby_protocol` is `Some`, the nearby ALPN is registered on the
+    /// router so peers can probe identity, list shares, and push offers.
     ///
     /// # Errors
     ///
@@ -75,7 +76,7 @@ impl LightningP2PNode {
         data_dir: PathBuf,
         download_dir: PathBuf,
         relay_url: Option<RelayUrl>,
-        nearby_protocol: Arc<NearbyShareProtocol>,
+        nearby_protocol: Option<Arc<NearbyShareProtocol>>,
     ) -> Result<Self> {
         std::fs::create_dir_all(&data_dir)?;
         std::fs::create_dir_all(&download_dir)?;
@@ -91,9 +92,13 @@ impl LightningP2PNode {
 
         let blob_store = load_blob_store(&data_dir).await?;
         let blobs = Blobs::builder(blob_store).build(&endpoint);
-        let router = Router::builder(endpoint.clone())
-            .accept(iroh_blobs::ALPN, blobs.clone())
-            .accept(super::nearby_protocol::NEARBY_SHARE_ALPN, nearby_protocol)
+        let mut router_builder =
+            Router::builder(endpoint.clone()).accept(iroh_blobs::ALPN, blobs.clone());
+        if let Some(protocol) = nearby_protocol {
+            router_builder =
+                router_builder.accept(super::nearby_protocol::NEARBY_PROTOCOL_ALPN, protocol);
+        }
+        let router = router_builder
             .spawn()
             .await
             .map_err(LightningP2PError::Network)?;

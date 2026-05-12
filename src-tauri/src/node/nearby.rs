@@ -293,24 +293,22 @@ impl NearbyShareRegistry {
     /// Returns the resulting snapshot if it changed, otherwise `None`. The
     /// caller is expected to emit `nearby-devices-updated` to the frontend so
     /// the new device shows up instantly — before any per-peer share probe.
-    pub(crate) async fn upsert_wifi_device(
+    async fn upsert_wifi_device(
         &self,
         node_id: NodeId,
         candidate: &RemoteCandidate,
     ) -> Option<Vec<NearbyDevice>> {
         let mut guard = self.devices.write().await;
         let now = unix_timestamp();
-        let entry = guard
-            .entry(node_id)
-            .or_insert_with(|| NearbyDevice {
-                node_id: node_id.to_string(),
-                device_name: "Unknown device".into(),
-                last_seen_unix: now,
-                transport: NearbyTransport::WifiMdns,
-                route_hint: candidate.route_hint,
-                direct_address_count: candidate.direct_address_count,
-                has_active_share: false,
-            });
+        let entry = guard.entry(node_id).or_insert_with(|| NearbyDevice {
+            node_id: node_id.to_string(),
+            device_name: "Unknown device".into(),
+            last_seen_unix: now,
+            transport: NearbyTransport::WifiMdns,
+            route_hint: candidate.route_hint,
+            direct_address_count: candidate.direct_address_count,
+            has_active_share: false,
+        });
 
         let prior = entry.clone();
         entry.last_seen_unix = now;
@@ -336,17 +334,15 @@ impl NearbyShareRegistry {
     ) -> Option<Vec<NearbyDevice>> {
         let mut guard = self.devices.write().await;
         let now = unix_timestamp();
-        let entry = guard
-            .entry(node_id)
-            .or_insert_with(|| NearbyDevice {
-                node_id: node_id.to_string(),
-                device_name: device_name.clone(),
-                last_seen_unix: now,
-                transport: NearbyTransport::Ble,
-                route_hint: NearbyRouteHint::Unknown,
-                direct_address_count: 0,
-                has_active_share,
-            });
+        let entry = guard.entry(node_id).or_insert_with(|| NearbyDevice {
+            node_id: node_id.to_string(),
+            device_name: device_name.clone(),
+            last_seen_unix: now,
+            transport: NearbyTransport::Ble,
+            route_hint: NearbyRouteHint::Unknown,
+            direct_address_count: 0,
+            has_active_share,
+        });
 
         let prior = entry.clone();
         entry.last_seen_unix = now;
@@ -653,14 +649,13 @@ async fn refresh_nearby_shares(
             continue;
         }
         let node_id = result.node_id;
-        if !result.device_name.is_empty() {
-            if registry
+        if !result.device_name.is_empty()
+            && registry
                 .set_device_name(node_id, result.device_name.clone())
                 .await
                 .is_some()
-            {
-                device_snapshot_changed = true;
-            }
+        {
+            device_snapshot_changed = true;
         }
         if registry
             .set_device_has_share(node_id, !result.records.is_empty())
