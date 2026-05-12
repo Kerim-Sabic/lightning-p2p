@@ -16,7 +16,7 @@ import androidx.core.app.NotificationCompat
  * freeze the process within seconds of the user switching apps, killing any
  * in-progress download.
  *
- * The Rust side starts/stops the service through [Helper] whenever the
+ * The Rust side starts/stops the service through [start] and [stop] whenever the
  * active-transfer count transitions across zero.
  */
 class TransferForegroundService : Service() {
@@ -71,27 +71,25 @@ class TransferForegroundService : Service() {
     private const val EXTRA_ACTIVE_COUNT = "active_count"
 
     /**
-     * Helper invoked from Rust (via JNI) when the active-transfer count
+     * Invoked from Kotlin and Rust (via JNI) when the active-transfer count
      * transitions across zero. Both [start] and [stop] are safe to call
      * repeatedly — Android coalesces the underlying lifecycle changes.
      */
-    object Helper {
-      @JvmStatic
-      fun start(context: Context, activeCount: Int) {
-        val intent = Intent(context, TransferForegroundService::class.java)
-          .putExtra(EXTRA_ACTIVE_COUNT, activeCount.coerceAtLeast(1))
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-          context.startForegroundService(intent)
-        } else {
-          context.startService(intent)
-        }
+    @JvmStatic
+    fun start(context: Context, activeCount: Int) {
+      val intent = Intent(context, TransferForegroundService::class.java)
+        .putExtra(EXTRA_ACTIVE_COUNT, activeCount.coerceAtLeast(1))
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        context.startForegroundService(intent)
+      } else {
+        context.startService(intent)
       }
+    }
 
-      @JvmStatic
-      fun stop(context: Context) {
-        val intent = Intent(context, TransferForegroundService::class.java)
-        context.stopService(intent)
-      }
+    @JvmStatic
+    fun stop(context: Context) {
+      val intent = Intent(context, TransferForegroundService::class.java)
+      context.stopService(intent)
     }
   }
 }

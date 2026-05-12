@@ -1,9 +1,11 @@
-import { Radar, ScanSearch, Send } from "lucide-react";
-import { useState } from "react";
+import { LaptopMinimal, Radar, ScanSearch, Send } from "lucide-react";
+import { useEffect, useState } from "react";
 import {
+  getLocalDeviceIdentity,
   isDesktopRuntime,
   offerShareToPeer,
   pickShareFiles,
+  type LocalDeviceIdentity,
   type NearbyDevice,
 } from "../lib/tauri";
 import { useIncomingOfferStore } from "../stores/incomingOfferStore";
@@ -36,6 +38,26 @@ export function DevicesView() {
   const nativeRuntime = isDesktopRuntime();
   const localDiscoveryEnabled = settings?.local_discovery_enabled ?? true;
   const [busyNodeId, setBusyNodeId] = useState<string | null>(null);
+  const [localIdentity, setLocalIdentity] =
+    useState<LocalDeviceIdentity | null>(null);
+
+  useEffect(() => {
+    if (!nativeRuntime) {
+      return;
+    }
+    let active = true;
+    // Refresh whenever the node finishes coming online (node_id flip from null
+    // to set) so the identity card never reads "starting" once the endpoint
+    // is bound.
+    void getLocalDeviceIdentity().then((identity) => {
+      if (active) {
+        setLocalIdentity(identity);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [nativeRuntime, nodeStatus.node_id]);
 
   const handleSend = async (device: NearbyDevice): Promise<void> => {
     setError(null);
@@ -102,14 +124,26 @@ export function DevicesView() {
           </div>
 
           <div className="glass-subtle flex w-full max-w-[340px] flex-col gap-3 px-4 py-4">
-            <p className="metric-label">Pushing files</p>
-            <p className="text-sm leading-6 text-slate-300/80">
-              Pick a device, then choose files in the system picker. The
-              receiver sees a prompt and either accepts the transfer or
-              declines it.
-            </p>
+            <p className="metric-label">You're visible as</p>
+            <div className="flex items-start gap-3">
+              <div className="glass-icon h-10 w-10 shrink-0">
+                <LaptopMinimal className="h-4 w-4 text-emerald-200" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-white">
+                  {localIdentity?.device_name ?? "Detecting device name..."}
+                </p>
+                <p className="mt-1 break-all font-mono text-[11px] leading-5 text-slate-400">
+                  {localIdentity
+                    ? `${localIdentity.short_node_id}...`
+                    : "Waiting for node id..."}
+                </p>
+              </div>
+            </div>
             <p className="text-xs leading-6 text-slate-500">
-              Offers auto-expire after one minute without a response.
+              Other devices running Lightning P2P on the same network see
+              this name and node id. Pick a device, choose files, the
+              receiver accepts. Offers auto-expire after one minute.
             </p>
           </div>
         </div>
@@ -150,8 +184,9 @@ export function DevicesView() {
                 Looking for nearby devices...
               </p>
               <p className="meta-copy">
-                Open Lightning P2P on another device on the same network and it
-                should appear here within a second or two.
+                Open Lightning P2P on the other device too &mdash; they'll
+                appear here within a second once both apps are running on the
+                same Wi-Fi.
               </p>
             </div>
           ) : (

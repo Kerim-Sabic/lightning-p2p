@@ -224,6 +224,12 @@ export interface OfferResolved {
   receiver_node_id: string;
 }
 
+export interface LocalDeviceIdentity {
+  device_name: string;
+  short_node_id: string;
+  node_id: string;
+}
+
 export interface UpdateCheckResult {
   current_version: string;
   available: boolean;
@@ -506,6 +512,13 @@ export async function getNodeId(): Promise<string> {
     return "desktop-runtime-required";
   }
   return invoke<string>("get_node_id");
+}
+
+export async function getLocalDeviceIdentity(): Promise<LocalDeviceIdentity | null> {
+  if (!isDesktopRuntime()) {
+    return null;
+  }
+  return invoke<LocalDeviceIdentity>("get_local_device_identity");
 }
 
 export async function getNodeStatus(): Promise<NodeStatus> {

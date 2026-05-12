@@ -196,6 +196,7 @@ pub fn run() {
             commands::diagnostics::get_network_diagnostics,
             commands::peer::get_node_id,
             commands::peer::get_node_status,
+            commands::peer::get_local_device_identity,
             commands::platform::get_platform_profile,
             commands::settings::get_app_settings,
             commands::settings::get_download_dir,

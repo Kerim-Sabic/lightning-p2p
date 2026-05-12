@@ -48,7 +48,9 @@ Lightning P2P keeps the workflow simple and removes the cloud file-hosting middl
 
 ## Install
 
-Download the latest public Windows release from [GitHub Releases](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest).
+Download the latest public release from [GitHub Releases](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest).
+
+### Windows
 
 Recommended:
 
@@ -65,6 +67,21 @@ Requirements:
 - Windows 10 or Windows 11 x64
 - Microsoft Edge WebView2 Runtime, installed by the app bundle when needed
 - Firewall permission for nearby LAN discovery if Windows prompts for it
+
+### Android (sideload APK)
+
+1. Download [`LightningP2P-android-latest.apk`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P-android-latest.apk) from the latest release on your phone.
+2. When prompted, allow your browser or file manager to install unknown apps (Settings &rarr; Apps &rarr; Special access &rarr; Install unknown apps).
+3. Open the downloaded APK and tap **Install**.
+4. Launch Lightning P2P, allow notifications when asked (this keeps transfers alive in the background).
+
+Open Lightning P2P on a second device on the same Wi-Fi (Windows desktop or another Android phone) and the two devices appear in each other's Devices tab within a second. Pick a device, choose files, the receiver taps **Accept**.
+
+Requirements:
+
+- Android 7.0 (API 24) or newer
+- Wi-Fi network that does not block multicast (most home networks, some hotel/guest networks do)
+- ~50 MB of free space
 
 ## How it works
 
