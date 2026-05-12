@@ -68,14 +68,22 @@ Requirements:
 - Microsoft Edge WebView2 Runtime, installed by the app bundle when needed
 - Firewall permission for nearby LAN discovery if Windows prompts for it
 
-### Android (sideload APK)
+### Android alpha
 
-1. Download [`LightningP2P-android-latest.apk`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P-android-latest.apk) from the latest release on your phone.
+Android debug APKs are built in GitHub Actions for smoke testing. A public
+signed APK will appear in GitHub Releases as `LightningP2P-android-latest.apk`
+after Android signing secrets are configured for the release workflow.
+
+Once a signed APK is published:
+
+1. Download `LightningP2P-android-latest.apk` from the latest GitHub Release on your phone.
 2. When prompted, allow your browser or file manager to install unknown apps (Settings &rarr; Apps &rarr; Special access &rarr; Install unknown apps).
 3. Open the downloaded APK and tap **Install**.
 4. Launch Lightning P2P, allow notifications when asked (this keeps transfers alive in the background).
 
-Open Lightning P2P on a second device on the same Wi-Fi (Windows desktop or another Android phone) and the two devices appear in each other's Devices tab within a second. Pick a device, choose files, the receiver taps **Accept**.
+Open Lightning P2P on a second device on the same Wi-Fi (Windows desktop or
+another Android phone) and the two devices should appear in each other's Devices
+tab. Pick a device, choose files, and the receiver taps **Accept**.
 
 Requirements:
 
