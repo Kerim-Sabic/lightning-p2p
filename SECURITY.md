@@ -30,7 +30,7 @@ This is a direct-first peer-to-peer app. It is not a hosted cloud storage servic
 - Content is addressed and verified with BLAKE3 through iroh-blobs.
 - Receive handoff links keep tickets in URL fragments: `/receive#t=<ticket>`.
 - Browser receive pages do not receive the ticket in normal HTTP requests.
-- Local identity keys are stored through the OS keychain.
+- Local identity keys prefer the OS keychain. If the keychain is unavailable, current alpha/development builds fall back to an app-data key file so the iroh identity remains stable.
 - No telemetry is collected without explicit opt-in.
 
 ## What Lightning P2P Does Not Protect
@@ -40,6 +40,8 @@ This is a direct-first peer-to-peer app. It is not a hosted cloud storage servic
 - It does not scan received files for malware.
 - It does not protect against a compromised sender or receiver device.
 - It does not hide all network metadata from infrastructure that helps peers connect.
+- Nearby discovery can reveal local-network metadata for active shares, including device label, file label, content hash, size, route hints, and persistent NodeId.
+- Local logs, transfer history, peer cache, blob store, and fallback identity files are local artifacts that should be treated as sensitive on shared machines.
 - It has not completed a third-party security audit.
 
 ## Tickets Are Capability Tokens
@@ -51,6 +53,21 @@ Treat tickets like secrets:
 - share them only with the intended receiver
 - avoid posting them in public channels
 - regenerate or remove the shared content if a ticket leaks
+- remember that links, QR codes, clipboard contents, browser fragments, custom-scheme deep links, and support screenshots can all contain ticket material
+
+## Nearby Discovery
+
+Nearby discovery is designed for trusted local networks. When local discovery and a share are active, nearby peers can query the app over the Lightning P2P nearby-share protocol and see enough metadata to show a receive card: device label, share label, size, content hash, blob format, published time, NodeId, route hints, and direct-address count.
+
+This metadata is not the raw receive ticket, but it is sensitive. Use manual ticket sharing instead of nearby discovery if filenames, hostnames, organizational device names, or local-network presence should remain private.
+
+The current settings toggle controls nearby share listings and active-share responses. The iroh endpoint may still use local-network discovery for connectivity metadata until endpoint restart/rebuild support is added.
+
+## Local Key Storage
+
+Lightning P2P stores the persistent iroh identity key through the OS keychain when available. To keep profiles usable in CI, development, and mobile alpha environments, the app can fall back to `iroh-secret-key.hex` in the configured app data directory. That fallback file contains plaintext secret key material, is ignored by git, and is written with restrictive permissions on Unix platforms.
+
+If this file is exposed, delete it and restart the app to rotate the local peer identity. Existing tickets tied to the old identity may stop working.
 
 ## Relay Fallback
 
@@ -83,6 +100,7 @@ Lightning P2P does not send product telemetry by default. Diagnostics are copied
 | Attacker without ticket | Cannot request the referenced transfer without the capability token. |
 | Attacker with ticket | Can request that transfer while the sender is online and content is available. |
 | Relay visibility | Relay infrastructure may see connection metadata needed for connectivity, but it is not a storage bucket. |
+| Nearby LAN peer | Can see active nearby-share metadata while nearby discovery is enabled; use manual tickets for more private sharing. |
 | Sender goes offline | Transfer becomes unavailable or fails. |
 | Malicious file content | Bytes can be verified for integrity, but Lightning P2P does not judge whether the file is safe to open. |
 | Receiver download path | App checks that the destination is writable and exports verified content to disk. |
@@ -94,6 +112,8 @@ Lightning P2P does not send product telemetry by default. Diagnostics are copied
 - Public benchmark leadership claims are not published yet.
 - macOS/Linux/iOS are not public releases.
 - Android remains alpha/internal foundation work.
+- The keychain fallback stores raw identity key material in the app data directory when platform key storage is unavailable.
+- Nearby discovery does not yet have an approval/pairing step before share metadata is visible to local-network peers.
 - Pause/resume transfer UX is tracked but not complete.
 - A formal third-party audit has not been completed.
 

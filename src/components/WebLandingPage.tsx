@@ -498,7 +498,7 @@ function MarketingButton({
       href={href}
       aria-label={ariaLabel}
       className={cx(
-        "group inline-flex min-h-11 items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-semibold transition duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-300 active:scale-[0.98]",
+        "group inline-flex min-h-11 max-w-full items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-semibold transition duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-300 active:scale-[0.98]",
         variant === "primary" &&
           "bg-[linear-gradient(180deg,#b7ffdc,#73f2b7)] text-[#041713] shadow-[0_0_0_1px_rgba(183,255,220,0.45),0_18px_48px_rgba(52,211,153,0.24)] hover:shadow-[0_0_0_1px_rgba(183,255,220,0.72),0_22px_64px_rgba(52,211,153,0.3)]",
         variant === "secondary" &&
@@ -575,7 +575,7 @@ function Header({ activePath }: { activePath: string }) {
           : "border-b border-white/0 bg-[#050807]/52 backdrop-blur-xl",
       )}
     >
-      <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
+      <div className="mx-auto flex h-[72px] max-w-7xl items-center justify-between gap-4 px-4 sm:px-6">
         <a
           href="/"
           className="group flex min-w-0 items-center gap-3 rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-emerald-300"
@@ -601,7 +601,7 @@ function Header({ activePath }: { activePath: string }) {
                 key={item.href}
                 href={item.href}
                 className={cx(
-                  "rounded-full px-3 py-2 text-sm transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-300",
+                  "rounded-full px-3 py-1.5 text-sm transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-300",
                   active
                     ? "bg-white/10 text-white"
                     : "text-slate-300 hover:bg-white/[0.06] hover:text-white",
@@ -687,28 +687,36 @@ function Hero({ page, isHome }: { page: WebPage; isHome: boolean }) {
   return (
     <section
       id="product"
-      className="relative isolate min-h-[100svh] overflow-hidden bg-[#050807] px-4 pb-20 pt-28 sm:px-6 lg:pt-32"
+      className="relative isolate min-h-[100svh] overflow-hidden bg-[#050807] px-4 pb-16 pt-28 sm:px-6 lg:flex lg:items-center lg:pb-14 lg:pt-24"
     >
       <div
         aria-hidden="true"
         className="absolute inset-0 -z-20 bg-[radial-gradient(900px_circle_at_18%_12%,rgba(44,255,169,0.18),transparent_44%),radial-gradient(760px_circle_at_78%_18%,rgba(56,189,248,0.12),transparent_44%),linear-gradient(180deg,#050807_0%,#07110d_45%,#050807_100%)]"
       />
       <div aria-hidden="true" className="marketing-grid-bg absolute inset-0 -z-10" />
-      <div className="mx-auto grid min-w-0 max-w-7xl items-center gap-12 lg:grid-cols-[minmax(0,0.93fr)_minmax(380px,0.78fr)]">
-        <div className="min-w-0 max-w-4xl">
+      <div className="mx-auto grid w-full min-w-0 max-w-[1360px] items-center gap-12 lg:grid-cols-[minmax(0,1.04fr)_minmax(430px,0.76fr)] lg:gap-8 xl:grid-cols-[minmax(0,1.04fr)_minmax(520px,0.76fr)] xl:gap-12">
+        <div className="w-full min-w-0 max-w-[calc(100vw-2rem)] overflow-hidden sm:max-w-[820px]">
           <p className="inline-flex items-center gap-2 rounded-full border border-emerald-200/15 bg-emerald-300/[0.06] px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.24em] text-emerald-200 shadow-[0_0_32px_rgba(16,185,129,0.08)]">
             <Sparkles className="h-3.5 w-3.5" />
             {isHome ? "Lightning P2P" : page.eyebrow}
           </p>
-          <h1 className="mt-6 max-w-5xl text-[clamp(3.35rem,9vw,7.9rem)] font-semibold leading-[0.91] tracking-[-0.055em] text-white">
-            {headline}
+          <h1 className="mt-6 max-w-[820px] text-[clamp(2.75rem,11vw,3.35rem)] font-semibold leading-[0.96] tracking-[-0.05em] text-white sm:text-[clamp(3.35rem,8vw,4rem)] lg:text-[clamp(4rem,5.2vw,4.7rem)]">
+            {isHome ? (
+              <>
+                <span className="block xl:whitespace-nowrap">Open-source AirDrop</span>
+                <span className="block">for Windows.</span>
+              </>
+            ) : (
+              headline
+            )}
           </h1>
-          <p className="mt-7 max-w-2xl text-lg leading-8 text-slate-300 sm:text-xl">
+          <p className="mt-7 max-w-[calc(100vw-2rem)] text-[1.04rem] leading-8 text-slate-300 sm:max-w-[620px] sm:text-xl">
             {subheadline}
           </p>
-          <div className="mt-9 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+          <div className="mt-8 flex w-full max-w-[calc(100vw-2rem)] flex-col gap-3 sm:max-w-full sm:flex-row sm:flex-wrap sm:items-center">
             <MarketingButton
               href={VELOPACK_DOWNLOAD_URL}
+              className="w-full min-h-12 px-5 sm:w-auto sm:min-w-[188px]"
               ariaLabel="Download Lightning P2P for Windows"
             >
               <Download className="h-4 w-4" />
@@ -717,17 +725,22 @@ function Hero({ page, isHome }: { page: WebPage; isHome: boolean }) {
             <MarketingButton
               href={REPO_URL}
               variant="secondary"
+              className="w-full min-h-12 px-5 sm:w-auto sm:min-w-[166px]"
               ariaLabel="Star Lightning P2P on GitHub"
             >
               <Github className="h-4 w-4" />
               Star on GitHub
             </MarketingButton>
-            <MarketingButton href="#security" variant="ghost">
+            <MarketingButton
+              href="#security"
+              variant="ghost"
+              className="w-full min-h-12 px-4 sm:w-auto"
+            >
               Security model
               <ArrowRight className="h-4 w-4 transition group-hover:translate-x-0.5" />
             </MarketingButton>
           </div>
-          <ul className="mt-7 flex flex-wrap gap-x-4 gap-y-2 text-sm text-slate-400">
+          <ul className="mt-7 flex max-w-[calc(100vw-2rem)] flex-wrap gap-x-4 gap-y-2 text-sm text-slate-400 sm:max-w-[620px]">
             {[
               "MIT licensed",
               "No account",
@@ -752,15 +765,15 @@ function Hero({ page, isHome }: { page: WebPage; isHome: boolean }) {
 function HeroTransferVisual() {
   return (
     <div
-      className="relative mx-auto w-full min-w-0 max-w-[590px]"
+      className="relative mx-auto w-full min-w-0 max-w-full sm:max-w-[620px] lg:mr-0"
       aria-label="Animated peer-to-peer file transfer preview"
     >
-      <div className="absolute -inset-6 rounded-[40px] bg-emerald-300/10 blur-3xl" />
-      <div className="relative overflow-hidden rounded-[26px] border border-white/10 bg-[#07110d]/72 p-4 shadow-[0_32px_140px_rgba(0,0,0,0.55)] backdrop-blur-2xl sm:p-5">
-        <div className="absolute inset-0 bg-[radial-gradient(620px_circle_at_50%_36%,rgba(74,222,128,0.12),transparent_54%)]" />
-        <div className="relative grid gap-4">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
+      <div className="absolute -inset-6 rounded-[44px] bg-emerald-300/10 blur-3xl" />
+      <div className="relative overflow-hidden rounded-[32px] border border-white/10 bg-[#07110d]/74 p-4 shadow-[0_32px_140px_rgba(0,0,0,0.55)] backdrop-blur-2xl sm:p-5">
+        <div className="absolute inset-0 bg-[radial-gradient(680px_circle_at_50%_35%,rgba(74,222,128,0.13),transparent_56%)]" />
+        <div className="relative">
+          <div className="flex min-h-14 items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-3">
               <img
                 src={siteLogoUrl}
                 alt=""
@@ -768,36 +781,52 @@ function HeroTransferVisual() {
                 loading="eager"
                 decoding="async"
               />
-              <div>
+              <div className="min-w-0">
                 <p className="text-sm font-semibold text-white">Transfer ready</p>
-                <p className="text-xs text-slate-400">ticket://iroh/blob</p>
+                <p className="truncate text-xs text-slate-400">ticket://iroh/blob</p>
               </div>
             </div>
-            <span className="rounded-full border border-emerald-300/20 bg-emerald-300/10 px-3 py-1 text-xs font-medium text-emerald-200">
+            <span className="hidden shrink-0 rounded-full border border-emerald-300/20 bg-emerald-300/10 px-3 py-1 text-xs font-medium text-emerald-200 sm:inline-flex">
               Direct path
             </span>
           </div>
 
-          <div className="relative min-h-[330px] overflow-hidden rounded-[22px] border border-white/10 bg-black/28 p-4 sm:min-h-[390px]">
+          <div className="relative mt-4 min-h-[360px] overflow-hidden rounded-[24px] border border-white/10 bg-black/28 p-4 sm:min-h-[430px] lg:min-h-[420px] xl:min-h-[460px]">
             <div aria-hidden="true" className="absolute inset-0 transfer-noise" />
-            <DeviceCard
-              className="absolute left-4 top-5 w-[42%]"
+            <svg
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-[9%] h-[82%] w-[82%]"
+              viewBox="0 0 100 100"
+              preserveAspectRatio="none"
+            >
+              <path
+                className="hero-transfer-path"
+                d="M 18 25 C 38 32, 56 58, 82 73"
+              />
+            </svg>
+
+            <HeroDeviceCard
+              className="absolute left-[6%] top-[8%] z-10 w-[40%] max-w-[220px]"
               title="Sender"
               subtitle="Windows PC"
               icon={Files}
-              lines={["design-system.zip", "4.8 GB", "Ready to share"]}
+              lines={["project.mov", "Ready to share"]}
             />
-            <DeviceCard
-              className="absolute bottom-5 right-4 w-[42%]"
+            <HeroDeviceCard
+              className="absolute bottom-[7%] right-[6%] z-10 w-[42%] max-w-[236px]"
               title="Receiver"
               subtitle="Windows laptop"
               icon={HardDriveDownload}
-              lines={["Downloads", "BLAKE3 check", "Saving to disk"]}
+              lines={["Downloads", "BLAKE3"]}
+              qrLabel="Capability token"
             />
 
-            <div className="transfer-line absolute left-[22%] right-[22%] top-1/2 h-px" />
-            <div className="marketing-file-card absolute left-1/2 top-1/2">
-              <div className="flex items-center gap-3 rounded-[16px] border border-emerald-200/30 bg-[#07110d] px-4 py-3 shadow-[0_18px_58px_rgba(0,0,0,0.42),0_0_48px_rgba(52,211,153,0.16)]">
+            <div className="absolute left-[16%] right-[54%] top-[59%] z-[5] rounded-full border border-white/10 bg-white/[0.04] p-1">
+              <div className="transfer-progress h-2 rounded-full bg-[linear-gradient(90deg,#5eead4,#86efac,#d9f99d)]" />
+            </div>
+
+            <div className="marketing-file-card absolute left-[43%] top-[51%] z-20">
+              <div className="flex items-center gap-3 rounded-[16px] border border-emerald-200/30 bg-[#07110d] px-3.5 py-3 shadow-[0_18px_58px_rgba(0,0,0,0.42),0_0_48px_rgba(52,211,153,0.16)] sm:px-4">
                 <FileLock2 className="h-5 w-5 text-emerald-200" />
                 <div>
                   <p className="text-sm font-semibold text-white">project.mov</p>
@@ -806,37 +835,13 @@ function HeroTransferVisual() {
               </div>
             </div>
 
-            <div className="absolute left-5 right-5 top-[55%] rounded-full border border-white/10 bg-white/[0.04] p-1">
-              <div className="transfer-progress h-2 rounded-full bg-[linear-gradient(90deg,#5eead4,#86efac,#d9f99d)]" />
+            <div className="absolute right-[8%] top-[31%] z-10 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-xs font-semibold text-cyan-100 backdrop-blur-xl">
+              Relay fallback ready
             </div>
-
-            <div className="verification-pop absolute bottom-7 left-5 rounded-full border border-emerald-300/25 bg-emerald-300/10 px-3 py-2 text-xs font-semibold text-emerald-100 backdrop-blur-xl">
+            <div className="verification-pop absolute bottom-[8%] left-[8%] z-10 rounded-full border border-emerald-300/25 bg-emerald-300/10 px-3 py-2 text-xs font-semibold text-emerald-100 backdrop-blur-xl">
               <Check className="mr-1.5 inline h-3.5 w-3.5" />
               BLAKE3 verified
             </div>
-            <div className="absolute right-5 top-[42%] rounded-full border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-xs font-semibold text-cyan-100 backdrop-blur-xl">
-              Relay fallback ready
-            </div>
-            <div className="absolute bottom-6 right-7 grid h-20 w-20 place-items-center rounded-[18px] border border-white/10 bg-white/[0.06] backdrop-blur-xl">
-              <QrCode className="h-9 w-9 text-white" />
-              <span className="sr-only">QR ticket visual</span>
-            </div>
-          </div>
-
-          <div className="grid gap-3 text-xs text-slate-300 sm:grid-cols-3">
-            {[
-              ["Route", "Direct QUIC"],
-              ["Integrity", "BLAKE3"],
-              ["Ticket", "Capability token"],
-            ].map(([label, value]) => (
-              <div
-                key={label}
-                className="rounded-[14px] border border-white/10 bg-white/[0.04] p-3"
-              >
-                <p className="text-slate-500">{label}</p>
-                <p className="mt-1 font-semibold text-white">{value}</p>
-              </div>
-            ))}
           </div>
         </div>
       </div>
@@ -844,45 +849,58 @@ function HeroTransferVisual() {
   );
 }
 
-function DeviceCard({
+function HeroDeviceCard({
   title,
   subtitle,
   icon: Icon,
   lines,
+  qrLabel,
   className,
 }: {
   title: string;
   subtitle: string;
   icon: LucideIcon;
   lines: string[];
+  qrLabel?: string;
   className: string;
 }) {
   return (
     <div
       className={cx(
-        "rounded-[18px] border border-white/10 bg-white/[0.06] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-xl",
+        "rounded-[18px] border border-white/10 bg-white/[0.065] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-xl sm:p-3.5",
         className,
       )}
     >
       <div className="flex items-center gap-3">
-        <span className="grid h-9 w-9 place-items-center rounded-[10px] border border-emerald-300/20 bg-emerald-300/10 text-emerald-200">
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] border border-emerald-300/20 bg-emerald-300/10 text-emerald-200 sm:h-9 sm:w-9">
           <Icon className="h-4 w-4" />
         </span>
-        <div>
+        <div className="min-w-0">
           <p className="text-sm font-semibold text-white">{title}</p>
           <p className="text-xs text-slate-400">{subtitle}</p>
         </div>
       </div>
-      <div className="mt-4 grid gap-2">
+      <div className="mt-3 hidden gap-1.5 sm:grid">
         {lines.map((line) => (
           <div
             key={line}
-            className="rounded-full border border-white/8 bg-black/20 px-3 py-1.5 text-xs text-slate-300"
+            className="truncate rounded-full border border-white/8 bg-black/20 px-3 py-1 text-xs text-slate-300"
           >
             {line}
           </div>
         ))}
       </div>
+      {qrLabel ? (
+        <div className="mt-3 hidden items-center justify-between gap-3 rounded-[14px] border border-white/10 bg-black/20 p-2 sm:flex">
+          <span className="min-w-0 truncate text-[0.68rem] font-medium text-slate-300">
+            {qrLabel}
+          </span>
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] border border-emerald-300/20 bg-emerald-300/10 text-emerald-100 sm:h-9 sm:w-9">
+            <QrCode className="h-[18px] w-[18px] sm:h-5 sm:w-5" />
+            <span className="sr-only">QR ticket visual</span>
+          </span>
+        </div>
+      ) : null}
     </div>
   );
 }

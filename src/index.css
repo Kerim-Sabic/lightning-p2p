@@ -275,32 +275,32 @@ body.app-hydrated .static-seo-fallback {
   }
 }
 
-@keyframes transfer-pulse {
+@keyframes hero-transfer-path {
   0%,
   100% {
-    opacity: 0.35;
-    transform: translateX(-8%);
+    opacity: 0.55;
+    stroke-dashoffset: 18;
   }
   50% {
     opacity: 1;
-    transform: translateX(8%);
+    stroke-dashoffset: 0;
   }
 }
 
 @keyframes transfer-flight {
   0%,
   100% {
-    opacity: 0.72;
-    transform: translate(-92%, -52%) scale(0.98);
+    opacity: 0.74;
+    transform: translate(calc(-50% - 34px), calc(-50% - 16px)) scale(0.98);
   }
   45%,
   55% {
     opacity: 1;
-    transform: translate(-50%, -52%) scale(1);
+    transform: translate(-50%, -50%) scale(1);
   }
   75% {
-    opacity: 0.86;
-    transform: translate(-8%, -52%) scale(0.99);
+    opacity: 0.88;
+    transform: translate(calc(-50% + 40px), calc(-50% + 18px)) scale(0.99);
   }
 }
 
@@ -359,29 +359,14 @@ body.app-hydrated .static-seo-fallback {
     44px 44px;
 }
 
-.transfer-line {
-  background: linear-gradient(
-    90deg,
-    transparent,
-    rgba(45, 212, 191, 0.22),
-    rgba(134, 239, 172, 0.82),
-    rgba(45, 212, 191, 0.22),
-    transparent
-  );
-  box-shadow: 0 0 34px rgba(45, 212, 191, 0.38);
-}
-
-.transfer-line::before {
-  content: "";
-  position: absolute;
-  inset: -1px 0;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    rgba(255, 255, 255, 0.9),
-    transparent
-  );
-  animation: transfer-pulse 2.8s ease-in-out infinite;
+.hero-transfer-path {
+  fill: none;
+  stroke: rgba(110, 231, 183, 0.72);
+  stroke-width: 0.8;
+  stroke-linecap: round;
+  stroke-dasharray: 8 10;
+  filter: drop-shadow(0 0 12px rgba(45, 212, 191, 0.42));
+  animation: hero-transfer-path 4.2s ease-in-out infinite;
 }
 
 .marketing-file-card {
@@ -414,7 +399,12 @@ body.app-hydrated .static-seo-fallback {
   }
 
   .marketing-file-card {
-    transform: translate(-50%, -52%) !important;
+    opacity: 1 !important;
+    transform: translate(-50%, -50%) !important;
+  }
+
+  .hero-transfer-path {
+    stroke-dashoffset: 0 !important;
   }
 
   .transfer-progress {

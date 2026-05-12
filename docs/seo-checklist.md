@@ -22,7 +22,7 @@ On-page SEO is in code (see `scripts/build-web-metadata.mjs` and `src/content/we
 
 ### Package managers
 
-- [ ] [winget-pkgs](https://github.com/microsoft/winget-pkgs) - first manual submission is open at https://github.com/microsoft/winget-pkgs/pull/362516; subsequent releases via `winget-releaser` action.
+- [ ] [winget-pkgs](https://github.com/microsoft/winget-pkgs) - first manual submission https://github.com/microsoft/winget-pkgs/pull/362516 closed unmerged on May 2, 2026; resubmit after the next signed public release assets are published.
 - [ ] [Scoop](https://scoop.sh/) bucket entry (optional; extras or community bucket).
 - [ ] [Chocolatey](https://community.chocolatey.org/packages) (optional).
 

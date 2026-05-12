@@ -25,6 +25,7 @@ use tokio::{
 };
 
 const DISCOVERED_SHARES_UPDATED_EVENT: &str = "discovered-shares-updated";
+const NEARBY_DEVICES_UPDATED_EVENT: &str = "nearby-devices-updated";
 const REFRESH_INTERVAL: Duration = Duration::from_secs(4);
 const NODE_QUERY_TIMEOUT: Duration = Duration::from_millis(900);
 const CANDIDATE_STALE_AFTER: Duration = Duration::from_secs(18);
@@ -67,6 +68,40 @@ pub struct NearbyShare {
     pub freshness_seconds: u64,
     /// Unix timestamp when the sender published the share.
     pub published_at: u64,
+}
+
+/// Transport layer that surfaced a nearby device.
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum NearbyTransport {
+    /// Discovered via mDNS on the local Wi-Fi network.
+    WifiMdns,
+    /// Discovered via Bluetooth LE advertisement.
+    Ble,
+    /// Discovered via both mDNS and BLE in the same session.
+    Both,
+}
+
+/// Public nearby-device payload mirrored into the frontend.
+///
+/// Surfaced regardless of whether the peer has an active share — this is the
+/// AirDrop-style "I see this device" record that the push UI needs.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct NearbyDevice {
+    /// Remote iroh node identifier.
+    pub node_id: String,
+    /// Human-readable device name reported by the peer (or `"Unknown device"`).
+    pub device_name: String,
+    /// Unix timestamp when the device was last seen via any transport.
+    pub last_seen_unix: u64,
+    /// Transport that surfaced this device most recently.
+    pub transport: NearbyTransport,
+    /// Best-known reachability hint.
+    pub route_hint: NearbyRouteHint,
+    /// Known direct addresses currently attached to the peer.
+    pub direct_address_count: usize,
+    /// Whether the peer currently advertises an active share.
+    pub has_active_share: bool,
 }
 
 /// Active local share advertised to nearby peers while sharing is enabled.
@@ -115,12 +150,21 @@ struct RemoteCandidate {
     last_seen_at: Instant,
 }
 
+#[derive(Debug)]
+struct CandidateQueryResult {
+    node_id: NodeId,
+    responded: bool,
+    device_name: String,
+    records: Vec<NearbyShareRecord>,
+}
+
 /// In-memory registry for the active local share and discovered nearby shares.
 #[derive(Debug, Clone)]
 pub struct NearbyShareRegistry {
     local_discovery_enabled: Arc<RwLock<bool>>,
     active_share: Arc<RwLock<Option<ActiveShare>>>,
     discovered_shares: Arc<RwLock<Vec<NearbyShareRecord>>>,
+    devices: Arc<RwLock<BTreeMap<NodeId, NearbyDevice>>>,
 }
 
 impl NearbyShareRegistry {
@@ -131,6 +175,7 @@ impl NearbyShareRegistry {
             local_discovery_enabled: Arc::new(RwLock::new(local_discovery_enabled)),
             active_share: Arc::new(RwLock::new(None)),
             discovered_shares: Arc::new(RwLock::new(Vec::new())),
+            devices: Arc::new(RwLock::new(BTreeMap::new())),
         }
     }
 
@@ -217,6 +262,178 @@ impl NearbyShareRegistry {
         BlobTicket::new(record.node_addr.clone(), record.hash, record.format)
             .map_err(|error| LightningP2PError::Blob(error.to_string()))
     }
+
+    /// Returns the cached `NodeAddr` for a previously discovered device.
+    ///
+    /// Used by the push-offer flow to dial a peer the user selected in the
+    /// Devices view without re-running discovery.
+    pub async fn node_addr_for_device(&self, node_id: &NodeId) -> Option<NodeAddr> {
+        let guard = self.discovered_shares.read().await;
+        guard
+            .iter()
+            .find(|record| record.node_addr.node_id == *node_id)
+            .map(|record| record.node_addr.clone())
+    }
+
+    /// Returns the current public snapshot of nearby devices, sorted by name.
+    pub async fn devices_snapshot(&self) -> Vec<NearbyDevice> {
+        let guard = self.devices.read().await;
+        let mut snapshot = guard.values().cloned().collect::<Vec<_>>();
+        snapshot.sort_by(|left, right| {
+            left.device_name
+                .to_ascii_lowercase()
+                .cmp(&right.device_name.to_ascii_lowercase())
+                .then(left.node_id.cmp(&right.node_id))
+        });
+        snapshot
+    }
+
+    /// Upserts a device record discovered via Wi-Fi mDNS.
+    ///
+    /// Returns the resulting snapshot if it changed, otherwise `None`. The
+    /// caller is expected to emit `nearby-devices-updated` to the frontend so
+    /// the new device shows up instantly — before any per-peer share probe.
+    pub(crate) async fn upsert_wifi_device(
+        &self,
+        node_id: NodeId,
+        candidate: &RemoteCandidate,
+    ) -> Option<Vec<NearbyDevice>> {
+        let mut guard = self.devices.write().await;
+        let now = unix_timestamp();
+        let entry = guard
+            .entry(node_id)
+            .or_insert_with(|| NearbyDevice {
+                node_id: node_id.to_string(),
+                device_name: "Unknown device".into(),
+                last_seen_unix: now,
+                transport: NearbyTransport::WifiMdns,
+                route_hint: candidate.route_hint,
+                direct_address_count: candidate.direct_address_count,
+                has_active_share: false,
+            });
+
+        let prior = entry.clone();
+        entry.last_seen_unix = now;
+        entry.route_hint = stronger_route_hint(entry.route_hint, candidate.route_hint);
+        entry.direct_address_count = candidate.direct_address_count;
+        entry.transport = match entry.transport {
+            NearbyTransport::Ble | NearbyTransport::Both => NearbyTransport::Both,
+            NearbyTransport::WifiMdns => NearbyTransport::WifiMdns,
+        };
+
+        if devices_equal(&prior, entry) {
+            return None;
+        }
+        Some(snapshot_locked(&guard))
+    }
+
+    /// Upserts a device record discovered via Bluetooth LE.
+    pub async fn register_ble_candidate(
+        &self,
+        node_id: NodeId,
+        device_name: String,
+        has_active_share: bool,
+    ) -> Option<Vec<NearbyDevice>> {
+        let mut guard = self.devices.write().await;
+        let now = unix_timestamp();
+        let entry = guard
+            .entry(node_id)
+            .or_insert_with(|| NearbyDevice {
+                node_id: node_id.to_string(),
+                device_name: device_name.clone(),
+                last_seen_unix: now,
+                transport: NearbyTransport::Ble,
+                route_hint: NearbyRouteHint::Unknown,
+                direct_address_count: 0,
+                has_active_share,
+            });
+
+        let prior = entry.clone();
+        entry.last_seen_unix = now;
+        if !device_name.is_empty() {
+            entry.device_name = device_name;
+        }
+        entry.has_active_share = has_active_share;
+        entry.transport = match entry.transport {
+            NearbyTransport::WifiMdns | NearbyTransport::Both => NearbyTransport::Both,
+            NearbyTransport::Ble => NearbyTransport::Ble,
+        };
+
+        if devices_equal(&prior, entry) {
+            return None;
+        }
+        Some(snapshot_locked(&guard))
+    }
+
+    /// Updates the `device_name` for a previously discovered device.
+    ///
+    /// Called after a successful `Hello` probe completes. Returns the updated
+    /// snapshot if anything changed.
+    pub(crate) async fn set_device_name(
+        &self,
+        node_id: NodeId,
+        device_name: String,
+    ) -> Option<Vec<NearbyDevice>> {
+        if device_name.is_empty() {
+            return None;
+        }
+        let mut guard = self.devices.write().await;
+        let entry = guard.get_mut(&node_id)?;
+        if entry.device_name == device_name {
+            return None;
+        }
+        entry.device_name = device_name;
+        Some(snapshot_locked(&guard))
+    }
+
+    /// Updates the `has_active_share` flag on a device record.
+    pub(crate) async fn set_device_has_share(
+        &self,
+        node_id: NodeId,
+        has_active_share: bool,
+    ) -> Option<Vec<NearbyDevice>> {
+        let mut guard = self.devices.write().await;
+        let entry = guard.get_mut(&node_id)?;
+        if entry.has_active_share == has_active_share {
+            return None;
+        }
+        entry.has_active_share = has_active_share;
+        Some(snapshot_locked(&guard))
+    }
+
+    /// Removes stale device records older than `CANDIDATE_STALE_AFTER`.
+    pub(crate) async fn prune_stale_devices(&self) -> Option<Vec<NearbyDevice>> {
+        let mut guard = self.devices.write().await;
+        let now = unix_timestamp();
+        let stale_threshold = CANDIDATE_STALE_AFTER.as_secs();
+        let before = guard.len();
+        guard.retain(|_, entry| now.saturating_sub(entry.last_seen_unix) <= stale_threshold);
+        if guard.len() == before {
+            return None;
+        }
+        Some(snapshot_locked(&guard))
+    }
+}
+
+fn devices_equal(left: &NearbyDevice, right: &NearbyDevice) -> bool {
+    left.device_name == right.device_name
+        && left.transport == right.transport
+        && left.route_hint == right.route_hint
+        && left.direct_address_count == right.direct_address_count
+        && left.has_active_share == right.has_active_share
+}
+
+fn snapshot_locked(
+    guard: &tokio::sync::RwLockWriteGuard<'_, BTreeMap<NodeId, NearbyDevice>>,
+) -> Vec<NearbyDevice> {
+    let mut snapshot = guard.values().cloned().collect::<Vec<_>>();
+    snapshot.sort_by(|left, right| {
+        left.device_name
+            .to_ascii_lowercase()
+            .cmp(&right.device_name.to_ascii_lowercase())
+            .then(left.node_id.cmp(&right.node_id))
+    });
+    snapshot
 }
 
 /// Starts the background LAN discovery loop for nearby shares.
@@ -250,9 +467,12 @@ pub fn spawn_nearby_discovery_loop(
 
     tauri::async_runtime::spawn(async move {
         let mut candidates = seed_candidates(&endpoint);
+        let local_node_id = endpoint.node_id();
         let mut stream_seen: HashSet<NodeId> = HashSet::new();
         let mut interval = tokio::time::interval(REFRESH_INTERVAL);
         interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
+
+        seed_devices(&app_handle, &registry, &candidates).await;
 
         let mut discovery_events = discovery_events;
         let _ = refresh_nearby_shares(
@@ -273,8 +493,12 @@ pub fn spawn_nearby_discovery_loop(
                     }
                     maybe_item = events.next() => {
                         if let Some(item) = maybe_item {
-                            if let Some(candidate) = candidate_from_discovery_item(item) {
+                            if let Some(candidate) = candidate_from_discovery_item(item, local_node_id) {
                                 stream_seen.insert(candidate.node_id);
+                                // Emit device record instantly, before the per-peer
+                                // share RPC fan-out (which may block on up to
+                                // NODE_QUERY_TIMEOUT per stale peer).
+                                emit_device_upsert(&app_handle, &registry, &candidate).await;
                                 upsert_candidate(&mut candidates, candidate);
                             }
                             if let Err(error) = refresh_candidates(&app_handle, &endpoint, &registry, &mut candidates, &stream_seen).await {
@@ -291,6 +515,13 @@ pub fn spawn_nearby_discovery_loop(
             }
 
             interval.tick().await;
+            if let Some(service) = endpoint.discovery() {
+                if let Some(stream) = service.subscribe() {
+                    tracing::info!("LAN discovery subscription re-established");
+                    lan_discovery_active.store(true, Ordering::Relaxed);
+                    discovery_events = Some(stream);
+                }
+            }
             if let Err(error) = refresh_candidates(
                 &app_handle,
                 &endpoint,
@@ -306,6 +537,46 @@ pub fn spawn_nearby_discovery_loop(
     });
 }
 
+async fn seed_devices(
+    app_handle: &AppHandle,
+    registry: &NearbyShareRegistry,
+    candidates: &BTreeMap<NodeId, RemoteCandidate>,
+) {
+    let mut changed = false;
+    for candidate in candidates.values() {
+        if registry
+            .upsert_wifi_device(candidate.node_id, candidate)
+            .await
+            .is_some()
+        {
+            changed = true;
+        }
+    }
+    if changed {
+        let snapshot = registry.devices_snapshot().await;
+        emit_devices(app_handle, snapshot);
+    }
+}
+
+async fn emit_device_upsert(
+    app_handle: &AppHandle,
+    registry: &NearbyShareRegistry,
+    candidate: &RemoteCandidate,
+) {
+    if let Some(snapshot) = registry
+        .upsert_wifi_device(candidate.node_id, candidate)
+        .await
+    {
+        emit_devices(app_handle, snapshot);
+    }
+}
+
+fn emit_devices(app_handle: &AppHandle, snapshot: Vec<NearbyDevice>) {
+    if let Err(error) = app_handle.emit(NEARBY_DEVICES_UPDATED_EVENT, snapshot) {
+        tracing::debug!("failed to emit nearby-devices-updated: {error}");
+    }
+}
+
 async fn refresh_candidates(
     app_handle: &AppHandle,
     endpoint: &Endpoint,
@@ -313,8 +584,32 @@ async fn refresh_candidates(
     candidates: &mut BTreeMap<NodeId, RemoteCandidate>,
     stream_seen: &HashSet<NodeId>,
 ) -> Result<()> {
-    merge_endpoint_candidates(endpoint, candidates, stream_seen);
+    let added = merge_endpoint_candidates(endpoint, candidates, stream_seen);
     prune_stale_candidates(candidates);
+
+    // Surface any newly merged devices to the UI immediately.
+    let mut device_changed = false;
+    for node_id in added {
+        if let Some(candidate) = candidates.get(&node_id) {
+            if registry
+                .upsert_wifi_device(node_id, candidate)
+                .await
+                .is_some()
+            {
+                device_changed = true;
+            }
+        }
+    }
+
+    if let Some(_pruned) = registry.prune_stale_devices().await {
+        device_changed = true;
+    }
+
+    if device_changed {
+        let snapshot = registry.devices_snapshot().await;
+        emit_devices(app_handle, snapshot);
+    }
+
     refresh_nearby_shares(
         app_handle,
         endpoint,
@@ -340,16 +635,58 @@ async fn refresh_nearby_shares(
         return Ok(());
     }
 
-    let discovered = stream::iter(candidates.into_iter().map(|candidate| {
+    let results = stream::iter(candidates.into_iter().map(|candidate| {
         let endpoint = endpoint.clone();
         async move { query_candidate(endpoint, candidate).await }
     }))
     .buffer_unordered(MAX_PARALLEL_QUERIES)
     .collect::<Vec<_>>()
-    .await
-    .into_iter()
-    .flatten()
-    .collect::<Vec<_>>();
+    .await;
+    let any_response = results.iter().any(|result| result.responded);
+
+    // Sync the device snapshot with whatever the peers reported. This keeps
+    // `device_name` and `has_active_share` accurate without waiting for a
+    // dedicated Hello round-trip.
+    let mut device_snapshot_changed = false;
+    for result in &results {
+        if !result.responded {
+            continue;
+        }
+        let node_id = result.node_id;
+        if !result.device_name.is_empty() {
+            if registry
+                .set_device_name(node_id, result.device_name.clone())
+                .await
+                .is_some()
+            {
+                device_snapshot_changed = true;
+            }
+        }
+        if registry
+            .set_device_has_share(node_id, !result.records.is_empty())
+            .await
+            .is_some()
+        {
+            device_snapshot_changed = true;
+        }
+    }
+    if device_snapshot_changed {
+        let snapshot = registry.devices_snapshot().await;
+        emit_devices(app_handle, snapshot);
+    }
+
+    let discovered = results
+        .into_iter()
+        .flat_map(|result| result.records)
+        .collect::<Vec<_>>();
+
+    if discovered.is_empty() && !any_response && !registry.discovered_shares.read().await.is_empty()
+    {
+        tracing::debug!(
+            "nearby share refresh had no successful peer responses; keeping previous snapshot"
+        );
+        return Ok(());
+    }
 
     let changed = registry.replace_discovered_shares(discovered).await;
     emit_if_changed(app_handle, changed)
@@ -375,10 +712,17 @@ fn merge_endpoint_candidates(
     endpoint: &Endpoint,
     candidates: &mut BTreeMap<NodeId, RemoteCandidate>,
     stream_seen: &HashSet<NodeId>,
-) {
+) -> Vec<NodeId> {
+    let mut added = Vec::new();
     for candidate in local_candidates(endpoint, stream_seen) {
+        let was_present = candidates.contains_key(&candidate.node_id);
+        let node_id = candidate.node_id;
         upsert_candidate(candidates, candidate);
+        if !was_present {
+            added.push(node_id);
+        }
     }
+    added
 }
 
 fn upsert_candidate(
@@ -476,8 +820,14 @@ fn instant_from_freshness(freshness: Duration) -> Instant {
         .unwrap_or_else(Instant::now)
 }
 
-fn candidate_from_discovery_item(item: DiscoveryItem) -> Option<RemoteCandidate> {
+fn candidate_from_discovery_item(
+    item: DiscoveryItem,
+    local_node_id: NodeId,
+) -> Option<RemoteCandidate> {
     if item.provenance != local_swarm_discovery::NAME {
+        return None;
+    }
+    if item.node_addr.node_id == local_node_id {
         return None;
     }
 
@@ -501,26 +851,47 @@ fn candidate_from_discovery_item(item: DiscoveryItem) -> Option<RemoteCandidate>
     })
 }
 
-async fn query_candidate(endpoint: Endpoint, candidate: RemoteCandidate) -> Vec<NearbyShareRecord> {
+async fn query_candidate(endpoint: Endpoint, candidate: RemoteCandidate) -> CandidateQueryResult {
+    let node_id = candidate.node_id;
     let queried = tokio::time::timeout(
         NODE_QUERY_TIMEOUT,
         fetch_remote_shares(&endpoint, candidate.node_addr.clone()),
     )
     .await;
     match queried {
-        Ok(Ok(envelope)) => envelope
-            .shares
-            .into_iter()
-            .filter_map(|share| discovered_record(&candidate, &envelope.device_name, &share))
-            .collect(),
+        Ok(Ok(envelope)) => {
+            let device_name = envelope.device_name.clone();
+            CandidateQueryResult {
+                node_id,
+                responded: true,
+                device_name,
+                records: envelope
+                    .shares
+                    .into_iter()
+                    .filter_map(|share| {
+                        discovered_record(&candidate, &envelope.device_name, &share)
+                    })
+                    .collect(),
+            }
+        }
         Ok(Err(error)) => {
             tracing::debug!(
                 node_id = %candidate.node_id,
                 "nearby share query failed: {error}"
             );
-            Vec::new()
+            CandidateQueryResult {
+                node_id,
+                responded: false,
+                device_name: String::new(),
+                records: Vec::new(),
+            }
         }
-        Err(_) => Vec::new(),
+        Err(_) => CandidateQueryResult {
+            node_id,
+            responded: false,
+            device_name: String::new(),
+            records: Vec::new(),
+        },
     }
 }
 
@@ -604,7 +975,7 @@ fn unix_timestamp() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use iroh::{NodeAddr, PublicKey};
+    use iroh::{NodeAddr, PublicKey, SecretKey};
     use std::str::FromStr;
 
     fn sample_record(share_id: &str) -> NearbyShareRecord {
@@ -688,5 +1059,33 @@ mod tests {
             stronger_route_hint(NearbyRouteHint::Relay, NearbyRouteHint::Mixed),
             NearbyRouteHint::Mixed
         );
+    }
+
+    #[test]
+    fn discovery_item_for_local_node_is_ignored() {
+        let local_node_id = SecretKey::from_bytes(&[1_u8; 32]).public();
+        let item = DiscoveryItem {
+            node_addr: NodeAddr::new(local_node_id),
+            provenance: local_swarm_discovery::NAME,
+            last_updated: None,
+        };
+
+        assert!(candidate_from_discovery_item(item, local_node_id).is_none());
+    }
+
+    #[test]
+    fn discovery_item_from_other_node_becomes_candidate() {
+        let local_node_id = SecretKey::from_bytes(&[1_u8; 32]).public();
+        let remote_node_id = SecretKey::from_bytes(&[2_u8; 32]).public();
+        let item = DiscoveryItem {
+            node_addr: NodeAddr::new(remote_node_id),
+            provenance: local_swarm_discovery::NAME,
+            last_updated: None,
+        };
+
+        let candidate =
+            candidate_from_discovery_item(item, local_node_id).expect("remote candidate");
+
+        assert_eq!(candidate.node_id, remote_node_id);
     }
 }

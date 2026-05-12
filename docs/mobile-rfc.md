@@ -1,9 +1,9 @@
 # Lightning P2P — Mobile (iOS + Android) RFC
 
-Status: **Draft** · Target: phase 2, after desktop P0/P1 PRs land
+Status: **Historical / in progress** · Target: phase 2 after desktop reliability work
 Authors: @Kerim-Sabic
 
-Current update: Android alpha foundation is implemented on `main`. iOS remains prepared but not shipped.
+Current update: Android alpha foundation is implemented and documented in [android-alpha.md](android-alpha.md). iOS remains prepared but not shipped.
 
 ## 1. Motivation
 
@@ -14,7 +14,7 @@ Lightning P2P today is Windows-only. The single biggest asks from users are:
 
 Both are answered by shipping iOS and Android builds. The core engine already has the properties we need: [iroh](https://iroh.computer) works on both platforms, iroh-blobs does verified streaming without any desktop-specific assumptions, and Tauri v2 natively supports `tauri ios init` / `tauri android init` against the same Rust crate.
 
-The goal of this RFC is to lock in scope, sequencing, and known risks **before** any mobile work starts, so we don't regress the desktop build while we experiment.
+The goal of this RFC is to preserve scope, sequencing, and known risks while Android alpha work proceeds, so we do not regress the desktop build while we experiment.
 
 ## 2. Non-goals
 

@@ -3,6 +3,7 @@
 use crate::storage::settings::{AppSettings, RelayModeSetting};
 use crate::AppState;
 use serde::Serialize;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use std::path::Path;
 use tauri::{AppHandle, Emitter, State};
 
@@ -73,6 +74,13 @@ pub async fn set_download_dir(
     state: State<'_, AppState>,
     path: String,
 ) -> Result<SettingsPayload, String> {
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        let _ = (state, path);
+        return Err("Changing the download folder is not available in the mobile alpha. Receives stay in app-private storage.".into());
+    }
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     state
         .settings
         .set_download_dir(path.into())
@@ -188,10 +196,20 @@ pub async fn set_local_discovery_enabled(
 /// opened.
 #[tauri::command]
 pub async fn open_download_dir(state: State<'_, AppState>) -> Result<(), String> {
-    let download_dir = state.settings.snapshot().await.download_dir;
-    open_path(&download_dir).map_err(String::from)
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        let _ = state;
+        return Err("Opening the download folder is not available in the mobile alpha. Receives stay in app-private storage.".into());
+    }
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        let download_dir = state.settings.snapshot().await.download_dir;
+        open_path(&download_dir).map_err(String::from)
+    }
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn open_path(path: &Path) -> crate::error::Result<()> {
     let status = open_command(path)?.status()?;
     if status.success() {
@@ -203,6 +221,7 @@ fn open_path(path: &Path) -> crate::error::Result<()> {
     }
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn open_command(path: &Path) -> crate::error::Result<std::process::Command> {
     #[cfg(target_os = "windows")]
     let command = {

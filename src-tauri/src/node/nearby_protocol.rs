@@ -178,7 +178,16 @@ pub(crate) async fn fetch_remote_shares(
         .read_to_end(MAX_MESSAGE_BYTES)
         .await
         .map_err(|error| LightningP2PError::Other(error.to_string()))?;
-    let parsed: NearbyShareResponse = serde_json::from_slice(&response)?;
+    parse_response_envelope(&response)
+}
+
+fn parse_response_envelope(response: &[u8]) -> Result<RemoteShareEnvelope> {
+    let parsed: NearbyShareResponse = serde_json::from_slice(response)?;
+    if parsed.protocol_version != PROTOCOL_VERSION {
+        return Err(LightningP2PError::Other(
+            "Unsupported nearby-share protocol version".into(),
+        ));
+    }
     Ok(RemoteShareEnvelope {
         device_name: parsed.device_name,
         shares: parsed.shares,
@@ -223,6 +232,20 @@ mod tests {
     #[test]
     fn local_device_name_has_fallback() {
         assert!(!local_device_name().trim().is_empty());
+    }
+
+    #[test]
+    fn rejects_mismatched_response_protocol_version() {
+        let response = NearbyShareResponse {
+            protocol_version: PROTOCOL_VERSION + 1,
+            device_name: "sender".into(),
+            shares: Vec::new(),
+        };
+        let bytes = serde_json::to_vec(&response).expect("response bytes");
+
+        let error = parse_response_envelope(&bytes).expect_err("mismatched protocol version fails");
+
+        assert!(error.to_string().contains("Unsupported nearby-share"));
     }
 
     #[tokio::test]
