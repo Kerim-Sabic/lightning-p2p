@@ -792,6 +792,87 @@ jobs:
           name: lightning-p2p-android-debug-apk
           path: src-tauri/gen/android/app/build/outputs/apk/**/*.apk
 
+  android-emulator-smoke:
+    name: Android emulator launch smoke
+    # Only run on push to main and tagged releases — the emulator boot adds
+    # ~10 minutes and would slow PR iteration. PRs still get build verification
+    # via android-package; this catches "release APK launches" regressions
+    # before they reach a tag.
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    runs-on: ubuntu-latest
+    needs: [android-package]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Download debug APK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: lightning-p2p-android-debug-apk
+          path: android-debug-artifact
+
+      - name: Locate APK
+        id: locate_apk
+        run: |
+          apk=$(find android-debug-artifact -name '*.apk' -type f | head -n 1)
+          if [ -z "$apk" ]; then
+            echo "::error::No APK found in downloaded artifact"
+            exit 1
+          fi
+          echo "apk=$apk" >> "$GITHUB_OUTPUT"
+          echo "Located APK at $apk"
+
+      - name: Run launcher smoke test on emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          target: default
+          arch: x86_64
+          profile: pixel_5
+          force-avd-creation: false
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          disable-animations: true
+          script: |
+            set -e
+            apk='${{ steps.locate_apk.outputs.apk }}'
+            echo "Installing $apk"
+            adb install -r "$apk"
+
+            echo "Launching com.lightningp2p.app/.MainActivity"
+            adb logcat -c
+            adb shell am start -W -n com.lightningp2p.app/.MainActivity
+
+            echo "Watching logcat for 30 seconds for fatal exceptions..."
+            timeout 30 adb logcat -d AndroidRuntime:E '*:S' > logcat-androidruntime.txt || true
+            timeout 30 adb logcat -d '*:F' > logcat-fatal.txt || true
+
+            if grep -E 'FATAL EXCEPTION|AndroidRuntime: FATAL' logcat-androidruntime.txt logcat-fatal.txt; then
+              echo "::error::Fatal exception during launch"
+              cat logcat-androidruntime.txt
+              cat logcat-fatal.txt
+              exit 1
+            fi
+
+            echo "Verifying MainActivity is in the foreground"
+            if ! adb shell dumpsys activity activities | grep -q 'com.lightningp2p.app/.MainActivity'; then
+              echo "::error::MainActivity is not in the activity stack after launch"
+              adb shell dumpsys activity activities | head -n 50
+              exit 1
+            fi
+            echo "Launcher smoke passed."
+
   release-android:
     name: Release Android
     if: needs.release-plan.outputs.android_release_mode == 'signed'
@@ -904,10 +985,103 @@ jobs:
           # Stable alias so README links can always point at the latest APK.
           cp "$apk" "$stage/LightningP2P-android-latest.apk"
 
-          ( cd "$stage" && sha256sum *.apk *.aab > SHA256SUMS-android.txt )
-
           echo "Android release artifacts staged at $stage"
           ls -lh "$stage"
+
+      - name: Resolve Android build-tools binaries
+        id: build_tools
+        run: |
+          # ANDROID_HOME is set by android-actions/setup-android; pick the
+          # newest installed build-tools directory so apksigner and aapt2 are
+          # resolved even when the SDK installs alongside an older version.
+          bt_root="${ANDROID_SDK_ROOT:-$ANDROID_HOME}/build-tools"
+          if [ ! -d "$bt_root" ]; then
+            echo "::error::Missing build-tools directory at $bt_root"
+            exit 1
+          fi
+          latest=$(ls -1 "$bt_root" | sort -V | tail -n 1)
+          if [ -z "$latest" ]; then
+            echo "::error::No build-tools installed under $bt_root"
+            exit 1
+          fi
+          echo "bin=$bt_root/$latest" >> "$GITHUB_OUTPUT"
+          echo "Resolved build-tools at $bt_root/$latest"
+
+      - name: Verify APK signature (v2/v3 required)
+        env:
+          BUILD_TOOLS: ${{ steps.build_tools.outputs.bin }}
+        run: |
+          apk="${GITHUB_WORKSPACE}/android-release-stage/LightningP2P-${APP_VERSION}-android.apk"
+          if [ ! -f "$apk" ]; then
+            echo "::error::Staged APK missing at $apk"
+            exit 1
+          fi
+          echo "Running apksigner verify on $apk"
+          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$apk" | tee apksigner-output.txt
+
+          # Refuse v1-only signing: Play Protect requires at least v2.
+          if ! grep -Eq '^Verified using v2 scheme \(APK Signature Scheme v2\): true' apksigner-output.txt; then
+            echo "::error::APK is not signed with v2 scheme. Play Protect bar is v2 minimum."
+            exit 1
+          fi
+          if ! grep -Eq '^Verified using v3 scheme \(APK Signature Scheme v3\): true' apksigner-output.txt; then
+            # v3 is strongly preferred but not strictly required for Android 9+
+            # devices that support it; fall back to a warning rather than fail.
+            echo "::warning::APK is not signed with v3 scheme. Consider adding v3 for key rotation support."
+          fi
+
+          # Extract the SHA-256 cert digest into a stable file so the next step
+          # can publish it next to the SHA-256 file hashes.
+          cert_sha256=$(grep -E '^Signer #1 certificate SHA-256 digest:' apksigner-output.txt | awk -F': ' '{print $2}')
+          if [ -z "$cert_sha256" ]; then
+            echo "::error::Could not parse signer cert SHA-256 from apksigner output."
+            exit 1
+          fi
+          echo "APK_CERT_SHA256=$cert_sha256" >> "$GITHUB_ENV"
+
+          {
+            echo "### Android signing verification"
+            echo ""
+            echo "- v2 scheme: \`verified\`"
+            echo "- Signer #1 SHA-256 cert digest: \`$cert_sha256\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Inspect APK metadata
+        env:
+          BUILD_TOOLS: ${{ steps.build_tools.outputs.bin }}
+        run: |
+          apk="${GITHUB_WORKSPACE}/android-release-stage/LightningP2P-${APP_VERSION}-android.apk"
+          "$BUILD_TOOLS/aapt2" dump badging "$apk" > aapt2-badging.txt || true
+          if [ -s aapt2-badging.txt ]; then
+            pkg=$(grep -E '^package:' aapt2-badging.txt | head -n 1 || true)
+            sdk=$(grep -E '^sdkVersion:' aapt2-badging.txt | head -n 1 || true)
+            target=$(grep -E '^targetSdkVersion:' aapt2-badging.txt | head -n 1 || true)
+            {
+              echo ""
+              echo "### Android APK metadata"
+              echo ""
+              echo "- \`$pkg\`"
+              echo "- \`$sdk\`"
+              echo "- \`$target\`"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Write SHA256SUMS with signer fingerprint
+        run: |
+          stage="${GITHUB_WORKSPACE}/android-release-stage"
+          (
+            cd "$stage"
+            {
+              echo "# Lightning P2P Android release artifacts"
+              echo "# Generated by GitHub Actions on $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+              echo "# Signer #1 certificate SHA-256: ${APK_CERT_SHA256}"
+              echo "# Verify cert with: apksigner verify --print-certs <apk>"
+              echo ""
+              sha256sum *.apk *.aab
+            } > SHA256SUMS-android.txt
+          )
+          echo "SHA256SUMS-android.txt contents:"
+          cat "$stage/SHA256SUMS-android.txt"
 
       - name: Clean up keystore
         if: always()
