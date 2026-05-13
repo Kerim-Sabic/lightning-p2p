@@ -88,6 +88,22 @@ Repo → **Settings** → **Secrets and variables** → **Actions** → **New re
 
 Once added, never echo them in workflow logs. The CI workflow already redacts them.
 
+#### Helper script (faster path)
+
+[`scripts/set-android-secrets.ps1`](../scripts/set-android-secrets.ps1) automates
+the steps above without ever putting the password on the command line or in
+shell history. It prompts twice with `Read-Host -AsSecureString` (hidden
+input), base64-encodes the keystore in-memory, and pipes each value through
+`gh secret set` via stdin.
+
+```powershell
+.\scripts\set-android-secrets.ps1
+```
+
+The script defaults to the runbook keystore path and the `lightning-p2p-release`
+alias. Pass `-KeystorePath` or `-KeyAlias` to override, and `-Repo OWNER/NAME`
+when running from outside the repo working tree.
+
 ### Verify the workflow picks them up
 
 Trigger CI via `workflow_dispatch` with `release_mode=auto`. The `release-plan` job summary should show:
