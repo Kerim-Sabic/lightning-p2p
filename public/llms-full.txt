@@ -42,6 +42,13 @@ Optional public assets:
 - LightningP2P.msi for managed deployments
 - Source build from GitHub for developers
 
+Download trust:
+- Verify release artifacts with SHA256SUMS.txt.
+- Use scripts/verify-release.ps1 on Windows to check SHA256 and Authenticode status.
+- Unsigned community builds may show Microsoft Defender SmartScreen warnings.
+- Signed production builds can still show warnings until file and publisher reputation build.
+- If you do not trust the source or checksum, do not install.
+
 ## How Transfer Works
 
 1. The sender chooses files or a folder in the native Windows app.

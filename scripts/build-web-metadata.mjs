@@ -15,7 +15,7 @@ const siteUrl = (process.env.SITE_URL || "https://lightning-p2p.netlify.app").re
 const pages = JSON.parse(
   await readFile(join(repoRoot, "src", "content", "web-pages.json"), "utf8"),
 );
-const publicReleaseVersion = "0.4.0";
+const publicReleaseVersion = "0.4.1";
 const repoUrl = "https://github.com/Kerim-Sabic/lightning-p2p";
 const releaseUrl = `${repoUrl}/releases/latest`;
 const exeDownloadUrl = `${repoUrl}/releases/latest/download/LightningP2PSetup.exe`;
@@ -201,8 +201,8 @@ ${body}
       <p>
         Download the recommended <a href="${escapeHtml(velopackDownloadUrl)}">Velopack one-click installer</a>,
         the classic <a href="${escapeHtml(exeDownloadUrl)}">NSIS setup installer</a>, or the
-        <a href="${escapeHtml(msiDownloadUrl)}">MSI installer</a>. Code-signing status,
-        Tauri updater signatures, and SHA256 checksums are available on
+        <a href="${escapeHtml(msiDownloadUrl)}">MSI installer</a>. Signing status,
+        SmartScreen notes, and SHA256 checksums are available on
         <a href="${escapeHtml(releaseUrl)}">GitHub Releases</a>.
         Latest public release: v${escapeHtml(publicReleaseVersion)}.
       </p>${keyFacts}${caveats}${faqs}${related}
@@ -235,7 +235,7 @@ function softwareApplicationJsonLd(page) {
       "QUIC transport with relay-assisted fallback",
       "BLAKE3 verified streaming",
       "No account and no cloud file storage",
-      "Release pipeline support for updater metadata signatures and Windows code-signing",
+      "Release pipeline support for unsigned community builds, SHA256 checksums, optional updater metadata signatures, and optional Windows code-signing",
     ],
     publisher: {
       "@type": "Organization",

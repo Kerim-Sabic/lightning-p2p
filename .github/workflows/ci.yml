@@ -7,6 +7,16 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      release_mode:
+        description: Windows release mode for manual runs
+        required: true
+        default: auto
+        type: choice
+        options:
+          - auto
+          - community_unsigned
+          - production_signed
 
 env:
   CARGO_TERM_COLOR: always
@@ -66,6 +76,81 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
 
+  release-plan:
+    name: Resolve release mode
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    outputs:
+      windows_release_mode: ${{ steps.plan.outputs.windows_release_mode }}
+      android_release_mode: ${{ steps.plan.outputs.android_release_mode }}
+    steps:
+      - name: Choose release mode
+        id: plan
+        env:
+          REQUESTED_RELEASE_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.release_mode || 'auto' }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
+          AZURE_TRUSTED_SIGNING_ACCOUNT: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT }}
+          AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE: ${{ secrets.AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          has_windows_signing=false
+          if [ -n "${TAURI_SIGNING_PRIVATE_KEY}" ] &&
+             [ -n "${AZURE_CLIENT_ID}" ] &&
+             [ -n "${AZURE_CLIENT_SECRET}" ] &&
+             [ -n "${AZURE_TENANT_ID}" ] &&
+             [ -n "${AZURE_TRUSTED_SIGNING_ENDPOINT}" ] &&
+             [ -n "${AZURE_TRUSTED_SIGNING_ACCOUNT}" ] &&
+             [ -n "${AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE}" ]; then
+            has_windows_signing=true
+          fi
+
+          case "${REQUESTED_RELEASE_MODE}" in
+            production_signed)
+              windows_release_mode="production_signed"
+              ;;
+            community_unsigned)
+              windows_release_mode="community_unsigned"
+              ;;
+            auto|*)
+              if [ "${has_windows_signing}" = "true" ]; then
+                windows_release_mode="production_signed"
+              else
+                windows_release_mode="community_unsigned"
+              fi
+              ;;
+          esac
+
+          android_release_mode="skip"
+          if [ -n "${ANDROID_KEYSTORE_BASE64}" ] &&
+             [ -n "${ANDROID_KEYSTORE_PASSWORD}" ] &&
+             [ -n "${ANDROID_KEY_ALIAS}" ] &&
+             [ -n "${ANDROID_KEY_PASSWORD}" ]; then
+            android_release_mode="signed"
+          fi
+
+          {
+            echo "windows_release_mode=${windows_release_mode}"
+            echo "android_release_mode=${android_release_mode}"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### Release plan"
+            echo ""
+            echo "- Requested mode: \`${REQUESTED_RELEASE_MODE}\`"
+            echo "- Windows release mode: \`${windows_release_mode}\`"
+            echo "- Windows signing secrets present: \`${has_windows_signing}\`"
+            echo "- Android release mode: \`${android_release_mode}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   windows-package:
     name: Windows package smoke
     runs-on: windows-latest
@@ -105,11 +190,235 @@ jobs:
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
 
-  release-windows:
-    name: Release Windows
-    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+  release-windows-community:
+    name: Release Windows (community unsigned draft)
+    if: needs.release-plan.outputs.windows_release_mode == 'community_unsigned'
     runs-on: windows-latest
-    needs: [windows-package]
+    needs: [windows-package, release-plan]
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        continue-on-error: true
+        with:
+          workspaces: ./src-tauri -> target
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Resolve release version
+        shell: pwsh
+        run: |
+          $config = Get-Content src-tauri/tauri.conf.json | ConvertFrom-Json
+          "APP_VERSION=$($config.version)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "RELEASE_TAG=v$($config.version)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Build unsigned Windows bundles
+        run: pnpm build:windows
+
+      - name: Create stable installer aliases
+        shell: pwsh
+        run: |
+          $releaseRoot = "src-tauri/target/x86_64-pc-windows-msvc/release"
+          $bundleRoot = Join-Path $releaseRoot "bundle"
+
+          $nsis = Get-ChildItem -Path (Join-Path $bundleRoot "nsis") -Filter "*_x64-setup.exe" -File |
+            Sort-Object Name |
+            Select-Object -First 1
+          if (-not $nsis) {
+            throw "NSIS installer was not found; cannot create stable alias."
+          }
+          Copy-Item -LiteralPath $nsis.FullName -Destination (Join-Path $bundleRoot "LightningP2PSetup.exe") -Force
+
+          $msi = Get-ChildItem -Path (Join-Path $bundleRoot "msi") -Filter "*_x64_en-US.msi" -File |
+            Sort-Object Name |
+            Select-Object -First 1
+          if (-not $msi) {
+            throw "MSI installer was not found; cannot create stable alias."
+          }
+          Copy-Item -LiteralPath $msi.FullName -Destination (Join-Path $bundleRoot "LightningP2P.msi") -Force
+
+      - name: Setup .NET for Velopack
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Install Velopack CLI
+        shell: pwsh
+        run: dotnet tool install -g vpk
+
+      - name: Pack unsigned Velopack installer
+        shell: pwsh
+        run: |
+          $releaseRoot = "src-tauri/target/x86_64-pc-windows-msvc/release"
+          $stageDir = Join-Path $releaseRoot "velopack-stage"
+          $releasesDir = Join-Path $releaseRoot "velopack-releases"
+
+          New-Item -ItemType Directory -Force -Path $stageDir | Out-Null
+          New-Item -ItemType Directory -Force -Path $releasesDir | Out-Null
+
+          Copy-Item -Path (Join-Path $releaseRoot "lightning-p2p.exe") -Destination $stageDir -Force
+          $webView = Join-Path $releaseRoot "WebView2Loader.dll"
+          if (Test-Path $webView) {
+            Copy-Item -Path $webView -Destination $stageDir -Force
+          }
+          Copy-Item -Path "scripts/velopack-post-install.ps1" -Destination $stageDir -Force
+          Copy-Item -Path "scripts/velopack-post-uninstall.ps1" -Destination $stageDir -Force
+
+          vpk pack `
+            --packId "LightningP2P" `
+            --packVersion "$env:APP_VERSION" `
+            --packDir "$stageDir" `
+            --mainExe "lightning-p2p.exe" `
+            --packTitle "Lightning P2P" `
+            --packAuthors "Lightning P2P" `
+            --icon "src-tauri/icons/icon.ico" `
+            --outputDir "$releasesDir" `
+            --runtime "win-x64" `
+            --noPortable
+
+      - name: Stage unsigned release artifacts
+        shell: pwsh
+        run: |
+          $releaseRoot = "src-tauri/target/x86_64-pc-windows-msvc/release"
+          $bundleRoot = Join-Path $releaseRoot "bundle"
+          $velopackRoot = Join-Path $releaseRoot "velopack-releases"
+          $stage = "windows-release-stage"
+
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+
+          $nsis = Get-ChildItem -Path (Join-Path $bundleRoot "nsis") -Filter "*_x64-setup.exe" -File |
+            Sort-Object Name |
+            Select-Object -First 1
+          $msi = Get-ChildItem -Path (Join-Path $bundleRoot "msi") -Filter "*_x64_en-US.msi" -File |
+            Sort-Object Name |
+            Select-Object -First 1
+          $velopackSetup = Get-ChildItem -Path $velopackRoot -Filter "*-Setup.exe" -File |
+            Sort-Object Name |
+            Select-Object -First 1
+
+          if (-not $nsis) { throw "NSIS installer was not found." }
+          if (-not $msi) { throw "MSI installer was not found." }
+          if (-not $velopackSetup) { throw "Velopack setup artifact was not found." }
+
+          Copy-Item -LiteralPath $nsis.FullName -Destination (Join-Path $stage $nsis.Name) -Force
+          Copy-Item -LiteralPath $msi.FullName -Destination (Join-Path $stage $msi.Name) -Force
+          Copy-Item -LiteralPath (Join-Path $bundleRoot "LightningP2PSetup.exe") -Destination (Join-Path $stage "LightningP2PSetup.exe") -Force
+          Copy-Item -LiteralPath (Join-Path $bundleRoot "LightningP2P.msi") -Destination (Join-Path $stage "LightningP2P.msi") -Force
+          Copy-Item -LiteralPath $velopackSetup.FullName -Destination (Join-Path $stage "LightningP2P-win-Setup.exe") -Force
+
+          Get-ChildItem -Path $velopackRoot -Filter "*-full.nupkg" -File | ForEach-Object {
+            Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $stage $_.Name) -Force
+          }
+          $releasesFile = Join-Path $velopackRoot "RELEASES"
+          if (Test-Path $releasesFile) {
+            Copy-Item -LiteralPath $releasesFile -Destination (Join-Path $stage "RELEASES") -Force
+          }
+
+      - name: Generate SHA256 checksums
+        shell: pwsh
+        run: |
+          $stage = "windows-release-stage"
+          $checksumPath = Join-Path $stage "SHA256SUMS.txt"
+          $files = Get-ChildItem -Path $stage -File |
+            Where-Object { $_.Name -ne "SHA256SUMS.txt" } |
+            Sort-Object Name
+
+          if (-not $files) {
+            throw "No release files found for checksum generation."
+          }
+
+          $lines = foreach ($file in $files) {
+            $hash = (Get-FileHash -Path $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $($file.Name)"
+          }
+
+          $lines | Set-Content -Path $checksumPath -Encoding utf8
+          Write-Host "Checksums written to $checksumPath"
+
+      - name: Verify unsigned release artifacts
+        shell: pwsh
+        run: |
+          $stage = "windows-release-stage"
+          $checksums = Join-Path $stage "SHA256SUMS.txt"
+          foreach ($name in @("LightningP2P-win-Setup.exe", "LightningP2PSetup.exe", "LightningP2P.msi")) {
+            ./scripts/verify-release.ps1 -Installer (Join-Path $stage $name) -Checksums $checksums
+          }
+
+      - name: Write community release notes
+        shell: pwsh
+        run: |
+          $body = @(
+            "## Lightning P2P v$env:APP_VERSION"
+            ""
+            "Draft community unsigned Windows build."
+            ""
+            'This build is not Authenticode code-signed. Windows Defender SmartScreen may show "Windows protected your PC" or "unrecognized app" because Windows cannot verify a publisher identity for unsigned files.'
+            ""
+            "Verify the source and SHA256 checksum before installing. If you do not trust the source or checksum, do not install."
+            ""
+            "### Downloads"
+            ""
+            "| File | Description |"
+            "|------|-------------|"
+            "| ``LightningP2P-win-Setup.exe`` | Recommended Velopack one-click installer, unsigned community build |"
+            "| ``LightningP2PSetup.exe`` | Stable alias for the NSIS setup installer, unsigned community build |"
+            "| ``LightningP2P.msi`` | Stable alias for the MSI installer, unsigned community build |"
+            "| ``SHA256SUMS.txt`` | SHA256 checksums for this release |"
+            ""
+            "### Verify before installing"
+            ""
+            '```powershell'
+            'powershell -ExecutionPolicy Bypass -File .\scripts\verify-release.ps1 -Installer .\LightningP2PSetup.exe -Checksums .\SHA256SUMS.txt'
+            '```'
+            ""
+            "Documentation:"
+            ""
+            "- Download trust: https://github.com/Kerim-Sabic/lightning-p2p/blob/main/docs/download-trust.md"
+            "- Security model: https://github.com/Kerim-Sabic/lightning-p2p/blob/main/SECURITY.md"
+            "- Privacy: https://github.com/Kerim-Sabic/lightning-p2p/blob/main/PRIVACY.md"
+            ""
+            "Full changelog: https://github.com/Kerim-Sabic/lightning-p2p/commits/$env:RELEASE_TAG"
+          ) -join [Environment]::NewLine
+          $body | Set-Content -Path "RELEASE_NOTES-community.md" -Encoding utf8
+
+      - name: Create draft unsigned GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: Lightning P2P v${{ env.APP_VERSION }} (community unsigned)
+          body_path: RELEASE_NOTES-community.md
+          draft: true
+          prerelease: true
+          fail_on_unmatched_files: true
+          files: windows-release-stage/*
+
+      - name: Upload unsigned release bundle artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lightning-p2p-windows-community-unsigned-bundle
+          path: windows-release-stage/*
+
+  release-windows-signed:
+    name: Release Windows (production signed)
+    if: needs.release-plan.outputs.windows_release_mode == 'production_signed'
+    runs-on: windows-latest
+    needs: [windows-package, release-plan]
     permissions:
       contents: write
     env:
@@ -202,9 +511,9 @@ jobs:
             | File | Description |
             |------|-------------|
             | `LightningP2P-win-Setup.exe` | Recommended Velopack installer (one-click, per-user install, delta-update ready) |
-            | `Lightning.P2P_${{ env.APP_VERSION }}_x64-setup.exe` | Classic NSIS installer with Tauri updater metadata |
+            | `Lightning P2P_${{ env.APP_VERSION }}_x64-setup.exe` | Classic NSIS installer with Tauri updater metadata |
             | `LightningP2PSetup.exe` | Stable alias for the latest NSIS installer |
-            | `Lightning.P2P_${{ env.APP_VERSION }}_x64_en-US.msi` | Windows MSI installer (managed environments) |
+            | `Lightning P2P_${{ env.APP_VERSION }}_x64_en-US.msi` | Windows MSI installer (managed environments) |
             | `LightningP2P.msi` | Stable alias for the latest MSI installer |
             | winget manifest | Planned; publish after the package is accepted in `microsoft/winget-pkgs` |
 
@@ -386,8 +695,7 @@ jobs:
 
           $lines = foreach ($file in $files) {
             $hash = (Get-FileHash -Path $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-            $assetName = $file.Name -replace " ", "."
-            "$hash  $assetName"
+            "$hash  $($file.Name)"
           }
 
           $lines | Set-Content -Path $checksumPath -Encoding utf8
@@ -486,9 +794,9 @@ jobs:
 
   release-android:
     name: Release Android
-    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    if: needs.release-plan.outputs.android_release_mode == 'signed'
     runs-on: ubuntu-latest
-    needs: [android-package]
+    needs: [android-package, release-plan]
     permissions:
       contents: write
     env:

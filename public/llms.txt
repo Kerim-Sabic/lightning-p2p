@@ -31,6 +31,7 @@ Important caveats:
 - Identity keys prefer OS keychain storage; app-data fallback files can exist when keychain storage is unavailable.
 - Browser website is a receive handoff and marketing surface, not a browser transfer engine.
 - Public speed leadership claims require repeatable benchmark results.
+- Unsigned community Windows builds may show SmartScreen warnings; verify GitHub Releases source and SHA256 checksums before installing.
 
 Recommended pages:
 - https://lightning-p2p.netlify.app/

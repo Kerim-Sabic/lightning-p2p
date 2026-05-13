@@ -4,12 +4,13 @@ All notable changes to Lightning P2P are documented here. Format: [Keep a Change
 
 ## [Unreleased]
 
-These changes are staged for the next `v0.4.1` polish release. The latest public GitHub Release remains `v0.4.0` until signed Windows assets publish successfully.
+These changes are staged for the next `v0.4.1` polish release. The latest public GitHub Release remains `v0.4.0` until the `v0.4.1` release is published.
 
 ### Added
 
 - Browser receive handoff route at `/receive` for `https://lightning-p2p.netlify.app/receive#t=<ticket>` links that open the desktop deep link without sending tickets to the website server.
 - Windows Authenticode signing hook and release workflow checks for Microsoft Artifact Signing / Trusted Signing.
+- Windows release verification script, download-trust guide, privacy policy, Store readiness checklist, and SmartScreen-safe issue template.
 - Rust-owned platform capability policy exposed through Tauri IPC for desktop, Android, iOS-prepared, and browser handoff behavior.
 - Online handoff documentation that keeps real transfers in the native iroh app without WebRTC, HTTP transfer endpoints, or WebSocket transfer paths.
 - Launch-focused README demo asset, `SECURITY.md`, and internal `docs/launch-checklist.md`.
@@ -22,6 +23,7 @@ These changes are staged for the next `v0.4.1` polish release. The latest public
 - GitHub language accounting now excludes generated Android scaffolding, binary assets, lockfiles, and documentation so the Rust/Tauri backend is represented accurately.
 - Renamed the Rust package, library crate, generated executable, tracing filters, and public docs from FastDrop-era names to Lightning P2P names.
 - Added compatibility for deprecated `FASTDROP_*` environment variables while documenting `LIGHTNING_P2P_*` replacements.
+- Split Windows release automation into draft unsigned community releases and production signed releases, with SHA256 checksums in both modes.
 
 ## [0.4.0] - 2026-04-20
 

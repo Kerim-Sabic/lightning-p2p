@@ -47,6 +47,35 @@ lightning-p2p://receive?t=<ticket>
 
 Relay fallback helps devices connect when NAT or firewalls block direct paths. It should not be described as cloud storage. It also should not be described as "never touches a server" because discovery and relay infrastructure can be involved in connectivity.
 
+## Windows Install And Trust Surface
+
+Lightning P2P is a networked desktop app, so public releases should make the
+Windows trust surface explicit instead of hiding it.
+
+Confirmed behavior in this repository:
+
+- The app uses iroh and QUIC for peer connectivity. The operating system may
+  show firewall prompts because direct peer connectivity and nearby discovery
+  need network access.
+- NSIS installs are configured as current-user installs, not per-machine admin
+  installs.
+- Velopack post-install hooks add inbound and outbound Windows Firewall rules
+  scoped to `lightning-p2p.exe`; the uninstall hook removes the rule.
+- The app registers the `lightning-p2p://` deep-link scheme through
+  `tauri-plugin-deep-link`.
+- The updater plugin can check signed update metadata when updater artifacts are
+  enabled for a signed production release.
+- The installer embeds the Microsoft Edge WebView2 bootstrapper/runtime path
+  configured by Tauri. The app does not run an arbitrary post-install download
+  script from this repository.
+- No hidden autostart entry is configured in this repository.
+- No telemetry endpoint or analytics SDK is configured in this repository.
+
+Unsigned community releases can trigger Microsoft Defender SmartScreen because
+Windows cannot verify a publisher identity. That is a distribution trust issue,
+not a transfer-protocol property. Verify release source, SHA256 checksums, and
+Authenticode status before installing.
+
 ## Nearby Discovery
 
 Nearby discovery is meant for trusted local networks. When enabled, the device publishes itself over iroh's mDNS-based `LocalSwarmDiscovery`. Other peers on the same network can:
@@ -58,15 +87,15 @@ The nearby ALPN is a tagged-enum protocol with three message types: `Hello` (dev
 
 What this means for risk:
 
-- A nearby peer cannot push files onto your device silently — every offer surfaces a UI prompt that requires explicit acceptance.
+- A nearby peer cannot push files onto your device silently; every offer surfaces a UI prompt that requires explicit acceptance.
 - A nearby peer *can* spam offer prompts. The current overlay shows one offer at a time and a counter for the rest; per-NodeId rate-limiting in the offer inbox is a planned mitigation before public release.
-- A nearby peer can always read the public mDNS service announcement (NodeId + reachability) regardless of whether sharing is enabled — this is inherent to mDNS, not Lightning P2P specific.
+- A nearby peer can always read the public mDNS service announcement (NodeId + reachability) regardless of whether sharing is enabled; this is inherent to mDNS, not Lightning P2P specific.
 
 Use manual ticket sharing when even the discovery metadata should not be visible on the LAN.
 
 ## Bluetooth LE Discovery (planned)
 
-Android manifest permissions for BLE (`BLUETOOTH_SCAN` with `neverForLocation`, `BLUETOOTH_ADVERTISE`, `BLUETOOTH_CONNECT`) are declared so a follow-up can ship cross-network proximity discovery. When wired up, the BLE advertisement payload will carry only the iroh NodeId + a truncated device name + a single flags byte — never file contents. All actual file transfer continues to ride iroh QUIC. The BLE service UUID and manufacturer-specific data layout will be documented here once the scanner/advertiser lands.
+Android manifest permissions for BLE (`BLUETOOTH_SCAN` with `neverForLocation`, `BLUETOOTH_ADVERTISE`, `BLUETOOTH_CONNECT`) are declared so a follow-up can ship cross-network proximity discovery. When wired up, the BLE advertisement payload will carry only the iroh NodeId + a truncated device name + a single flags byte; never file contents. All actual file transfer continues to ride iroh QUIC. The BLE service UUID and manufacturer-specific data layout will be documented here once the scanner/advertiser lands.
 
 ## Local Artifacts
 

@@ -1,0 +1,41 @@
+name: Security report
+description: Start a security report without posting sensitive details publicly.
+title: "[Security] Private report requested"
+labels: ["security"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not post exploit details, private tickets, secret keys, private files, or sensitive logs in a public issue.
+
+        Prefer GitHub Security Advisories when available. If you cannot access a private reporting path, submit this minimal issue so a maintainer can provide a private contact.
+  - type: dropdown
+    id: private-channel
+    attributes:
+      label: Do you need a private reporting channel?
+      options:
+        - Yes, I need a private maintainer contact
+        - No, I already submitted privately
+    validations:
+      required: true
+  - type: dropdown
+    id: category
+    attributes:
+      label: Area
+      options:
+        - Transfer tickets
+        - Nearby discovery
+        - Local key storage
+        - Update or installer trust
+        - File export or path handling
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: public-summary
+    attributes:
+      label: Public-safe summary
+      description: Keep this high level. Do not include reproduction details if they could be abused.
+      placeholder: "I found a possible issue in ..."
+    validations:
+      required: true

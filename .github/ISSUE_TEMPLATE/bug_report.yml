@@ -1,0 +1,72 @@
+name: Bug report
+description: Report a reproducible Lightning P2P bug.
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Do not include private tickets, private keys, or sensitive filenames unless you are comfortable posting them publicly.
+  - type: input
+    id: version
+    attributes:
+      label: Lightning P2P version
+      placeholder: "0.4.1"
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: "Windows 11 23H2"
+    validations:
+      required: true
+  - type: dropdown
+    id: route
+    attributes:
+      label: Transfer route
+      options:
+        - LAN direct
+        - WAN direct
+        - Relay fallback
+        - Nearby discovery
+        - Not transfer-related
+        - Unknown
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: List the exact actions that trigger the bug.
+      placeholder: |
+        1. Open Lightning P2P
+        2. Select ...
+        3. See ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Redact tickets, paths, device names, and sensitive filenames before posting.
+    validations:
+      required: false
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+    validations:
+      required: false

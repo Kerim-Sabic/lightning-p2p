@@ -98,7 +98,8 @@ interface AnswerContent {
 
 const webPages = pages as WebPage[];
 
-const publicReleaseVersion = "v0.4.0";
+const publicReleaseVersion = "v0.4.1";
+const DOWNLOAD_TRUST_URL = `${REPO_URL}/blob/main/docs/download-trust.md`;
 
 const baseKeyFacts: KeyFact[] = [
   { label: "Product", value: "Lightning P2P" },
@@ -1301,7 +1302,7 @@ function DownloadCards() {
         <SectionHeading
           eyebrow="Download"
           title="Start with the Windows installer."
-          copy="Best for most users: install, open, send. Release files live on GitHub so downloads, checksums, signatures, and updater metadata stay inspectable."
+          copy="Best for most users: install, open, send. Release files live on GitHub so downloads, checksums, signing status, and any generated updater metadata stay inspectable."
         />
 
         <div className="mt-12 grid gap-4 lg:grid-cols-[1.15fr_0.85fr_0.85fr]">
@@ -1343,6 +1344,7 @@ function DownloadCards() {
                 "No account required",
                 "GitHub Releases",
                 "SHA256SUMS.txt published",
+                "SmartScreen guidance documented",
               ].map((item) => (
                 <span
                   key={item}
@@ -1385,7 +1387,14 @@ function DownloadCards() {
             className="inline-flex items-center gap-2 underline-offset-4 transition hover:text-white hover:underline"
           >
             <FileCheck2 className="h-4 w-4" />
-            Checksums and signatures
+            Checksums and signing status
+          </a>
+          <a
+            href={DOWNLOAD_TRUST_URL}
+            className="inline-flex items-center gap-2 underline-offset-4 transition hover:text-white hover:underline"
+          >
+            <ShieldCheck className="h-4 w-4" />
+            Download trust guide
           </a>
         </div>
 
@@ -1405,7 +1414,7 @@ function DownloadCards() {
             },
             {
               title: "Release artifacts",
-              copy: "GitHub Releases contain installer assets, updater metadata, SHA256 checksums, and signatures for published builds.",
+              copy: "GitHub Releases contain installer assets, SHA256 checksums, signing status, and any updater metadata generated for that build.",
             },
           ].map((item) => (
             <div
