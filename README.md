@@ -10,7 +10,7 @@ Free, open-source peer-to-peer file transfer for Windows. No cloud upload, no ac
 ![Tauri](https://img.shields.io/badge/Tauri-v2-38bdf8)
 ![BLAKE3](https://img.shields.io/badge/integrity-BLAKE3-7ce7b2)
 
-[Download for Windows](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest) | [Website](https://lightning-p2p.netlify.app/) | [Download trust](docs/download-trust.md) | [Security](SECURITY.md) | [Privacy](PRIVACY.md) | [Benchmarks](docs/benchmark-report-template.md) | [Contribute](CONTRIBUTING.md)
+[Download for Windows](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest) | [Website](https://lightning-p2p.netlify.app/) | [Windows trust](docs/download-trust.md) | [Android trust](docs/android-trust.md) | [Security](SECURITY.md) | [Privacy](PRIVACY.md) | [Benchmarks](docs/benchmark-report-template.md) | [Contribute](CONTRIBUTING.md)
 
 ## Demo
 
@@ -78,27 +78,62 @@ Requirements:
 - Microsoft Edge WebView2 Runtime, installed by the app bundle when needed
 - Firewall permission for nearby LAN discovery if Windows prompts for it
 
-### Android alpha
+### Android
 
-Android debug APKs are built in GitHub Actions for smoke testing. A public
-signed APK will appear in GitHub Releases as `LightningP2P-android-latest.apk`
-after Android signing secrets are configured for the release workflow.
+Download `LightningP2P-android-latest.apk` and `SHA256SUMS-android.txt` from
+the latest [GitHub Release](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest)
+on your phone (or on a PC for USB sideload).
 
-Once a signed APK is published:
+#### Install
 
-1. Download `LightningP2P-android-latest.apk` from the latest GitHub Release on your phone.
-2. When prompted, allow your browser or file manager to install unknown apps (Settings &rarr; Apps &rarr; Special access &rarr; Install unknown apps).
-3. Open the downloaded APK and tap **Install**.
-4. Launch Lightning P2P, allow notifications when asked (this keeps transfers alive in the background).
+1. Open the downloaded APK from your file manager.
+2. The first time, Android asks "Allow [your downloader] to install unknown
+   apps?" — tap **Settings** → toggle **Allow from this source** → back out.
+3. Tap **Install**.
+4. If Play Protect shows "couldn't verify this app", tap **Install anyway** —
+   that's the expected one-time dialog for any new app not on the Play Store.
+5. Launch Lightning P2P, allow notifications + Bluetooth when prompted.
 
-Open Lightning P2P on a second device on the same Wi-Fi (Windows desktop or
-another Android phone) and the two devices should appear in each other's Devices
-tab. Pick a device, choose files, and the receiver taps **Accept**.
+#### What's normal vs. what isn't
+
+| Prompt | Normal? | What it means |
+| --- | --- | --- |
+| "Install unknown apps" permission | Yes, once per downloader | Android's OS-level confirmation for any sideload |
+| "Play Protect couldn't verify this app" | Yes, once | Low-reputation warning, not a malware warning |
+| "App not installed" / "App damaged" | **No** | Bad download — verify SHA-256 and re-download |
+| Red "Blocked by Play Protect" banner | **No** | Verify SHA-256; if it matches, file an issue |
+
+See [docs/android-trust.md](docs/android-trust.md) for the full trust guide,
+SHA-256 verification steps, and signer-fingerprint instructions.
+
+#### Verify the download
+
+```powershell
+(Get-FileHash .\LightningP2P-android-latest.apk -Algorithm SHA256).Hash
+Get-Content .\SHA256SUMS-android.txt | Select-String "LightningP2P-android-latest.apk"
+```
+
+The two values must match. If they don't, delete the APK and re-download.
+
+Every Lightning P2P release is signed with the same keystore — published cert
+fingerprint will appear here once the first signed release is cut. Power users
+can verify with `apksigner verify --print-certs` and compare.
+
+#### Use it
+
+Open Lightning P2P on a second device (Windows desktop, another phone) and the
+two devices should appear in each other's Devices tab within ~10 seconds. Pick
+a device, choose files, the receiver taps **Accept**. Devices on the same Wi-Fi
+discover each other via mDNS; off-Wi-Fi devices in range discover each other via
+Bluetooth and the actual transfer uses iroh's relay fallback.
 
 Requirements:
 
 - Android 7.0 (API 24) or newer
-- Wi-Fi network that does not block multicast (most home networks, some hotel/guest networks do)
+- Wi-Fi network that does not block multicast (most home networks; some
+  hotel/guest networks do — the app surfaces a hint when this happens)
+- Bluetooth for off-Wi-Fi nearby discovery (optional, can be turned off in
+  Settings)
 - ~50 MB of free space
 
 ## How it works
@@ -133,7 +168,7 @@ See [SECURITY.md](SECURITY.md) for the threat model and reporting policy.
 | Platform | Status |
 | --- | --- |
 | Windows | Public release |
-| Android | Alpha/internal foundation |
+| Android | Public sideload (mDNS + Bluetooth nearby discovery) |
 | macOS/Linux | Planned |
 | iOS | Not shipped |
 | Browser | Receive handoff and marketing only, not the transfer engine |

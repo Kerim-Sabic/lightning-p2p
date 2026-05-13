@@ -2,9 +2,8 @@
 
 ## Supported Versions
 
-Security fixes target the latest public Windows release and the current `main`
-branch. Android is alpha/internal foundation work until a signed public Android
-release is published.
+Security fixes target the latest public Windows and Android releases and the
+current `main` branch.
 
 ## Reporting a Vulnerability
 
@@ -102,23 +101,36 @@ The sender must stay online, keep Lightning P2P open, and keep the content avail
 Release automation supports:
 
 - Tauri updater metadata signatures
-- SHA256 checksums
-- Authenticode code-signing when Microsoft Trusted Signing secrets are configured
+- SHA256 checksums for both Windows and Android artifacts
+- Authenticode code-signing for Windows when Microsoft Trusted Signing secrets are configured
+- Android v2/v3 APK signing with a project-controlled release keystore (cert fingerprint published in [README.md](README.md#android))
 
 Unsigned community builds may show Microsoft Defender SmartScreen warnings such
 as "Windows protected your PC" or "unrecognized app". Signed production builds
 can also show SmartScreen prompts until Microsoft reputation builds for the
 publisher and file hash.
 
+On Android, sideloaded APKs always show the OS-level "Install unknown apps"
+prompt; that is normal and not a malware signal. Play Protect may also show a
+one-time "couldn't verify this app" dialog for new releases — this also subsides
+as install reputation grows. See [docs/android-trust.md](docs/android-trust.md)
+for verification commands and the published cert fingerprint.
+
 Do not assume every build is code-signed. Verify public release artifacts from
 GitHub Releases when install trust matters:
 
 ```powershell
+# Windows
 powershell -ExecutionPolicy Bypass -File .\scripts\verify-release.ps1 -Installer .\LightningP2PSetup.exe -Checksums .\SHA256SUMS.txt
+
+# Android (PowerShell): hash check
+(Get-FileHash .\LightningP2P-android-latest.apk -Algorithm SHA256).Hash
+Get-Content .\SHA256SUMS-android.txt | Select-String "LightningP2P-android-latest.apk"
 ```
 
-See [docs/download-trust.md](docs/download-trust.md) for the download trust
-model.
+See [docs/download-trust.md](docs/download-trust.md) for the Windows trust
+model and [docs/android-trust.md](docs/android-trust.md) for the Android
+sideload trust model.
 
 ## Telemetry Policy
 
@@ -142,7 +154,6 @@ Lightning P2P does not send product telemetry by default. Diagnostics are copied
 
 - Public benchmark leadership claims are not published yet.
 - macOS/Linux/iOS are not public releases.
-- Android remains alpha/internal foundation work.
 - The keychain fallback stores raw identity key material in the app data directory when platform key storage is unavailable.
 - Nearby discovery does not yet have an approval/pairing step before share metadata is visible to local-network peers.
 - Pause/resume transfer UX is tracked but not complete.
