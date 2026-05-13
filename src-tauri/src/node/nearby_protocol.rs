@@ -336,10 +336,33 @@ async fn exchange(
 }
 
 /// Returns the local device name reported to nearby peers.
+///
+/// Priority:
+/// 1. `LIGHTNING_P2P_DEVICE_NAME` — explicit override, always wins.
+/// 2. On Android, `ro.product.model` from system properties (e.g. "Pixel 7").
+///    Android typically doesn't populate `HOSTNAME`/`COMPUTERNAME`, so without
+///    this branch every Android peer would show up as "Nearby device".
+/// 3. `COMPUTERNAME` (Windows), `HOSTNAME` (Unix), `USERDOMAIN` (Windows fallback).
+/// 4. `"Nearby device"` as a last resort — keeps the UI useful even on a host
+///    with no resolvable identity.
 #[must_use]
 pub fn local_device_name() -> String {
+    if let Some(explicit) = env::var("LIGHTNING_P2P_DEVICE_NAME")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+    {
+        return explicit;
+    }
+
+    #[cfg(target_os = "android")]
+    {
+        if let Some(android_name) = android_device_name() {
+            return android_name;
+        }
+    }
+
     [
-        env::var("LIGHTNING_P2P_DEVICE_NAME").ok(),
         env::var("COMPUTERNAME").ok(),
         env::var("HOSTNAME").ok(),
         env::var("USERDOMAIN").ok(),
@@ -349,6 +372,58 @@ pub fn local_device_name() -> String {
     .map(|value| value.trim().to_string())
     .find(|value| !value.is_empty())
     .unwrap_or_else(|| "Nearby device".into())
+}
+
+/// Reads `ro.product.model` (and `ro.product.manufacturer` as a fallback) from
+/// the Android property service, returning a user-recognizable device name
+/// like "Pixel 7" or "Samsung SM-G991U".
+///
+/// Uses the libc bionic `__system_property_get` directly rather than crossing
+/// JNI — keeps the resolution out of the activity lifecycle and works from any
+/// Rust thread.
+#[cfg(target_os = "android")]
+fn android_device_name() -> Option<String> {
+    let model = read_android_property("ro.product.model");
+    let manufacturer = read_android_property("ro.product.manufacturer");
+    match (manufacturer, model) {
+        (Some(mfr), Some(mdl)) => {
+            // If the model already starts with the manufacturer (e.g. "Google
+            // Pixel 7" is rare; usually it's just "Pixel 7"), don't duplicate.
+            if mdl.to_ascii_lowercase().starts_with(&mfr.to_ascii_lowercase()) {
+                Some(mdl)
+            } else {
+                Some(mdl)
+            }
+        }
+        (None, Some(mdl)) => Some(mdl),
+        (Some(mfr), None) => Some(mfr),
+        (None, None) => None,
+    }
+}
+
+#[cfg(target_os = "android")]
+fn read_android_property(name: &str) -> Option<String> {
+    use std::ffi::CString;
+    use std::os::raw::{c_char, c_int};
+
+    extern "C" {
+        fn __system_property_get(name: *const c_char, value: *mut c_char) -> c_int;
+    }
+
+    let c_name = CString::new(name).ok()?;
+    // PROP_VALUE_MAX in bionic is 92 bytes including the trailing NUL.
+    let mut buf = [0u8; 92];
+    let len = unsafe { __system_property_get(c_name.as_ptr(), buf.as_mut_ptr().cast::<c_char>()) };
+    if len <= 0 {
+        return None;
+    }
+    let trimmed = &buf[..len as usize];
+    let value = std::str::from_utf8(trimmed).ok()?.trim().to_string();
+    if value.is_empty() {
+        None
+    } else {
+        Some(value)
+    }
 }
 
 #[cfg(test)]
