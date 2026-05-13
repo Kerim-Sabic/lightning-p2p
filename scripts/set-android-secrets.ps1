@@ -59,8 +59,13 @@ function Set-GhSecret {
   }
   $repoArg = @()
   if ($Repo) { $repoArg = @("--repo", $Repo) }
-  # Pipe via stdin so the value never appears in the gh command line.
-  $Value | gh secret set $Name @repoArg
+  # Pass the value via --body rather than stdin: PowerShell 5.1's pipe to a
+  # native command appends CRLF, which `base64 -d` in CI then refuses with
+  # `invalid input`. --body sends the literal value as an argv element, no
+  # extra bytes. Trade-off: the value briefly appears in this PowerShell
+  # session's process arguments; acceptable for a one-shot release setup
+  # on a single-user dev machine.
+  gh secret set $Name --body $Value @repoArg
   if ($LASTEXITCODE -ne 0) {
     throw "gh secret set $Name failed with exit code $LASTEXITCODE"
   }
