@@ -857,19 +857,10 @@ jobs:
             timeout 30 adb logcat -d AndroidRuntime:E '*:S' > logcat-androidruntime.txt || true
             timeout 30 adb logcat -d '*:F' > logcat-fatal.txt || true
 
-            if grep -E 'FATAL EXCEPTION|AndroidRuntime: FATAL' logcat-androidruntime.txt logcat-fatal.txt; then
-              echo "::error::Fatal exception during launch"
-              cat logcat-androidruntime.txt
-              cat logcat-fatal.txt
-              exit 1
-            fi
+            if grep -E 'FATAL EXCEPTION|AndroidRuntime: FATAL' logcat-androidruntime.txt logcat-fatal.txt; then echo "::error::Fatal exception during launch"; cat logcat-androidruntime.txt; cat logcat-fatal.txt; exit 1; fi
 
             echo "Verifying MainActivity is in the foreground"
-            if ! adb shell dumpsys activity activities | grep -q 'com.lightningp2p.app/.MainActivity'; then
-              echo "::error::MainActivity is not in the activity stack after launch"
-              adb shell dumpsys activity activities | head -n 50
-              exit 1
-            fi
+            adb shell dumpsys activity activities | grep -q 'com.lightningp2p.app/.MainActivity' || (echo "::error::MainActivity is not in the activity stack after launch"; adb shell dumpsys activity activities | head -n 50; exit 1)
             echo "Launcher smoke passed."
 
   release-android:
