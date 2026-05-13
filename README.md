@@ -10,7 +10,7 @@ Free, open-source peer-to-peer file transfer for Windows. No cloud upload, no ac
 ![Tauri](https://img.shields.io/badge/Tauri-v2-38bdf8)
 ![BLAKE3](https://img.shields.io/badge/integrity-BLAKE3-7ce7b2)
 
-[Download for Windows](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P-win-Setup.exe) · [Website](https://lightning-p2p.netlify.app/) · [Security](SECURITY.md) · [Benchmarks](docs/benchmark-report-template.md) · [GitHub Releases](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest) · [Contribute](CONTRIBUTING.md)
+[Download for Windows](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest) | [Website](https://lightning-p2p.netlify.app/) | [Download trust](docs/download-trust.md) | [Security](SECURITY.md) | [Privacy](PRIVACY.md) | [Benchmarks](docs/benchmark-report-template.md) | [Contribute](CONTRIBUTING.md)
 
 ## Demo
 
@@ -46,9 +46,11 @@ Lightning P2P keeps the workflow simple and removes the cloud file-hosting middl
 | Open source | Yes |
 | MIT license | Yes |
 
-## Install
+## Download & Trust
 
-Download the latest public release from [GitHub Releases](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest).
+Download the latest public Windows release from [GitHub Releases](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest).
+
+Early community builds may be unsigned and may trigger Microsoft Defender SmartScreen. Verify the download source and checksum before installing. Do not install if the checksum does not match or if you do not trust the source.
 
 ### Windows
 
@@ -61,6 +63,14 @@ Optional:
 - [`LightningP2PSetup.exe`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2PSetup.exe) - classic NSIS installer
 - [`LightningP2P.msi`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P.msi) - MSI for managed deployments
 - Source build for developers
+
+Verify a release download:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\verify-release.ps1 -Installer .\LightningP2PSetup.exe -Checksums .\SHA256SUMS.txt
+```
+
+Read [docs/download-trust.md](docs/download-trust.md) for SmartScreen, SHA256, and Authenticode guidance. Read [SECURITY.md](SECURITY.md) and [PRIVACY.md](PRIVACY.md) before using Lightning P2P on sensitive files or networks.
 
 Requirements:
 

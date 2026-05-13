@@ -10,6 +10,7 @@ This directory keeps project docs that are too detailed for the README.
 
 ## Security and Privacy
 
+- [download-trust.md](download-trust.md) - SmartScreen, SHA256, Authenticode, and official download-source guidance.
 - [security-model.md](security-model.md) - public security model and caveats.
 - [SECURITY_NOTES.md](SECURITY_NOTES.md) - implementation-level security notes from the launch audit.
 - [online-handoff.md](online-handoff.md) - receive handoff behavior and URL-fragment ticket handling.
@@ -18,6 +19,7 @@ This directory keeps project docs that are too detailed for the README.
 
 - [release-checklist.md](release-checklist.md) - tagged-release checklist.
 - [release-operations.md](release-operations.md) - manual release tasks such as winget, signing, and clean-VM verification.
+- [store-readiness.md](store-readiness.md) - Microsoft Store preparation checklist.
 - [launch-checklist.md](launch-checklist.md) - public launch readiness tasks.
 - [seo-checklist.md](seo-checklist.md) - off-page SEO and discovery tasks.
 

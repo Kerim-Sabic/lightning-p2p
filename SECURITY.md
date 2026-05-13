@@ -2,13 +2,20 @@
 
 ## Supported Versions
 
-Security fixes target the latest public Windows release and the current `main` branch.
+Security fixes target the latest public Windows release and the current `main`
+branch. Android is alpha/internal foundation work until a signed public Android
+release is published.
 
 ## Reporting a Vulnerability
 
 Do not open a public issue for a suspected vulnerability.
 
-Report security issues through GitHub Security Advisories when available, or contact the repository owner privately with:
+Report security issues through GitHub Security Advisories when available, or
+contact the repository owner privately. If no private contact is listed for your
+deployment, open a minimal public issue asking for a private security contact and
+do not include exploit details.
+
+Include:
 
 - affected version or commit
 - operating system
@@ -16,6 +23,17 @@ Report security issues through GitHub Security Advisories when available, or con
 - steps to reproduce
 - expected impact
 - safe proof-of-concept files, logs, or screenshots
+
+## Official Release Sources
+
+Official public builds are distributed only from:
+
+- GitHub Releases: <https://github.com/Kerim-Sabic/lightning-p2p/releases>
+- Official website: <https://lightning-p2p.netlify.app/>
+- A future Microsoft Store listing after this repository documents it
+
+Do not install builds from mirrors, chat attachments, or reuploads unless you
+can independently verify the source and checksum.
 
 ## Security Model
 
@@ -87,7 +105,20 @@ Release automation supports:
 - SHA256 checksums
 - Authenticode code-signing when Microsoft Trusted Signing secrets are configured
 
-Do not assume every local development build is code-signed. Verify public release artifacts from GitHub Releases when install trust matters.
+Unsigned community builds may show Microsoft Defender SmartScreen warnings such
+as "Windows protected your PC" or "unrecognized app". Signed production builds
+can also show SmartScreen prompts until Microsoft reputation builds for the
+publisher and file hash.
+
+Do not assume every build is code-signed. Verify public release artifacts from
+GitHub Releases when install trust matters:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\verify-release.ps1 -Installer .\LightningP2PSetup.exe -Checksums .\SHA256SUMS.txt
+```
+
+See [docs/download-trust.md](docs/download-trust.md) for the download trust
+model.
 
 ## Telemetry Policy
 

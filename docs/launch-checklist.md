@@ -12,7 +12,7 @@ Internal checklist for repository promotion work. Keep this out of the README so
 
 ## Release Readiness
 
-- [x] Latest public release is `v0.4.0`, published April 20, 2026.
+- [x] Release mismatch audited: `v0.4.0` was the latest public release on April 20, 2026; the next promotion target is `v0.4.1`.
 - [x] Release assets include `LightningP2P-win-Setup.exe`, `LightningP2PSetup.exe`, `LightningP2P.msi`, updater metadata, and checksums.
 - [ ] Tag and publish `v0.4.1` after launch polish lands.
 - [ ] Confirm the release body says "no artificial file-size cap" instead of "no limits".
