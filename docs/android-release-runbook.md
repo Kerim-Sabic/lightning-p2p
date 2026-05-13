@@ -130,8 +130,8 @@ If it shows `skip`, at least one secret is missing or empty. The job summary lis
    ```powershell
    git checkout main
    git pull
-   git tag -a v0.4.2 -m "Release v0.4.2"
-   git push origin v0.4.2
+   git tag -a v0.4.3 -m "Release v0.4.3"
+   git push origin v0.4.3
    ```
 
 4. **Watch the workflow.** The tag push triggers CI on `refs/tags/v*`. Expected jobs:
@@ -140,9 +140,9 @@ If it shows `skip`, at least one secret is missing or empty. The job summary lis
    - `release-android` (signed APK + AAB build, only if signing mode is `signed`)
    - `release-windows-community` or `release-windows-signed` (whichever applies)
 
-5. **Verify the GitHub Release.** Open `https://github.com/Kerim-Sabic/lightning-p2p/releases/tag/v0.4.2`:
-   - `LightningP2P-0.4.2-android.apk` ✓
-   - `LightningP2P-0.4.2-android.aab` ✓
+5. **Verify the GitHub Release.** Open `https://github.com/Kerim-Sabic/lightning-p2p/releases/tag/v0.4.3`:
+   - `LightningP2P-0.4.3-android.apk` ✓
+   - `LightningP2P-0.4.3-android.aab` ✓
    - `LightningP2P-android-latest.apk` (alias, always points at the newest) ✓
    - `SHA256SUMS-android.txt` ✓
 
@@ -151,7 +151,7 @@ If it shows `skip`, at least one secret is missing or empty. The job summary lis
    ```powershell
    $bt = "$env:LocalAppData\Android\Sdk\build-tools"
    $latest = Get-ChildItem $bt | Sort-Object Name -Descending | Select-Object -First 1
-   & "$($latest.FullName)\apksigner.bat" verify --print-certs --verbose LightningP2P-0.4.2-android.apk
+   & "$($latest.FullName)\apksigner.bat" verify --print-certs --verbose LightningP2P-0.4.3-android.apk
    ```
 
    The `SHA-256` cert fingerprint must match the one captured in step "Capture the certificate fingerprint" above. If it doesn't, **something is wrong** — do not publish; investigate before announcing.

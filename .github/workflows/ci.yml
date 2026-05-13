@@ -366,7 +366,7 @@ jobs:
           $body = @(
             "## Lightning P2P v$env:APP_VERSION"
             ""
-            "Draft community unsigned Windows build."
+            "Community unsigned Windows build."
             ""
             'This build is not Authenticode code-signed. Windows Defender SmartScreen may show "Windows protected your PC" or "unrecognized app" because Windows cannot verify a publisher identity for unsigned files.'
             ""
@@ -842,13 +842,12 @@ jobs:
           arch: x86_64
           profile: pixel_5
           force-avd-creation: false
-          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics
           disable-animations: true
           script: |
             set -e
-            apk='${{ steps.locate_apk.outputs.apk }}'
-            echo "Installing $apk"
-            adb install -r "$apk"
+            echo "Installing ${{ steps.locate_apk.outputs.apk }}"
+            adb install -r '${{ steps.locate_apk.outputs.apk }}'
 
             echo "Launching com.lightningp2p.app/.MainActivity"
             adb logcat -c
@@ -968,15 +967,17 @@ jobs:
           stage="${GITHUB_WORKSPACE}/android-release-stage"
           mkdir -p "$stage"
 
-          apk=$(find "$out/apk/release" -maxdepth 1 -name '*.apk' | head -n 1)
-          aab=$(find "$out/bundle/release" -maxdepth 1 -name '*.aab' | head -n 1)
+          apk=$(find "$out/apk" -type f \( -path '*/universal/release/*.apk' -o -path '*/release/*.apk' \) | sort | head -n 1)
+          aab=$(find "$out/bundle" -type f \( -path '*/universalRelease/*.aab' -o -path '*/release/*.aab' \) | sort | head -n 1)
 
           if [ -z "$apk" ]; then
-            echo "::error::No release APK found under $out/apk/release"
+            echo "::error::No release APK found under $out/apk"
+            find "$out/apk" -maxdepth 5 -type f -print || true
             exit 1
           fi
           if [ -z "$aab" ]; then
-            echo "::error::No release AAB found under $out/bundle/release"
+            echo "::error::No release AAB found under $out/bundle"
+            find "$out/bundle" -maxdepth 5 -type f -print || true
             exit 1
           fi
 
