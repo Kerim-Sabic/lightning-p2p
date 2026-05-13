@@ -85,7 +85,15 @@ Compare against the `SHA256SUMS-android.txt` line for `LightningP2P-android-late
 
 ### Signer certificate (optional, recommended)
 
-Every Lightning P2P release is signed with the same release keystore. The SHA-256 cert fingerprint is published in the [README](../README.md#android) — once you've verified one release, every future release should show the same fingerprint.
+Every Lightning P2P release is signed with the same release keystore. The
+published SHA-256 cert fingerprint is:
+
+```
+5F:A0:D6:63:46:FF:9C:91:1B:18:D1:2A:5F:77:F1:F0:9B:2D:E2:A7:69:A0:97:68:6C:FC:FA:43:BD:86:29:16
+```
+
+Once you've verified one release against this value, every future release
+should show the same fingerprint.
 
 From an Android SDK install on your PC:
 

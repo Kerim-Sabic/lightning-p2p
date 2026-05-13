@@ -115,9 +115,16 @@ Get-Content .\SHA256SUMS-android.txt | Select-String "LightningP2P-android-lates
 
 The two values must match. If they don't, delete the APK and re-download.
 
-Every Lightning P2P release is signed with the same keystore — published cert
-fingerprint will appear here once the first signed release is cut. Power users
-can verify with `apksigner verify --print-certs` and compare.
+Every Lightning P2P release is signed with the same keystore. Power users can
+verify with `apksigner verify --print-certs <apk>` and compare the
+`Signer #1 certificate SHA-256 digest` against:
+
+```
+5F:A0:D6:63:46:FF:9C:91:1B:18:D1:2A:5F:77:F1:F0:9B:2D:E2:A7:69:A0:97:68:6C:FC:FA:43:BD:86:29:16
+```
+
+If the value does not match, do not install — the APK is signed with a
+different key than this project publishes.
 
 #### Use it
 
