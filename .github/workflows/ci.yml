@@ -183,7 +183,7 @@ jobs:
         run: pnpm build:windows
 
       - name: Upload Windows bundle artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: lightning-p2p-windows-smoke-bundle
           path: |
@@ -409,7 +409,7 @@ jobs:
           files: windows-release-stage/*
 
       - name: Upload unsigned release bundle artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: lightning-p2p-windows-community-unsigned-bundle
           path: windows-release-stage/*
@@ -716,7 +716,7 @@ jobs:
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/SHA256SUMS.txt
 
       - name: Upload release bundle artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: lightning-p2p-windows-release-bundle
           path: |
@@ -787,7 +787,7 @@ jobs:
         run: pnpm android:build:debug
 
       - name: Upload debug APK artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: lightning-p2p-android-debug-apk
           path: src-tauri/gen/android/app/build/outputs/apk/**/*.apk
@@ -924,7 +924,7 @@ jobs:
             android-release-stage/SHA256SUMS-android.txt
 
       - name: Upload Android release bundle artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: lightning-p2p-android-release-bundle
           path: android-release-stage/*
