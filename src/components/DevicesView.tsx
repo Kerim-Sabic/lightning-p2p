@@ -1,4 +1,11 @@
-import { LaptopMinimal, Radar, ScanSearch, Send } from "lucide-react";
+import {
+  LaptopMinimal,
+  QrCode,
+  Radar,
+  ScanSearch,
+  Send,
+  WifiOff,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import {
   getLocalDeviceIdentity,
@@ -10,6 +17,7 @@ import {
 } from "../lib/tauri";
 import { useIncomingOfferStore } from "../stores/incomingOfferStore";
 import { useNearbyDeviceStore } from "../stores/nearbyDeviceStore";
+import { useNearbyDiagnosticStore } from "../stores/nearbyDiagnosticStore";
 import { useTransferStore } from "../stores/transferStore";
 import { DeviceCard } from "./DeviceCard";
 
@@ -34,9 +42,14 @@ export function DevicesView() {
   const settings = useTransferStore((state) => state.settings);
   const setError = useTransferStore((state) => state.setError);
   const devices = useNearbyDeviceStore((state) => state.devices);
+  const diagnosticState = useNearbyDiagnosticStore((state) => state.state);
   const recordOutbound = useIncomingOfferStore((state) => state.recordOutbound);
   const nativeRuntime = isDesktopRuntime();
   const localDiscoveryEnabled = settings?.local_discovery_enabled ?? true;
+  const networkLikelyBlocked =
+    diagnosticState === "likely_blocked" &&
+    localDiscoveryEnabled &&
+    devices.length === 0;
   const [busyNodeId, setBusyNodeId] = useState<string | null>(null);
   const [localIdentity, setLocalIdentity] =
     useState<LocalDeviceIdentity | null>(null);
@@ -178,17 +191,39 @@ export function DevicesView() {
               </p>
             </div>
           ) : devices.length === 0 ? (
-            <div className="glass-subtle flex flex-col items-center gap-2 px-5 py-10 text-center">
-              <Radar className="h-5 w-5 text-sky-200/70" />
-              <p className="text-base font-semibold text-white">
-                Looking for nearby devices...
-              </p>
-              <p className="meta-copy">
-                Open Lightning P2P on the other device too &mdash; they'll
-                appear here within a second once both apps are running on the
-                same Wi-Fi.
-              </p>
-            </div>
+            networkLikelyBlocked ? (
+              <div className="glass-subtle flex flex-col items-center gap-3 px-5 py-8 text-center">
+                <WifiOff className="h-5 w-5 text-amber-200/80" />
+                <p className="text-base font-semibold text-white">
+                  This network may be blocking multicast
+                </p>
+                <p className="meta-copy max-w-[44ch]">
+                  Lightning P2P uses multicast for instant nearby discovery,
+                  and some hotel, guest, and enterprise Wi-Fi networks silently
+                  drop those packets. The app is healthy &mdash; you just
+                  haven't seen a peer.
+                </p>
+                <div className="mt-1 flex items-center gap-2 text-xs text-amber-100/90">
+                  <QrCode className="h-3.5 w-3.5" />
+                  <span>
+                    Use Send to generate a QR or ticket the receiver can paste
+                    instead.
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="glass-subtle flex flex-col items-center gap-2 px-5 py-10 text-center">
+                <Radar className="h-5 w-5 text-sky-200/70" />
+                <p className="text-base font-semibold text-white">
+                  Looking for nearby devices...
+                </p>
+                <p className="meta-copy">
+                  Open Lightning P2P on the other device too &mdash; they'll
+                  appear here within a second once both apps are running on the
+                  same Wi-Fi.
+                </p>
+              </div>
+            )
           ) : (
             devices.map((device) => (
               <DeviceCard

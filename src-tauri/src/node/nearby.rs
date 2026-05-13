@@ -26,10 +26,17 @@ use tokio::{
 
 const DISCOVERED_SHARES_UPDATED_EVENT: &str = "discovered-shares-updated";
 const NEARBY_DEVICES_UPDATED_EVENT: &str = "nearby-devices-updated";
+const NEARBY_DIAGNOSTIC_STATE_EVENT: &str = "nearby-diagnostic-state";
 const REFRESH_INTERVAL: Duration = Duration::from_secs(4);
 const NODE_QUERY_TIMEOUT: Duration = Duration::from_millis(900);
 const CANDIDATE_STALE_AFTER: Duration = Duration::from_secs(18);
 const MAX_PARALLEL_QUERIES: usize = 8;
+/// How long the discovery loop waits with zero peers before declaring the
+/// local network is "likely blocking multicast". Most home/office networks
+/// surface their first peer well under this deadline; hotel/guest networks
+/// that block multicast never do, and we want to nudge users toward QR/ticket
+/// fallback instead of leaving them staring at an empty list.
+const LIKELY_BLOCKED_DEADLINE: Duration = Duration::from_secs(10);
 
 /// High-level reachability hint for a nearby share candidate.
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
@@ -68,6 +75,27 @@ pub struct NearbyShare {
     pub freshness_seconds: u64,
     /// Unix timestamp when the sender published the share.
     pub published_at: u64,
+}
+
+/// Diagnostic snapshot the frontend uses to explain *why* the device list is
+/// empty.
+///
+/// The Devices view uses this to show a "network may be blocking multicast"
+/// hint card on guest/hotel Wi-Fi networks that silently drop mDNS packets,
+/// rather than leaving the user staring at "Looking for nearby devices..."
+/// indefinitely.
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum NearbyDiagnosticState {
+    /// Discovery loop is running and has not yet seen a peer.
+    Searching,
+    /// At least one peer has been seen via any transport since the loop
+    /// started. Latches once set.
+    DevicesVisible,
+    /// `LIKELY_BLOCKED_DEADLINE` has elapsed with no peer seen and we have not
+    /// previously surfaced any device. Strong hint the network is blocking
+    /// multicast and the user should reach for the QR/ticket fallback.
+    LikelyBlocked,
 }
 
 /// Transport layer that surfaced a nearby device.
@@ -479,6 +507,12 @@ pub fn spawn_nearby_discovery_loop(
         )
         .await;
 
+        // Diagnostic state is purely UX — never affects discovery itself.
+        let started_at = Instant::now();
+        let mut diagnostic_state = NearbyDiagnosticState::Searching;
+        emit_diagnostic_state(&app_handle, diagnostic_state);
+        update_diagnostic_state(&app_handle, &registry, started_at, &mut diagnostic_state).await;
+
         loop {
             if let Some(events) = discovery_events.as_mut() {
                 tokio::select! {
@@ -507,6 +541,13 @@ pub fn spawn_nearby_discovery_loop(
                         }
                     }
                 }
+                update_diagnostic_state(
+                    &app_handle,
+                    &registry,
+                    started_at,
+                    &mut diagnostic_state,
+                )
+                .await;
                 continue;
             }
 
@@ -518,6 +559,8 @@ pub fn spawn_nearby_discovery_loop(
                     discovery_events = Some(stream);
                 }
             }
+            update_diagnostic_state(&app_handle, &registry, started_at, &mut diagnostic_state)
+                .await;
             if let Err(error) = refresh_candidates(
                 &app_handle,
                 &endpoint,
@@ -570,6 +613,40 @@ async fn emit_device_upsert(
 fn emit_devices(app_handle: &AppHandle, snapshot: Vec<NearbyDevice>) {
     if let Err(error) = app_handle.emit(NEARBY_DEVICES_UPDATED_EVENT, snapshot) {
         tracing::debug!("failed to emit nearby-devices-updated: {error}");
+    }
+}
+
+fn emit_diagnostic_state(app_handle: &AppHandle, state: NearbyDiagnosticState) {
+    if let Err(error) = app_handle.emit(NEARBY_DIAGNOSTIC_STATE_EVENT, state) {
+        tracing::debug!("failed to emit nearby-diagnostic-state: {error}");
+    }
+}
+
+/// Re-evaluates the diagnostic state based on the current device snapshot and
+/// elapsed runtime, emitting only on transition.
+async fn update_diagnostic_state(
+    app_handle: &AppHandle,
+    registry: &NearbyShareRegistry,
+    started_at: Instant,
+    current: &mut NearbyDiagnosticState,
+) {
+    let device_count = registry.devices_snapshot().await.len();
+    let elapsed = started_at.elapsed();
+
+    let next = match (*current, device_count) {
+        // Latching: once we have seen a device, keep DevicesVisible even if
+        // they all disappear. Disappearance is not the same as "network is
+        // hostile to multicast"; it usually just means the other side closed.
+        (NearbyDiagnosticState::DevicesVisible, _) => NearbyDiagnosticState::DevicesVisible,
+        (_, count) if count > 0 => NearbyDiagnosticState::DevicesVisible,
+        (NearbyDiagnosticState::LikelyBlocked, 0) => NearbyDiagnosticState::LikelyBlocked,
+        (_, 0) if elapsed >= LIKELY_BLOCKED_DEADLINE => NearbyDiagnosticState::LikelyBlocked,
+        _ => NearbyDiagnosticState::Searching,
+    };
+
+    if next != *current {
+        *current = next;
+        emit_diagnostic_state(app_handle, next);
     }
 }
 
