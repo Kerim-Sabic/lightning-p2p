@@ -9,8 +9,8 @@ mod status;
 
 pub use endpoint::LightningP2PNode;
 pub use nearby::{
-    spawn_nearby_discovery_loop, ActiveShare, NearbyDevice, NearbyShare, NearbyShareRegistry,
-    NearbyTransport,
+    spawn_nearby_discovery_loop, ActiveShare, NearbyDevice, NearbyDiagnosticState, NearbyShare,
+    NearbyShareRegistry, NearbyTransport,
 };
 pub use nearby_offer::{IncomingOffer, OfferInbox, OfferRejection, PendingOffer};
 pub use nearby_protocol::NearbyShareProtocol;

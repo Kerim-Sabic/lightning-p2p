@@ -6,6 +6,7 @@ import {
   onDiscoveredSharesUpdated,
   onIncomingOffer,
   onNearbyDevicesUpdated,
+  onNearbyDiagnosticState,
   onOfferResolved,
   onTransferProgress,
   type NodeOnlineState,
@@ -13,6 +14,7 @@ import {
 } from "../lib/tauri";
 import { useIncomingOfferStore } from "../stores/incomingOfferStore";
 import { useNearbyDeviceStore } from "../stores/nearbyDeviceStore";
+import { useNearbyDiagnosticStore } from "../stores/nearbyDiagnosticStore";
 import { useNearbyShareStore } from "../stores/nearbyShareStore";
 import { useTransferStore } from "../stores/transferStore";
 
@@ -192,6 +194,26 @@ export function useTransfer(): void {
 
     void onNearbyDevicesUpdated((devices) => {
       useNearbyDeviceStore.getState().applyDevicesUpdated(devices);
+    })
+      .then((fn) => {
+        unlisten = fn;
+      })
+      .catch(handleSubscriptionError);
+
+    return () => {
+      unlisten?.();
+    };
+  }, [handleSubscriptionError, inTauriRuntime]);
+
+  useEffect(() => {
+    if (!inTauriRuntime) {
+      return;
+    }
+
+    let unlisten: (() => void) | null = null;
+
+    void onNearbyDiagnosticState((state) => {
+      useNearbyDiagnosticStore.getState().applyState(state);
     })
       .then((fn) => {
         unlisten = fn;

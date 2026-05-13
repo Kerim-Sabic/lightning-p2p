@@ -207,6 +207,11 @@ export interface NearbyDevice {
   has_active_share: boolean;
 }
 
+export type NearbyDiagnosticState =
+  | "searching"
+  | "devices_visible"
+  | "likely_blocked";
+
 export interface IncomingOffer {
   offer_id: string;
   sender_node_id: string;
@@ -802,6 +807,21 @@ export function onNearbyDevicesUpdated(
   return listen<NearbyDevice[]>("nearby-devices-updated", ({ payload }) => {
     callback(payload);
   });
+}
+
+export function onNearbyDiagnosticState(
+  callback: (state: NearbyDiagnosticState) => void,
+): Promise<UnlistenFn> {
+  if (!isDesktopRuntime()) {
+    return Promise.resolve(() => {});
+  }
+
+  return listen<NearbyDiagnosticState>(
+    "nearby-diagnostic-state",
+    ({ payload }) => {
+      callback(payload);
+    },
+  );
 }
 
 export function onIncomingOffer(
