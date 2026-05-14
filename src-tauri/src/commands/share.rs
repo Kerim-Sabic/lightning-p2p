@@ -119,8 +119,8 @@ pub fn render_ticket_qr(ticket: String) -> Result<String, String> {
     Ok(code
         .render::<svg::Color<'_>>()
         .min_dimensions(256, 256)
-        .dark_color(svg::Color("#E5F0FF"))
-        .light_color(svg::Color("transparent"))
+        .dark_color(svg::Color("#0F172A"))
+        .light_color(svg::Color("#FFFFFF"))
         .build())
 }
 
@@ -174,6 +174,14 @@ mod tests {
     fn qr_svg_contains_svg_tag() {
         let svg = render_ticket_qr("blobexample".into()).expect("qr svg should render");
         assert!(svg.contains("<svg"));
+    }
+
+    #[test]
+    fn qr_svg_uses_high_contrast_non_transparent_colors() {
+        let svg = render_ticket_qr("blobexample".into()).expect("qr svg should render");
+        assert!(svg.contains("#0F172A"));
+        assert!(svg.contains("#FFFFFF"));
+        assert!(!svg.contains("transparent"));
     }
 
     #[test]

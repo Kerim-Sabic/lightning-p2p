@@ -116,7 +116,7 @@ If it shows `skip`, at least one secret is missing or empty. The job summary lis
 
 ## Release procedure
 
-1. **Bump the version** in three files, all to the same value (e.g. `0.4.2`):
+1. **Bump the version** in three files, all to the same value (e.g. `0.4.4`):
    - [`src-tauri/Cargo.toml`](../src-tauri/Cargo.toml) — `version = "X.Y.Z"`
    - [`package.json`](../package.json) — `"version": "X.Y.Z"`
    - [`src-tauri/tauri.conf.json`](../src-tauri/tauri.conf.json) — `"version": "X.Y.Z"`
@@ -130,8 +130,8 @@ If it shows `skip`, at least one secret is missing or empty. The job summary lis
    ```powershell
    git checkout main
    git pull
-   git tag -a v0.4.3 -m "Release v0.4.3"
-   git push origin v0.4.3
+   git tag -a v0.4.4 -m "Release v0.4.4"
+   git push origin v0.4.4
    ```
 
 4. **Watch the workflow.** The tag push triggers CI on `refs/tags/v*`. Expected jobs:
@@ -140,9 +140,9 @@ If it shows `skip`, at least one secret is missing or empty. The job summary lis
    - `release-android` (signed APK + AAB build, only if signing mode is `signed`)
    - `release-windows-community` or `release-windows-signed` (whichever applies)
 
-5. **Verify the GitHub Release.** Open `https://github.com/Kerim-Sabic/lightning-p2p/releases/tag/v0.4.3`:
-   - `LightningP2P-0.4.3-android.apk` ✓
-   - `LightningP2P-0.4.3-android.aab` ✓
+5. **Verify the GitHub Release.** Open `https://github.com/Kerim-Sabic/lightning-p2p/releases/tag/v0.4.4`:
+   - `LightningP2P-0.4.4-android.apk` ✓
+   - `LightningP2P-0.4.4-android.aab` ✓
    - `LightningP2P-android-latest.apk` (alias, always points at the newest) ✓
    - `SHA256SUMS-android.txt` ✓
 
@@ -151,7 +151,7 @@ If it shows `skip`, at least one secret is missing or empty. The job summary lis
    ```powershell
    $bt = "$env:LocalAppData\Android\Sdk\build-tools"
    $latest = Get-ChildItem $bt | Sort-Object Name -Descending | Select-Object -First 1
-   & "$($latest.FullName)\apksigner.bat" verify --print-certs --verbose LightningP2P-0.4.3-android.apk
+   & "$($latest.FullName)\apksigner.bat" verify --print-certs --verbose LightningP2P-0.4.4-android.apk
    ```
 
    The `SHA-256` cert fingerprint must match the one captured in step "Capture the certificate fingerprint" above. If it doesn't, **something is wrong** — do not publish; investigate before announcing.
@@ -183,12 +183,67 @@ After CI publishes a signed APK, run through this on at least one real device be
    - The "Install unknown apps" prompt appears exactly once (this is normal, document this in README).
    - The "Play Protect couldn't verify" dialog appears once and proceeds cleanly.
    - **No** "App not installed" or "App damaged" errors. If either appears, the APK is corrupted or the cert chain is wrong.
-5. Launch the app. Grant notifications + Bluetooth permissions when asked.
+5. Launch the app. Grant notification permission when asked so foreground transfers remain visible.
 6. Confirm the device-name shown in the Devices view header matches the phone's name (not "Nearby device").
-7. Open Lightning P2P on a Windows PC on the same Wi-Fi. Confirm both devices see each other in Devices within ~10 seconds.
+7. Open Lightning P2P on a Windows PC on the same trusted Wi-Fi/LAN. Confirm both devices see each other in Devices within ~10 seconds.
 8. Send a 10 MB file PC → phone. Accept. Confirm complete.
 9. Send a 500 MB file phone → PC with the phone screen locked halfway through. Confirm transfer survives (foreground service notification stays visible).
-10. Move the phone off Wi-Fi (mobile data only, or different network). Confirm BLE-discovered peers still appear in Devices, with a "via Bluetooth" badge. Send a small file — confirm iroh relay fallback engages.
-11. In Settings, toggle "Allow Bluetooth discovery" off. Confirm BLE peers disappear within 30 seconds.
+10. Confirm Settings shows Bluetooth proximity discovery as a planned v0.5.0 capability and does not claim off-Wi-Fi discovery works in this build.
+11. Leave off-Wi-Fi BLE discovery validation for the v0.5.0 hardware test plan; BLE peers are not expected to appear in v0.4.4.
 
-If anything in steps 4–11 fails, do not announce the release. File issues for the failures and decide whether to revert the tag or hot-fix.
+If anything in steps 4-11 fails, do not announce the release. File issues for the failures and decide whether to revert the tag or hot-fix.
+
+## Physical device launch smoke script
+
+Run this from PowerShell with one Android phone connected over USB debugging. It tests the public GitHub Release APK, not a local debug build.
+
+```powershell
+$ErrorActionPreference = "Stop"
+$adb = "$env:LocalAppData\Android\Sdk\platform-tools\adb.exe"
+$apkUrl = "https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P-android-latest.apk"
+$sumUrl = "https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/SHA256SUMS-android.txt"
+$apk = ".\LightningP2P-android-latest.apk"
+$sums = ".\SHA256SUMS-android.txt"
+$logcat = ".\lightning-p2p-launch-logcat.txt"
+
+& $adb devices
+& $adb uninstall com.lightningp2p.app | Out-Host
+
+Invoke-WebRequest -Uri $apkUrl -OutFile $apk
+Invoke-WebRequest -Uri $sumUrl -OutFile $sums
+
+$actual = (Get-FileHash $apk -Algorithm SHA256).Hash.ToLowerInvariant()
+$expectedLine = Get-Content $sums | Select-String "LightningP2P-android-latest.apk"
+if (-not $expectedLine -or $expectedLine.ToString().ToLowerInvariant() -notmatch $actual) {
+  throw "APK checksum mismatch. Actual SHA256: $actual"
+}
+
+& $adb install -r $apk
+& $adb logcat -c
+& $adb shell am start -W -n com.lightningp2p.app/.MainActivity
+Start-Sleep -Seconds 30
+& $adb logcat -v threadtime -d > $logcat
+
+$failures = Select-String -Path $logcat -Pattern "FATAL EXCEPTION|AndroidRuntime|SIGSEGV|signal 11|Rust panic|panicked at|Force finishing activity.*com.lightningp2p.app"
+if ($failures) {
+  $failures | Format-Table -AutoSize
+  throw "Lightning P2P Android launch smoke failed. Full log: $logcat"
+}
+
+$activity = & $adb shell dumpsys activity activities
+if ($activity -notmatch "com.lightningp2p.app/.MainActivity") {
+  throw "MainActivity is not in the activity stack after launch."
+}
+
+Write-Host "Launch smoke passed. Full log: $logcat"
+```
+
+Then run the transfer matrix before announcing:
+
+1. Cold launch, force close, reopen, rotate, background, foreground: no crash.
+2. Settings -> diagnostics copies a useful local bundle.
+3. Windows and Android see each other on the same Wi-Fi within about 10 seconds.
+4. Windows -> Android 10 MB transfer completes.
+5. Android -> Windows 10 MB transfer completes.
+6. One 500 MB transfer completes while the phone screen is locked.
+7. The website Android APK button downloads `LightningP2P-android-latest.apk` directly.

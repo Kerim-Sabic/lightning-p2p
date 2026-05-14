@@ -119,8 +119,9 @@ export function DevicesView() {
             </h1>
             <p className="meta-copy mt-3 max-w-[58ch]">
               Discovered peers appear here as soon as they're seen on the local
-              network. Picking files pushes them to that device — the receiver
-              taps to accept before any bytes move.
+              Wi-Fi/LAN. Picking files pushes them to that device; the receiver
+              taps to accept before any bytes move. Bluetooth proximity
+              discovery is staged for v0.5.0.
             </p>
 
             <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-400">
@@ -154,7 +155,7 @@ export function DevicesView() {
               </div>
             </div>
             <p className="text-xs leading-6 text-slate-500">
-              Other devices running Lightning P2P on the same network see
+              Other devices running Lightning P2P on the same trusted network see
               this name and node id. Pick a device, choose files, the
               receiver accepts. Offers auto-expire after one minute.
             </p>
@@ -220,7 +221,7 @@ export function DevicesView() {
                 <p className="meta-copy">
                   Open Lightning P2P on the other device too &mdash; they'll
                   appear here within a second once both apps are running on the
-                  same Wi-Fi.
+                  same trusted Wi-Fi/LAN.
                 </p>
               </div>
             )

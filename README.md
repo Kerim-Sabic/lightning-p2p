@@ -92,7 +92,8 @@ on your phone (or on a PC for USB sideload).
 3. Tap **Install**.
 4. If Play Protect shows "couldn't verify this app", tap **Install anyway** —
    that's the expected one-time dialog for any new app not on the Play Store.
-5. Launch Lightning P2P, allow notifications + Bluetooth when prompted.
+5. Launch Lightning P2P and allow notifications when prompted so Android can
+   keep foreground transfers visible.
 
 #### What's normal vs. what isn't
 
@@ -130,17 +131,17 @@ different key than this project publishes.
 
 Open Lightning P2P on a second device (Windows desktop, another phone) and the
 two devices should appear in each other's Devices tab within ~10 seconds. Pick
-a device, choose files, the receiver taps **Accept**. Devices on the same Wi-Fi
-discover each other via mDNS; off-Wi-Fi devices in range discover each other via
-Bluetooth and the actual transfer uses iroh's relay fallback.
+a device, choose files, the receiver taps **Accept**. Devices on the same
+trusted Wi-Fi/LAN discover each other via mDNS. Off-Wi-Fi Bluetooth proximity
+discovery is planned for v0.5.0 and is not claimed as working in this build.
 
 Requirements:
 
 - Android 7.0 (API 24) or newer
 - Wi-Fi network that does not block multicast (most home networks; some
   hotel/guest networks do — the app surfaces a hint when this happens)
-- Bluetooth for off-Wi-Fi nearby discovery (optional, can be turned off in
-  Settings)
+- Bluetooth is optional future hardware for off-Wi-Fi proximity discovery; file
+  transfers will still use iroh, not BLE
 - ~50 MB of free space
 
 ## How it works
@@ -175,7 +176,7 @@ See [SECURITY.md](SECURITY.md) for the threat model and reporting policy.
 | Platform | Status |
 | --- | --- |
 | Windows | Public release |
-| Android | Public sideload (mDNS + Bluetooth nearby discovery) |
+| Android | Public sideload alpha (mDNS nearby discovery; BLE planned) |
 | macOS/Linux | Planned |
 | iOS | Not shipped |
 | Browser | Receive handoff and marketing only, not the transfer engine |

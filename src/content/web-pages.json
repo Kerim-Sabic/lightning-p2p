@@ -70,12 +70,12 @@
   {
     "path": "/download",
     "label": "Download",
-    "title": "Download Lightning P2P for Windows - Free P2P File Transfer",
-    "description": "Download Lightning P2P for Windows. Install the free open-source desktop app from GitHub Releases with SHA256 checksums and clear signing status.",
-    "eyebrow": "Windows installer",
-    "heading": "Download the free Windows P2P file transfer app.",
-    "intro": "Install Lightning P2P on Windows 10 or Windows 11 to send large files directly between devices without cloud upload, storage accounts, or temporary hosted links.",
-    "focus": "Use the Velopack one-click setup for the modern install path. NSIS, MSI, signing status, SmartScreen notes, and SHA256 checksums remain available on GitHub Releases.",
+    "title": "Download Lightning P2P - Windows Installer and Android APK",
+    "description": "Download Lightning P2P for Windows or Android. Install from GitHub Releases with SHA256 checksums, signer details, and clear sideload guidance.",
+    "eyebrow": "Native downloads",
+    "heading": "Download Lightning P2P for Windows or Android.",
+    "intro": "Install Lightning P2P on Windows 10, Windows 11, or Android 7.0+ to send large files directly between devices without cloud upload, storage accounts, or temporary hosted links.",
+    "focus": "Use the Velopack one-click setup for Windows or the latest Android APK for sideload alpha testing. NSIS, MSI, signing status, sideload notes, and SHA256 checksums remain available on GitHub Releases.",
     "inNav": true,
     "priority": "0.9",
     "related": ["/", "/security", "/send-files-between-windows-computers"]

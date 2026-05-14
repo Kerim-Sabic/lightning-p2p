@@ -786,11 +786,29 @@ jobs:
           NDK_HOME: ${{ env.ANDROID_NDK_HOME }}
         run: pnpm android:build:debug
 
+      - name: Build Android release APK smoke
+        env:
+          NDK_HOME: ${{ env.ANDROID_NDK_HOME }}
+        run: pnpm android:build:apk
+
+      - name: Build Android release AAB smoke
+        env:
+          NDK_HOME: ${{ env.ANDROID_NDK_HOME }}
+        run: pnpm android:build:aab
+
       - name: Upload debug APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: lightning-p2p-android-debug-apk
-          path: src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+          path: src-tauri/gen/android/app/build/outputs/apk/**/debug/*.apk
+
+      - name: Upload Android package smoke artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: lightning-p2p-android-package-smoke
+          path: |
+            src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+            src-tauri/gen/android/app/build/outputs/bundle/**/*.aab
 
   android-emulator-smoke:
     name: Android emulator launch smoke
@@ -1062,6 +1080,66 @@ jobs:
               echo "- \`$target\`"
             } >> "$GITHUB_STEP_SUMMARY"
           fi
+
+      - name: Enable KVM for release APK launch smoke
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Launch staged release APK on emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          target: default
+          arch: x86_64
+          profile: pixel_5
+          force-avd-creation: false
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics
+          disable-animations: true
+          script: |
+            set -euo pipefail
+            apk="${GITHUB_WORKSPACE}/android-release-stage/LightningP2P-${APP_VERSION}-android.apk"
+            echo "Installing staged release APK: $apk"
+            adb install -r "$apk"
+
+            echo "Launching com.lightningp2p.app/.MainActivity"
+            adb logcat -c
+            adb shell am start -W -n com.lightningp2p.app/.MainActivity
+            sleep 30
+
+            adb logcat -v threadtime -d > "${GITHUB_WORKSPACE}/logcat-release-smoke.txt" || true
+            adb shell dumpsys activity activities > "${GITHUB_WORKSPACE}/activities-release-smoke.txt" || true
+
+            if grep -E 'FATAL EXCEPTION|AndroidRuntime: FATAL|SIGSEGV|signal 11|Rust panic|panicked at|Force finishing activity.*com.lightningp2p.app' "${GITHUB_WORKSPACE}/logcat-release-smoke.txt"; then
+              echo "::error::Fatal exception, native crash, or Rust panic during release APK launch"
+              cat "${GITHUB_WORKSPACE}/logcat-release-smoke.txt"
+              exit 1
+            fi
+
+            adb shell pidof com.lightningp2p.app >/dev/null || {
+              echo "::error::com.lightningp2p.app process is not running after launch"
+              cat "${GITHUB_WORKSPACE}/logcat-release-smoke.txt"
+              exit 1
+            }
+
+            grep -q 'com.lightningp2p.app/.MainActivity' "${GITHUB_WORKSPACE}/activities-release-smoke.txt" || {
+              echo "::error::MainActivity is not in the activity stack after release APK launch"
+              head -n 80 "${GITHUB_WORKSPACE}/activities-release-smoke.txt"
+              exit 1
+            }
+
+            echo "Release APK launch smoke passed."
+
+      - name: Upload release APK launch smoke logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lightning-p2p-android-release-launch-smoke-logs
+          path: |
+            logcat-release-smoke.txt
+            activities-release-smoke.txt
 
       - name: Write SHA256SUMS with signer fingerprint
         run: |

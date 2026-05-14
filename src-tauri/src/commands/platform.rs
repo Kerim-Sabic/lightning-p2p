@@ -136,6 +136,8 @@ pub struct PlatformCapabilities {
     pub scan_receive_qr: bool,
     /// Whether LAN nearby-share discovery should be enabled.
     pub local_discovery: bool,
+    /// Whether Bluetooth proximity discovery is wired in this runtime.
+    pub bluetooth_discovery: bool,
     /// Whether iroh relay fallback is supported.
     pub relay_fallback: bool,
     /// Whether users can configure a custom relay URL.
@@ -245,6 +247,7 @@ fn capabilities(platform_kind: NativePlatformKind) -> PlatformCapabilities {
         receive_files: platform_kind != NativePlatformKind::Unknown,
         scan_receive_qr: mobile,
         local_discovery,
+        bluetooth_discovery: false,
         relay_fallback: platform_kind != NativePlatformKind::Unknown,
         custom_relay: platform_kind != NativePlatformKind::Unknown,
         custom_receive_dir: public_storage,
@@ -345,10 +348,10 @@ const fn online_notice(platform_kind: NativePlatformKind) -> &'static str {
 const fn release_notice(platform_kind: NativePlatformKind) -> &'static str {
     match platform_kind {
         NativePlatformKind::Windows => {
-            "Windows is the public release target with Velopack, NSIS, MSI, and signing hooks."
+            "Windows is the public release target. Community builds are unsigned until Authenticode signing is configured; verify GitHub release checksums."
         }
         NativePlatformKind::Android => {
-            "Android is an internal alpha target until device transfers, sideload APK, and Play AAB checks pass."
+            "Android is a public sideload alpha. Verify the APK checksum and signer fingerprint before installing."
         }
         NativePlatformKind::Ios => {
             "iOS is not shipped from this Windows workspace; it needs macOS, Xcode, Apple signing, and multicast entitlement review."
@@ -374,6 +377,7 @@ mod tests {
         assert!(profile.capabilities.send_folders);
         assert!(profile.capabilities.public_downloads_export);
         assert!(profile.capabilities.web_handoff_receive);
+        assert!(!profile.capabilities.bluetooth_discovery);
         assert!(!profile.capabilities.browser_transfer);
     }
 
@@ -386,6 +390,7 @@ mod tests {
         assert_eq!(profile.release_support, ReleaseSupport::AndroidAlpha);
         assert!(profile.capabilities.scan_receive_qr);
         assert!(profile.capabilities.local_discovery);
+        assert!(!profile.capabilities.bluetooth_discovery);
         assert!(!profile.capabilities.send_folders);
         assert!(!profile.capabilities.background_transfer);
     }

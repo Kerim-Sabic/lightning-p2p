@@ -8,7 +8,7 @@ import android.content.pm.PackageManager
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Bundle
-import android.util.Log
+import android.system.Os
 import androidx.activity.enableEdgeToEdge
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -17,27 +17,39 @@ class MainActivity : TauriActivity() {
   private var multicastLock: WifiManager.MulticastLock? = null
 
   override fun onCreate(savedInstanceState: Bundle?) {
-    enableEdgeToEdge()
-    super.onCreate(savedInstanceState)
-    acquireMulticastLock()
-    ensureTransferNotificationChannel()
-    requestPostNotificationsIfNeeded()
-    // Start the foreground service for the activity lifetime so any in-flight
-    // iroh transfer survives backgrounding. The notification is silent +
-    // IMPORTANCE_LOW so it stays unobtrusive when nothing is happening.
+    AndroidDiagnostics.install(this)
+    AndroidDiagnostics.info(this, "MainActivity.onCreate start")
+
     try {
-      TransferForegroundService.start(applicationContext, 0)
+      safeStep("prepare Rust app data directory") { prepareRustAppDataDir() }
+      enableEdgeToEdge()
+      super.onCreate(savedInstanceState)
+      safeStep("acquire multicast lock") { acquireMulticastLock() }
+      safeStep("ensure transfer notification channel") { ensureTransferNotificationChannel() }
+      safeStep("request notification permission") { requestPostNotificationsIfNeeded() }
+      safeStep("start idle foreground service") {
+        TransferForegroundService.start(applicationContext, 0)
+      }
+      AndroidDiagnostics.info(this, "MainActivity.onCreate complete")
     } catch (error: Throwable) {
-      Log.w(TAG, "Failed to start transfer foreground service: ${error.message}")
+      AndroidDiagnostics.error(this, "MainActivity.onCreate failed", error)
+      throw error
     }
+  }
+
+  private fun prepareRustAppDataDir() {
+    val dataDir = AndroidDiagnostics.appDataDir(applicationContext)
+    if (!dataDir.exists() && !dataDir.mkdirs()) {
+      AndroidDiagnostics.warn(this, "Android app data directory could not be created")
+    }
+    Os.setenv("LIGHTNING_P2P_DATA_DIR", dataDir.absolutePath, true)
+    AndroidDiagnostics.info(this, "Rust app data directory prepared")
   }
 
   /**
    * Android 13+ gates the foreground-service notification behind a runtime
-   * permission. Without the grant, the notification stays hidden — the service
-   * still runs but the OS becomes more aggressive about throttling the process
-   * under battery optimization. We ask once on first launch; a declined grant
-   * is respected and not re-prompted.
+   * permission. Without the grant, the notification stays hidden and the OS can
+   * throttle the process more aggressively under battery optimization.
    */
   private fun requestPostNotificationsIfNeeded() {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
@@ -57,25 +69,20 @@ class MainActivity : TauriActivity() {
         POST_NOTIFICATIONS_REQUEST_CODE,
       )
     } catch (error: Throwable) {
-      Log.w(TAG, "Failed to request POST_NOTIFICATIONS: ${error.message}")
+      AndroidDiagnostics.warn(this, "Failed to request POST_NOTIFICATIONS", error)
     }
   }
 
   override fun onDestroy() {
-    releaseMulticastLock()
-    try {
-      TransferForegroundService.stop(applicationContext)
-    } catch (error: Throwable) {
-      Log.w(TAG, "Failed to stop transfer foreground service: ${error.message}")
-    }
+    AndroidDiagnostics.info(this, "MainActivity.onDestroy")
+    safeStep("release multicast lock") { releaseMulticastLock() }
+    safeStep("stop idle foreground service") { TransferForegroundService.stop(applicationContext) }
     super.onDestroy()
   }
 
   /**
    * Without an explicit [WifiManager.MulticastLock] most Android devices
-   * silently drop the multicast packets iroh's mDNS discovery relies on, so
-   * nearby Wi-Fi peers would simply never appear. We acquire it for the
-   * lifetime of the activity to keep discovery instant.
+   * silently drop the multicast packets iroh's mDNS discovery relies on.
    */
   private fun acquireMulticastLock() {
     if (multicastLock?.isHeld == true) {
@@ -87,8 +94,9 @@ class MainActivity : TauriActivity() {
       lock.setReferenceCounted(false)
       lock.acquire()
       multicastLock = lock
+      AndroidDiagnostics.info(this, "Multicast lock acquired")
     } catch (error: Throwable) {
-      Log.w(TAG, "Failed to acquire multicast lock: ${error.message}")
+      AndroidDiagnostics.warn(this, "Failed to acquire multicast lock", error)
     }
   }
 
@@ -98,7 +106,7 @@ class MainActivity : TauriActivity() {
       try {
         lock.release()
       } catch (error: Throwable) {
-        Log.w(TAG, "Failed to release multicast lock: ${error.message}")
+        AndroidDiagnostics.warn(this, "Failed to release multicast lock", error)
       }
     }
     multicastLock = null
@@ -106,8 +114,6 @@ class MainActivity : TauriActivity() {
 
   /**
    * Creates the foreground-service notification channel once, idempotently.
-   * The channel must exist before [TransferForegroundService] calls
-   * [startForeground] on Android 8+.
    */
   private fun ensureTransferNotificationChannel() {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
@@ -115,6 +121,7 @@ class MainActivity : TauriActivity() {
     }
     val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     if (manager.getNotificationChannel(TransferForegroundService.CHANNEL_ID) != null) {
+      AndroidDiagnostics.info(this, "Transfer notification channel already exists")
       return
     }
     val channel = NotificationChannel(
@@ -126,10 +133,18 @@ class MainActivity : TauriActivity() {
       setShowBadge(false)
     }
     manager.createNotificationChannel(channel)
+    AndroidDiagnostics.info(this, "Transfer notification channel ready")
+  }
+
+  private fun safeStep(name: String, action: () -> Unit) {
+    try {
+      action()
+    } catch (error: Throwable) {
+      AndroidDiagnostics.error(this, "Android startup step failed: $name", error)
+    }
   }
 
   private companion object {
-    private const val TAG = "LightningP2P"
     private const val MULTICAST_LOCK_TAG = "lightning-p2p-mdns"
     private const val POST_NOTIFICATIONS_REQUEST_CODE = 1001
   }

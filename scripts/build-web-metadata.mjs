@@ -15,12 +15,15 @@ const siteUrl = (process.env.SITE_URL || "https://lightning-p2p.netlify.app").re
 const pages = JSON.parse(
   await readFile(join(repoRoot, "src", "content", "web-pages.json"), "utf8"),
 );
-const publicReleaseVersion = "0.4.1";
+const packageJson = JSON.parse(await readFile(join(repoRoot, "package.json"), "utf8"));
+const appVersion = packageJson.version;
 const repoUrl = "https://github.com/Kerim-Sabic/lightning-p2p";
 const releaseUrl = `${repoUrl}/releases/latest`;
 const exeDownloadUrl = `${repoUrl}/releases/latest/download/LightningP2PSetup.exe`;
 const msiDownloadUrl = `${repoUrl}/releases/latest/download/LightningP2P.msi`;
 const velopackDownloadUrl = `${repoUrl}/releases/latest/download/LightningP2P-win-Setup.exe`;
+const androidApkDownloadUrl = `${repoUrl}/releases/latest/download/LightningP2P-android-latest.apk`;
+const androidChecksumsUrl = `${repoUrl}/releases/latest/download/SHA256SUMS-android.txt`;
 const siteLogoUrl = `${siteUrl}/site-logo.png`;
 
 function escapeHtml(value) {
@@ -50,7 +53,7 @@ function findPage(path) {
 const baseKeyFacts = [
   ["Product", "Lightning P2P"],
   ["Category", "peer-to-peer file transfer app"],
-  ["Platform", "Windows public release"],
+  ["Platform", "Windows public release, Android sideload alpha"],
   ["License", "MIT"],
   ["Account required", "no"],
   ["Cloud upload", "no"],
@@ -75,7 +78,7 @@ function answerForPath(page) {
     "/":
       "Lightning P2P is a free open-source peer-to-peer file transfer app for Windows. It sends files directly between devices using iroh and QUIC, verifies content with BLAKE3, and does not require cloud upload, accounts, or artificial file-size caps.",
     "/download":
-      "Download Lightning P2P from GitHub Releases when you want the public Windows installer for direct-first P2P file transfer. The recommended asset is the one-click Windows setup, with NSIS and MSI options available for alternate deployment paths.",
+      "Download Lightning P2P from GitHub Releases when you want the public Windows installer or Android sideload APK for direct-first P2P file transfer.",
     "/security":
       "Lightning P2P avoids cloud file hosting, uses encrypted peer transport through iroh, verifies content with BLAKE3, and treats tickets as capability tokens.",
     "/benchmarks":
@@ -201,10 +204,12 @@ ${body}
       <p>
         Download the recommended <a href="${escapeHtml(velopackDownloadUrl)}">Velopack one-click installer</a>,
         the classic <a href="${escapeHtml(exeDownloadUrl)}">NSIS setup installer</a>, or the
-        <a href="${escapeHtml(msiDownloadUrl)}">MSI installer</a>. Signing status,
-        SmartScreen notes, and SHA256 checksums are available on
+        <a href="${escapeHtml(msiDownloadUrl)}">MSI installer</a>. Android users can sideload
+        <a href="${escapeHtml(androidApkDownloadUrl)}">LightningP2P-android-latest.apk</a> and verify it with
+        <a href="${escapeHtml(androidChecksumsUrl)}">SHA256SUMS-android.txt</a>. Signing status,
+        SmartScreen notes, Android sideload notes, and SHA256 checksums are available on
         <a href="${escapeHtml(releaseUrl)}">GitHub Releases</a>.
-        Latest public release: v${escapeHtml(publicReleaseVersion)}.
+        App version: v${escapeHtml(appVersion)}.
       </p>${keyFacts}${caveats}${faqs}${related}
       </section>
     </main>`;
@@ -216,14 +221,14 @@ function softwareApplicationJsonLd(page) {
     "@type": "SoftwareApplication",
     name: "Lightning P2P",
     applicationCategory: "UtilitiesApplication",
-    operatingSystem: "Windows 10, Windows 11",
+    operatingSystem: "Windows 10, Windows 11, Android 7.0+",
     description: page.description,
-    softwareVersion: publicReleaseVersion,
+    softwareVersion: appVersion,
     isAccessibleForFree: true,
     license: `${repoUrl}/blob/main/LICENSE`,
     codeRepository: repoUrl,
     url: siteUrl,
-    downloadUrl: velopackDownloadUrl,
+    downloadUrl: [velopackDownloadUrl, androidApkDownloadUrl],
     installUrl: `${siteUrl}/download`,
     screenshot: `${siteUrl}/og-image.png`,
     softwareHelp: pageUrl("/security"),

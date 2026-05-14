@@ -3,7 +3,7 @@
 Status: **Historical / in progress** · Target: phase 2 after desktop reliability work
 Authors: @Kerim-Sabic
 
-Current update: Android alpha foundation is implemented and documented in [android-alpha.md](android-alpha.md). The AirDrop-style nearby push flow (devices list + tap-to-accept offer) and Android background-safe transfers (foreground service + MulticastLock) are now in tree. BLE-based proximity discovery is permissioned in the Android manifest but the scanner/advertiser is not yet wired up. iOS remains prepared but not shipped.
+Current update: Android alpha foundation is implemented and documented in [android-alpha.md](android-alpha.md). The AirDrop-style nearby push flow (devices list + tap-to-accept offer) and Android background-safe transfers (foreground service + MulticastLock) are now in tree. BLE-based proximity discovery is permissioned in the Android manifest and has a default-off setting, but the scanner/advertiser is not yet wired up. iOS remains prepared but not shipped.
 
 ## 1. Motivation
 

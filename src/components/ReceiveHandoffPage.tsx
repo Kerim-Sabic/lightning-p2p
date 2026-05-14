@@ -10,6 +10,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import siteLogoUrl from "../assets/lightning-p2p-site-logo.png";
 import {
+  ANDROID_APK_DOWNLOAD_URL,
   REPO_URL,
   RELEASE_URL,
   VELOPACK_DOWNLOAD_URL,
@@ -183,6 +184,13 @@ export function ReceiveHandoffPage() {
                 >
                   <Download className="h-4 w-4" />
                   Install for Windows
+                </a>
+                <a
+                  href={ANDROID_APK_DOWNLOAD_URL}
+                  className="inline-flex items-center gap-2 rounded-full border border-white/16 bg-white/8 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/14"
+                >
+                  <Download className="h-4 w-4" />
+                  Install Android APK
                 </a>
                 <a
                   href={RELEASE_URL}

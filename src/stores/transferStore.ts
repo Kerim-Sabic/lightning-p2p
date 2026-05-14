@@ -103,6 +103,7 @@ interface TransferStore {
   setRelayMode: (relayMode: RelayMode) => Promise<void>;
   setCustomRelayUrl: (relayUrl: string | null) => Promise<void>;
   setLocalDiscoveryEnabled: (enabled: boolean) => Promise<void>;
+  setBluetoothDiscoveryEnabled: (enabled: boolean) => Promise<void>;
   completeFirstRun: () => Promise<void>;
   checkForUpdates: (silent?: boolean) => Promise<void>;
   installUpdate: () => Promise<void>;
@@ -261,7 +262,8 @@ function sameSettings(left: AppSettings, right: AppSettings): boolean {
     left.first_run_complete === right.first_run_complete &&
     left.relay_mode === right.relay_mode &&
     left.custom_relay_url === right.custom_relay_url &&
-    left.local_discovery_enabled === right.local_discovery_enabled
+    left.local_discovery_enabled === right.local_discovery_enabled &&
+    left.bluetooth_discovery_enabled === right.bluetooth_discovery_enabled
   );
 }
 
@@ -612,6 +614,15 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
       if (!enabled) {
         useNearbyShareStore.getState().clearShares();
       }
+    } catch (error) {
+      set({ error: toErrorMessage(error) });
+    }
+  },
+
+  setBluetoothDiscoveryEnabled: async (enabled) => {
+    try {
+      const settings = await tauri.setBluetoothDiscoveryEnabled(enabled);
+      set(withSettings(settings));
     } catch (error) {
       set({ error: toErrorMessage(error) });
     }

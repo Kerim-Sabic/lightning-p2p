@@ -484,7 +484,7 @@ export function SendView() {
             <div className="glass-subtle flex flex-col items-center justify-center gap-4 p-5 text-center">
               {qrSvg ? (
                 <div
-                  className="rounded-[20px] border border-white/[0.08] bg-white p-3"
+                  className="qr-code-frame rounded-[20px] border border-white/[0.08] bg-white p-3"
                   dangerouslySetInnerHTML={{ __html: qrSvg }}
                 />
               ) : (

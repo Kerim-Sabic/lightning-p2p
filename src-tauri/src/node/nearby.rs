@@ -190,6 +190,7 @@ struct CandidateQueryResult {
 #[derive(Debug, Clone)]
 pub struct NearbyShareRegistry {
     local_discovery_enabled: Arc<RwLock<bool>>,
+    bluetooth_discovery_enabled: Arc<RwLock<bool>>,
     active_share: Arc<RwLock<Option<ActiveShare>>>,
     discovered_shares: Arc<RwLock<Vec<NearbyShareRecord>>>,
     devices: Arc<RwLock<BTreeMap<NodeId, NearbyDevice>>>,
@@ -201,6 +202,7 @@ impl NearbyShareRegistry {
     pub fn new(local_discovery_enabled: bool) -> Self {
         Self {
             local_discovery_enabled: Arc::new(RwLock::new(local_discovery_enabled)),
+            bluetooth_discovery_enabled: Arc::new(RwLock::new(false)),
             active_share: Arc::new(RwLock::new(None)),
             discovered_shares: Arc::new(RwLock::new(Vec::new())),
             devices: Arc::new(RwLock::new(BTreeMap::new())),
@@ -215,6 +217,17 @@ impl NearbyShareRegistry {
     /// Updates whether local discovery is enabled.
     pub async fn set_local_discovery_enabled(&self, enabled: bool) {
         let mut guard = self.local_discovery_enabled.write().await;
+        *guard = enabled;
+    }
+
+    /// Returns whether Bluetooth proximity discovery is enabled.
+    pub async fn bluetooth_discovery_enabled(&self) -> bool {
+        *self.bluetooth_discovery_enabled.read().await
+    }
+
+    /// Updates whether Bluetooth proximity discovery is enabled.
+    pub async fn set_bluetooth_discovery_enabled(&self, enabled: bool) {
+        let mut guard = self.bluetooth_discovery_enabled.write().await;
         *guard = enabled;
     }
 
@@ -328,6 +341,7 @@ impl NearbyShareRegistry {
     ) -> Option<Vec<NearbyDevice>> {
         let mut guard = self.devices.write().await;
         let now = unix_timestamp();
+        let inserted = !guard.contains_key(&node_id);
         let entry = guard.entry(node_id).or_insert_with(|| NearbyDevice {
             node_id: node_id.to_string(),
             device_name: "Unknown device".into(),
@@ -347,7 +361,7 @@ impl NearbyShareRegistry {
             NearbyTransport::WifiMdns => NearbyTransport::WifiMdns,
         };
 
-        if devices_equal(&prior, entry) {
+        if !inserted && devices_equal(&prior, entry) {
             return None;
         }
         Some(snapshot_locked(&guard))
@@ -360,8 +374,13 @@ impl NearbyShareRegistry {
         device_name: String,
         has_active_share: bool,
     ) -> Option<Vec<NearbyDevice>> {
+        if !self.bluetooth_discovery_enabled().await {
+            return None;
+        }
+
         let mut guard = self.devices.write().await;
         let now = unix_timestamp();
+        let inserted = !guard.contains_key(&node_id);
         let entry = guard.entry(node_id).or_insert_with(|| NearbyDevice {
             node_id: node_id.to_string(),
             device_name: device_name.clone(),
@@ -383,10 +402,27 @@ impl NearbyShareRegistry {
             NearbyTransport::Ble => NearbyTransport::Ble,
         };
 
-        if devices_equal(&prior, entry) {
+        if !inserted && devices_equal(&prior, entry) {
             return None;
         }
         Some(snapshot_locked(&guard))
+    }
+
+    /// Removes Bluetooth-only device records and downgrades dual-transport records to Wi-Fi.
+    pub async fn clear_ble_discovered_devices(&self) -> Option<Vec<NearbyDevice>> {
+        let mut guard = self.devices.write().await;
+        let before = snapshot_locked(&guard);
+        guard.retain(|_, device| device.transport != NearbyTransport::Ble);
+        for device in guard.values_mut() {
+            if device.transport == NearbyTransport::Both {
+                device.transport = NearbyTransport::WifiMdns;
+            }
+        }
+        let after = snapshot_locked(&guard);
+        if before == after {
+            return None;
+        }
+        Some(after)
     }
 
     /// Updates the `device_name` for a previously discovered device.
@@ -541,13 +577,8 @@ pub fn spawn_nearby_discovery_loop(
                         }
                     }
                 }
-                update_diagnostic_state(
-                    &app_handle,
-                    &registry,
-                    started_at,
-                    &mut diagnostic_state,
-                )
-                .await;
+                update_diagnostic_state(&app_handle, &registry, started_at, &mut diagnostic_state)
+                    .await;
                 continue;
             }
 
@@ -1101,6 +1132,98 @@ mod tests {
             .expect("ticket should rebuild");
         assert_eq!(ticket.hash(), Hash::new(b"share-1"));
         assert_eq!(ticket.format(), BlobFormat::HashSeq);
+    }
+
+    #[tokio::test]
+    async fn ble_candidates_are_ignored_until_enabled() {
+        let registry = NearbyShareRegistry::new(true);
+        let node_id = SecretKey::from_bytes(&[3_u8; 32]).public();
+
+        let changed = registry
+            .register_ble_candidate(node_id, "phone".into(), false)
+            .await;
+
+        assert!(changed.is_none());
+        assert!(registry.devices_snapshot().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn wifi_candidates_emit_first_insertion() {
+        let registry = NearbyShareRegistry::new(true);
+        let node_id = SecretKey::from_bytes(&[6_u8; 32]).public();
+        let candidate = RemoteCandidate {
+            node_id,
+            node_addr: NodeAddr::new(node_id),
+            route_hint: NearbyRouteHint::Direct,
+            direct_address_count: 1,
+            last_seen_at: Instant::now(),
+        };
+
+        let changed = registry
+            .upsert_wifi_device(node_id, &candidate)
+            .await
+            .expect("wifi device insertion should emit");
+
+        assert_eq!(changed.len(), 1);
+        assert_eq!(changed[0].transport, NearbyTransport::WifiMdns);
+    }
+
+    #[tokio::test]
+    async fn disabling_ble_clears_ble_only_devices() {
+        let registry = NearbyShareRegistry::new(true);
+        registry.set_bluetooth_discovery_enabled(true).await;
+        let node_id = SecretKey::from_bytes(&[4_u8; 32]).public();
+
+        registry
+            .register_ble_candidate(node_id, "phone".into(), true)
+            .await
+            .expect("ble device should be added");
+
+        registry.set_bluetooth_discovery_enabled(false).await;
+        let changed = registry
+            .clear_ble_discovered_devices()
+            .await
+            .expect("ble device should be cleared");
+
+        assert!(changed.is_empty());
+        assert!(registry.devices_snapshot().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn disabling_ble_keeps_wifi_side_of_dual_transport_device() {
+        let registry = NearbyShareRegistry::new(true);
+        registry.set_bluetooth_discovery_enabled(true).await;
+        let node_id = SecretKey::from_bytes(&[5_u8; 32]).public();
+
+        registry
+            .register_ble_candidate(node_id, "phone".into(), false)
+            .await
+            .expect("ble device should be added");
+        let candidate = RemoteCandidate {
+            node_id,
+            node_addr: NodeAddr::new(node_id),
+            route_hint: NearbyRouteHint::Direct,
+            direct_address_count: 1,
+            last_seen_at: Instant::now(),
+        };
+        registry
+            .upsert_wifi_device(node_id, &candidate)
+            .await
+            .expect("wifi side should be added");
+
+        assert_eq!(
+            registry.devices_snapshot().await[0].transport,
+            NearbyTransport::Both
+        );
+
+        registry.set_bluetooth_discovery_enabled(false).await;
+        let changed = registry
+            .clear_ble_discovered_devices()
+            .await
+            .expect("dual transport should downgrade");
+
+        assert_eq!(changed[0].transport, NearbyTransport::WifiMdns);
+        assert_eq!(registry.devices_snapshot().await.len(), 1);
     }
 
     #[test]

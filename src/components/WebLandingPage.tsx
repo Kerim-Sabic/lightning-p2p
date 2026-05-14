@@ -36,6 +36,8 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import siteLogoUrl from "../assets/lightning-p2p-site-logo.png";
 import pages from "../content/web-pages.json";
 import {
+  ANDROID_APK_DOWNLOAD_URL,
+  ANDROID_CHECKSUMS_URL,
   MSI_DOWNLOAD_URL,
   NSIS_DOWNLOAD_URL,
   RELEASE_URL,
@@ -98,13 +100,13 @@ interface AnswerContent {
 
 const webPages = pages as WebPage[];
 
-const publicReleaseVersion = "v0.4.1";
+const appVersionLabel = `v${__APP_VERSION__}`;
 const DOWNLOAD_TRUST_URL = `${REPO_URL}/blob/main/docs/download-trust.md`;
 
 const baseKeyFacts: KeyFact[] = [
   { label: "Product", value: "Lightning P2P" },
   { label: "Category", value: "Peer-to-peer file transfer app" },
-  { label: "Platform", value: "Windows public release" },
+  { label: "Platform", value: "Windows public release, Android sideload alpha" },
   { label: "License", value: "MIT" },
   { label: "Account required", value: "No" },
   { label: "Cloud upload", value: "No" },
@@ -129,7 +131,7 @@ function answerContentForPage(page: WebPage): AnswerContent {
     "/":
       "Lightning P2P is a free open-source peer-to-peer file transfer app for Windows. It sends files directly between devices using iroh and QUIC, verifies content with BLAKE3, and does not require cloud upload, accounts, or artificial file-size caps.",
     "/download":
-      "Download Lightning P2P from GitHub Releases when you want the public Windows installer for direct-first P2P file transfer. The recommended asset is the one-click Windows setup, with NSIS and MSI options available for alternate deployment paths.",
+      "Download Lightning P2P from GitHub Releases when you want the public Windows installer or Android sideload APK for direct-first P2P file transfer. The recommended Windows asset is the one-click setup; Android users should verify the APK checksum before installing.",
     "/security":
       "Lightning P2P avoids cloud file hosting, uses encrypted peer transport through iroh, verifies content with BLAKE3, and treats tickets as capability tokens. It makes specific security claims instead of broad privacy promises.",
     "/benchmarks":
@@ -630,6 +632,12 @@ function Header({ activePath }: { activePath: string }) {
               Download
             </MarketingButton>
           </div>
+          <div className="hidden lg:block">
+            <MarketingButton href={ANDROID_APK_DOWNLOAD_URL} variant="secondary">
+              <Download className="h-4 w-4" />
+              Android APK
+            </MarketingButton>
+          </div>
           <div className="md:hidden">
             <button
               type="button"
@@ -671,6 +679,15 @@ function Header({ activePath }: { activePath: string }) {
             >
               <Download className="h-4 w-4" />
               Download for Windows
+            </MarketingButton>
+            <MarketingButton
+              href={ANDROID_APK_DOWNLOAD_URL}
+              variant="secondary"
+              className="w-full"
+              ariaLabel="Download Lightning P2P Android APK"
+            >
+              <Download className="h-4 w-4" />
+              Download Android APK
             </MarketingButton>
           </nav>
         </div>
@@ -722,6 +739,15 @@ function Hero({ page, isHome }: { page: WebPage; isHome: boolean }) {
             >
               <Download className="h-4 w-4" />
               Download for Windows
+            </MarketingButton>
+            <MarketingButton
+              href={ANDROID_APK_DOWNLOAD_URL}
+              variant="secondary"
+              className="w-full min-h-12 px-5 sm:w-auto sm:min-w-[178px]"
+              ariaLabel="Download Lightning P2P Android APK"
+            >
+              <Download className="h-4 w-4" />
+              Android APK
             </MarketingButton>
             <MarketingButton
               href={REPO_URL}
@@ -1301,8 +1327,8 @@ function DownloadCards() {
       <div className="mx-auto max-w-7xl">
         <SectionHeading
           eyebrow="Download"
-          title="Start with the Windows installer."
-          copy="Best for most users: install, open, send. Release files live on GitHub so downloads, checksums, signing status, and any generated updater metadata stay inspectable."
+          title="Start with the native app."
+          copy="Windows is the stable public path. Android is a sideload alpha, distributed from GitHub Releases with checksums and signer details so every APK stays inspectable."
         />
 
         <div className="mt-12 grid gap-4 lg:grid-cols-[1.15fr_0.85fr_0.85fr]">
@@ -1312,7 +1338,7 @@ function DownloadCards() {
               Recommended
             </span>
             <span className="relative ml-2 inline-flex rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs font-semibold text-slate-200">
-              Latest public release: {publicReleaseVersion}
+              App version: {appVersionLabel}
             </span>
             <div className="relative mt-8 flex items-start gap-4">
               <span className="grid h-12 w-12 place-items-center rounded-[16px] border border-emerald-200/24 bg-emerald-200/12 text-emerald-100">
@@ -1357,20 +1383,20 @@ function DownloadCards() {
           </article>
 
           <DownloadOption
+            icon={Download}
+            title="Android APK"
+            subtitle="Sideload alpha"
+            copy="Install the signed APK on Android 7.0 or newer. Verify SHA256 first, then allow install from your browser or file manager."
+            href={ANDROID_APK_DOWNLOAD_URL}
+            action="Download APK"
+          />
+          <DownloadOption
             icon={PackageCheck}
             title="MSI"
             subtitle="Managed deployments"
             copy="Use the MSI path when you need deployment tooling, inventory, or policy-managed installs."
             href={MSI_DOWNLOAD_URL}
             action="Download MSI"
-          />
-          <DownloadOption
-            icon={Terminal}
-            title="Build from source"
-            subtitle="Developers"
-            copy="Clone the repo, install dependencies, and run the Tauri app locally. winget is tracked but not presented as the primary live install path yet."
-            href={REPO_URL}
-            action="View source"
           />
         </div>
 
@@ -1390,6 +1416,13 @@ function DownloadCards() {
             Checksums and signing status
           </a>
           <a
+            href={ANDROID_CHECKSUMS_URL}
+            className="inline-flex items-center gap-2 underline-offset-4 transition hover:text-white hover:underline"
+          >
+            <FileCheck2 className="h-4 w-4" />
+            Android SHA256SUMS
+          </a>
+          <a
             href={DOWNLOAD_TRUST_URL}
             className="inline-flex items-center gap-2 underline-offset-4 transition hover:text-white hover:underline"
           >
@@ -1402,11 +1435,11 @@ function DownloadCards() {
           {[
             {
               title: "Requirements",
-              copy: "Windows 10 or Windows 11 x64 with WebView2 available through the app bundle when needed.",
+              copy: "Windows 10/11 x64 for desktop, or Android 7.0+ for the sideload alpha.",
             },
             {
               title: "Install steps",
-              copy: "Download the Windows setup, run it, launch Lightning P2P, then allow firewall access if Windows asks.",
+              copy: "Download the matching installer or APK from GitHub Releases, verify checksums, install, then launch Lightning P2P.",
             },
             {
               title: "Firewall note",
@@ -1428,7 +1461,62 @@ function DownloadCards() {
             </div>
           ))}
         </div>
+
+        <AndroidInstallGuide />
       </div>
+    </section>
+  );
+}
+
+function AndroidInstallGuide() {
+  const steps = [
+    "Download LightningP2P-android-latest.apk and SHA256SUMS-android.txt from the same GitHub Release.",
+    "Compare the APK hash against SHA256SUMS-android.txt before installing.",
+    "Open the APK. If Android asks, allow your browser or file manager to install unknown apps.",
+    "If Play Protect says it could not verify the app, use Install anyway only after the checksum matches.",
+    "Launch Lightning P2P, grant notification permission, keep the app open, and copy Settings diagnostics if anything fails.",
+  ];
+
+  return (
+    <section className="mt-12 rounded-[24px] border border-white/10 bg-white/[0.035] p-6">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="max-w-3xl">
+          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-300">
+            Android install tutorial
+          </p>
+          <h3 className="mt-3 text-2xl font-semibold tracking-[-0.02em] text-white">
+            Sideload the APK, then verify launch on the phone.
+          </h3>
+          <p className="mt-3 text-sm leading-6 text-slate-300">
+            The APK is distributed through GitHub Releases. The website button
+            downloads the same stable alias used by the release workflow.
+          </p>
+        </div>
+        <div className="flex flex-col gap-3 sm:flex-row lg:flex-col">
+          <MarketingButton href={ANDROID_APK_DOWNLOAD_URL}>
+            <Download className="h-4 w-4" />
+            Download Android APK
+          </MarketingButton>
+          <MarketingButton href={ANDROID_CHECKSUMS_URL} variant="secondary">
+            <FileCheck2 className="h-4 w-4" />
+            Android checksums
+          </MarketingButton>
+        </div>
+      </div>
+
+      <ol className="mt-6 grid gap-3 lg:grid-cols-5">
+        {steps.map((step, index) => (
+          <li
+            key={step}
+            className="rounded-[16px] border border-white/10 bg-black/20 p-4 text-sm leading-6 text-slate-300"
+          >
+            <span className="mb-3 grid h-8 w-8 place-items-center rounded-full bg-emerald-300/12 text-xs font-semibold text-emerald-100 ring-1 ring-inset ring-emerald-300/20">
+              {index + 1}
+            </span>
+            {step}
+          </li>
+        ))}
+      </ol>
     </section>
   );
 }

@@ -31,6 +31,7 @@ pub enum RelayModeSetting {
 
 /// Persisted application settings shared by the frontend and backend.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct AppSettings {
     /// Default directory for verified receives.
     pub download_dir: PathBuf,
@@ -45,6 +46,9 @@ pub struct AppSettings {
     /// Whether nearby-share discovery is enabled on the local network.
     #[serde(default = "default_local_discovery_enabled")]
     pub local_discovery_enabled: bool,
+    /// Whether Bluetooth proximity discovery is allowed once the native bridge is available.
+    #[serde(default = "default_bluetooth_discovery_enabled")]
+    pub bluetooth_discovery_enabled: bool,
 }
 
 impl AppSettings {
@@ -56,6 +60,7 @@ impl AppSettings {
             relay_mode: RelayModeSetting::Public,
             custom_relay_url: None,
             local_discovery_enabled: default_local_discovery_enabled(),
+            bluetooth_discovery_enabled: default_bluetooth_discovery_enabled(),
         }
     }
 
@@ -104,6 +109,19 @@ impl SettingsState {
             current: Arc::new(RwLock::new(settings)),
         };
         Ok(state)
+    }
+
+    /// Creates a non-persisted settings state from defaults.
+    ///
+    /// This is a last-resort launch fallback for mobile builds: the UI should
+    /// still open and expose diagnostics even if the settings file cannot be
+    /// created on disk.
+    #[must_use]
+    pub fn in_memory_defaults(data_dir: &Path) -> Self {
+        Self {
+            path: data_dir.join(SETTINGS_FILE_NAME),
+            current: Arc::new(RwLock::new(AppSettings::defaults(data_dir))),
+        }
     }
 
     /// Returns the current in-memory settings snapshot.
@@ -185,6 +203,19 @@ impl SettingsState {
     pub async fn set_local_discovery_enabled(&self, enabled: bool) -> Result<AppSettings> {
         self.update_settings(|settings| {
             settings.local_discovery_enabled = enabled;
+            Ok(())
+        })
+        .await
+    }
+
+    /// Enables or disables Bluetooth proximity discovery.
+    ///
+    /// # Errors
+    ///
+    /// Returns `LightningP2PError` if the updated settings cannot be written.
+    pub async fn set_bluetooth_discovery_enabled(&self, enabled: bool) -> Result<AppSettings> {
+        self.update_settings(|settings| {
+            settings.bluetooth_discovery_enabled = enabled;
             Ok(())
         })
         .await
@@ -383,6 +414,10 @@ fn default_local_discovery_enabled() -> bool {
     true
 }
 
+fn default_bluetooth_discovery_enabled() -> bool {
+    false
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -448,6 +483,7 @@ mod tests {
             Some("https://relay.example.com./".into())
         );
         assert!(snapshot.local_discovery_enabled);
+        assert!(!snapshot.bluetooth_discovery_enabled);
     }
 
     #[tokio::test]
@@ -525,6 +561,7 @@ mod tests {
         assert_eq!(backup_count, 1);
         assert_eq!(state.path, settings_path);
         assert!(recovered.local_discovery_enabled);
+        assert!(!recovered.bluetooth_discovery_enabled);
     }
 
     #[tokio::test]
@@ -538,6 +575,21 @@ mod tests {
         let reloaded = SettingsState::load_or_create(dir.path()).expect("settings reload");
         let snapshot = reloaded.snapshot().await;
         assert!(!snapshot.local_discovery_enabled);
+    }
+
+    #[tokio::test]
+    async fn bluetooth_discovery_setting_defaults_off_and_persists() {
+        let (state, dir) = temp_settings_state();
+        assert!(!state.snapshot().await.bluetooth_discovery_enabled);
+
+        state
+            .set_bluetooth_discovery_enabled(true)
+            .await
+            .expect("bluetooth discovery should persist");
+
+        let reloaded = SettingsState::load_or_create(dir.path()).expect("settings reload");
+        let snapshot = reloaded.snapshot().await;
+        assert!(snapshot.bluetooth_discovery_enabled);
     }
 
     #[test]

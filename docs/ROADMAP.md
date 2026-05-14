@@ -2,6 +2,20 @@
 
 This roadmap is intentionally conservative. It avoids fake speed, security, or platform claims.
 
+## Quick Polish Release: v0.4.4
+
+- Fix QR rendering to use dark modules on an opaque white background.
+- Show the Android signing SHA-256 fingerprint in the app.
+- Label Windows release artifacts as community unsigned until Authenticode signing is configured.
+- Keep Bluetooth proximity discovery visible as a planned, default-off capability rather than a shipped feature.
+
+## Proximity Discovery: v0.5.0
+
+- Wire Android BLE scanner/advertiser into the existing `register_ble_candidate` registry path.
+- Add Windows BLE watcher/publisher support where laptop hardware supports it.
+- Use BLE only as a discovery beacon; identity handoff and all file transfer remain on iroh QUIC/iroh-blobs.
+- Validate Windows-to-Android discovery and tap-device-card transfer on real hardware before publishing claims.
+
 ## Promotion Release: v0.4.1
 
 - Ship the polished README and website.

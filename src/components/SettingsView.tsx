@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import {
   Activity,
+  Bluetooth,
   CheckCircle2,
   ClipboardCheck,
   Copy,
@@ -14,15 +15,14 @@ import {
   RefreshCw,
   ScanSearch,
   Settings2,
+  ShieldCheck,
   Waypoints,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
-  getPlatformProfile,
-  getNetworkDiagnostics,
+  collectDiagnosticBundle,
   isDesktopRuntime,
   isMobileRuntime,
-  type NetworkDiagnostics,
   type NodeStatus,
   type PlatformProfile,
   type RelayMode,
@@ -156,34 +156,8 @@ function capabilityLabel(enabled: boolean): string {
   return enabled ? "Enabled" : "Disabled";
 }
 
-function diagnosticsText(
-  diagnostics: NetworkDiagnostics,
-  platformProfile: PlatformProfile,
-): string {
-  return [
-    "Lightning P2P diagnostics",
-    `App version: ${diagnostics.app_version}`,
-    `Platform: ${platformProfile.platform_kind}`,
-    `Runtime family: ${platformProfile.runtime_family}`,
-    `Transfer engine: ${platformProfile.transfer_engine}`,
-    `Online handoff model: ${platformProfile.online_handoff_model}`,
-    `Storage model: ${platformProfile.storage_model}`,
-    `Release support: ${platformProfile.release_support}`,
-    `Background transfer: ${platformProfile.capabilities.background_transfer ? "yes" : "no"}`,
-    `Browser transfer: ${platformProfile.capabilities.browser_transfer ? "yes" : "no"}`,
-    `Node ID: ${diagnostics.node_id ?? "not ready"}`,
-    `Online state: ${diagnostics.online_state}`,
-    `Relay mode: ${diagnostics.relay_mode}`,
-    `Relay connected: ${diagnostics.relay_connected ? "yes" : "no"}`,
-    `Relay URL: ${diagnostics.relay_url ?? "none"}`,
-    `Direct address count: ${diagnostics.direct_address_count}`,
-    `LAN discovery enabled: ${diagnostics.local_discovery_enabled ? "yes" : "no"}`,
-    `LAN discovery active: ${diagnostics.lan_discovery_active ? "yes" : "no"}`,
-    `Download folder status: ${diagnostics.download_dir_status.status}`,
-    `Download folder writable: ${diagnostics.download_dir_status.writable ? "yes" : "no"}`,
-    `Latest route kind: ${diagnostics.latest_route_kind}`,
-  ].join("\n");
-}
+const ANDROID_SIGNING_FINGERPRINT =
+  "5F:A0:D6:63:46:FF:9C:91:1B:18:D1:2A:5F:77:F1:F0:9B:2D:E2:A7:69:A0:97:68:6C:FC:FA:43:BD:86:29:16";
 
 export function SettingsView() {
   const settings = useTransferStore((state) => state.settings);
@@ -203,6 +177,9 @@ export function SettingsView() {
   const setLocalDiscoveryEnabled = useTransferStore(
     (state) => state.setLocalDiscoveryEnabled,
   );
+  const setBluetoothDiscoveryEnabled = useTransferStore(
+    (state) => state.setBluetoothDiscoveryEnabled,
+  );
   const checkForUpdates = useTransferStore((state) => state.checkForUpdates);
   const installUpdate = useTransferStore((state) => state.installUpdate);
   const nativeRuntime = isDesktopRuntime();
@@ -221,6 +198,12 @@ export function SettingsView() {
   const updateBusy =
     updateState.phase === "checking" || updateState.phase === "downloading";
   const canInstall = updateState.phase === "available";
+  const bluetoothDiscoveryEnabled =
+    settings?.bluetooth_discovery_enabled ?? false;
+  const bluetoothDiscoveryAvailable =
+    platformProfile.capabilities.bluetooth_discovery;
+  const bluetoothDiscoveryToggleEnabled =
+    nativeRuntime && bluetoothDiscoveryAvailable;
 
   const saveCustomRelay = async (): Promise<void> => {
     await setCustomRelayUrl(customRelayUrl.trim() || null);
@@ -235,13 +218,8 @@ export function SettingsView() {
 
   const copyDiagnostics = async (): Promise<void> => {
     try {
-      const [diagnostics, latestPlatformProfile] = await Promise.all([
-        getNetworkDiagnostics(),
-        getPlatformProfile(),
-      ]);
-      await writeClipboardText(
-        diagnosticsText(diagnostics, latestPlatformProfile),
-      );
+      const bundle = await collectDiagnosticBundle();
+      await writeClipboardText(bundle.report);
       setDiagnosticsState("copied");
       window.setTimeout(() => setDiagnosticsState("idle"), 1800);
     } catch {
@@ -424,8 +402,8 @@ export function SettingsView() {
             <div>
               <p className="text-sm font-medium text-white">Diagnostics</p>
               <p className="text-[13px] text-slate-300/72">
-                Copy a privacy-safe network snapshot for troubleshooting direct
-                versus relay-backed transfers.
+                Copy a local diagnostic bundle with runtime status, redacted
+                logs, and recent Android launch failures.
               </p>
             </div>
           </div>
@@ -473,6 +451,39 @@ export function SettingsView() {
       <section className="glass-panel p-6">
         <div className="flex items-center gap-3">
           <div className="glass-icon">
+            <ShieldCheck className="h-5 w-5 text-emerald-200" />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-white">About / Security</p>
+            <p className="text-[13px] text-slate-300/72">
+              Release trust details for verifying the app you installed.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-2 xl:grid-cols-[1.3fr_0.7fr]">
+          <div className="stat-card">
+            <p className="metric-label">Android signer SHA-256</p>
+            <p className="mt-2 break-all font-mono text-[12px] leading-6 text-white">
+              {ANDROID_SIGNING_FINGERPRINT}
+            </p>
+          </div>
+          <div className="stat-card">
+            <p className="metric-label">Windows signing</p>
+            <p className="mt-2 text-sm font-semibold text-white">
+              Community unsigned
+            </p>
+            <p className="mt-1 text-[13px] leading-6 text-slate-300/72">
+              Verify GitHub release checksums until Authenticode signing is
+              configured.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section className="glass-panel p-6">
+        <div className="flex items-center gap-3">
+          <div className="glass-icon">
             <Waypoints className="h-5 w-5 text-emerald-200" />
           </div>
           <div>
@@ -486,7 +497,7 @@ export function SettingsView() {
           </div>
         </div>
 
-        <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
           <div className="stat-card">
             <p className="metric-label">Runtime</p>
             <p className="mt-1.5 text-sm font-semibold text-white">
@@ -503,6 +514,12 @@ export function SettingsView() {
             <p className="metric-label">Nearby discovery</p>
             <p className="mt-1.5 text-sm font-semibold text-white">
               {capabilityLabel(platformProfile.capabilities.local_discovery)}
+            </p>
+          </div>
+          <div className="stat-card">
+            <p className="metric-label">Bluetooth discovery</p>
+            <p className="mt-1.5 text-sm font-semibold text-white">
+              {bluetoothDiscoveryAvailable ? "Available" : "Planned"}
             </p>
           </div>
           <div className="stat-card">
@@ -604,49 +621,104 @@ export function SettingsView() {
           </p>
         ) : null}
 
-        <div className="mt-5 flex items-center justify-between rounded-[24px] border border-white/8 bg-black/20 px-4 py-4">
-          <div className="flex items-start gap-3">
-            <div className="glass-icon h-10 w-10 rounded-[16px]">
-              <ScanSearch className="h-4 w-4 text-sky-200" />
+        <div className="mt-5 space-y-3">
+          <div className="flex items-center justify-between rounded-[24px] border border-white/8 bg-black/20 px-4 py-4">
+            <div className="flex items-start gap-3">
+              <div className="glass-icon h-10 w-10 rounded-[16px]">
+                <ScanSearch className="h-4 w-4 text-sky-200" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-white">
+                  Wi-Fi/LAN nearby discovery
+                </p>
+                <p className="text-[13px] leading-6 text-slate-300/72">
+                  Automatically find peers on the same trusted local network
+                  without exchanging a code first.
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="text-sm font-medium text-white">
-                Nearby share discovery
-              </p>
-              <p className="text-[13px] leading-6 text-slate-300/72">
-                Automatically find active LAN shares without manually exchanging
-                a code first.
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={() =>
-              void setLocalDiscoveryEnabled(
-                !(settings?.local_discovery_enabled ?? true),
-              )
-            }
-            disabled={!nativeRuntime}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full border transition-all duration-200 ${
-              (settings?.local_discovery_enabled ?? true)
-                ? "border-sky-300/20 bg-sky-500/20"
-                : "border-white/10 bg-white/[0.04]"
-            } disabled:cursor-not-allowed disabled:opacity-50`}
-            aria-pressed={settings?.local_discovery_enabled ?? true}
-          >
-            <motion.span
-              layout
-              transition={{ type: "spring", stiffness: 500, damping: 30 }}
-              className={`inline-block h-4 w-4 rounded-full shadow-sm transition-colors ${
+            <button
+              onClick={() =>
+                void setLocalDiscoveryEnabled(
+                  !(settings?.local_discovery_enabled ?? true),
+                )
+              }
+              disabled={!nativeRuntime}
+              className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-all duration-200 ${
                 (settings?.local_discovery_enabled ?? true)
-                  ? "bg-sky-200"
-                  : "bg-slate-300"
-              }`}
-              style={{
-                marginLeft:
-                  (settings?.local_discovery_enabled ?? true) ? "22px" : "3px",
-              }}
-            />
-          </button>
+                  ? "border-sky-300/20 bg-sky-500/20"
+                  : "border-white/10 bg-white/[0.04]"
+              } disabled:cursor-not-allowed disabled:opacity-50`}
+              aria-pressed={settings?.local_discovery_enabled ?? true}
+            >
+              <motion.span
+                layout
+                transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                className={`inline-block h-4 w-4 rounded-full shadow-sm transition-colors ${
+                  (settings?.local_discovery_enabled ?? true)
+                    ? "bg-sky-200"
+                    : "bg-slate-300"
+                }`}
+                style={{
+                  marginLeft:
+                    (settings?.local_discovery_enabled ?? true)
+                      ? "22px"
+                      : "3px",
+                }}
+              />
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between rounded-[24px] border border-white/8 bg-black/20 px-4 py-4">
+            <div className="flex items-start gap-3">
+              <div className="glass-icon h-10 w-10 rounded-[16px]">
+                <Bluetooth className="h-4 w-4 text-sky-200" />
+              </div>
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-sm font-medium text-white">
+                    Bluetooth proximity discovery
+                  </p>
+                  <span className="rounded-full border border-amber-300/16 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-100">
+                    v0.5.0
+                  </span>
+                </div>
+                <p className="text-[13px] leading-6 text-slate-300/72">
+                  Defaults off. BLE will only discover nearby identities; file
+                  transfer stays on iroh QUIC. The native Android and Windows
+                  bridge still needs hardware validation.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() =>
+                void setBluetoothDiscoveryEnabled(!bluetoothDiscoveryEnabled)
+              }
+              disabled={!bluetoothDiscoveryToggleEnabled}
+              className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-all duration-200 ${
+                bluetoothDiscoveryEnabled
+                  ? "border-sky-300/20 bg-sky-500/20"
+                  : "border-white/10 bg-white/[0.04]"
+              } disabled:cursor-not-allowed disabled:opacity-50`}
+              aria-pressed={bluetoothDiscoveryEnabled}
+              title={
+                bluetoothDiscoveryAvailable
+                  ? "Bluetooth discovery"
+                  : "Bluetooth discovery is planned for v0.5.0"
+              }
+            >
+              <motion.span
+                layout
+                transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                className={`inline-block h-4 w-4 rounded-full shadow-sm transition-colors ${
+                  bluetoothDiscoveryEnabled ? "bg-sky-200" : "bg-slate-300"
+                }`}
+                style={{
+                  marginLeft: bluetoothDiscoveryEnabled ? "22px" : "3px",
+                }}
+              />
+            </button>
+          </div>
         </div>
 
         <div className="mt-5 grid gap-2 xl:grid-cols-3">

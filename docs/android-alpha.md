@@ -101,7 +101,7 @@ pnpm android:build:aab
 - Receives save to Lightning P2P app-private storage for the alpha.
 - Public Downloads export is a later milestone.
 - Identity keys prefer platform keychain storage, but the current alpha can fall back to an app-private `iroh-secret-key.hex` file when keychain access is unavailable. This is not production-grade Android Keystore integration yet.
-- Networking stays iroh plus iroh-blobs. No HTTP server, WebSocket server, or custom transfer protocol. Bluetooth permissions are declared for future BLE-based proximity discovery but the BLE scanner/advertiser is not yet wired up.
+- Networking stays iroh plus iroh-blobs. No HTTP server, WebSocket server, or custom transfer protocol. Bluetooth permissions are declared for future BLE-based proximity discovery, the app setting defaults off, and the BLE scanner/advertiser is not yet wired up.
 - Android local discovery is enabled; relay fallback must also be tested.
 - Storage Access Framework: the dialog plugin normally resolves `content://` URIs to file paths before they reach the sender. If a URI slips through, the sender surfaces a clear error ("Copy the file into the Lightning P2P app folder and try again") instead of crashing. Full SAF-stream-to-cache support is tracked in the mobile RFC.
 

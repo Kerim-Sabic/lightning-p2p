@@ -9,6 +9,7 @@ use tauri::{AppHandle, Emitter, State};
 
 /// Serializable snapshot of user-configurable application settings.
 #[derive(Debug, Clone, Serialize)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct SettingsPayload {
     /// Default directory where received files are exported.
     pub download_dir: String,
@@ -22,6 +23,8 @@ pub struct SettingsPayload {
     pub custom_relay_url: Option<String>,
     /// Whether nearby-share discovery is enabled on the local network.
     pub local_discovery_enabled: bool,
+    /// Whether Bluetooth proximity discovery is enabled once supported by this build.
+    pub bluetooth_discovery_enabled: bool,
 }
 
 impl From<AppSettings> for SettingsPayload {
@@ -33,6 +36,7 @@ impl From<AppSettings> for SettingsPayload {
             relay_mode: settings.relay_mode,
             custom_relay_url: settings.custom_relay_url,
             local_discovery_enabled: settings.local_discovery_enabled,
+            bluetooth_discovery_enabled: settings.bluetooth_discovery_enabled,
         }
     }
 }
@@ -182,6 +186,36 @@ pub async fn set_local_discovery_enabled(
         let shares = state.nearby_shares.clear_discovered_shares().await;
         if let Some(shares) = shares {
             app.emit("discovered-shares-updated", shares)
+                .map_err(|error| error.to_string())?;
+        }
+    }
+    Ok(SettingsPayload::from(settings))
+}
+
+/// Updates whether Bluetooth proximity discovery is enabled.
+///
+/// # Errors
+///
+/// Returns an error string if persistence or event emission fails.
+#[tauri::command]
+pub async fn set_bluetooth_discovery_enabled(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    enabled: bool,
+) -> Result<SettingsPayload, String> {
+    let settings = state
+        .settings
+        .set_bluetooth_discovery_enabled(enabled)
+        .await
+        .map_err(String::from)?;
+    state
+        .nearby_shares
+        .set_bluetooth_discovery_enabled(enabled)
+        .await;
+    if !enabled {
+        let devices = state.nearby_shares.clear_ble_discovered_devices().await;
+        if let Some(devices) = devices {
+            app.emit("nearby-devices-updated", devices)
                 .map_err(|error| error.to_string())?;
         }
     }

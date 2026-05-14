@@ -107,6 +107,10 @@ fn spawn_node_startup(handle: tauri::AppHandle) {
             .nearby_shares
             .set_local_discovery_enabled(settings.local_discovery_enabled)
             .await;
+        state
+            .nearby_shares
+            .set_bluetooth_discovery_enabled(settings.bluetooth_discovery_enabled)
+            .await;
         let nearby_protocol = Arc::new(NearbyShareProtocol::new(
             state.nearby_shares.clone(),
             state.offer_inbox.clone(),
@@ -170,13 +174,32 @@ fn spawn_node_startup(handle: tauri::AppHandle) {
 pub fn run() {
     telemetry::init_tracing();
 
-    let data_dir =
-        resolve_app_data_dir().expect("Lightning P2P could not resolve an application data dir");
-    let settings =
-        SettingsState::load_or_create(&data_dir).expect("Lightning P2P could not load settings");
+    let data_dir = match resolve_app_data_dir() {
+        Ok(data_dir) => data_dir,
+        Err(error) => {
+            let fallback = std::env::temp_dir().join("com.lightningp2p.app");
+            tracing::error!(
+                error = %error,
+                fallback = %fallback.display(),
+                "failed to resolve app data dir; using temporary fallback"
+            );
+            fallback
+        }
+    };
+    let settings = match SettingsState::load_or_create(&data_dir) {
+        Ok(settings) => settings,
+        Err(error) => {
+            tracing::error!(
+                error = %error,
+                data_dir = %data_dir.display(),
+                "failed to load settings; launching with in-memory defaults"
+            );
+            SettingsState::in_memory_defaults(&data_dir)
+        }
+    };
     let app_state = AppState::new(data_dir, settings);
 
-    app_builder()
+    if let Err(error) = app_builder()
         .manage(app_state)
         .invoke_handler(tauri::generate_handler![
             commands::share::create_share,
@@ -194,6 +217,8 @@ pub fn run() {
             commands::nearby::offer_share_to_peer,
             commands::nearby::respond_to_offer,
             commands::diagnostics::get_network_diagnostics,
+            commands::diagnostics::collect_diagnostic_bundle,
+            commands::diagnostics::record_frontend_diagnostic,
             commands::peer::get_node_id,
             commands::peer::get_node_status,
             commands::peer::get_local_device_identity,
@@ -206,6 +231,7 @@ pub fn run() {
             commands::settings::set_relay_mode,
             commands::settings::set_custom_relay_url,
             commands::settings::set_local_discovery_enabled,
+            commands::settings::set_bluetooth_discovery_enabled,
             commands::settings::open_download_dir,
         ])
         .setup(|app| {
@@ -214,5 +240,7 @@ pub fn run() {
             Ok(())
         })
         .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+    {
+        tracing::error!("error while running tauri application: {error}");
+    }
 }

@@ -389,7 +389,10 @@ fn android_device_name() -> Option<String> {
         (Some(mfr), Some(mdl)) => {
             // If the model already starts with the manufacturer (e.g. "Google
             // Pixel 7" is rare; usually it's just "Pixel 7"), don't duplicate.
-            if mdl.to_ascii_lowercase().starts_with(&mfr.to_ascii_lowercase()) {
+            if mdl
+                .to_ascii_lowercase()
+                .starts_with(&mfr.to_ascii_lowercase())
+            {
                 Some(mdl)
             } else {
                 Some(mdl)

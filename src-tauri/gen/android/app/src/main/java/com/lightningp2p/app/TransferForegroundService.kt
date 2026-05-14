@@ -11,30 +11,34 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 
 /**
- * Foreground service that keeps the app process — and therefore the iroh
- * endpoint — alive while transfers are in flight. Without this, Android can
- * freeze the process within seconds of the user switching apps, killing any
- * in-progress download.
- *
- * The Rust side starts/stops the service through [start] and [stop] whenever the
- * active-transfer count transitions across zero.
+ * Foreground service that keeps the app process alive while transfers are in
+ * flight. Startup is defensive: foreground-service failures are logged locally
+ * and the service stops itself instead of crashing the activity.
  */
 class TransferForegroundService : Service() {
   override fun onBind(intent: Intent?): IBinder? = null
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-    val activeCount = intent?.getIntExtra(EXTRA_ACTIVE_COUNT, 1) ?: 1
-    val notification = buildNotification(activeCount)
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-      startForeground(
-        NOTIFICATION_ID,
-        notification,
-        ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
-      )
-    } else {
-      startForeground(NOTIFICATION_ID, notification)
+    AndroidDiagnostics.install(applicationContext)
+    return try {
+      val activeCount = intent?.getIntExtra(EXTRA_ACTIVE_COUNT, 1) ?: 1
+      AndroidDiagnostics.info(this, "TransferForegroundService start activeCount=$activeCount")
+      val notification = buildNotification(activeCount)
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        startForeground(
+          NOTIFICATION_ID,
+          notification,
+          ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
+        )
+      } else {
+        startForeground(NOTIFICATION_ID, notification)
+      }
+      START_STICKY
+    } catch (error: Throwable) {
+      AndroidDiagnostics.error(this, "TransferForegroundService failed to enter foreground", error)
+      stopSelf(startId)
+      START_NOT_STICKY
     }
-    return START_STICKY
   }
 
   private fun buildNotification(activeCount: Int): Notification {
@@ -48,16 +52,20 @@ class TransferForegroundService : Service() {
       PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )
 
-    val text = resources.getQuantityString(
-      R.plurals.transfer_notification_active,
-      activeCount,
-      activeCount,
-    )
+    val text = if (activeCount > 0) {
+      resources.getQuantityString(
+        R.plurals.transfer_notification_active,
+        activeCount,
+        activeCount,
+      )
+    } else {
+      getString(R.string.transfer_notification_idle)
+    }
 
     return NotificationCompat.Builder(this, CHANNEL_ID)
       .setContentTitle(getString(R.string.transfer_notification_title))
       .setContentText(text)
-      .setSmallIcon(R.mipmap.ic_launcher)
+      .setSmallIcon(R.drawable.ic_stat_transfer)
       .setOngoing(true)
       .setOnlyAlertOnce(true)
       .setSilent(true)
@@ -70,26 +78,30 @@ class TransferForegroundService : Service() {
     private const val NOTIFICATION_ID = 1
     private const val EXTRA_ACTIVE_COUNT = "active_count"
 
-    /**
-     * Invoked from Kotlin and Rust (via JNI) when the active-transfer count
-     * transitions across zero. Both [start] and [stop] are safe to call
-     * repeatedly — Android coalesces the underlying lifecycle changes.
-     */
     @JvmStatic
     fun start(context: Context, activeCount: Int) {
-      val intent = Intent(context, TransferForegroundService::class.java)
-        .putExtra(EXTRA_ACTIVE_COUNT, activeCount.coerceAtLeast(1))
-      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-        context.startForegroundService(intent)
-      } else {
-        context.startService(intent)
+      try {
+        AndroidDiagnostics.install(context)
+        val intent = Intent(context, TransferForegroundService::class.java)
+          .putExtra(EXTRA_ACTIVE_COUNT, activeCount.coerceAtLeast(0))
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+          context.startForegroundService(intent)
+        } else {
+          context.startService(intent)
+        }
+      } catch (error: Throwable) {
+        AndroidDiagnostics.error(context, "Failed to request transfer foreground service start", error)
       }
     }
 
     @JvmStatic
     fun stop(context: Context) {
-      val intent = Intent(context, TransferForegroundService::class.java)
-      context.stopService(intent)
+      try {
+        val intent = Intent(context, TransferForegroundService::class.java)
+        context.stopService(intent)
+      } catch (error: Throwable) {
+        AndroidDiagnostics.warn(context, "Failed to stop transfer foreground service", error)
+      }
     }
   }
 }

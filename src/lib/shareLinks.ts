@@ -6,6 +6,8 @@ export const RECEIVE_PATH = "/receive";
 export const VELOPACK_DOWNLOAD_URL = `${RELEASE_URL}/download/LightningP2P-win-Setup.exe`;
 export const NSIS_DOWNLOAD_URL = `${RELEASE_URL}/download/LightningP2PSetup.exe`;
 export const MSI_DOWNLOAD_URL = `${RELEASE_URL}/download/LightningP2P.msi`;
+export const ANDROID_APK_DOWNLOAD_URL = `${RELEASE_URL}/download/LightningP2P-android-latest.apk`;
+export const ANDROID_CHECKSUMS_URL = `${RELEASE_URL}/download/SHA256SUMS-android.txt`;
 
 export function versionedNsisDownloadUrl(version: string): string {
   return `${RELEASE_URL}/download/Lightning.P2P_${version}_x64-setup.exe`;

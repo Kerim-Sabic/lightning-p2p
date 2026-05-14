@@ -121,6 +121,7 @@ export interface AppSettings {
   relay_mode: RelayMode;
   custom_relay_url: string | null;
   local_discovery_enabled: boolean;
+  bluetooth_discovery_enabled: boolean;
 }
 
 export interface DownloadDirectoryDiagnostics {
@@ -141,8 +142,14 @@ export interface NetworkDiagnostics {
   direct_address_count: number;
   lan_discovery_active: boolean;
   local_discovery_enabled: boolean;
+  bluetooth_discovery_enabled: boolean;
   download_dir_status: DownloadDirectoryDiagnostics;
   latest_route_kind: RouteKind;
+}
+
+export interface DiagnosticBundle {
+  generated_at_unix: number;
+  report: string;
 }
 
 export interface PlatformCapabilities {
@@ -152,6 +159,7 @@ export interface PlatformCapabilities {
   receive_files: boolean;
   scan_receive_qr: boolean;
   local_discovery: boolean;
+  bluetooth_discovery: boolean;
   relay_fallback: boolean;
   custom_relay: boolean;
   custom_receive_dir: boolean;
@@ -323,6 +331,7 @@ const browserSettings: AppSettings = {
   relay_mode: "public",
   custom_relay_url: null,
   local_discovery_enabled: true,
+  bluetooth_discovery_enabled: false,
 };
 
 const browserNetworkDiagnostics: NetworkDiagnostics = {
@@ -336,6 +345,7 @@ const browserNetworkDiagnostics: NetworkDiagnostics = {
   direct_address_count: 0,
   lan_discovery_active: false,
   local_discovery_enabled: false,
+  bluetooth_discovery_enabled: false,
   download_dir_status: {
     exists: false,
     is_dir: false,
@@ -360,6 +370,7 @@ export const browserPlatformProfile: PlatformProfile = {
     receive_files: false,
     scan_receive_qr: false,
     local_discovery: false,
+    bluetooth_discovery: false,
     relay_fallback: false,
     custom_relay: false,
     custom_receive_dir: false,
@@ -635,6 +646,20 @@ export async function getNetworkDiagnostics(): Promise<NetworkDiagnostics> {
   return invoke<NetworkDiagnostics>("get_network_diagnostics");
 }
 
+export async function collectDiagnosticBundle(): Promise<DiagnosticBundle> {
+  requireNativeRuntime("Diagnostic bundle collection");
+  return invoke<DiagnosticBundle>("collect_diagnostic_bundle");
+}
+
+export function recordFrontendDiagnostic(message: string): void {
+  if (!isTauri()) {
+    return;
+  }
+  void invoke("record_frontend_diagnostic", { message }).catch(() => {
+    // Diagnostics must never create a user-visible failure loop.
+  });
+}
+
 export async function getPlatformProfile(): Promise<PlatformProfile> {
   if (!isNativeRuntime()) {
     return browserPlatformProfile;
@@ -678,6 +703,13 @@ export async function setLocalDiscoveryEnabled(
 ): Promise<AppSettings> {
   requireNativeRuntime("Changing local discovery settings");
   return invoke<AppSettings>("set_local_discovery_enabled", { enabled });
+}
+
+export async function setBluetoothDiscoveryEnabled(
+  enabled: boolean,
+): Promise<AppSettings> {
+  requireNativeRuntime("Changing Bluetooth discovery settings");
+  return invoke<AppSettings>("set_bluetooth_discovery_enabled", { enabled });
 }
 
 export async function completeFirstRun(): Promise<AppSettings> {

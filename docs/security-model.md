@@ -95,7 +95,7 @@ Use manual ticket sharing when even the discovery metadata should not be visible
 
 ## Bluetooth LE Discovery (planned)
 
-Android manifest permissions for BLE (`BLUETOOTH_SCAN` with `neverForLocation`, `BLUETOOTH_ADVERTISE`, `BLUETOOTH_CONNECT`) are declared so a follow-up can ship cross-network proximity discovery. When wired up, the BLE advertisement payload will carry only the iroh NodeId + a truncated device name + a single flags byte; never file contents. All actual file transfer continues to ride iroh QUIC. The BLE service UUID and manufacturer-specific data layout will be documented here once the scanner/advertiser lands.
+Android manifest permissions for BLE (`BLUETOOTH_SCAN` with `neverForLocation`, `BLUETOOTH_ADVERTISE`, `BLUETOOTH_CONNECT`) are declared so a follow-up can ship cross-network proximity discovery. The persisted `bluetooth_discovery_enabled` setting defaults off and the current release does not start a scanner or advertiser. When wired up, the BLE advertisement payload will carry only the iroh NodeId + a truncated device name + a single flags byte; never file contents. All actual file transfer continues to ride iroh QUIC. The BLE service UUID and manufacturer-specific data layout will be documented here once the scanner/advertiser lands.
 
 ## Local Artifacts
 
