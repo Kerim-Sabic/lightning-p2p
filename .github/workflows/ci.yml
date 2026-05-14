@@ -1025,12 +1025,12 @@ jobs:
           # Extract the SHA-256 cert digest into a stable file so the next step
           # can publish it next to the SHA-256 file hashes.
           cert_sha256=$(
-            awk -F': ' '
-              /^Signer #[0-9]+ certificate SHA-256 digest:/ { print $2; exit }
-              /^V[0-9]+(\.[0-9]+)? Signer: certificate SHA-256 digest:/ { print $2; exit }
+            awk '
+              /^Signer #[0-9]+ certificate SHA-256 digest:/ { print $NF; exit }
+              /^V[0-9]+(\.[0-9]+)? Signer: certificate SHA-256 digest:/ { print $NF; exit }
             ' apksigner-output.txt
           )
-          if [ -z "$cert_sha256" ]; then
+          if ! echo "$cert_sha256" | grep -Eq '^[a-fA-F0-9]{64}$'; then
             echo "::error::Could not parse signer cert SHA-256 from apksigner output."
             exit 1
           fi
