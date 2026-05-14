@@ -863,23 +863,17 @@ jobs:
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics
           disable-animations: true
           script: |
-            set -e
-            echo "Installing ${{ steps.locate_apk.outputs.apk }}"
-            adb install -r '${{ steps.locate_apk.outputs.apk }}'
+            bash "${GITHUB_WORKSPACE}/scripts/android-launch-smoke.sh" "${GITHUB_WORKSPACE}/${{ steps.locate_apk.outputs.apk }}" "debug-smoke"
 
-            echo "Launching com.lightningp2p.app/.MainActivity"
-            adb logcat -c
-            adb shell am start -W -n com.lightningp2p.app/.MainActivity
-
-            echo "Watching logcat for 30 seconds for fatal exceptions..."
-            timeout 30 adb logcat -d AndroidRuntime:E '*:S' > logcat-androidruntime.txt || true
-            timeout 30 adb logcat -d '*:F' > logcat-fatal.txt || true
-
-            if grep -E 'FATAL EXCEPTION|AndroidRuntime: FATAL' logcat-androidruntime.txt logcat-fatal.txt; then echo "::error::Fatal exception during launch"; cat logcat-androidruntime.txt; cat logcat-fatal.txt; exit 1; fi
-
-            echo "Verifying MainActivity is in the foreground"
-            adb shell dumpsys activity activities | grep -q 'com.lightningp2p.app/.MainActivity' || (echo "::error::MainActivity is not in the activity stack after launch"; adb shell dumpsys activity activities | head -n 50; exit 1)
-            echo "Launcher smoke passed."
+      - name: Upload debug APK launch smoke logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lightning-p2p-android-debug-launch-smoke-logs
+          path: |
+            logcat-debug-smoke.txt
+            activities-debug-smoke.txt
+            process-debug-smoke.txt
 
   release-android:
     name: Release Android
@@ -1099,38 +1093,7 @@ jobs:
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics
           disable-animations: true
           script: |
-            set -eu
-            apk="${GITHUB_WORKSPACE}/android-release-stage/LightningP2P-${APP_VERSION}-android.apk"
-            echo "Installing staged release APK: $apk"
-            adb install -r "$apk"
-
-            echo "Launching com.lightningp2p.app/.MainActivity"
-            adb logcat -c
-            adb shell am start -W -n com.lightningp2p.app/.MainActivity
-            sleep 30
-
-            adb logcat -v threadtime -d > "${GITHUB_WORKSPACE}/logcat-release-smoke.txt" || true
-            adb shell dumpsys activity activities > "${GITHUB_WORKSPACE}/activities-release-smoke.txt" || true
-
-            if grep -E 'FATAL EXCEPTION|AndroidRuntime: FATAL|SIGSEGV|signal 11|Rust panic|panicked at|Force finishing activity.*com.lightningp2p.app' "${GITHUB_WORKSPACE}/logcat-release-smoke.txt"; then
-              echo "::error::Fatal exception, native crash, or Rust panic during release APK launch"
-              cat "${GITHUB_WORKSPACE}/logcat-release-smoke.txt"
-              exit 1
-            fi
-
-            adb shell pidof com.lightningp2p.app >/dev/null || {
-              echo "::error::com.lightningp2p.app process is not running after launch"
-              cat "${GITHUB_WORKSPACE}/logcat-release-smoke.txt"
-              exit 1
-            }
-
-            grep -q 'com.lightningp2p.app/.MainActivity' "${GITHUB_WORKSPACE}/activities-release-smoke.txt" || {
-              echo "::error::MainActivity is not in the activity stack after release APK launch"
-              head -n 80 "${GITHUB_WORKSPACE}/activities-release-smoke.txt"
-              exit 1
-            }
-
-            echo "Release APK launch smoke passed."
+            bash "${GITHUB_WORKSPACE}/scripts/android-launch-smoke.sh" "${GITHUB_WORKSPACE}/android-release-stage/LightningP2P-${APP_VERSION}-android.apk" "release-smoke"
 
       - name: Upload release APK launch smoke logs
         if: always()
@@ -1140,6 +1103,7 @@ jobs:
           path: |
             logcat-release-smoke.txt
             activities-release-smoke.txt
+            process-release-smoke.txt
 
       - name: Write SHA256SUMS with signer fingerprint
         run: |
