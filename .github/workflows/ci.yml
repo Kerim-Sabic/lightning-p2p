@@ -1099,7 +1099,7 @@ jobs:
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics
           disable-animations: true
           script: |
-            set -euo pipefail
+            set -eu
             apk="${GITHUB_WORKSPACE}/android-release-stage/LightningP2P-${APP_VERSION}-android.apk"
             echo "Installing staged release APK: $apk"
             adb install -r "$apk"
