@@ -142,8 +142,13 @@ pub async fn set_relay_mode(
         .set_relay_mode(relay_mode)
         .await
         .map_err(String::from)?;
-    restart_node_after_endpoint_setting(app, &state, settings.clone(), "relay_mode_changed")
-        .await?;
+    Box::pin(restart_node_after_endpoint_setting(
+        app,
+        &state,
+        settings.clone(),
+        "relay_mode_changed",
+    ))
+    .await?;
     Ok(SettingsPayload::from(settings))
 }
 
@@ -163,8 +168,13 @@ pub async fn set_custom_relay_url(
         .set_custom_relay_url(relay_url)
         .await
         .map_err(String::from)?;
-    restart_node_after_endpoint_setting(app, &state, settings.clone(), "custom_relay_url_changed")
-        .await?;
+    Box::pin(restart_node_after_endpoint_setting(
+        app,
+        &state,
+        settings.clone(),
+        "custom_relay_url_changed",
+    ))
+    .await?;
     Ok(SettingsPayload::from(settings))
 }
 
@@ -195,8 +205,13 @@ pub async fn set_local_discovery_enabled(
                 .map_err(|error| error.to_string())?;
         }
     }
-    restart_node_after_endpoint_setting(app, &state, settings.clone(), "local_discovery_changed")
-        .await?;
+    Box::pin(restart_node_after_endpoint_setting(
+        app,
+        &state,
+        settings.clone(),
+        "local_discovery_changed",
+    ))
+    .await?;
     Ok(SettingsPayload::from(settings))
 }
 
