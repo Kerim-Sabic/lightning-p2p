@@ -763,6 +763,13 @@ jobs:
         with:
           packages: "platforms;android-36 build-tools;36.0.0 ndk;26.3.11579264"
 
+      - name: Free Android runner disk space
+        run: |
+          df -h
+          sudo rm -rf /usr/share/dotnet /usr/local/share/boost /opt/ghc /opt/hostedtoolcache/CodeQL || true
+          sudo apt-get clean
+          df -h
+
       - name: Install Rust Android targets
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -774,6 +781,7 @@ jobs:
         with:
           workspaces: ./src-tauri -> target
           key: android
+          cache-targets: false
 
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
@@ -977,6 +985,13 @@ jobs:
         with:
           packages: "platforms;android-36 build-tools;36.0.0 ndk;26.3.11579264"
 
+      - name: Free Android runner disk space
+        run: |
+          df -h
+          sudo rm -rf /usr/share/dotnet /usr/local/share/boost /opt/ghc /opt/hostedtoolcache/CodeQL || true
+          sudo apt-get clean
+          df -h
+
       - name: Install Rust Android targets
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -988,6 +1003,7 @@ jobs:
         with:
           workspaces: ./src-tauri -> target
           key: android-release
+          cache-targets: false
 
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
