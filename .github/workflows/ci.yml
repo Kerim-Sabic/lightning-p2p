@@ -796,11 +796,64 @@ jobs:
           NDK_HOME: ${{ env.ANDROID_NDK_HOME }}
         run: pnpm android:build:aab
 
+      - name: Sign release APK for launch smoke
+        run: |
+          set -euo pipefail
+          out=src-tauri/gen/android/app/build/outputs
+          stage="${GITHUB_WORKSPACE}/android-release-smoke-stage"
+          mkdir -p "$stage"
+
+          apk=$(find "$out/apk" -type f \( -path '*/universal/release/*.apk' -o -path '*/release/*.apk' \) | sort | head -n 1)
+          if [ -z "$apk" ]; then
+            echo "::error::No release APK found under $out/apk"
+            find "$out/apk" -maxdepth 5 -type f -print || true
+            exit 1
+          fi
+
+          bt_root="${ANDROID_SDK_ROOT:-$ANDROID_HOME}/build-tools"
+          latest=$(ls -1 "$bt_root" | sort -V | tail -n 1)
+          if [ -z "$latest" ]; then
+            echo "::error::No Android build-tools found under $bt_root"
+            exit 1
+          fi
+          build_tools="$bt_root/$latest"
+
+          keystore="$stage/ci-release-smoke.jks"
+          signed_apk="$stage/LightningP2P-release-smoke.apk"
+          storepass="lightning-ci-release-smoke"
+          keytool -genkeypair \
+            -storetype PKCS12 \
+            -keystore "$keystore" \
+            -storepass "$storepass" \
+            -keypass "$storepass" \
+            -alias ci-release-smoke \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 7 \
+            -dname "CN=Lightning P2P CI Release Smoke,O=Lightning P2P,C=US"
+
+          "$build_tools/apksigner" sign \
+            --ks "$keystore" \
+            --ks-key-alias ci-release-smoke \
+            --ks-pass "pass:$storepass" \
+            --key-pass "pass:$storepass" \
+            --out "$signed_apk" \
+            "$apk"
+          "$build_tools/apksigner" verify --verbose "$signed_apk"
+          rm -f "$keystore"
+          ls -lh "$stage"
+
       - name: Upload debug APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: lightning-p2p-android-debug-apk
           path: src-tauri/gen/android/app/build/outputs/apk/**/debug/*.apk
+
+      - name: Upload signed release smoke APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lightning-p2p-android-release-smoke-apk
+          path: android-release-smoke-stage/*.apk
 
       - name: Upload Android package smoke artifacts
         uses: actions/upload-artifact@v4
@@ -835,16 +888,16 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Download debug APK artifact
+      - name: Download signed release smoke APK artifact
         uses: actions/download-artifact@v4
         with:
-          name: lightning-p2p-android-debug-apk
-          path: android-debug-artifact
+          name: lightning-p2p-android-release-smoke-apk
+          path: android-release-smoke-artifact
 
       - name: Locate APK
         id: locate_apk
         run: |
-          apk=$(find android-debug-artifact -name '*.apk' -type f | head -n 1)
+          apk=$(find android-release-smoke-artifact -name '*.apk' -type f | head -n 1)
           if [ -z "$apk" ]; then
             echo "::error::No APK found in downloaded artifact"
             exit 1
@@ -863,17 +916,17 @@ jobs:
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics
           disable-animations: true
           script: |
-            bash "${GITHUB_WORKSPACE}/scripts/android-launch-smoke.sh" "${GITHUB_WORKSPACE}/${{ steps.locate_apk.outputs.apk }}" "debug-smoke"
+            bash "${GITHUB_WORKSPACE}/scripts/android-launch-smoke.sh" "${GITHUB_WORKSPACE}/${{ steps.locate_apk.outputs.apk }}" "release-smoke"
 
-      - name: Upload debug APK launch smoke logs
+      - name: Upload release APK launch smoke logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: lightning-p2p-android-debug-launch-smoke-logs
+          name: lightning-p2p-android-release-smoke-logs
           path: |
-            logcat-debug-smoke.txt
-            activities-debug-smoke.txt
-            process-debug-smoke.txt
+            logcat-release-smoke.txt
+            activities-release-smoke.txt
+            process-release-smoke.txt
 
   release-android:
     name: Release Android
