@@ -1,9 +1,12 @@
 import {
   ArrowUpRight,
   CheckCircle2,
+  ClipboardCheck,
+  Copy,
   StopCircle,
   TimerReset,
 } from "lucide-react";
+import { useState } from "react";
 import {
   formatBytes,
   formatDurationMs,
@@ -11,6 +14,7 @@ import {
   formatSpeed,
   formatTimestamp,
 } from "../lib/format";
+import { collectDiagnosticBundle, writeClipboardText } from "../lib/tauri";
 import type { TransferEntry } from "../stores/transferStore";
 
 interface TransferCardProps {
@@ -96,6 +100,9 @@ function failureHelp(transfer: TransferEntry): string | null {
 }
 
 export function TransferCard({ transfer, onCancel }: TransferCardProps) {
+  const [diagnosticsState, setDiagnosticsState] = useState<
+    "idle" | "copied" | "error"
+  >("idle");
   const hasTotal = transfer.total > 0;
   const percent = hasTotal
     ? Math.min((transfer.bytes / transfer.total) * 100, 100)
@@ -119,6 +126,18 @@ export function TransferCard({ transfer, onCancel }: TransferCardProps) {
     }
   };
 
+  const handleCopyDiagnostics = async (): Promise<void> => {
+    try {
+      const bundle = await collectDiagnosticBundle(transfer.transferId);
+      await writeClipboardText(bundle.report);
+      setDiagnosticsState("copied");
+      window.setTimeout(() => setDiagnosticsState("idle"), 1800);
+    } catch {
+      setDiagnosticsState("error");
+      window.setTimeout(() => setDiagnosticsState("idle"), 2200);
+    }
+  };
+
   return (
     <article className="glass-panel p-4">
       <div className="flex flex-col gap-4">
@@ -136,22 +155,42 @@ export function TransferCard({ transfer, onCancel }: TransferCardProps) {
                 Route {routeLabel(transfer.routeKind)}
               </span>
               <StatusIcon className="h-3.5 w-3.5 text-slate-400" />
-              <span className="text-xs text-slate-400">{statusLabel(transfer)}</span>
+              <span className="text-xs text-slate-400">
+                {statusLabel(transfer)}
+              </span>
             </div>
             <p className="mt-2 truncate text-base font-semibold tracking-[-0.02em] text-white">
               {transfer.name}
             </p>
           </div>
 
-          {isActive && onCancel ? (
+          <div className="flex shrink-0 flex-wrap justify-end gap-2">
             <button
-              onClick={handleCancel}
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-rose-400/15 bg-rose-500/10 px-3 py-2 text-xs font-medium text-rose-100/85"
+              onClick={() => void handleCopyDiagnostics()}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-medium text-slate-100/85"
             >
-              <StopCircle className="h-3.5 w-3.5" />
-              Cancel
+              {diagnosticsState === "copied" ? (
+                <ClipboardCheck className="h-3.5 w-3.5 text-emerald-200" />
+              ) : (
+                <Copy className="h-3.5 w-3.5" />
+              )}
+              {diagnosticsState === "copied"
+                ? "Copied"
+                : diagnosticsState === "error"
+                  ? "Copy failed"
+                  : "Diagnostics"}
             </button>
-          ) : null}
+
+            {isActive && onCancel ? (
+              <button
+                onClick={handleCancel}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-rose-400/15 bg-rose-500/10 px-3 py-2 text-xs font-medium text-rose-100/85"
+              >
+                <StopCircle className="h-3.5 w-3.5" />
+                Cancel
+              </button>
+            ) : null}
+          </div>
         </div>
 
         <div className="space-y-2">

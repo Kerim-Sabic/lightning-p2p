@@ -1,7 +1,7 @@
 //! Commands for querying node/peer information.
 
 use crate::node::nearby_protocol::local_device_name;
-use crate::node::NodeRuntimeStatus;
+use crate::node::{NodeRuntimeStatus, NodeSupervisorStatus};
 use crate::AppState;
 use serde::Serialize;
 use tauri::State;
@@ -45,6 +45,18 @@ pub async fn get_node_status(state: State<'_, AppState>) -> Result<NodeRuntimeSt
         Some(node) => Ok(node.runtime_status()),
         None => Ok(state.node_runtime.read().await.clone()),
     }
+}
+
+/// Returns the current node supervisor lifecycle state.
+///
+/// # Errors
+///
+/// Returns an error string if application state access fails.
+#[tauri::command]
+pub async fn get_node_supervisor_status(
+    state: State<'_, AppState>,
+) -> Result<NodeSupervisorStatus, String> {
+    Ok(state.node_supervisor.status().await)
 }
 
 /// Returns the local device's discovery identity for use in the Devices view.

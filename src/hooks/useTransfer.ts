@@ -7,8 +7,10 @@ import {
   onIncomingOffer,
   onNearbyDevicesUpdated,
   onNearbyDiagnosticState,
+  onNodeSupervisorStatus,
   onOfferResolved,
   onTransferProgress,
+  recordFrontendDiagnostic,
   type NodeOnlineState,
   type TransferEvent,
 } from "../lib/tauri";
@@ -37,21 +39,51 @@ function nextNodeStatusPollMs(onlineState: NodeOnlineState): number {
   }
 }
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 export function useTransfer(): void {
   const setError = useTransferStore((state) => state.setError);
   const inTauriRuntime = isTauri();
   const hydrateApp = useEffectEvent(async () => {
     const store = useTransferStore.getState();
 
+    const runHydrationStep = async (
+      name: string,
+      action: () => Promise<void>,
+    ): Promise<void> => {
+      recordFrontendDiagnostic(`hydrate:${name}:start`);
+      try {
+        await action();
+        recordFrontendDiagnostic(`hydrate:${name}:ok`);
+      } catch (error) {
+        const message = errorMessage(error);
+        recordFrontendDiagnostic(`hydrate:${name}:failed:${message}`);
+        store.setError(message);
+      }
+    };
+
+    recordFrontendDiagnostic("hydrate:start");
     await Promise.all([
-      store.refreshPlatformProfile(),
-      store.refreshNodeStatus(),
-      store.refreshSettings(),
-      store.refreshActiveTransfers(),
-      store.refreshHistory(),
-      useNearbyShareStore.getState().refreshShares(),
-      useNearbyDeviceStore.getState().refreshDevices(),
+      runHydrationStep("platform-profile", store.refreshPlatformProfile),
+      runHydrationStep("node-status", store.refreshNodeStatus),
+      runHydrationStep(
+        "node-supervisor-status",
+        store.refreshNodeSupervisorStatus,
+      ),
+      runHydrationStep("ble-status", store.refreshBleDiscoveryStatus),
+      runHydrationStep("settings", store.refreshSettings),
+      runHydrationStep("active-transfers", store.refreshActiveTransfers),
+      runHydrationStep("history", store.refreshHistory),
+      runHydrationStep("nearby-shares", () =>
+        useNearbyShareStore.getState().refreshShares(),
+      ),
+      runHydrationStep("nearby-devices", () =>
+        useNearbyDeviceStore.getState().refreshDevices(),
+      ),
     ]);
+    recordFrontendDiagnostic("hydrate:complete");
 
     const settings = useTransferStore.getState().settings;
     if (settings?.auto_update_enabled && !isMobileRuntime()) {
@@ -164,6 +196,26 @@ export function useTransfer(): void {
       unlisten?.();
     };
   }, [handleSubscriptionError, handleTransferEvent, inTauriRuntime]);
+
+  useEffect(() => {
+    if (!inTauriRuntime) {
+      return;
+    }
+
+    let unlisten: (() => void) | null = null;
+
+    void onNodeSupervisorStatus((status) => {
+      useTransferStore.getState().applyNodeSupervisorStatus(status);
+    })
+      .then((fn) => {
+        unlisten = fn;
+      })
+      .catch(handleSubscriptionError);
+
+    return () => {
+      unlisten?.();
+    };
+  }, [handleSubscriptionError, inTauriRuntime]);
 
   useEffect(() => {
     if (!inTauriRuntime) {

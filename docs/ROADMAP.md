@@ -9,6 +9,13 @@ This roadmap is intentionally conservative. It avoids fake speed, security, or p
 - Label Windows release artifacts as community unsigned until Authenticode signing is configured.
 - Keep Bluetooth proximity discovery visible as a planned, default-off capability rather than a shipped feature.
 
+## Proof Release: v0.4.5
+
+- Rebuild the iroh node through a supervisor when relay or LAN discovery settings change, while deferring restarts during active transfers.
+- Add transfer-scoped diagnostics, node-supervisor status, BLE status, and clear history/cache controls.
+- Add benchmark and physical Android acceptance scripts before publishing speed or BLE claims.
+- Keep BLE experimental and off by default; all file data remains on iroh QUIC/iroh-blobs.
+
 ## Proximity Discovery: v0.5.0
 
 - Wire Android BLE scanner/advertiser into the existing `register_ble_candidate` registry path.
@@ -26,7 +33,7 @@ This roadmap is intentionally conservative. It avoids fake speed, security, or p
 
 ## Reliability
 
-- Add endpoint restart supervisor for relay/local-discovery settings.
+- Expand endpoint restart supervisor tests around active-transfer restart deferral.
 - Improve nearby discovery diagnostics in Settings.
 - Move flaky LAN/multicast smoke tests to ignored/manual test suites.
 - Add deterministic nearby registry/protocol tests.
@@ -51,8 +58,7 @@ This roadmap is intentionally conservative. It avoids fake speed, security, or p
 ## Product UX
 
 - Pause/resume transfer UX.
-- Clear history and peer cache controls.
-- Better transfer diagnostics for direct vs relay path.
+- Add richer transfer timeline visualization for direct vs relay path.
 - Optional pairing/approval for nearby discovery metadata.
 - Benchmark report UI once repeatable results exist.
 

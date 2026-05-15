@@ -247,7 +247,7 @@ fn capabilities(platform_kind: NativePlatformKind) -> PlatformCapabilities {
         receive_files: platform_kind != NativePlatformKind::Unknown,
         scan_receive_qr: mobile,
         local_discovery,
-        bluetooth_discovery: false,
+        bluetooth_discovery: android,
         relay_fallback: platform_kind != NativePlatformKind::Unknown,
         custom_relay: platform_kind != NativePlatformKind::Unknown,
         custom_receive_dir: public_storage,
@@ -390,7 +390,7 @@ mod tests {
         assert_eq!(profile.release_support, ReleaseSupport::AndroidAlpha);
         assert!(profile.capabilities.scan_receive_qr);
         assert!(profile.capabilities.local_discovery);
-        assert!(!profile.capabilities.bluetooth_discovery);
+        assert!(profile.capabilities.bluetooth_discovery);
         assert!(!profile.capabilities.send_folders);
         assert!(!profile.capabilities.background_transfer);
     }

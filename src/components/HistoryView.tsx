@@ -1,5 +1,13 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { Clock3, Copy, Filter, History, RefreshCw, Search } from "lucide-react";
+import {
+  Clock3,
+  Copy,
+  Filter,
+  History,
+  RefreshCw,
+  Search,
+  Trash2,
+} from "lucide-react";
 import { useDeferredValue, useMemo, useState } from "react";
 import { formatBytes, formatTimestamp } from "../lib/format";
 import { createReceiveHandoffLink } from "../lib/shareLinks";
@@ -17,6 +25,9 @@ function directionTone(direction: "send" | "receive"): string {
 export function HistoryView() {
   const history = useTransferStore((state) => state.history);
   const reshare = useTransferStore((state) => state.reshare);
+  const clearTransferHistory = useTransferStore(
+    (state) => state.clearTransferHistory,
+  );
   const setError = useTransferStore((state) => state.setError);
   const [directionFilter, setDirectionFilter] =
     useState<DirectionFilter>("all");
@@ -24,6 +35,7 @@ export function HistoryView() {
   const [resharedHash, setResharedHash] = useState<string | null>(null);
   const [resharedTicket, setResharedTicket] = useState<string | null>(null);
   const [copied, setCopied] = useState<"link" | "ticket" | null>(null);
+  const [clearingHistory, setClearingHistory] = useState(false);
 
   const deferredQuery = useDeferredValue(query);
   const normalizedQuery = deferredQuery.trim().toLowerCase();
@@ -109,6 +121,21 @@ export function HistoryView() {
       window.setTimeout(() => setCopied(null), 1800);
     } catch (error) {
       setError(error instanceof Error ? error.message : "Copy failed");
+    }
+  };
+
+  const handleClearHistory = async (): Promise<void> => {
+    if (history.length === 0) {
+      return;
+    }
+    if (!window.confirm("Clear all transfer history on this device?")) {
+      return;
+    }
+    setClearingHistory(true);
+    try {
+      await clearTransferHistory();
+    } finally {
+      setClearingHistory(false);
     }
   };
 
@@ -249,9 +276,19 @@ export function HistoryView() {
       </AnimatePresence>
 
       <section className="space-y-2">
-        <div className="flex items-center gap-2 text-sm font-medium text-slate-200">
-          <History className="h-4 w-4 text-violet-200" />
-          Transfer log
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-sm font-medium text-slate-200">
+            <History className="h-4 w-4 text-violet-200" />
+            Transfer log
+          </div>
+          <button
+            onClick={() => void handleClearHistory()}
+            disabled={history.length === 0 || clearingHistory}
+            className="glass-button inline-flex items-center gap-2 px-3 py-2 text-xs text-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Clear history
+          </button>
         </div>
 
         {filteredHistory.length === 0 ? (

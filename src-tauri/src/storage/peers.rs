@@ -59,6 +59,18 @@ pub fn load_all(db: &StorageDb) -> Result<Vec<PeerRecord>> {
     Ok(peers)
 }
 
+/// Clears all persisted peer-cache records and flushes the database.
+///
+/// # Errors
+///
+/// Returns `LightningP2PError` if storage cannot be cleared or flushed.
+pub fn clear_all(db: &StorageDb) -> Result<()> {
+    let tree = db.tree(TREE_NAME)?;
+    tree.clear()?;
+    db.flush()?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -81,5 +93,20 @@ mod tests {
         let peers = load_all(&db).expect("peers should load");
         assert_eq!(peers.len(), 1);
         assert_eq!(peers[0].nickname, Some("Alice".into()));
+    }
+
+    #[test]
+    fn clear_all_removes_peers() {
+        let (db, _dir) = temp_db();
+        let peer = PeerRecord {
+            node_id: "node123".into(),
+            nickname: Some("Alice".into()),
+            last_seen: 1_700_000_000,
+        };
+        save_peer(&db, &peer).expect("peer should save");
+        clear_all(&db).expect("peers should clear");
+
+        let peers = load_all(&db).expect("peers should load");
+        assert!(peers.is_empty());
     }
 }

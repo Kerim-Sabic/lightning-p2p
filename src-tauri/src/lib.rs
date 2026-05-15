@@ -15,9 +15,7 @@ pub mod telemetry;
 pub mod transfer;
 
 use error::{LightningP2PError, Result};
-use node::{
-    LightningP2PNode, NearbyShareProtocol, NearbyShareRegistry, NodeRuntimeStatus, OfferInbox,
-};
+use node::{LightningP2PNode, NearbyShareRegistry, NodeRuntimeStatus, NodeSupervisor, OfferInbox};
 use std::sync::Arc;
 use storage::settings::{resolve_app_data_dir, SettingsState};
 use tauri::Manager;
@@ -32,6 +30,8 @@ pub struct AppState {
     pub node: Arc<RwLock<Option<Arc<LightningP2PNode>>>>,
     /// Last known node startup or reachability status.
     pub node_runtime: Arc<RwLock<NodeRuntimeStatus>>,
+    /// Supervises node startup and restart sequencing.
+    pub node_supervisor: NodeSupervisor,
     /// Persisted user settings shared across sessions.
     pub settings: SettingsState,
     /// In-memory registry of active transfers.
@@ -46,10 +46,15 @@ impl AppState {
     /// Creates a new `AppState` with no node initialized yet.
     #[must_use]
     pub fn new(data_dir: std::path::PathBuf, settings: SettingsState) -> Self {
+        let node = Arc::new(RwLock::new(None));
+        let node_runtime = Arc::new(RwLock::new(NodeRuntimeStatus::starting()));
+        let node_supervisor =
+            NodeSupervisor::new(data_dir.clone(), node.clone(), node_runtime.clone());
         Self {
             data_dir,
-            node: Arc::new(RwLock::new(None)),
-            node_runtime: Arc::new(RwLock::new(NodeRuntimeStatus::starting())),
+            node,
+            node_runtime,
+            node_supervisor,
             settings,
             transfers: TransferQueue::new(),
             nearby_shares: NearbyShareRegistry::new(true),
@@ -100,68 +105,16 @@ fn app_builder() -> tauri::Builder<tauri::Wry> {
 fn spawn_node_startup(handle: tauri::AppHandle) {
     tauri::async_runtime::spawn(async move {
         let state = handle.state::<AppState>();
-        let data_dir = state.data_dir.clone();
         let settings = state.settings.snapshot().await;
-        let download_dir = settings.download_dir.clone();
         state
-            .nearby_shares
-            .set_local_discovery_enabled(settings.local_discovery_enabled)
+            .node_supervisor
+            .start(
+                handle.clone(),
+                settings,
+                state.nearby_shares.clone(),
+                state.offer_inbox.clone(),
+            )
             .await;
-        state
-            .nearby_shares
-            .set_bluetooth_discovery_enabled(settings.bluetooth_discovery_enabled)
-            .await;
-        let nearby_protocol = Arc::new(NearbyShareProtocol::new(
-            state.nearby_shares.clone(),
-            state.offer_inbox.clone(),
-            handle.clone(),
-        ));
-
-        {
-            let mut runtime = state.node_runtime.write().await;
-            *runtime = NodeRuntimeStatus::starting();
-        }
-
-        let relay_url = match settings.resolved_custom_relay_url() {
-            Ok(relay_url) => relay_url,
-            Err(error) => {
-                tracing::error!("Invalid relay configuration: {error}");
-                let mut runtime = state.node_runtime.write().await;
-                *runtime = NodeRuntimeStatus::offline();
-                return;
-            }
-        };
-
-        match node::LightningP2PNode::start_with_dirs_and_relay(
-            data_dir,
-            download_dir,
-            relay_url,
-            Some(nearby_protocol),
-        )
-        .await
-        {
-            Ok(node) => {
-                let runtime_status = node.runtime_status();
-                let endpoint = node.endpoint().clone();
-                let lan_flag = node.lan_discovery_flag();
-                let mut guard = state.node.write().await;
-                *guard = Some(Arc::new(node));
-                let mut runtime = state.node_runtime.write().await;
-                *runtime = runtime_status;
-                node::spawn_nearby_discovery_loop(
-                    handle.clone(),
-                    endpoint,
-                    state.nearby_shares.clone(),
-                    lan_flag,
-                );
-                tracing::info!("iroh node started successfully");
-            }
-            Err(error) => {
-                let mut runtime = state.node_runtime.write().await;
-                *runtime = NodeRuntimeStatus::offline();
-                tracing::error!("Failed to start iroh node: {error}");
-            }
-        }
     });
 }
 
@@ -213,14 +166,18 @@ pub fn run() {
             commands::transfer::cancel_transfer,
             commands::transfer::get_active_transfers,
             commands::transfer::get_transfer_history,
+            commands::transfer::clear_transfer_history,
             commands::nearby::get_nearby_devices,
+            commands::nearby::clear_peer_cache,
             commands::nearby::offer_share_to_peer,
             commands::nearby::respond_to_offer,
             commands::diagnostics::get_network_diagnostics,
+            commands::diagnostics::get_ble_discovery_status,
             commands::diagnostics::collect_diagnostic_bundle,
             commands::diagnostics::record_frontend_diagnostic,
             commands::peer::get_node_id,
             commands::peer::get_node_status,
+            commands::peer::get_node_supervisor_status,
             commands::peer::get_local_device_identity,
             commands::platform::get_platform_profile,
             commands::settings::get_app_settings,

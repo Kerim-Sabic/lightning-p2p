@@ -16,6 +16,7 @@ import {
   ScanSearch,
   Settings2,
   ShieldCheck,
+  Trash2,
   Waypoints,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -156,6 +157,27 @@ function capabilityLabel(enabled: boolean): string {
   return enabled ? "Enabled" : "Disabled";
 }
 
+function supervisorPhaseLabel(phase: string): string {
+  switch (phase) {
+    case "idle":
+      return "Ready";
+    case "starting":
+      return "Starting";
+    case "restarting":
+      return "Restarting";
+    case "blocked_active_transfers":
+      return "Restart deferred";
+    case "failed":
+      return "Failed";
+    default:
+      return "Unknown";
+  }
+}
+
+function bleStateLabel(active: boolean): string {
+  return active ? "Active" : "Inactive";
+}
+
 const ANDROID_SIGNING_FINGERPRINT =
   "5F:A0:D6:63:46:FF:9C:91:1B:18:D1:2A:5F:77:F1:F0:9B:2D:E2:A7:69:A0:97:68:6C:FC:FA:43:BD:86:29:16";
 
@@ -163,6 +185,12 @@ export function SettingsView() {
   const settings = useTransferStore((state) => state.settings);
   const downloadDir = useTransferStore((state) => state.downloadDir);
   const nodeStatus = useTransferStore((state) => state.nodeStatus);
+  const nodeSupervisorStatus = useTransferStore(
+    (state) => state.nodeSupervisorStatus,
+  );
+  const bleDiscoveryStatus = useTransferStore(
+    (state) => state.bleDiscoveryStatus,
+  );
   const platformProfile = useTransferStore((state) => state.platformProfile);
   const updateState = useTransferStore((state) => state.updateState);
   const pickDownloadDir = useTransferStore((state) => state.pickDownloadDir);
@@ -180,6 +208,7 @@ export function SettingsView() {
   const setBluetoothDiscoveryEnabled = useTransferStore(
     (state) => state.setBluetoothDiscoveryEnabled,
   );
+  const clearPeerCache = useTransferStore((state) => state.clearPeerCache);
   const checkForUpdates = useTransferStore((state) => state.checkForUpdates);
   const installUpdate = useTransferStore((state) => state.installUpdate);
   const nativeRuntime = isDesktopRuntime();
@@ -189,6 +218,9 @@ export function SettingsView() {
   const [customRelayUrl, setCustomRelayUrlInput] = useState("");
   const [diagnosticsState, setDiagnosticsState] = useState<
     "idle" | "copied" | "error"
+  >("idle");
+  const [peerCacheState, setPeerCacheState] = useState<
+    "idle" | "cleared" | "error"
   >("idle");
 
   useEffect(() => {
@@ -224,6 +256,17 @@ export function SettingsView() {
       window.setTimeout(() => setDiagnosticsState("idle"), 1800);
     } catch {
       setDiagnosticsState("error");
+    }
+  };
+
+  const handleClearPeerCache = async (): Promise<void> => {
+    try {
+      await clearPeerCache();
+      setPeerCacheState("cleared");
+      window.setTimeout(() => setPeerCacheState("idle"), 1800);
+    } catch {
+      setPeerCacheState("error");
+      window.setTimeout(() => setPeerCacheState("idle"), 2200);
     }
   };
 
@@ -393,6 +436,109 @@ export function SettingsView() {
         </article>
       </section>
 
+      <section className="grid gap-4 xl:grid-cols-2">
+        <article className="glass-panel p-6">
+          <div className="flex items-center gap-3">
+            <div className="glass-icon">
+              <Activity className="h-5 w-5 text-sky-200" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-white">
+                Runtime readiness
+              </p>
+              <p className="text-[13px] text-slate-300/72">
+                Android launch, route, benchmark, and restart state at a glance.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-2 md:grid-cols-2">
+            <div className="stat-card">
+              <p className="metric-label">Android gate</p>
+              <p className="mt-1.5 text-sm font-semibold text-white">
+                {platformProfile.platform_kind === "android"
+                  ? "Physical proof required"
+                  : "Desktop runtime"}
+              </p>
+            </div>
+            <div className="stat-card">
+              <p className="metric-label">Route state</p>
+              <p className="mt-1.5 text-sm font-semibold text-white">
+                {onlineStateLabel(nodeStatus.online_state)}
+              </p>
+            </div>
+            <div className="stat-card">
+              <p className="metric-label">Supervisor</p>
+              <p className="mt-1.5 text-sm font-semibold text-white">
+                {supervisorPhaseLabel(nodeSupervisorStatus.phase)}
+              </p>
+              {nodeSupervisorStatus.last_error ? (
+                <p className="mt-1 text-xs leading-5 text-amber-100/80">
+                  {nodeSupervisorStatus.last_error}
+                </p>
+              ) : null}
+            </div>
+            <div className="stat-card">
+              <p className="metric-label">Benchmark proof</p>
+              <p className="mt-1.5 text-sm font-semibold text-white">
+                Evidence required
+              </p>
+            </div>
+          </div>
+        </article>
+
+        <article className="glass-panel p-6">
+          <div className="flex items-center gap-3">
+            <div className="glass-icon">
+              <Bluetooth className="h-5 w-5 text-sky-200" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-white">
+                BLE experimental status
+              </p>
+              <p className="text-[13px] text-slate-300/72">
+                BLE discovers presence only. All bytes still move over iroh.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-2 md:grid-cols-2">
+            <div className="stat-card">
+              <p className="metric-label">Support</p>
+              <p className="mt-1.5 text-sm font-semibold text-white">
+                {bleDiscoveryStatus.supported
+                  ? "Android plumbing"
+                  : "Unavailable"}
+              </p>
+            </div>
+            <div className="stat-card">
+              <p className="metric-label">Setting</p>
+              <p className="mt-1.5 text-sm font-semibold text-white">
+                {bleDiscoveryStatus.enabled ? "Enabled" : "Off"}
+              </p>
+            </div>
+            <div className="stat-card">
+              <p className="metric-label">Scanner</p>
+              <p className="mt-1.5 text-sm font-semibold text-white">
+                {bleStateLabel(bleDiscoveryStatus.scanning)}
+              </p>
+            </div>
+            <div className="stat-card">
+              <p className="metric-label">Advertiser</p>
+              <p className="mt-1.5 text-sm font-semibold text-white">
+                {bleStateLabel(bleDiscoveryStatus.advertising)}
+              </p>
+            </div>
+          </div>
+
+          {bleDiscoveryStatus.last_error ? (
+            <p className="mt-3 rounded-2xl border border-amber-300/16 bg-amber-500/10 p-3 text-xs leading-5 text-amber-50/82">
+              {bleDiscoveryStatus.last_error}
+            </p>
+          ) : null}
+        </article>
+      </section>
+
       <section className="glass-panel p-6">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div className="flex items-center gap-3">
@@ -408,22 +554,36 @@ export function SettingsView() {
             </div>
           </div>
 
-          <button
-            onClick={() => void copyDiagnostics()}
-            disabled={!nativeRuntime}
-            className="glass-button inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm text-slate-100"
-          >
-            {diagnosticsState === "copied" ? (
-              <ClipboardCheck className="h-4 w-4 text-emerald-200" />
-            ) : (
-              <Copy className="h-4 w-4" />
-            )}
-            {diagnosticsState === "copied"
-              ? "Copied"
-              : diagnosticsState === "error"
-                ? "Copy failed"
-                : "Copy diagnostics"}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => void copyDiagnostics()}
+              disabled={!nativeRuntime}
+              className="glass-button inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm text-slate-100"
+            >
+              {diagnosticsState === "copied" ? (
+                <ClipboardCheck className="h-4 w-4 text-emerald-200" />
+              ) : (
+                <Copy className="h-4 w-4" />
+              )}
+              {diagnosticsState === "copied"
+                ? "Copied"
+                : diagnosticsState === "error"
+                  ? "Copy failed"
+                  : "Copy diagnostics"}
+            </button>
+            <button
+              onClick={() => void handleClearPeerCache()}
+              disabled={!nativeRuntime}
+              className="glass-button inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm text-slate-100"
+            >
+              <Trash2 className="h-4 w-4" />
+              {peerCacheState === "cleared"
+                ? "Peer cache cleared"
+                : peerCacheState === "error"
+                  ? "Clear failed"
+                  : "Clear peer cache"}
+            </button>
+          </div>
         </div>
 
         <div className="mt-4 grid gap-2 md:grid-cols-3">
@@ -680,13 +840,13 @@ export function SettingsView() {
                     Bluetooth proximity discovery
                   </p>
                   <span className="rounded-full border border-amber-300/16 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-100">
-                    v0.5.0
+                    Experimental
                   </span>
                 </div>
                 <p className="text-[13px] leading-6 text-slate-300/72">
                   Defaults off. BLE will only discover nearby identities; file
-                  transfer stays on iroh QUIC. The native Android and Windows
-                  bridge still needs hardware validation.
+                  transfer stays on iroh QUIC. Hardware peer discovery still
+                  needs proof before any public claim.
                 </p>
               </div>
             </div>
@@ -704,7 +864,7 @@ export function SettingsView() {
               title={
                 bluetoothDiscoveryAvailable
                   ? "Bluetooth discovery"
-                  : "Bluetooth discovery is planned for v0.5.0"
+                  : "Bluetooth discovery is unavailable on this runtime"
               }
             >
               <motion.span

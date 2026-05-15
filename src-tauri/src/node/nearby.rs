@@ -329,6 +329,16 @@ impl NearbyShareRegistry {
         snapshot
     }
 
+    /// Clears all discovered-device records and returns the new snapshot if it changed.
+    pub async fn clear_devices(&self) -> Option<Vec<NearbyDevice>> {
+        let mut guard = self.devices.write().await;
+        if guard.is_empty() {
+            return None;
+        }
+        guard.clear();
+        Some(Vec::new())
+    }
+
     /// Upserts a device record discovered via Wi-Fi mDNS.
     ///
     /// Returns the resulting snapshot if it changed, otherwise `None`. The

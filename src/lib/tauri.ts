@@ -70,6 +70,23 @@ export type NearbyTransport = "wifi_mdns" | "ble" | "both";
 export type OfferDecision = "accepted" | "rejected" | "expired";
 export type WireBlobFormat = "raw" | "hash_seq";
 export type RelayMode = "public" | "custom";
+export type NodeSupervisorPhase =
+  | "idle"
+  | "starting"
+  | "restarting"
+  | "blocked_active_transfers"
+  | "failed";
+export type BlePermissionState =
+  | "unsupported"
+  | "not_requested"
+  | "granted"
+  | "denied"
+  | "unknown";
+export type BleAdapterState =
+  | "unsupported"
+  | "unknown"
+  | "unavailable"
+  | "available";
 
 export interface NodeStatus {
   online: boolean;
@@ -79,6 +96,23 @@ export interface NodeStatus {
   direct_address_count: number;
   lan_discovery_active: boolean;
   online_state: NodeOnlineState;
+}
+
+export interface NodeSupervisorStatus {
+  phase: NodeSupervisorPhase;
+  last_reason: string | null;
+  last_error: string | null;
+  last_changed_unix: number;
+}
+
+export interface BleDiscoveryStatus {
+  supported: boolean;
+  enabled: boolean;
+  permission_state: BlePermissionState;
+  adapter_state: BleAdapterState;
+  scanning: boolean;
+  advertising: boolean;
+  last_error: string | null;
 }
 
 export interface ActiveTransfer {
@@ -145,6 +179,8 @@ export interface NetworkDiagnostics {
   bluetooth_discovery_enabled: boolean;
   download_dir_status: DownloadDirectoryDiagnostics;
   latest_route_kind: RouteKind;
+  node_supervisor: NodeSupervisorStatus;
+  ble_status: BleDiscoveryStatus;
 }
 
 export interface DiagnosticBundle {
@@ -324,6 +360,23 @@ const browserNodeStatus: NodeStatus = {
   online_state: "offline",
 };
 
+const browserNodeSupervisorStatus: NodeSupervisorStatus = {
+  phase: "failed",
+  last_reason: "browser_preview",
+  last_error: "Native runtime required",
+  last_changed_unix: 0,
+};
+
+const browserBleDiscoveryStatus: BleDiscoveryStatus = {
+  supported: false,
+  enabled: false,
+  permission_state: "unsupported",
+  adapter_state: "unsupported",
+  scanning: false,
+  advertising: false,
+  last_error: "Native Android runtime required",
+};
+
 const browserSettings: AppSettings = {
   download_dir: "Desktop app runtime required",
   auto_update_enabled: false,
@@ -353,6 +406,8 @@ const browserNetworkDiagnostics: NetworkDiagnostics = {
     status: "desktop_runtime_required",
   },
   latest_route_kind: "unknown",
+  node_supervisor: browserNodeSupervisorStatus,
+  ble_status: browserBleDiscoveryStatus,
 };
 
 export const browserPlatformProfile: PlatformProfile = {
@@ -544,6 +599,13 @@ export async function getNodeStatus(): Promise<NodeStatus> {
   return invoke<NodeStatus>("get_node_status");
 }
 
+export async function getNodeSupervisorStatus(): Promise<NodeSupervisorStatus> {
+  if (!isDesktopRuntime()) {
+    return browserNodeSupervisorStatus;
+  }
+  return invoke<NodeSupervisorStatus>("get_node_supervisor_status");
+}
+
 export async function getAppVersion(): Promise<string> {
   if (!isDesktopRuntime()) {
     return "web-preview";
@@ -578,7 +640,9 @@ export async function startReceive(ticket: string): Promise<string> {
   return invoke<string>("start_receive", { ticket });
 }
 
-export async function startReceiveDiscoveredShare(shareId: string): Promise<string> {
+export async function startReceiveDiscoveredShare(
+  shareId: string,
+): Promise<string> {
   requireNativeRuntime("Receiving nearby shares");
   return invoke<string>("start_receive_discovered_share", { shareId });
 }
@@ -632,6 +696,16 @@ export async function getTransferHistory(): Promise<TransferRecord[]> {
   return invoke<TransferRecord[]>("get_transfer_history");
 }
 
+export async function clearTransferHistory(): Promise<void> {
+  requireNativeRuntime("Clearing transfer history");
+  await invoke("clear_transfer_history");
+}
+
+export async function clearPeerCache(): Promise<void> {
+  requireNativeRuntime("Clearing peer cache");
+  await invoke("clear_peer_cache");
+}
+
 export async function getAppSettings(): Promise<AppSettings> {
   if (!isDesktopRuntime()) {
     return browserSettings;
@@ -646,9 +720,20 @@ export async function getNetworkDiagnostics(): Promise<NetworkDiagnostics> {
   return invoke<NetworkDiagnostics>("get_network_diagnostics");
 }
 
-export async function collectDiagnosticBundle(): Promise<DiagnosticBundle> {
+export async function getBleDiscoveryStatus(): Promise<BleDiscoveryStatus> {
+  if (!isDesktopRuntime()) {
+    return browserBleDiscoveryStatus;
+  }
+  return invoke<BleDiscoveryStatus>("get_ble_discovery_status");
+}
+
+export async function collectDiagnosticBundle(
+  transferId?: string,
+): Promise<DiagnosticBundle> {
   requireNativeRuntime("Diagnostic bundle collection");
-  return invoke<DiagnosticBundle>("collect_diagnostic_bundle");
+  return invoke<DiagnosticBundle>("collect_diagnostic_bundle", {
+    transferId: transferId ?? null,
+  });
 }
 
 export function recordFrontendDiagnostic(message: string): void {
@@ -815,6 +900,21 @@ export function onTransferProgress(
   return listen<TransferEvent>("transfer-progress", ({ payload }) => {
     callback(payload);
   });
+}
+
+export function onNodeSupervisorStatus(
+  callback: (status: NodeSupervisorStatus) => void,
+): Promise<UnlistenFn> {
+  if (!isDesktopRuntime()) {
+    return Promise.resolve(() => {});
+  }
+
+  return listen<NodeSupervisorStatus>(
+    "node-supervisor-status",
+    ({ payload }) => {
+      callback(payload);
+    },
+  );
 }
 
 export function onDiscoveredSharesUpdated(

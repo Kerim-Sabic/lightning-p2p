@@ -66,6 +66,18 @@ pub fn load_all(db: &StorageDb) -> Result<Vec<TransferRecord>> {
     Ok(records)
 }
 
+/// Clears all persisted transfer history and flushes the database.
+///
+/// # Errors
+///
+/// Returns `LightningP2PError` if storage cannot be cleared or flushed.
+pub fn clear_all(db: &StorageDb) -> Result<()> {
+    let tree = db.tree(TREE_NAME)?;
+    tree.clear()?;
+    db.flush()?;
+    Ok(())
+}
+
 /// Finds the most recent send record for a given content hash.
 ///
 /// # Errors
@@ -139,5 +151,23 @@ mod tests {
             .expect("lookup should succeed")
             .expect("send record should exist");
         assert_eq!(record.filename, "new.txt");
+    }
+
+    #[test]
+    fn clear_all_removes_records() {
+        let (db, _dir) = temp_db();
+        let record = TransferRecord {
+            hash: "abc123".into(),
+            filename: "test.txt".into(),
+            size: 1024,
+            peer: Some("peer-1".into()),
+            timestamp: 1_700_000_000,
+            direction: TransferDirection::Send,
+        };
+        save_record(&db, &record).expect("record should save");
+        clear_all(&db).expect("history should clear");
+
+        let records = load_all(&db).expect("records should load");
+        assert!(records.is_empty());
     }
 }

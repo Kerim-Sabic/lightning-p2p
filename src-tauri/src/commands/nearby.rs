@@ -3,13 +3,14 @@
 use crate::node::nearby_offer::{emit_offer_resolved, OfferDecision, OfferShareMessage};
 use crate::node::nearby_protocol::{local_device_name, send_offer, WireBlobFormat};
 use crate::node::{ActiveShare, NearbyDevice};
+use crate::storage::peers;
 use crate::AppState;
 use iroh::{NodeAddr, NodeId};
 use iroh_blobs::BlobFormat;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tauri::State;
+use tauri::{Emitter, State};
 
 /// Returns the current list of nearby devices visible to this node.
 ///
@@ -19,6 +20,33 @@ use tauri::State;
 #[tauri::command]
 pub async fn get_nearby_devices(state: State<'_, AppState>) -> Result<Vec<NearbyDevice>, String> {
     Ok(state.nearby_shares.devices_snapshot().await)
+}
+
+/// Clears persisted and in-memory nearby peer caches.
+///
+/// # Errors
+///
+/// Returns an error string if storage clearing or event emission fails.
+#[tauri::command]
+pub async fn clear_peer_cache(
+    app_handle: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let node = state.get_node().await.map_err(String::from)?;
+    peers::clear_all(node.db()).map_err(String::from)?;
+
+    if let Some(shares) = state.nearby_shares.clear_discovered_shares().await {
+        app_handle
+            .emit("discovered-shares-updated", shares)
+            .map_err(|error| error.to_string())?;
+    }
+    if let Some(devices) = state.nearby_shares.clear_devices().await {
+        app_handle
+            .emit("nearby-devices-updated", devices)
+            .map_err(|error| error.to_string())?;
+    }
+
+    Ok(())
 }
 
 /// Pushes a share offer to a previously discovered nearby device.

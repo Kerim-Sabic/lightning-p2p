@@ -15,6 +15,7 @@ import { useTransfer } from "./hooks/useTransfer";
 import {
   getRuntimeKind,
   onDeepLinkOpened,
+  recordFrontendDiagnostic,
   type RuntimeKind,
 } from "./lib/tauri";
 import { useTransferStore } from "./stores/transferStore";
@@ -29,6 +30,7 @@ export function App() {
     document.documentElement.dataset.runtime = runtimeKind;
     document.body.dataset.runtime = runtimeKind;
     document.body.classList.add("app-hydrated");
+    recordFrontendDiagnostic(`app:rendered:${runtimeKind}`);
 
     return () => {
       delete document.documentElement.dataset.runtime;
@@ -98,9 +100,7 @@ function NativeAppShell({ runtimeKind }: NativeAppShellProps) {
   }, [view]);
 
   return (
-    <div
-      className="relative h-screen overflow-hidden bg-[var(--canvas-0)] text-[var(--fg-primary)]"
-    >
+    <div className="relative h-screen overflow-hidden bg-[var(--canvas-0)] text-[var(--fg-primary)]">
       <div
         className={`app-shell ${
           mobileRuntime ? "app-shell-mobile" : "app-shell-desktop"
@@ -109,9 +109,7 @@ function NativeAppShell({ runtimeKind }: NativeAppShellProps) {
         <FirstRunOverlay />
         {!mobileRuntime ? <WindowChrome currentView={view} /> : null}
         <div
-          className={`flex min-h-0 flex-1 ${
-            mobileRuntime ? "flex-col" : ""
-          }`}
+          className={`flex min-h-0 flex-1 ${mobileRuntime ? "flex-col" : ""}`}
         >
           {!mobileRuntime ? (
             <Sidebar currentView={view} onNavigate={handleNavigate} />

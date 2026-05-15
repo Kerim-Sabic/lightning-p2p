@@ -133,15 +133,18 @@ pub async fn complete_first_run(state: State<'_, AppState>) -> Result<SettingsPa
 /// Returns an error string if custom relay mode is selected without a valid URL.
 #[tauri::command]
 pub async fn set_relay_mode(
+    app: AppHandle,
     state: State<'_, AppState>,
     relay_mode: RelayModeSetting,
 ) -> Result<SettingsPayload, String> {
-    state
+    let settings = state
         .settings
         .set_relay_mode(relay_mode)
         .await
-        .map(SettingsPayload::from)
-        .map_err(String::from)
+        .map_err(String::from)?;
+    restart_node_after_endpoint_setting(app, &state, settings.clone(), "relay_mode_changed")
+        .await?;
+    Ok(SettingsPayload::from(settings))
 }
 
 /// Updates the custom relay URL used when custom relay mode is enabled.
@@ -151,15 +154,18 @@ pub async fn set_relay_mode(
 /// Returns an error string if the URL is invalid.
 #[tauri::command]
 pub async fn set_custom_relay_url(
+    app: AppHandle,
     state: State<'_, AppState>,
     relay_url: Option<String>,
 ) -> Result<SettingsPayload, String> {
-    state
+    let settings = state
         .settings
         .set_custom_relay_url(relay_url)
         .await
-        .map(SettingsPayload::from)
-        .map_err(String::from)
+        .map_err(String::from)?;
+    restart_node_after_endpoint_setting(app, &state, settings.clone(), "custom_relay_url_changed")
+        .await?;
+    Ok(SettingsPayload::from(settings))
 }
 
 /// Updates whether nearby-share discovery is enabled on the local network.
@@ -189,6 +195,8 @@ pub async fn set_local_discovery_enabled(
                 .map_err(|error| error.to_string())?;
         }
     }
+    restart_node_after_endpoint_setting(app, &state, settings.clone(), "local_discovery_changed")
+        .await?;
     Ok(SettingsPayload::from(settings))
 }
 
@@ -220,6 +228,27 @@ pub async fn set_bluetooth_discovery_enabled(
         }
     }
     Ok(SettingsPayload::from(settings))
+}
+
+async fn restart_node_after_endpoint_setting(
+    app: AppHandle,
+    state: &State<'_, AppState>,
+    settings: AppSettings,
+    reason: &'static str,
+) -> Result<(), String> {
+    state
+        .node_supervisor
+        .restart_if_idle(
+            app,
+            settings,
+            &state.transfers,
+            state.nearby_shares.clone(),
+            state.offer_inbox.clone(),
+            reason,
+        )
+        .await
+        .map(|_| ())
+        .map_err(String::from)
 }
 
 /// Opens the current download directory in the operating system's file explorer.

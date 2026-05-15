@@ -100,6 +100,17 @@ pub async fn get_transfer_history(
     history::load_all(node.db()).map_err(String::from)
 }
 
+/// Clears persisted transfer history.
+///
+/// # Errors
+///
+/// Returns an error string if the node is unavailable or history clearing fails.
+#[tauri::command]
+pub async fn clear_transfer_history(state: State<'_, AppState>) -> Result<(), String> {
+    let node = state.get_node().await.map_err(String::from)?;
+    history::clear_all(node.db()).map_err(String::from)
+}
+
 /// Shared helper that powers both the regular ticket-receive path and the
 /// accept-an-offer path, so the queue + progress + cancellation wiring lives
 /// in one place.

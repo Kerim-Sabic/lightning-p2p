@@ -2,7 +2,9 @@ import { create } from "zustand";
 import type {
   ActiveTransfer,
   AppSettings,
+  BleDiscoveryStatus,
   NearbyShare,
+  NodeSupervisorStatus,
   NodeStatus,
   RelayMode,
   RouteKind,
@@ -17,6 +19,7 @@ import type {
   UpdateProgress,
 } from "../lib/tauri";
 import * as tauri from "../lib/tauri";
+import { useNearbyDeviceStore } from "./nearbyDeviceStore";
 import { useNearbyShareStore } from "./nearbyShareStore";
 
 export type TransferStatus = "starting" | "running" | "completed" | "failed";
@@ -67,6 +70,8 @@ export interface UpdateState {
 
 interface TransferStore {
   nodeStatus: NodeStatus;
+  nodeSupervisorStatus: NodeSupervisorStatus;
+  bleDiscoveryStatus: BleDiscoveryStatus;
   platformProfile: PlatformProfile;
   settings: AppSettings | null;
   downloadDir: string | null;
@@ -87,11 +92,15 @@ interface TransferStore {
   pickShareFiles: () => Promise<void>;
   pickShareFolder: () => Promise<void>;
   refreshNodeStatus: () => Promise<void>;
+  refreshNodeSupervisorStatus: () => Promise<void>;
+  refreshBleDiscoveryStatus: () => Promise<void>;
   refreshPlatformProfile: () => Promise<void>;
   refreshSettings: () => Promise<void>;
   refreshDownloadDir: () => Promise<void>;
   refreshActiveTransfers: () => Promise<void>;
   refreshHistory: () => Promise<void>;
+  clearTransferHistory: () => Promise<void>;
+  clearPeerCache: () => Promise<void>;
   createShare: () => Promise<void>;
   startReceive: (ticket: string) => Promise<string | null>;
   startReceiveNearbyShare: (share: NearbyShare) => Promise<string | null>;
@@ -108,6 +117,7 @@ interface TransferStore {
   checkForUpdates: (silent?: boolean) => Promise<void>;
   installUpdate: () => Promise<void>;
   applyTransferEvent: (event: TransferEvent) => void;
+  applyNodeSupervisorStatus: (status: NodeSupervisorStatus) => void;
 }
 
 const defaultNodeStatus: NodeStatus = {
@@ -118,6 +128,23 @@ const defaultNodeStatus: NodeStatus = {
   direct_address_count: 0,
   lan_discovery_active: false,
   online_state: "starting",
+};
+
+const defaultNodeSupervisorStatus: NodeSupervisorStatus = {
+  phase: "starting",
+  last_reason: "app_startup",
+  last_error: null,
+  last_changed_unix: 0,
+};
+
+const defaultBleDiscoveryStatus: BleDiscoveryStatus = {
+  supported: false,
+  enabled: false,
+  permission_state: "unknown",
+  adapter_state: "unknown",
+  scanning: false,
+  advertising: false,
+  last_error: null,
 };
 
 const defaultUpdateState: UpdateState = {
@@ -192,7 +219,8 @@ function mergeActiveTransfer(
       transfer.phase ??
       current?.phase ??
       (transfer.direction === "receive" ? "connecting" : "preparing"),
-    failureCategory: transfer.failure_category ?? current?.failureCategory ?? null,
+    failureCategory:
+      transfer.failure_category ?? current?.failureCategory ?? null,
     outputPath: transfer.output_path ?? current?.outputPath ?? null,
     connectMs: transfer.connect_ms,
     downloadMs: transfer.download_ms,
@@ -287,6 +315,8 @@ function sameTransferProgress(
 
 export const useTransferStore = create<TransferStore>((set, get) => ({
   nodeStatus: defaultNodeStatus,
+  nodeSupervisorStatus: defaultNodeSupervisorStatus,
+  bleDiscoveryStatus: defaultBleDiscoveryStatus,
   platformProfile: tauri.browserPlatformProfile,
   settings: null,
   downloadDir: null,
@@ -367,6 +397,24 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
       set((state) =>
         sameNodeStatus(state.nodeStatus, nodeStatus) ? state : { nodeStatus },
       );
+    } catch (error) {
+      set({ error: toErrorMessage(error) });
+    }
+  },
+
+  refreshNodeSupervisorStatus: async () => {
+    try {
+      const nodeSupervisorStatus = await tauri.getNodeSupervisorStatus();
+      set({ nodeSupervisorStatus });
+    } catch (error) {
+      set({ error: toErrorMessage(error) });
+    }
+  },
+
+  refreshBleDiscoveryStatus: async () => {
+    try {
+      const bleDiscoveryStatus = await tauri.getBleDiscoveryStatus();
+      set({ bleDiscoveryStatus });
     } catch (error) {
       set({ error: toErrorMessage(error) });
     }
@@ -456,6 +504,25 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
     }
   },
 
+  clearTransferHistory: async () => {
+    try {
+      await tauri.clearTransferHistory();
+      set({ history: [] });
+    } catch (error) {
+      set({ error: toErrorMessage(error) });
+    }
+  },
+
+  clearPeerCache: async () => {
+    try {
+      await tauri.clearPeerCache();
+      useNearbyShareStore.getState().clearShares();
+      useNearbyDeviceStore.getState().clearDevices();
+    } catch (error) {
+      set({ error: toErrorMessage(error) });
+    }
+  },
+
   createShare: async () => {
     const paths = get().shareSelection.map((item) => item.path);
     if (paths.length === 0) {
@@ -514,7 +581,9 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
       if (!get().settings) {
         set(withSettings(await tauri.getAppSettings()));
       }
-      const transferId = await tauri.startReceiveDiscoveredShare(share.share_id);
+      const transferId = await tauri.startReceiveDiscoveredShare(
+        share.share_id,
+      );
       set((state) => ({
         transfers: {
           ...state.transfers,
@@ -593,6 +662,8 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
     try {
       const settings = await tauri.setRelayMode(relayMode);
       set(withSettings(settings));
+      await get().refreshNodeSupervisorStatus();
+      await get().refreshNodeStatus();
     } catch (error) {
       set({ error: toErrorMessage(error) });
     }
@@ -602,6 +673,8 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
     try {
       const settings = await tauri.setCustomRelayUrl(relayUrl);
       set(withSettings(settings));
+      await get().refreshNodeSupervisorStatus();
+      await get().refreshNodeStatus();
     } catch (error) {
       set({ error: toErrorMessage(error) });
     }
@@ -614,6 +687,8 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
       if (!enabled) {
         useNearbyShareStore.getState().clearShares();
       }
+      await get().refreshNodeSupervisorStatus();
+      await get().refreshNodeStatus();
     } catch (error) {
       set({ error: toErrorMessage(error) });
     }
@@ -623,6 +698,7 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
     try {
       const settings = await tauri.setBluetoothDiscoveryEnabled(enabled);
       set(withSettings(settings));
+      await get().refreshBleDiscoveryStatus();
     } catch (error) {
       set({ error: toErrorMessage(error) });
     }
@@ -825,5 +901,9 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
         return { transfers };
       }
     });
+  },
+
+  applyNodeSupervisorStatus: (status) => {
+    set({ nodeSupervisorStatus: status });
   },
 }));

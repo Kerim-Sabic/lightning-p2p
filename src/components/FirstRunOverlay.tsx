@@ -8,6 +8,7 @@ import {
   Waypoints,
 } from "lucide-react";
 import { useState } from "react";
+import { isMobileRuntime } from "../lib/tauri";
 import { useTransferStore } from "../stores/transferStore";
 
 function statusLabel(onlineState: string): string {
@@ -49,6 +50,7 @@ export function FirstRunOverlay() {
   const completeFirstRun = useTransferStore((state) => state.completeFirstRun);
   const openDownloadDir = useTransferStore((state) => state.openDownloadDir);
   const [isSaving, setIsSaving] = useState(false);
+  const mobileRuntime = isMobileRuntime();
 
   if (!settings || settings.first_run_complete) {
     return null;
@@ -64,12 +66,12 @@ export function FirstRunOverlay() {
   };
 
   return (
-    <div className="pointer-events-auto absolute inset-0 z-40 flex items-center justify-center bg-black/72 px-4 backdrop-blur-2xl">
+    <div className="pointer-events-auto absolute inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/72 px-4 py-[calc(16px+env(safe-area-inset-top))] backdrop-blur-2xl sm:items-center">
       <motion.section
         initial={{ opacity: 0, y: 20, scale: 0.96 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
-        className="glass-panel relative w-full max-w-4xl overflow-hidden p-7"
+        className="glass-panel relative my-auto w-full max-w-4xl overflow-hidden p-5 sm:p-7"
       >
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.12),transparent_34%),radial-gradient(circle_at_90%_15%,rgba(56,189,248,0.08),transparent_30%)]" />
         <div className="relative space-y-5">
@@ -150,7 +152,9 @@ export function FirstRunOverlay() {
                     Default receive folder
                   </p>
                   <p className="text-[13px] text-slate-300/72">
-                    Verified downloads are exported here.
+                    {mobileRuntime
+                      ? "Android receives stay in app-private storage for this alpha."
+                      : "Verified downloads are exported here."}
                   </p>
                 </div>
               </div>
@@ -164,22 +168,24 @@ export function FirstRunOverlay() {
                 </p>
               </div>
 
-              <div className="mt-3 flex flex-wrap gap-2">
-                <button
-                  onClick={() => void pickDownloadDir()}
-                  className="glass-button inline-flex items-center gap-2 px-3.5 py-2 text-sm text-slate-100"
-                >
-                  <FolderCog className="h-4 w-4" />
-                  Change folder
-                </button>
-                <button
-                  onClick={() => void openDownloadDir()}
-                  className="glass-button inline-flex items-center gap-2 px-3.5 py-2 text-sm text-slate-100"
-                >
-                  <HardDriveDownload className="h-4 w-4" />
-                  Open folder
-                </button>
-              </div>
+              {!mobileRuntime ? (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    onClick={() => void pickDownloadDir()}
+                    className="glass-button inline-flex items-center gap-2 px-3.5 py-2 text-sm text-slate-100"
+                  >
+                    <FolderCog className="h-4 w-4" />
+                    Change folder
+                  </button>
+                  <button
+                    onClick={() => void openDownloadDir()}
+                    className="glass-button inline-flex items-center gap-2 px-3.5 py-2 text-sm text-slate-100"
+                  >
+                    <HardDriveDownload className="h-4 w-4" />
+                    Open folder
+                  </button>
+                </div>
+              ) : null}
             </article>
           </div>
 

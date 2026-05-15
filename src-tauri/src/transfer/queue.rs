@@ -77,6 +77,20 @@ impl TransferQueue {
             .is_some_and(|cancel| cancel.send(true).is_ok())
     }
 
+    /// Returns whether any active transfer is currently registered.
+    pub async fn has_active(&self) -> bool {
+        !self.active.read().await.is_empty()
+    }
+
+    /// Returns one active transfer snapshot by id.
+    pub async fn get(&self, transfer_id: &str) -> Option<TransferInfo> {
+        self.active
+            .read()
+            .await
+            .get(transfer_id)
+            .map(|entry| entry.info.clone())
+    }
+
     /// Returns a snapshot of all active transfers.
     pub async fn list(&self) -> Vec<TransferInfo> {
         let map = self.active.read().await;

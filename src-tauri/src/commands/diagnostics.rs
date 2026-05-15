@@ -1,9 +1,11 @@
 //! Commands for privacy-safe runtime diagnostics.
 
-use crate::node::NodeOnlineState;
+use crate::commands::platform::PlatformProfile;
+use crate::node::{NodeOnlineState, NodeSupervisorStatus};
 use crate::storage::settings::RelayModeSetting;
 use crate::telemetry;
 use crate::transfer::metrics::RouteKind;
+use crate::transfer::progress::{TransferInfo, TransferPhase};
 use crate::AppState;
 use serde::Serialize;
 use std::io::Write;
@@ -59,6 +61,10 @@ pub struct NetworkDiagnostics {
     pub download_dir_status: DownloadDirectoryDiagnostics,
     /// Latest active transfer route kind, if known.
     pub latest_route_kind: RouteKind,
+    /// Current supervised node lifecycle state.
+    pub node_supervisor: NodeSupervisorStatus,
+    /// Bluetooth LE discovery status for the current runtime.
+    pub ble_status: BleDiscoveryStatus,
 }
 
 /// A local-only diagnostic bundle users can paste into support reports.
@@ -68,6 +74,84 @@ pub struct DiagnosticBundle {
     pub generated_at_unix: u64,
     /// Redacted plain-text report.
     pub report: String,
+}
+
+/// Bluetooth LE runtime permission state.
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum BlePermissionState {
+    /// This runtime does not support Bluetooth LE discovery.
+    Unsupported,
+    /// Runtime permission has not been requested by this build.
+    NotRequested,
+    /// Runtime permission is granted.
+    Granted,
+    /// Runtime permission is denied.
+    Denied,
+    /// Runtime permission state cannot be inspected from this layer.
+    Unknown,
+}
+
+/// Bluetooth adapter state visible to the Rust diagnostics layer.
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum BleAdapterState {
+    /// This runtime does not support Bluetooth LE discovery.
+    Unsupported,
+    /// Adapter state cannot be inspected from this layer.
+    Unknown,
+    /// Bluetooth adapter is unavailable.
+    Unavailable,
+    /// Bluetooth adapter is available.
+    Available,
+}
+
+/// Current experimental Bluetooth LE discovery status.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[allow(clippy::struct_excessive_bools)]
+pub struct BleDiscoveryStatus {
+    /// Whether this compiled runtime can support Bluetooth LE plumbing.
+    pub supported: bool,
+    /// Whether the user-enabled setting is on.
+    pub enabled: bool,
+    /// Runtime permission state.
+    pub permission_state: BlePermissionState,
+    /// Bluetooth adapter state.
+    pub adapter_state: BleAdapterState,
+    /// Whether BLE scanning is currently running.
+    pub scanning: bool,
+    /// Whether BLE advertising is currently running.
+    pub advertising: bool,
+    /// Last user-actionable BLE error, if any.
+    pub last_error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+struct TransferDiagnostic {
+    transfer_id: String,
+    found: bool,
+    direction: Option<String>,
+    name: Option<String>,
+    peer: Option<String>,
+    bytes: u64,
+    total: u64,
+    route_kind: RouteKind,
+    phase: TransferPhase,
+    failure_category: Option<String>,
+    connect_ms: u64,
+    download_ms: u64,
+    export_ms: u64,
+    note: Option<String>,
+}
+
+struct DiagnosticReportParts<'a> {
+    generated_at_unix: u64,
+    diagnostics: &'a NetworkDiagnostics,
+    platform: PlatformProfile,
+    transfer_context: String,
+    rust_log: String,
+    android_log: String,
+    frontend_log: String,
 }
 
 /// Returns privacy-safe network diagnostics for copying into bug reports.
@@ -80,6 +164,18 @@ pub async fn get_network_diagnostics(
     state: State<'_, AppState>,
 ) -> Result<NetworkDiagnostics, String> {
     Ok(build_network_diagnostics(&state).await)
+}
+
+/// Returns experimental Bluetooth LE discovery status.
+///
+/// # Errors
+///
+/// Returns an error string if application state cannot be read.
+#[tauri::command]
+pub async fn get_ble_discovery_status(
+    state: State<'_, AppState>,
+) -> Result<BleDiscoveryStatus, String> {
+    Ok(build_ble_status(&state).await)
 }
 
 /// Records a frontend diagnostic line in the local app-private diagnostics log.
@@ -106,14 +202,44 @@ pub fn record_frontend_diagnostic(
 #[tauri::command]
 pub async fn collect_diagnostic_bundle(
     state: State<'_, AppState>,
+    transfer_id: Option<String>,
 ) -> Result<DiagnosticBundle, String> {
     let diagnostics = build_network_diagnostics(&state).await;
     let platform = crate::commands::platform::current_platform_profile();
     let settings = state.settings.snapshot().await;
     let diagnostics_dir = telemetry::diagnostics_dir(&state.data_dir);
     let generated_at_unix = unix_timestamp();
+    let transfer = build_transfer_diagnostic(&state, transfer_id.as_deref()).await;
+    let report_parts = DiagnosticReportParts {
+        generated_at_unix,
+        diagnostics: &diagnostics,
+        platform,
+        transfer_context: format_transfer_diagnostic(&transfer),
+        rust_log: read_recent_log(&telemetry::rust_log_path(&state.data_dir), RECENT_LOG_LINES),
+        android_log: read_recent_log(
+            &diagnostics_dir.join(ANDROID_LOG_FILE_NAME),
+            RECENT_LOG_LINES,
+        ),
+        frontend_log: read_recent_log(
+            &diagnostics_dir.join(FRONTEND_LOG_FILE_NAME),
+            RECENT_LOG_LINES,
+        ),
+    };
+    let mut report = format_diagnostic_report(&report_parts);
 
-    let mut report = format!(
+    report = redact_known_path(report, &state.data_dir, "[app-data]");
+    report = redact_known_path(report, &settings.download_dir, "[download-dir]");
+
+    Ok(DiagnosticBundle {
+        generated_at_unix,
+        report,
+    })
+}
+
+fn format_diagnostic_report(parts: &DiagnosticReportParts<'_>) -> String {
+    let diagnostics = parts.diagnostics;
+    let platform = parts.platform;
+    format!(
         "\
 Lightning P2P diagnostic bundle
 Generated: {generated_at_unix}
@@ -136,9 +262,21 @@ Direct address count: {direct_address_count}
 LAN discovery enabled: {local_discovery_enabled}
 LAN discovery active: {lan_discovery_active}
 Bluetooth discovery enabled: {bluetooth_discovery_enabled}
+BLE supported: {ble_supported}
+BLE permission: {ble_permission:?}
+BLE adapter: {ble_adapter:?}
+BLE scanning: {ble_scanning}
+BLE advertising: {ble_advertising}
+BLE last error: {ble_last_error}
+Node supervisor phase: {node_supervisor_phase:?}
+Node supervisor reason: {node_supervisor_reason}
+Node supervisor error: {node_supervisor_error}
 Download folder status: {download_status}
 Download folder writable: {download_writable}
 Latest route kind: {latest_route_kind:?}
+
+== Transfer context ==
+{transfer_context}
 
 == Rust log tail ==
 {rust_log}
@@ -149,6 +287,7 @@ Latest route kind: {latest_route_kind:?}
 == Frontend log tail ==
 {frontend_log}
 ",
+        generated_at_unix = parts.generated_at_unix,
         app_version = diagnostics.app_version,
         platform_kind = platform.platform_kind,
         runtime_family = platform.runtime_family,
@@ -168,27 +307,35 @@ Latest route kind: {latest_route_kind:?}
         local_discovery_enabled = bool_label(diagnostics.local_discovery_enabled),
         lan_discovery_active = bool_label(diagnostics.lan_discovery_active),
         bluetooth_discovery_enabled = bool_label(diagnostics.bluetooth_discovery_enabled),
+        ble_supported = bool_label(diagnostics.ble_status.supported),
+        ble_permission = diagnostics.ble_status.permission_state,
+        ble_adapter = diagnostics.ble_status.adapter_state,
+        ble_scanning = bool_label(diagnostics.ble_status.scanning),
+        ble_advertising = bool_label(diagnostics.ble_status.advertising),
+        ble_last_error = diagnostics
+            .ble_status
+            .last_error
+            .as_deref()
+            .unwrap_or("none"),
+        node_supervisor_phase = diagnostics.node_supervisor.phase,
+        node_supervisor_reason = diagnostics
+            .node_supervisor
+            .last_reason
+            .as_deref()
+            .unwrap_or("none"),
+        node_supervisor_error = diagnostics
+            .node_supervisor
+            .last_error
+            .as_deref()
+            .unwrap_or("none"),
         download_status = diagnostics.download_dir_status.status,
         download_writable = bool_label(diagnostics.download_dir_status.writable),
         latest_route_kind = diagnostics.latest_route_kind,
-        rust_log = read_recent_log(&telemetry::rust_log_path(&state.data_dir), RECENT_LOG_LINES),
-        android_log = read_recent_log(
-            &diagnostics_dir.join(ANDROID_LOG_FILE_NAME),
-            RECENT_LOG_LINES,
-        ),
-        frontend_log = read_recent_log(
-            &diagnostics_dir.join(FRONTEND_LOG_FILE_NAME),
-            RECENT_LOG_LINES,
-        ),
-    );
-
-    report = redact_known_path(report, &state.data_dir, "[app-data]");
-    report = redact_known_path(report, &settings.download_dir, "[download-dir]");
-
-    Ok(DiagnosticBundle {
-        generated_at_unix,
-        report,
-    })
+        transfer_context = parts.transfer_context,
+        rust_log = parts.rust_log,
+        android_log = parts.android_log,
+        frontend_log = parts.frontend_log,
+    )
 }
 
 async fn build_network_diagnostics(state: &AppState) -> NetworkDiagnostics {
@@ -220,7 +367,153 @@ async fn build_network_diagnostics(state: &AppState) -> NetworkDiagnostics {
         bluetooth_discovery_enabled: settings.bluetooth_discovery_enabled,
         download_dir_status: inspect_download_dir(&settings.download_dir),
         latest_route_kind,
+        node_supervisor: state.node_supervisor.status().await,
+        ble_status: build_ble_status(state).await,
     }
+}
+
+async fn build_ble_status(state: &AppState) -> BleDiscoveryStatus {
+    let enabled = state.settings.snapshot().await.bluetooth_discovery_enabled;
+    let supported = cfg!(target_os = "android");
+    let last_error = if supported && enabled {
+        Some(
+            "BLE scanner/advertiser is experimental and currently limited to no-crash status plumbing in this build."
+                .into(),
+        )
+    } else if supported {
+        None
+    } else {
+        Some("BLE discovery is supported only by the Android runtime plan.".into())
+    };
+
+    BleDiscoveryStatus {
+        supported,
+        enabled,
+        permission_state: if supported {
+            BlePermissionState::Unknown
+        } else {
+            BlePermissionState::Unsupported
+        },
+        adapter_state: if supported {
+            BleAdapterState::Unknown
+        } else {
+            BleAdapterState::Unsupported
+        },
+        scanning: false,
+        advertising: false,
+        last_error,
+    }
+}
+
+async fn build_transfer_diagnostic(
+    state: &AppState,
+    transfer_id: Option<&str>,
+) -> TransferDiagnostic {
+    if let Some(transfer_id) = transfer_id {
+        return state.transfers.get(transfer_id).await.map_or_else(
+            || TransferDiagnostic {
+                transfer_id: transfer_id.to_string(),
+                found: false,
+                direction: None,
+                name: None,
+                peer: None,
+                bytes: 0,
+                total: 0,
+                route_kind: RouteKind::Unknown,
+                phase: TransferPhase::Failed,
+                failure_category: None,
+                connect_ms: 0,
+                download_ms: 0,
+                export_ms: 0,
+                note: Some(
+                    "Transfer is not active in the in-memory queue. Check persisted history and log tail."
+                        .into(),
+                ),
+            },
+            |transfer| transfer_diagnostic_from_info(transfer, Some("active transfer".into())),
+        );
+    }
+
+    let active = state.transfers.list().await;
+    if let Some(transfer) = active.last().cloned() {
+        return transfer_diagnostic_from_info(transfer, Some("latest active transfer".into()));
+    }
+
+    TransferDiagnostic {
+        transfer_id: "none".into(),
+        found: false,
+        direction: None,
+        name: None,
+        peer: None,
+        bytes: 0,
+        total: 0,
+        route_kind: RouteKind::Unknown,
+        phase: TransferPhase::Completed,
+        failure_category: None,
+        connect_ms: 0,
+        download_ms: 0,
+        export_ms: 0,
+        note: Some("No active transfer at collection time.".into()),
+    }
+}
+
+fn transfer_diagnostic_from_info(
+    transfer: TransferInfo,
+    note: Option<String>,
+) -> TransferDiagnostic {
+    TransferDiagnostic {
+        transfer_id: transfer.transfer_id,
+        found: true,
+        direction: Some(format!("{:?}", transfer.direction)),
+        name: Some(transfer.name),
+        peer: transfer.peer,
+        bytes: transfer.bytes,
+        total: transfer.total,
+        route_kind: transfer.route_kind,
+        phase: transfer.phase,
+        failure_category: transfer
+            .failure_category
+            .map(|category| format!("{category:?}")),
+        connect_ms: transfer.connect_ms,
+        download_ms: transfer.download_ms,
+        export_ms: transfer.export_ms,
+        note,
+    }
+}
+
+fn format_transfer_diagnostic(transfer: &TransferDiagnostic) -> String {
+    format!(
+        "\
+Transfer ID: {transfer_id}
+Found active: {found}
+Direction: {direction}
+Name: {name}
+Peer: {peer}
+Bytes: {bytes}
+Total: {total}
+Route: {route_kind:?}
+Phase: {phase:?}
+Failure category: {failure_category}
+Connect ms: {connect_ms}
+Download ms: {download_ms}
+Export ms: {export_ms}
+Note: {note}
+",
+        transfer_id = transfer.transfer_id,
+        found = bool_label(transfer.found),
+        direction = transfer.direction.as_deref().unwrap_or("n/a"),
+        name = transfer.name.as_deref().unwrap_or("n/a"),
+        peer = transfer.peer.as_deref().unwrap_or("n/a"),
+        bytes = transfer.bytes,
+        total = transfer.total,
+        route_kind = transfer.route_kind,
+        phase = transfer.phase,
+        failure_category = transfer.failure_category.as_deref().unwrap_or("none"),
+        connect_ms = transfer.connect_ms,
+        download_ms = transfer.download_ms,
+        export_ms = transfer.export_ms,
+        note = transfer.note.as_deref().unwrap_or("none"),
+    )
 }
 
 fn inspect_download_dir(path: &Path) -> DownloadDirectoryDiagnostics {
