@@ -2,6 +2,8 @@ param(
   [string]$PackageId = "com.lightningp2p.app",
   [string]$ApkUrl = "https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P-android-latest.apk",
   [string]$ChecksumUrl = "https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/SHA256SUMS-android.txt",
+  [string]$LocalApkPath = "",
+  [string]$LocalChecksumPath = "",
   [string]$OutputDir = "android-acceptance-results",
   [switch]$CleanInstall
 )
@@ -46,21 +48,36 @@ if ($devices.Count -gt 1) {
 $output = Join-Path (Resolve-Path ".") $OutputDir
 New-Item -ItemType Directory -Force -Path $output | Out-Null
 
-$apkPath = Join-Path $output "LightningP2P-android-latest.apk"
+$apkPath = Join-Path $output "LightningP2P-android-under-test.apk"
 $checksumPath = Join-Path $output "SHA256SUMS-android.txt"
 $logcatPath = Join-Path $output "lightning-p2p-launch-logcat.txt"
 $activityPath = Join-Path $output "lightning-p2p-activity-state.txt"
 
-Invoke-WebRequest -Uri $ApkUrl -OutFile $apkPath
-Invoke-WebRequest -Uri $ChecksumUrl -OutFile $checksumPath
+Remove-Item -LiteralPath $apkPath -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath $checksumPath -Force -ErrorAction SilentlyContinue
+
+if (-not [string]::IsNullOrWhiteSpace($LocalApkPath)) {
+  $resolvedApk = (Resolve-Path -LiteralPath $LocalApkPath).Path
+  Copy-Item -LiteralPath $resolvedApk -Destination $apkPath -Force
+
+  if (-not [string]::IsNullOrWhiteSpace($LocalChecksumPath)) {
+    $resolvedChecksum = (Resolve-Path -LiteralPath $LocalChecksumPath).Path
+    Copy-Item -LiteralPath $resolvedChecksum -Destination $checksumPath -Force
+  }
+} else {
+  Invoke-WebRequest -Uri $ApkUrl -OutFile $apkPath
+  Invoke-WebRequest -Uri $ChecksumUrl -OutFile $checksumPath
+}
 
 $hash = (Get-FileHash -LiteralPath $apkPath -Algorithm SHA256).Hash.ToLowerInvariant()
-$expectedLine = Get-Content -LiteralPath $checksumPath | Select-String "LightningP2P-android-latest.apk"
-if (-not $expectedLine) {
-  throw "Checksum file does not contain LightningP2P-android-latest.apk."
-}
-if ($expectedLine.ToString().ToLowerInvariant() -notmatch $hash) {
-  throw "APK SHA256 mismatch. Actual: $hash"
+if (Test-Path -LiteralPath $checksumPath) {
+  $checksumText = (Get-Content -LiteralPath $checksumPath -Raw).ToLowerInvariant()
+  if ($checksumText -notmatch [regex]::Escape($hash)) {
+    throw "APK SHA256 mismatch. Actual: $hash"
+  }
+  Write-Host "APK SHA256 verified: $hash"
+} else {
+  Write-Host "No checksum file supplied for local APK. Computed APK SHA256: $hash"
 }
 
 if ($CleanInstall) {
