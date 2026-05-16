@@ -90,17 +90,24 @@ fn register_deep_links<R: tauri::Runtime>(_app: &tauri::App<R>) {}
 
 /// Trim Android share-staging cache entries older than 24h so a long-running
 /// install doesn't leak unbounded picker bytes into the cache directory.
+///
+/// Runs as a deferred async task because the underlying JNI calls require the
+/// activity to be live and the app classloader to be reachable — neither is
+/// guaranteed during synchronous Tauri setup. Any failure is logged and
+/// swallowed so it can never crash app startup.
 fn sweep_mobile_staging_cache() {
     #[cfg(target_os = "android")]
     {
-        let cutoff = commands::mobile::android::epoch_ms_24h_ago();
-        match commands::mobile::android::sweep_staging_older_than(cutoff) {
-            Ok(removed) if removed > 0 => {
-                tracing::info!(removed, "swept stale shared-staging cache entries")
+        tauri::async_runtime::spawn_blocking(|| {
+            let cutoff = commands::mobile::android::epoch_ms_24h_ago();
+            match commands::mobile::android::sweep_staging_older_than(cutoff) {
+                Ok(removed) if removed > 0 => {
+                    tracing::info!(removed, "swept stale shared-staging cache entries");
+                }
+                Ok(_) => {}
+                Err(error) => tracing::warn!(%error, "shared-staging cleanup failed"),
             }
-            Ok(_) => {}
-            Err(error) => tracing::warn!(error, "shared-staging cleanup failed"),
-        }
+        });
     }
 }
 

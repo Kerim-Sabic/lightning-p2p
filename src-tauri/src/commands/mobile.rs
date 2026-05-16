@@ -12,12 +12,12 @@
 
 #[cfg(target_os = "android")]
 pub(crate) mod android {
-    use jni::objects::{JObject, JObjectArray, JString, JValue};
+    use jni::objects::{JClass, JObject, JObjectArray, JString, JValue};
     use jni::sys::jsize;
     use jni::{JNIEnv, JavaVM};
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    const RESOLVER_CLASS: &str = "com/lightningp2p/app/ContentUriResolver";
+    const RESOLVER_CLASS_DOTTED: &str = "com.lightningp2p.app.ContentUriResolver";
 
     fn jvm() -> Result<JavaVM, String> {
         let ctx = ndk_context::android_context();
@@ -34,11 +34,48 @@ pub(crate) mod android {
         env.new_local_ref(&obj).map_err(|e| e.to_string())
     }
 
+    /// Load an app-defined class via the host activity's classloader.
+    ///
+    /// On Android, JNI's `FindClass` uses the *system* classloader when called
+    /// from a Rust-spawned thread. That classloader can't see app classes like
+    /// `ContentUriResolver`, so we have to ask the Context for its classloader
+    /// and load through that. This is the standard Android JNI workaround.
+    fn load_app_class<'local>(
+        env: &mut JNIEnv<'local>,
+        dotted_name: &str,
+    ) -> Result<JClass<'local>, String> {
+        let context = context_obj(env)?;
+        let loader = env
+            .call_method(
+                &context,
+                "getClassLoader",
+                "()Ljava/lang/ClassLoader;",
+                &[],
+            )
+            .map_err(|e| e.to_string())?
+            .l()
+            .map_err(|e| e.to_string())?;
+        let name = env.new_string(dotted_name).map_err(|e| e.to_string())?;
+        let class_obj = env
+            .call_method(
+                &loader,
+                "loadClass",
+                "(Ljava/lang/String;)Ljava/lang/Class;",
+                &[JValue::Object(&name)],
+            )
+            .map_err(|e| e.to_string())?
+            .l()
+            .map_err(|e| e.to_string())?;
+        Ok(JClass::from(class_obj))
+    }
+
     fn vec_to_jstring_array<'local>(
         env: &mut JNIEnv<'local>,
         values: &[String],
     ) -> Result<JObjectArray<'local>, String> {
         let len = jsize::try_from(values.len()).map_err(|e| e.to_string())?;
+        // `java.lang.String` lives in the system classloader so plain
+        // `find_class` works for it.
         let string_class = env.find_class("java/lang/String").map_err(|e| e.to_string())?;
         let empty = env.new_string("").map_err(|e| e.to_string())?;
         let array = env
@@ -73,6 +110,28 @@ pub(crate) mod android {
         Ok(out)
     }
 
+    fn call_resolver_static<'local, R, F>(
+        env: &mut JNIEnv<'local>,
+        method_name: &str,
+        sig: &str,
+        args: &[JValue<'local, '_>],
+        extract: F,
+    ) -> Result<R, String>
+    where
+        F: FnOnce(&mut JNIEnv<'local>, JValue<'local, '_>) -> Result<R, String>,
+    {
+        let class = load_app_class(env, RESOLVER_CLASS_DOTTED)?;
+        let result = env
+            .call_static_method(class, method_name, sig, args)
+            .map_err(|e| {
+                // Clear any pending Java exception so it doesn't crash the
+                // host thread when control returns to it.
+                let _ = env.exception_clear();
+                e.to_string()
+            })?;
+        extract(env, result)
+    }
+
     pub fn resolve_content_uris(uris: Vec<String>) -> Result<Vec<String>, String> {
         if uris.is_empty() || !uris.iter().any(|u| u.starts_with("content://")) {
             return Ok(uris);
@@ -81,16 +140,16 @@ pub(crate) mod android {
         let mut env = vm.attach_current_thread().map_err(|e| e.to_string())?;
         let context = context_obj(&mut env)?;
         let array = vec_to_jstring_array(&mut env, &uris)?;
-        let result = env
-            .call_static_method(
-                RESOLVER_CLASS,
-                "resolveContentUris",
-                "(Landroid/content/Context;[Ljava/lang/String;)[Ljava/lang/String;",
-                &[JValue::Object(&context), JValue::Object(&array)],
-            )
-            .map_err(|e| e.to_string())?;
-        let obj = result.l().map_err(|e| e.to_string())?;
-        jstring_array_to_vec(&mut env, JObjectArray::from(obj))
+        call_resolver_static(
+            &mut env,
+            "resolveContentUris",
+            "(Landroid/content/Context;[Ljava/lang/String;)[Ljava/lang/String;",
+            &[JValue::Object(&context), JValue::Object(&array)],
+            |env, result| {
+                let obj = result.l().map_err(|e| e.to_string())?;
+                jstring_array_to_vec(env, JObjectArray::from(obj))
+            },
+        )
     }
 
     pub fn publish_to_mediastore(
@@ -106,42 +165,42 @@ pub(crate) mod android {
         let filename_j = env.new_string(filename).map_err(|e| e.to_string())?;
         let mime_j = env.new_string(mime).map_err(|e| e.to_string())?;
         let bucket_j = env.new_string(bucket).map_err(|e| e.to_string())?;
-        let result = env
-            .call_static_method(
-                RESOLVER_CLASS,
-                "publishToMediaStore",
-                "(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;",
-                &[
-                    JValue::Object(&context),
-                    JValue::Object(&staged_j),
-                    JValue::Object(&filename_j),
-                    JValue::Object(&mime_j),
-                    JValue::Object(&bucket_j),
-                ],
-            )
-            .map_err(|e| e.to_string())?;
-        let obj = result.l().map_err(|e| e.to_string())?;
-        let jstr = JString::from(obj);
-        let value: String = env
-            .get_string(&jstr)
-            .map_err(|e| e.to_string())?
-            .into();
-        Ok(value)
+        call_resolver_static(
+            &mut env,
+            "publishToMediaStore",
+            "(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;",
+            &[
+                JValue::Object(&context),
+                JValue::Object(&staged_j),
+                JValue::Object(&filename_j),
+                JValue::Object(&mime_j),
+                JValue::Object(&bucket_j),
+            ],
+            |env, result| {
+                let obj = result.l().map_err(|e| e.to_string())?;
+                let jstr = JString::from(obj);
+                let value: String = env
+                    .get_string(&jstr)
+                    .map_err(|e| e.to_string())?
+                    .into();
+                Ok(value)
+            },
+        )
     }
 
     pub fn take_pending_shared_files() -> Result<Vec<String>, String> {
         let vm = jvm()?;
         let mut env = vm.attach_current_thread().map_err(|e| e.to_string())?;
-        let result = env
-            .call_static_method(
-                RESOLVER_CLASS,
-                "takePendingSharedFiles",
-                "()[Ljava/lang/String;",
-                &[],
-            )
-            .map_err(|e| e.to_string())?;
-        let obj = result.l().map_err(|e| e.to_string())?;
-        jstring_array_to_vec(&mut env, JObjectArray::from(obj))
+        call_resolver_static(
+            &mut env,
+            "takePendingSharedFiles",
+            "()[Ljava/lang/String;",
+            &[],
+            |env, result| {
+                let obj = result.l().map_err(|e| e.to_string())?;
+                jstring_array_to_vec(env, JObjectArray::from(obj))
+            },
+        )
     }
 
     pub fn open_system_folder(bucket: &str) -> Result<(), String> {
@@ -149,14 +208,13 @@ pub(crate) mod android {
         let mut env = vm.attach_current_thread().map_err(|e| e.to_string())?;
         let context = context_obj(&mut env)?;
         let bucket_j = env.new_string(bucket).map_err(|e| e.to_string())?;
-        env.call_static_method(
-            RESOLVER_CLASS,
+        call_resolver_static(
+            &mut env,
             "openSystemFolder",
             "(Landroid/content/Context;Ljava/lang/String;)V",
             &[JValue::Object(&context), JValue::Object(&bucket_j)],
+            |_env, _result| Ok(()),
         )
-        .map_err(|e| e.to_string())?;
-        Ok(())
     }
 
     /// Best-effort sweep of staged cache files older than `older_than_ms`.
@@ -165,17 +223,13 @@ pub(crate) mod android {
         let mut env = vm.attach_current_thread().map_err(|e| e.to_string())?;
         let context = context_obj(&mut env)?;
         let cutoff: i64 = older_than_ms.try_into().map_err(|_| "cutoff overflows i64".to_string())?;
-        let removed = env
-            .call_static_method(
-                RESOLVER_CLASS,
-                "sweepStagingOlderThan",
-                "(Landroid/content/Context;J)I",
-                &[JValue::Object(&context), JValue::Long(cutoff)],
-            )
-            .map_err(|e| e.to_string())?
-            .i()
-            .map_err(|e| e.to_string())?;
-        Ok(removed)
+        call_resolver_static(
+            &mut env,
+            "sweepStagingOlderThan",
+            "(Landroid/content/Context;J)I",
+            &[JValue::Object(&context), JValue::Long(cutoff)],
+            |_env, result| result.i().map_err(|e| e.to_string()),
+        )
     }
 
     /// Wall-clock epoch (ms) for a "older than 24h" cutoff used at app boot.
