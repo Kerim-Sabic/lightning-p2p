@@ -1,4 +1,4 @@
-//! File-type to MediaStore bucket mapping for Android receive routing.
+//! File-type to `MediaStore` bucket mapping for Android receive routing.
 //!
 //! Android 10+ scoped storage exposes four idiomatic public collections:
 //! `MediaStore.Images` (Pictures/), `MediaStore.Video` (Movies/),

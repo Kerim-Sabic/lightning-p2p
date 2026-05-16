@@ -4,7 +4,9 @@ import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Bundle
@@ -30,10 +32,69 @@ class MainActivity : TauriActivity() {
       safeStep("start idle foreground service") {
         TransferForegroundService.start(applicationContext, 0)
       }
+      safeStep("handle cold-start share intent") { handleShareIntent(intent) }
       AndroidDiagnostics.info(this, "MainActivity.onCreate complete")
     } catch (error: Throwable) {
       AndroidDiagnostics.error(this, "MainActivity.onCreate failed", error)
       throw error
+    }
+  }
+
+  override fun onNewIntent(intent: Intent) {
+    super.onNewIntent(intent)
+    setIntent(intent)
+    safeStep("handle warm share intent") { handleShareIntent(intent) }
+  }
+
+  /**
+   * Inspect an incoming Intent for ACTION_SEND / ACTION_SEND_MULTIPLE and,
+   * when present, resolve the EXTRA_STREAM URIs into app-private cache and
+   * stash them on [ContentUriResolver] for the JS layer to drain.
+   */
+  private fun handleShareIntent(intent: Intent?) {
+    if (intent == null) return
+    val uriStrings = extractShareUris(intent)
+    if (uriStrings.isEmpty()) return
+    try {
+      val resolved = ContentUriResolver.resolveContentUris(
+        applicationContext,
+        uriStrings.toTypedArray(),
+      )
+      ContentUriResolver.setPendingSharedFiles(resolved)
+      AndroidDiagnostics.info(this, "Stashed ${resolved.size} shared file(s) for drain")
+    } catch (error: Throwable) {
+      AndroidDiagnostics.error(this, "Failed to resolve shared files", error)
+    }
+  }
+
+  private fun extractShareUris(intent: Intent): List<String> {
+    return when (intent.action) {
+      Intent.ACTION_SEND -> {
+        val uri = extractSingleStream(intent)
+        if (uri != null) listOf(uri.toString()) else emptyList()
+      }
+      Intent.ACTION_SEND_MULTIPLE -> {
+        extractStreamList(intent).map { it.toString() }
+      }
+      else -> emptyList()
+    }
+  }
+
+  @Suppress("DEPRECATION")
+  private fun extractSingleStream(intent: Intent): Uri? {
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+      intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+    } else {
+      intent.getParcelableExtra(Intent.EXTRA_STREAM) as? Uri
+    }
+  }
+
+  @Suppress("DEPRECATION")
+  private fun extractStreamList(intent: Intent): List<Uri> {
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+      intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java).orEmpty()
+    } else {
+      intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM).orEmpty()
     }
   }
 

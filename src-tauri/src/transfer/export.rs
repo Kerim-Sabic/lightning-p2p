@@ -12,6 +12,11 @@ use iroh_blobs::Hash;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
+#[cfg(target_os = "android")]
+use super::mime::bucket_for;
+#[cfg(target_os = "android")]
+use crate::commands::mobile::android as android_bridge;
+
 /// Result of exporting verified downloaded content.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExportSummary {
@@ -51,11 +56,88 @@ pub async fn export_ticket(
         export_blob(client, ticket, destination).await?
     };
 
+    let output_path = publish_to_public_storage(output_path, ticket.recursive()).await;
+
     Ok(ExportSummary {
         label,
         size,
         output_path,
     })
+}
+
+/// On Android, move a single-file export from app-private staging into the
+/// public MediaStore collection that matches its MIME bucket. The original
+/// staged file is deleted on successful publish. Returns a synthetic
+/// "Pictures/Lightning P2P/foo.jpg" descriptor path for UI display.
+///
+/// Folder transfers stay in app-private staging in v0.4.6; per-file publish
+/// for folders lands in a follow-up release.
+///
+/// On non-Android targets this is an identity pass-through.
+#[cfg(target_os = "android")]
+async fn publish_to_public_storage(staged_path: PathBuf, recursive: bool) -> PathBuf {
+    if recursive {
+        tracing::info!(
+            path = %staged_path.display(),
+            "folder transfer kept in app-private staging; per-file publish lands in v0.4.7"
+        );
+        return staged_path;
+    }
+
+    let file_name = match staged_path.file_name().and_then(|n| n.to_str()) {
+        Some(name) if !name.is_empty() => name.to_string(),
+        _ => {
+            tracing::warn!(
+                path = %staged_path.display(),
+                "received file has no usable name; keeping app-private"
+            );
+            return staged_path;
+        }
+    };
+
+    let bucket = bucket_for(&file_name);
+    let mime_str = mime_guess::from_path(&file_name)
+        .first_or_octet_stream()
+        .to_string();
+    let bucket_id = bucket.as_kotlin_id();
+    let staged_path_str = staged_path.to_string_lossy().into_owned();
+
+    let publish_result = {
+        let filename_owned = file_name.clone();
+        let mime_owned = mime_str.clone();
+        tokio::task::spawn_blocking(move || {
+            android_bridge::publish_to_mediastore(
+                &staged_path_str,
+                &filename_owned,
+                &mime_owned,
+                bucket_id,
+            )
+        })
+        .await
+    };
+
+    match publish_result {
+        Ok(Ok(_uri)) => {
+            if let Err(error) = tokio::fs::remove_file(&staged_path).await {
+                tracing::warn!(%error, path = %staged_path.display(), "could not remove staged file after MediaStore publish");
+            }
+            PathBuf::from(format!("{}/Lightning P2P/{}", bucket_id, file_name))
+        }
+        Ok(Err(error)) => {
+            tracing::warn!(%error, "MediaStore publish failed");
+            staged_path
+        }
+        Err(join_error) => {
+            tracing::warn!(%join_error, "MediaStore publish failed");
+            staged_path
+        }
+    }
+}
+
+#[cfg(not(target_os = "android"))]
+#[allow(clippy::unused_async)] // mirrors the Android-side async signature
+async fn publish_to_public_storage(staged_path: PathBuf, _recursive: bool) -> PathBuf {
+    staged_path
 }
 
 /// Resolves the user-visible label for a downloaded ticket.

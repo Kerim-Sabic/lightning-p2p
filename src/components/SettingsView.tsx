@@ -396,43 +396,85 @@ export function SettingsView() {
             </div>
             <div>
               <p className="text-sm font-medium text-white">
-                Download directory
+                {platformProfile.capabilities.smart_routing
+                  ? "Smart save routing"
+                  : "Download directory"}
               </p>
               <p className="text-[13px] text-slate-300/72">
-                {mobileRuntime
-                  ? "Android alpha receives stay inside app-private storage."
+                {platformProfile.capabilities.smart_routing
+                  ? "Verified receives auto-route by file type into your phone's system folders."
                   : "Verified receives are exported here after integrity checks."}
               </p>
             </div>
           </div>
 
-          <div className="mt-3 rounded-2xl border border-white/8 bg-black/25 p-4">
-            <p className="mb-2 text-[10px] uppercase tracking-[0.3em] text-slate-500">
-              Save location
-            </p>
-            <p className="break-all font-mono text-[13px] leading-6 text-slate-100/88">
-              {downloadDir ?? "Resolving download directory..."}
-            </p>
-          </div>
+          {platformProfile.capabilities.smart_routing ? (
+            <>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {[
+                  { label: "Pictures", hint: "Photos, screenshots, HEIC" },
+                  { label: "Movies", hint: "Video clips" },
+                  { label: "Music", hint: "Audio files" },
+                  { label: "Downloads", hint: "Documents, archives, other" },
+                ].map((bucket) => (
+                  <div
+                    key={bucket.label}
+                    className="rounded-2xl border border-white/8 bg-black/25 p-3"
+                  >
+                    <p className="text-[11px] uppercase tracking-[0.24em] text-slate-500">
+                      {bucket.label}
+                    </p>
+                    <p className="mt-1 text-[13px] text-slate-100/88">
+                      {bucket.hint}
+                    </p>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-3 text-[12px] text-slate-400">
+                Each file lands in a "Lightning P2P" subfolder of its bucket so
+                you can find received content alongside your existing media.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  onClick={() => void openDownloadDir()}
+                  className="glass-button inline-flex items-center gap-2 px-3.5 py-2 text-sm text-slate-100"
+                >
+                  <HardDriveDownload className="h-4 w-4" />
+                  Open Downloads
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="mt-3 rounded-2xl border border-white/8 bg-black/25 p-4">
+                <p className="mb-2 text-[10px] uppercase tracking-[0.3em] text-slate-500">
+                  Save location
+                </p>
+                <p className="break-all font-mono text-[13px] leading-6 text-slate-100/88">
+                  {downloadDir ?? "Resolving download directory..."}
+                </p>
+              </div>
 
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button
-              onClick={() => void pickDownloadDir()}
-              disabled={!desktopStorageControlsEnabled}
-              className="glass-button inline-flex items-center gap-2 px-3.5 py-2 text-sm text-slate-100"
-            >
-              <FolderCog className="h-4 w-4" />
-              Change folder
-            </button>
-            <button
-              onClick={() => void openDownloadDir()}
-              disabled={!desktopStorageControlsEnabled}
-              className="glass-button inline-flex items-center gap-2 px-3.5 py-2 text-sm text-slate-100"
-            >
-              <HardDriveDownload className="h-4 w-4" />
-              Open folder
-            </button>
-          </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  onClick={() => void pickDownloadDir()}
+                  disabled={!desktopStorageControlsEnabled}
+                  className="glass-button inline-flex items-center gap-2 px-3.5 py-2 text-sm text-slate-100"
+                >
+                  <FolderCog className="h-4 w-4" />
+                  Change folder
+                </button>
+                <button
+                  onClick={() => void openDownloadDir()}
+                  disabled={!desktopStorageControlsEnabled}
+                  className="glass-button inline-flex items-center gap-2 px-3.5 py-2 text-sm text-slate-100"
+                >
+                  <HardDriveDownload className="h-4 w-4" />
+                  Open folder
+                </button>
+              </div>
+            </>
+          )}
         </article>
       </section>
 

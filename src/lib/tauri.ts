@@ -200,6 +200,7 @@ export interface PlatformCapabilities {
   custom_relay: boolean;
   custom_receive_dir: boolean;
   public_downloads_export: boolean;
+  smart_routing: boolean;
   auto_update: boolean;
   deep_link_receive: boolean;
   web_handoff_receive: boolean;
@@ -430,6 +431,7 @@ export const browserPlatformProfile: PlatformProfile = {
     custom_relay: false,
     custom_receive_dir: false,
     public_downloads_export: false,
+    smart_routing: false,
     auto_update: false,
     deep_link_receive: false,
     web_handoff_receive: true,
@@ -834,11 +836,14 @@ export async function pickShareFiles(defaultPath?: string): Promise<string[]> {
     title: "Choose files to share",
   });
 
-  if (typeof selected === "string") {
-    return [selected];
-  }
+  const paths =
+    typeof selected === "string"
+      ? [selected]
+      : Array.isArray(selected)
+        ? selected
+        : [];
 
-  return Array.isArray(selected) ? selected : [];
+  return resolveAndroidUris(paths);
 }
 
 export async function pickShareFolder(
@@ -852,7 +857,65 @@ export async function pickShareFolder(
     title: "Choose a folder to share",
   });
 
-  return typeof selected === "string" ? selected : null;
+  if (typeof selected !== "string") {
+    return null;
+  }
+  const [resolved] = await resolveAndroidUris([selected]);
+  return resolved ?? null;
+}
+
+/**
+ * On Android, ask the Rust bridge to copy any `content://` SAF URIs into
+ * the app cache and return regular filesystem paths so iroh-blobs can
+ * `fs::metadata()` them. On other platforms this is a no-op identity.
+ */
+export async function resolveAndroidUris(paths: string[]): Promise<string[]> {
+  if (!isMobileRuntime() || paths.length === 0) {
+    return paths;
+  }
+  if (!paths.some((path) => path.startsWith("content://"))) {
+    return paths;
+  }
+  try {
+    return await invoke<string[]>("resolve_content_uris", { uris: paths });
+  } catch (error) {
+    console.error("resolve_content_uris failed", error);
+    throw new Error(
+      typeof error === "string"
+        ? error
+        : "Could not read the selected file from the system picker.",
+    );
+  }
+}
+
+/**
+ * Drains any files captured by the Android share-sheet handler since the
+ * last call. Empty on non-Android. Call on app boot and on window focus
+ * to handle cold-start and warm-start share intents.
+ */
+export async function drainPendingSharedFiles(): Promise<string[]> {
+  if (!isMobileRuntime()) {
+    return [];
+  }
+  try {
+    return await invoke<string[]>("take_pending_shared_files");
+  } catch (error) {
+    console.error("take_pending_shared_files failed", error);
+    return [];
+  }
+}
+
+/**
+ * Opens the Android system folder UI for a MediaStore bucket. Buckets
+ * are "Pictures" | "Movies" | "Music" | "Downloads".
+ */
+export async function openAndroidBucket(
+  bucket: "Pictures" | "Movies" | "Music" | "Downloads",
+): Promise<void> {
+  if (!isMobileRuntime()) {
+    throw new Error("openAndroidBucket is only available on Android");
+  }
+  await invoke("open_android_bucket", { bucket });
 }
 
 export async function checkForAppUpdate(): Promise<UpdateCheckResult> {

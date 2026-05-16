@@ -146,6 +146,10 @@ pub struct PlatformCapabilities {
     pub custom_receive_dir: bool,
     /// Whether received files can be exported to public Downloads.
     pub public_downloads_export: bool,
+    /// Whether received files are auto-routed into `MediaStore` buckets
+    /// (Pictures / Movies / Music / Downloads) instead of a single user
+    /// folder. Drives Android-specific Settings and `FirstRun` copy.
+    pub smart_routing: bool,
     /// Whether built-in update checks are enabled for this runtime.
     pub auto_update: bool,
     /// Whether receive tickets can be opened from OS deep links.
@@ -251,7 +255,11 @@ fn capabilities(platform_kind: NativePlatformKind) -> PlatformCapabilities {
         relay_fallback: platform_kind != NativePlatformKind::Unknown,
         custom_relay: platform_kind != NativePlatformKind::Unknown,
         custom_receive_dir: public_storage,
-        public_downloads_export: public_storage,
+        // Android routes verified receives into public MediaStore buckets
+        // (Pictures / Movies / Music / Downloads). Desktop exports to the
+        // configured user folder.
+        public_downloads_export: public_storage || android,
+        smart_routing: android,
         auto_update: desktop,
         deep_link_receive: windows || android,
         web_handoff_receive: windows || android,
@@ -303,7 +311,7 @@ const fn target_os_label(platform_kind: NativePlatformKind) -> &'static str {
 const fn storage_notice(platform_kind: NativePlatformKind) -> &'static str {
     match platform_kind {
         NativePlatformKind::Android => {
-            "Android alpha receives stay in Lightning P2P app-private storage until export is implemented."
+            "Android receives are auto-routed into public MediaStore: images to Pictures, video to Movies, audio to Music, other files to Downloads. Each lands in a Lightning P2P subfolder."
         }
         NativePlatformKind::Ios => {
             "iOS receives must use app-private storage until TestFlight, file export, and entitlement work are verified."
@@ -391,8 +399,25 @@ mod tests {
         assert!(profile.capabilities.scan_receive_qr);
         assert!(profile.capabilities.local_discovery);
         assert!(profile.capabilities.bluetooth_discovery);
+        assert!(profile.capabilities.public_downloads_export);
+        assert!(profile.capabilities.smart_routing);
         assert!(!profile.capabilities.send_folders);
         assert!(!profile.capabilities.background_transfer);
+    }
+
+    #[test]
+    fn desktop_profiles_do_not_use_smart_routing() {
+        for platform in [
+            NativePlatformKind::Windows,
+            NativePlatformKind::Macos,
+            NativePlatformKind::Linux,
+        ] {
+            let profile = platform_profile_for(platform);
+            assert!(
+                !profile.capabilities.smart_routing,
+                "desktop {platform:?} should keep single user-folder routing"
+            );
+        }
     }
 
     #[test]

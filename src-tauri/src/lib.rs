@@ -88,6 +88,22 @@ fn register_deep_links<R: tauri::Runtime>(app: &tauri::App<R>) {
 #[cfg(not(windows))]
 fn register_deep_links<R: tauri::Runtime>(_app: &tauri::App<R>) {}
 
+/// Trim Android share-staging cache entries older than 24h so a long-running
+/// install doesn't leak unbounded picker bytes into the cache directory.
+fn sweep_mobile_staging_cache() {
+    #[cfg(target_os = "android")]
+    {
+        let cutoff = commands::mobile::android::epoch_ms_24h_ago();
+        match commands::mobile::android::sweep_staging_older_than(cutoff) {
+            Ok(removed) if removed > 0 => {
+                tracing::info!(removed, "swept stale shared-staging cache entries")
+            }
+            Ok(_) => {}
+            Err(error) => tracing::warn!(error, "shared-staging cleanup failed"),
+        }
+    }
+}
+
 fn app_builder() -> tauri::Builder<tauri::Wry> {
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_os::init())
@@ -190,10 +206,14 @@ pub fn run() {
             commands::settings::set_local_discovery_enabled,
             commands::settings::set_bluetooth_discovery_enabled,
             commands::settings::open_download_dir,
+            commands::mobile::resolve_content_uris,
+            commands::mobile::take_pending_shared_files,
+            commands::mobile::open_android_bucket,
         ])
         .setup(|app| {
             register_deep_links(app);
             spawn_node_startup(app.handle().clone());
+            sweep_mobile_staging_cache();
             Ok(())
         })
         .run(tauri::generate_context!())

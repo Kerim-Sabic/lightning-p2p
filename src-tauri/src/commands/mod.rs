@@ -4,6 +4,7 @@
 //! frontend calls via `invoke()`. Every command returns `Result<T, String>`.
 
 pub mod diagnostics;
+pub mod mobile;
 pub mod nearby;
 pub mod peer;
 pub mod platform;

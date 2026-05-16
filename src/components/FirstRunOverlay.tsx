@@ -149,43 +149,62 @@ export function FirstRunOverlay() {
                 </div>
                 <div>
                   <p className="text-sm font-medium text-white">
-                    Default receive folder
+                    {mobileRuntime
+                      ? "Smart save routing"
+                      : "Default receive folder"}
                   </p>
                   <p className="text-[13px] text-slate-300/72">
                     {mobileRuntime
-                      ? "Android receives stay in app-private storage for this alpha."
+                      ? "Received files auto-route into your phone's system folders by type."
                       : "Verified downloads are exported here."}
                   </p>
                 </div>
               </div>
 
-              <div className="mt-3 rounded-2xl border border-white/8 bg-black/25 p-4">
-                <p className="mb-2 text-[10px] uppercase tracking-[0.3em] text-slate-500">
-                  Save location
-                </p>
-                <p className="break-all font-mono text-[13px] leading-6 text-slate-100/88">
-                  {settings.download_dir}
-                </p>
-              </div>
+              {mobileRuntime ? (
+                <ul className="mt-3 grid gap-1.5 text-[13px] text-slate-100/88 sm:grid-cols-2">
+                  <li className="rounded-xl border border-white/8 bg-black/25 px-3 py-2">
+                    Images <span className="text-slate-400">→ Pictures</span>
+                  </li>
+                  <li className="rounded-xl border border-white/8 bg-black/25 px-3 py-2">
+                    Video <span className="text-slate-400">→ Movies</span>
+                  </li>
+                  <li className="rounded-xl border border-white/8 bg-black/25 px-3 py-2">
+                    Audio <span className="text-slate-400">→ Music</span>
+                  </li>
+                  <li className="rounded-xl border border-white/8 bg-black/25 px-3 py-2">
+                    Other <span className="text-slate-400">→ Downloads</span>
+                  </li>
+                </ul>
+              ) : (
+                <>
+                  <div className="mt-3 rounded-2xl border border-white/8 bg-black/25 p-4">
+                    <p className="mb-2 text-[10px] uppercase tracking-[0.3em] text-slate-500">
+                      Save location
+                    </p>
+                    <p className="break-all font-mono text-[13px] leading-6 text-slate-100/88">
+                      {settings.download_dir}
+                    </p>
+                  </div>
 
-              {!mobileRuntime ? (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <button
-                    onClick={() => void pickDownloadDir()}
-                    className="glass-button inline-flex items-center gap-2 px-3.5 py-2 text-sm text-slate-100"
-                  >
-                    <FolderCog className="h-4 w-4" />
-                    Change folder
-                  </button>
-                  <button
-                    onClick={() => void openDownloadDir()}
-                    className="glass-button inline-flex items-center gap-2 px-3.5 py-2 text-sm text-slate-100"
-                  >
-                    <HardDriveDownload className="h-4 w-4" />
-                    Open folder
-                  </button>
-                </div>
-              ) : null}
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      onClick={() => void pickDownloadDir()}
+                      className="glass-button inline-flex items-center gap-2 px-3.5 py-2 text-sm text-slate-100"
+                    >
+                      <FolderCog className="h-4 w-4" />
+                      Change folder
+                    </button>
+                    <button
+                      onClick={() => void openDownloadDir()}
+                      className="glass-button inline-flex items-center gap-2 px-3.5 py-2 text-sm text-slate-100"
+                    >
+                      <HardDriveDownload className="h-4 w-4" />
+                      Open folder
+                    </button>
+                  </div>
+                </>
+              )}
             </article>
           </div>
 

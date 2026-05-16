@@ -13,6 +13,7 @@ import { WebLandingPage } from "./components/WebLandingPage";
 import { WindowChrome } from "./components/WindowChrome";
 import { useTransfer } from "./hooks/useTransfer";
 import {
+  drainPendingSharedFiles,
   getRuntimeKind,
   onDeepLinkOpened,
   recordFrontendDiagnostic,
@@ -57,6 +58,10 @@ function NativeAppShell({ runtimeKind }: NativeAppShellProps) {
   const setPendingReceiveTicket = useTransferStore(
     (state) => state.setPendingReceiveTicket,
   );
+  const prepareShareSelection = useTransferStore(
+    (state) => state.prepareShareSelection,
+  );
+  const createShare = useTransferStore((state) => state.createShare);
   useTransfer();
   const mobileRuntime = runtimeKind === "android" || runtimeKind === "ios";
 
@@ -76,6 +81,45 @@ function NativeAppShell({ runtimeKind }: NativeAppShellProps) {
       void subscription.then((unlisten) => unlisten());
     };
   }, [setPendingReceiveTicket]);
+
+  // Drain Android share-sheet handoffs on cold-start and on every window focus
+  // (warm-start case: user backgrounded the app, picked Share -> Lightning P2P,
+  // returned to the activity). Seeds the Send view and auto-creates the
+  // receive ticket so the user lands directly on a shareable QR/link.
+  useEffect(() => {
+    if (!mobileRuntime) {
+      return;
+    }
+
+    let active = true;
+
+    const drainAndSeed = async (): Promise<void> => {
+      const paths = await drainPendingSharedFiles();
+      if (!active || paths.length === 0) {
+        return;
+      }
+      startTransition(() => {
+        setView("send");
+      });
+      try {
+        await prepareShareSelection(paths);
+        await createShare();
+      } catch {
+        // store already surfaces errors via setError
+      }
+    };
+
+    void drainAndSeed();
+
+    const onFocus = (): void => {
+      void drainAndSeed();
+    };
+    window.addEventListener("focus", onFocus);
+    return () => {
+      active = false;
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [createShare, mobileRuntime, prepareShareSelection]);
 
   const handleNavigate = (nextView: View): void => {
     startTransition(() => {
