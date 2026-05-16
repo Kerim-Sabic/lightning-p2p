@@ -106,7 +106,7 @@ const DOWNLOAD_TRUST_URL = `${REPO_URL}/blob/main/docs/download-trust.md`;
 const baseKeyFacts: KeyFact[] = [
   { label: "Product", value: "Lightning P2P" },
   { label: "Category", value: "Peer-to-peer file transfer app" },
-  { label: "Platform", value: "Windows public release, Android sideload alpha" },
+  { label: "Platform", value: "Windows public release, Android v0.4.5 pre-release sideload" },
   { label: "License", value: "MIT" },
   { label: "Account required", value: "No" },
   { label: "Cloud upload", value: "No" },
@@ -1328,7 +1328,7 @@ function DownloadCards() {
         <SectionHeading
           eyebrow="Download"
           title="Start with the native app."
-          copy="Windows is the stable public path. Android is a sideload alpha, distributed from GitHub Releases with checksums and signer details so every APK stays inspectable."
+          copy="Windows is the stable public path. Android is a v0.4.5 pre-release sideload — CI emulator launch smoke passes, but physical phone acceptance is still pending, so the APK is not yet marked latest."
         />
 
         <div className="mt-12 grid gap-4 lg:grid-cols-[1.15fr_0.85fr_0.85fr]">
@@ -1385,8 +1385,8 @@ function DownloadCards() {
           <DownloadOption
             icon={Download}
             title="Android APK"
-            subtitle="Sideload alpha"
-            copy="Install the signed APK on Android 7.0 or newer. Verify SHA256 first, then allow install from your browser or file manager."
+            subtitle="v0.4.5 pre-release"
+            copy="Install the signed v0.4.5 pre-release APK on Android 7.0 or newer. Physical phone acceptance is still pending. Verify SHA256 first, then allow install from your browser or file manager."
             href={ANDROID_APK_DOWNLOAD_URL}
             action="Download APK"
           />
@@ -1435,7 +1435,7 @@ function DownloadCards() {
           {[
             {
               title: "Requirements",
-              copy: "Windows 10/11 x64 for desktop, or Android 7.0+ for the sideload alpha.",
+              copy: "Windows 10/11 x64 for desktop, or Android 7.0+ for the v0.4.5 pre-release sideload.",
             },
             {
               title: "Install steps",
@@ -1489,7 +1489,8 @@ function AndroidInstallGuide() {
           </h3>
           <p className="mt-3 text-sm leading-6 text-slate-300">
             The APK is distributed through GitHub Releases. The website button
-            downloads the same stable alias used by the release workflow.
+            downloads the v0.4.5 pre-release APK; physical phone acceptance is
+            still pending, so v0.4.5 is not marked latest.
           </p>
         </div>
         <div className="flex flex-col gap-3 sm:flex-row lg:flex-col">
