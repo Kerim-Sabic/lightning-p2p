@@ -13,6 +13,7 @@ import { formatBytes, formatTimestamp } from "../lib/format";
 import { createReceiveHandoffLink } from "../lib/shareLinks";
 import { writeClipboardText } from "../lib/tauri";
 import { useTransferStore } from "../stores/transferStore";
+import { EmptyState } from "./EmptyState";
 
 type DirectionFilter = "all" | "send" | "receive";
 
@@ -292,15 +293,19 @@ export function HistoryView() {
         </div>
 
         {filteredHistory.length === 0 ? (
-          <div className="glass-panel px-6 py-14 text-center">
-            <p className="text-base font-semibold text-white">
-              No matching transfers
-            </p>
-            <p className="mt-2 text-sm leading-6 text-slate-300/72">
-              Adjust the filters or complete a new transfer to populate the
-              history.
-            </p>
-          </div>
+          <EmptyState
+            icon={history.length === 0 ? Clock3 : Search}
+            title={
+              history.length === 0
+                ? "No transfers yet"
+                : "No matching transfers"
+            }
+            copy={
+              history.length === 0
+                ? "Sent and received files show up here with route, speed, and a one-tap re-share."
+                : "Adjust the filters or complete a new transfer to populate the history."
+            }
+          />
         ) : (
           <div className="grid gap-3">
             {filteredHistory.map((record, index) => (

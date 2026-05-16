@@ -114,9 +114,23 @@ Trigger CI via `workflow_dispatch` with `release_mode=auto`. The `release-plan` 
 
 If it shows `skip`, at least one secret is missing or empty. The job summary lists which.
 
+## v0.4.6 notes
+
+The v0.4.6 release brings four user-visible Android changes that change how the build is verified:
+
+1. **`minSdk` is now 29** ([`src-tauri/gen/android/app/build.gradle.kts`](../src-tauri/gen/android/app/build.gradle.kts)). The APK no longer installs on Android 7.0–9.0 (~3% of the 2026 install base). This is intentional — it lets the app use scoped `MediaStore` writes without requesting `WRITE_EXTERNAL_STORAGE`.
+2. **System share-target.** The manifest now declares `ACTION_SEND` / `ACTION_SEND_MULTIPLE` filters so Lightning P2P appears in Android's share sheet for image / video / audio / application MIME types and `*/*`. Verification: open Gallery → Share → Lightning P2P should appear in the chooser → tap → the app opens directly to Send with the file pre-selected and the QR/link auto-generated.
+3. **Smart save routing.** Verified single-file receives auto-publish into `MediaStore` collections — images to `Pictures/Lightning P2P`, video to `Movies/Lightning P2P`, audio to `Music/Lightning P2P`, other files to `Downloads/Lightning P2P`. Verification: receive one of each MIME type from a second device, then open the system Gallery / Files app and confirm each file appears in the right collection.
+4. **Launcher icon.** The icon source at [`src-tauri/icons/lightning-p2p-source.png`](../src-tauri/icons/lightning-p2p-source.png) should be updated to the new two-tone blue brand mark (≥1024×1024 with art inside the inner 66% safe zone) **before** running `pnpm android:build:apk`. Tauri regenerates all mipmap densities and the adaptive variants on every build, so no other manual edits are needed.
+
+Watch logcat during the smoke launch for these strings; treat them as fatal:
+- `MediaStore publish failed`
+- `shared-staging cleanup failed`
+- `MediaStore insert returned null`
+
 ## Release procedure
 
-1. **Bump the version** in three files, all to the same value (e.g. `0.4.4`):
+1. **Bump the version** in three files, all to the same value (e.g. `0.4.6`):
    - [`src-tauri/Cargo.toml`](../src-tauri/Cargo.toml) — `version = "X.Y.Z"`
    - [`package.json`](../package.json) — `"version": "X.Y.Z"`
    - [`src-tauri/tauri.conf.json`](../src-tauri/tauri.conf.json) — `"version": "X.Y.Z"`

@@ -20,6 +20,7 @@ import { useNearbyDeviceStore } from "../stores/nearbyDeviceStore";
 import { useNearbyDiagnosticStore } from "../stores/nearbyDiagnosticStore";
 import { useTransferStore } from "../stores/transferStore";
 import { DeviceCard } from "./DeviceCard";
+import { EmptyState } from "./EmptyState";
 
 function networkLabel(onlineState: string): string {
   switch (onlineState) {
@@ -182,48 +183,30 @@ export function DevicesView() {
 
         <div className="mt-4 space-y-3">
           {!localDiscoveryEnabled ? (
-            <div className="glass-subtle px-5 py-8 text-center">
-              <p className="text-base font-semibold text-white">
-                Nearby discovery is off
-              </p>
-              <p className="meta-copy mt-2">
-                Enable local discovery in Settings to see nearby devices
-                appear automatically.
-              </p>
-            </div>
+            <EmptyState
+              icon={ScanSearch}
+              title="Nearby discovery is off"
+              copy="Enable local discovery in Settings to see nearby devices appear automatically."
+            />
           ) : devices.length === 0 ? (
             networkLikelyBlocked ? (
-              <div className="glass-subtle flex flex-col items-center gap-3 px-5 py-8 text-center">
-                <WifiOff className="h-5 w-5 text-amber-200/80" />
-                <p className="text-base font-semibold text-white">
-                  This network may be blocking multicast
-                </p>
-                <p className="meta-copy max-w-[44ch]">
-                  Lightning P2P uses multicast for instant nearby discovery,
-                  and some hotel, guest, and enterprise Wi-Fi networks silently
-                  drop those packets. The app is healthy &mdash; you just
-                  haven't seen a peer.
-                </p>
-                <div className="mt-1 flex items-center gap-2 text-xs text-amber-100/90">
-                  <QrCode className="h-3.5 w-3.5" />
-                  <span>
-                    Use Send to generate a QR or ticket the receiver can paste
-                    instead.
-                  </span>
-                </div>
-              </div>
+              <EmptyState
+                icon={WifiOff}
+                title="This network may be blocking multicast"
+                copy="Lightning P2P uses multicast for instant nearby discovery, and some hotel, guest, and enterprise Wi-Fi networks silently drop those packets. The app is healthy — you just haven't seen a peer."
+                action={
+                  <div className="inline-flex items-center gap-2 rounded-full border border-amber-200/20 bg-amber-300/5 px-3 py-1.5 text-xs text-amber-100/90">
+                    <QrCode className="h-3.5 w-3.5" />
+                    Use Send to generate a QR or paste-ticket instead.
+                  </div>
+                }
+              />
             ) : (
-              <div className="glass-subtle flex flex-col items-center gap-2 px-5 py-10 text-center">
-                <Radar className="h-5 w-5 text-sky-200/70" />
-                <p className="text-base font-semibold text-white">
-                  Looking for nearby devices...
-                </p>
-                <p className="meta-copy">
-                  Open Lightning P2P on the other device too &mdash; they'll
-                  appear here within a second once both apps are running on the
-                  same trusted Wi-Fi/LAN.
-                </p>
-              </div>
+              <EmptyState
+                icon={Radar}
+                title="Looking for nearby devices..."
+                copy="Open Lightning P2P on the other device too — they'll appear here within a second once both apps are on the same trusted Wi-Fi/LAN."
+              />
             )
           ) : (
             devices.map((device) => (

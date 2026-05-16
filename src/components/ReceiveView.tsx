@@ -43,6 +43,8 @@ export function ReceiveView() {
   const downloadDir = useTransferStore((state) => state.downloadDir);
   const nodeStatus = useTransferStore((state) => state.nodeStatus);
   const settings = useTransferStore((state) => state.settings);
+  const platformProfile = useTransferStore((state) => state.platformProfile);
+  const smartRouting = platformProfile.capabilities.smart_routing;
   const setError = useTransferStore((state) => state.setError);
   const startReceive = useTransferStore((state) => state.startReceive);
   const startReceiveNearbyShare = useTransferStore(
@@ -299,23 +301,29 @@ export function ReceiveView() {
               want the explicit manual path.
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div
+            className={`flex flex-wrap gap-2 ${mobileRuntime ? "w-full" : ""}`}
+          >
             {mobileRuntime ? (
               <button
                 onClick={() => void handleScanQr()}
                 disabled={isScanning}
-                className="glass-button inline-flex items-center gap-2 px-4 py-2.5 text-sm text-slate-100"
+                className="mobile-hero-cta flex-1"
               >
-                <ScanSearch className="h-4 w-4" />
+                <ScanSearch className="h-5 w-5" />
                 {isScanning ? "Scanning..." : "Scan QR"}
               </button>
             ) : null}
             <button
               onClick={() => void handlePaste()}
-              className="glass-button inline-flex items-center gap-2 px-4 py-2.5 text-sm text-slate-100"
+              className={
+                mobileRuntime
+                  ? "glass-button min-h-touch inline-flex items-center gap-2 px-4 text-sm text-slate-100"
+                  : "glass-button inline-flex items-center gap-2 px-4 py-2.5 text-sm text-slate-100"
+              }
             >
               <ClipboardPaste className="h-4 w-4" />
-              Paste from clipboard
+              Paste link
             </button>
           </div>
         </div>
@@ -365,17 +373,28 @@ export function ReceiveView() {
           <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
             <div>
               <p className="metric-label">
-                {mobileRuntime ? "Alpha save destination" : "Export destination"}
+                {smartRouting ? "Where files land" : "Export destination"}
               </p>
-              <p className="mt-2 break-all font-mono text-sm leading-6 text-slate-100/88">
-                {downloadDir ?? "Resolving download directory..."}
-              </p>
+              {smartRouting ? (
+                <p className="mt-2 text-sm leading-6 text-slate-100/88">
+                  Pictures → Pictures · Video → Movies · Audio → Music · Other
+                  → Downloads. Each lands in a "Lightning P2P" subfolder.
+                </p>
+              ) : (
+                <p className="mt-2 break-all font-mono text-sm leading-6 text-slate-100/88">
+                  {downloadDir ?? "Resolving download directory..."}
+                </p>
+              )}
             </div>
 
             <button
               onClick={() => void handleReceive()}
               disabled={!ticketLooksValid || !nativeRuntime}
-              className="btn-success"
+              className={
+                mobileRuntime
+                  ? "mobile-hero-cta"
+                  : "btn-success"
+              }
             >
               <span className="relative inline-flex items-center gap-2">
                 <ArrowDownToLine className="h-4 w-4" />

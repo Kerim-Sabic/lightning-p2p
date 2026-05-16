@@ -296,16 +296,22 @@ export function SendView() {
 
             <div
               data-stage-action="true"
-              className="flex w-full max-w-[320px] flex-col gap-3"
+              className={`flex flex-col gap-3 ${mobileRuntime ? "w-full" : "w-full max-w-[320px]"}`}
             >
               <button
                 onClick={() => void pickShareFiles()}
                 disabled={!nativeRuntime}
-                className="btn-primary justify-center"
+                className={
+                  mobileRuntime
+                    ? "mobile-hero-cta"
+                    : "btn-primary justify-center"
+                }
               >
                 <span className="relative inline-flex items-center gap-2">
-                  <File className="h-4 w-4" />
-                  Choose files
+                  <File
+                    className={mobileRuntime ? "h-5 w-5" : "h-4 w-4"}
+                  />
+                  {mobileRuntime ? "Share files" : "Choose files"}
                 </span>
               </button>
               {!mobileRuntime ? (
@@ -325,8 +331,9 @@ export function SendView() {
                 </p>
               ) : mobileRuntime ? (
                 <p className="text-xs leading-6 text-slate-500">
-                  Android alpha stages files in app-private storage. Keep this
-                  screen open until the receiver finishes.
+                  Pick files here, or use any app's Share button and choose
+                  Lightning P2P. Pictures go to Pictures, audio to Music,
+                  video to Movies, other files to Downloads.
                 </p>
               ) : null}
             </div>

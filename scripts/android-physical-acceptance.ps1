@@ -92,7 +92,7 @@ Start-Sleep -Seconds 30
 & $script:AdbPath logcat -v threadtime -d | Set-Content -LiteralPath $logcatPath -Encoding UTF8
 & $script:AdbPath shell dumpsys activity activities | Set-Content -LiteralPath $activityPath -Encoding UTF8
 
-$fatalMatches = Select-String -Path $logcatPath -Pattern "FATAL EXCEPTION|AndroidRuntime|SIGSEGV|panic|liblightning" -CaseSensitive:$false
+$fatalMatches = Select-String -Path $logcatPath -Pattern "FATAL EXCEPTION|AndroidRuntime|SIGSEGV|panic|liblightning|MediaStore publish failed|shared-staging cleanup failed|MediaStore insert returned null" -CaseSensitive:$false
 if ($fatalMatches) {
   $fatalMatches | Select-Object -First 20
   throw "Launch smoke failed. Fatal Android/Rust patterns were found in $logcatPath."
@@ -116,3 +116,7 @@ Write-Host "  2. Settings -> Copy diagnostics returns useful Android/Rust/fronte
 Write-Host "  3. Windows -> Android 10 MB transfer completes."
 Write-Host "  4. Android -> Windows 10 MB transfer completes."
 Write-Host "  5. One 500 MB transfer completes while the phone screen is locked."
+Write-Host "  6. Pick a photo via the system file picker -> ticket creates without 'no such file' error."
+Write-Host "  7. Receive one JPG, one MP4, one MP3, one PDF -> verify each appears in Pictures/Movies/Music/Downloads via the system Gallery and Files apps."
+Write-Host "  8. Open the phone's Gallery -> Share a photo -> Lightning P2P appears in the chooser -> tap -> Send view opens with the photo pre-selected and a QR/link auto-generated."
+Write-Host "  9. Launcher icon shows the new two-tone blue mark under both circular and squircle masks."
