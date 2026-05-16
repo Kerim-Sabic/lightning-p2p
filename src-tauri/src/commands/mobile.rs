@@ -110,26 +110,11 @@ pub(crate) mod android {
         Ok(out)
     }
 
-    fn call_resolver_static<'local, R, F>(
-        env: &mut JNIEnv<'local>,
-        method_name: &str,
-        sig: &str,
-        args: &[JValue<'local, '_>],
-        extract: F,
-    ) -> Result<R, String>
-    where
-        F: FnOnce(&mut JNIEnv<'local>, JValue<'local, '_>) -> Result<R, String>,
-    {
-        let class = load_app_class(env, RESOLVER_CLASS_DOTTED)?;
-        let result = env
-            .call_static_method(class, method_name, sig, args)
-            .map_err(|e| {
-                // Clear any pending Java exception so it doesn't crash the
-                // host thread when control returns to it.
-                let _ = env.exception_clear();
-                e.to_string()
-            })?;
-        extract(env, result)
+    /// Clear any pending Java exception so it does not crash the host
+    /// thread on return, and return its string description.
+    fn drain_exception(env: &mut JNIEnv<'_>, err: jni::errors::Error) -> String {
+        let _ = env.exception_clear();
+        err.to_string()
     }
 
     pub fn resolve_content_uris(uris: Vec<String>) -> Result<Vec<String>, String> {
@@ -140,16 +125,20 @@ pub(crate) mod android {
         let mut env = vm.attach_current_thread().map_err(|e| e.to_string())?;
         let context = context_obj(&mut env)?;
         let array = vec_to_jstring_array(&mut env, &uris)?;
-        call_resolver_static(
-            &mut env,
+        let class = load_app_class(&mut env, RESOLVER_CLASS_DOTTED)?;
+        let raw = env.call_static_method(
+            class,
             "resolveContentUris",
             "(Landroid/content/Context;[Ljava/lang/String;)[Ljava/lang/String;",
             &[JValue::Object(&context), JValue::Object(&array)],
-            |env, result| {
-                let obj = result.l().map_err(|e| e.to_string())?;
-                jstring_array_to_vec(env, JObjectArray::from(obj))
-            },
-        )
+        );
+        let result = match raw {
+            Ok(r) => r,
+            Err(e) => return Err(drain_exception(&mut env, e)),
+        };
+        let obj: JObject<'_> = result.l().map_err(|e| e.to_string())?;
+        let array_out: JObjectArray<'_> = obj.into();
+        jstring_array_to_vec(&mut env, array_out)
     }
 
     pub fn publish_to_mediastore(
@@ -165,8 +154,9 @@ pub(crate) mod android {
         let filename_j = env.new_string(filename).map_err(|e| e.to_string())?;
         let mime_j = env.new_string(mime).map_err(|e| e.to_string())?;
         let bucket_j = env.new_string(bucket).map_err(|e| e.to_string())?;
-        call_resolver_static(
-            &mut env,
+        let class = load_app_class(&mut env, RESOLVER_CLASS_DOTTED)?;
+        let raw = env.call_static_method(
+            class,
             "publishToMediaStore",
             "(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;",
             &[
@@ -176,31 +166,34 @@ pub(crate) mod android {
                 JValue::Object(&mime_j),
                 JValue::Object(&bucket_j),
             ],
-            |env, result| {
-                let obj = result.l().map_err(|e| e.to_string())?;
-                let jstr = JString::from(obj);
-                let value: String = env
-                    .get_string(&jstr)
-                    .map_err(|e| e.to_string())?
-                    .into();
-                Ok(value)
-            },
-        )
+        );
+        let result = match raw {
+            Ok(r) => r,
+            Err(e) => return Err(drain_exception(&mut env, e)),
+        };
+        let obj: JObject<'_> = result.l().map_err(|e| e.to_string())?;
+        let jstr: JString<'_> = obj.into();
+        let value: String = env.get_string(&jstr).map_err(|e| e.to_string())?.into();
+        Ok(value)
     }
 
     pub fn take_pending_shared_files() -> Result<Vec<String>, String> {
         let vm = jvm()?;
         let mut env = vm.attach_current_thread().map_err(|e| e.to_string())?;
-        call_resolver_static(
-            &mut env,
+        let class = load_app_class(&mut env, RESOLVER_CLASS_DOTTED)?;
+        let raw = env.call_static_method(
+            class,
             "takePendingSharedFiles",
             "()[Ljava/lang/String;",
             &[],
-            |env, result| {
-                let obj = result.l().map_err(|e| e.to_string())?;
-                jstring_array_to_vec(env, JObjectArray::from(obj))
-            },
-        )
+        );
+        let result = match raw {
+            Ok(r) => r,
+            Err(e) => return Err(drain_exception(&mut env, e)),
+        };
+        let obj: JObject<'_> = result.l().map_err(|e| e.to_string())?;
+        let array_out: JObjectArray<'_> = obj.into();
+        jstring_array_to_vec(&mut env, array_out)
     }
 
     pub fn open_system_folder(bucket: &str) -> Result<(), String> {
@@ -208,13 +201,17 @@ pub(crate) mod android {
         let mut env = vm.attach_current_thread().map_err(|e| e.to_string())?;
         let context = context_obj(&mut env)?;
         let bucket_j = env.new_string(bucket).map_err(|e| e.to_string())?;
-        call_resolver_static(
-            &mut env,
+        let class = load_app_class(&mut env, RESOLVER_CLASS_DOTTED)?;
+        let raw = env.call_static_method(
+            class,
             "openSystemFolder",
             "(Landroid/content/Context;Ljava/lang/String;)V",
             &[JValue::Object(&context), JValue::Object(&bucket_j)],
-            |_env, _result| Ok(()),
-        )
+        );
+        if let Err(e) = raw {
+            return Err(drain_exception(&mut env, e));
+        }
+        Ok(())
     }
 
     /// Best-effort sweep of staged cache files older than `older_than_ms`.
@@ -222,14 +219,20 @@ pub(crate) mod android {
         let vm = jvm()?;
         let mut env = vm.attach_current_thread().map_err(|e| e.to_string())?;
         let context = context_obj(&mut env)?;
-        let cutoff: i64 = older_than_ms.try_into().map_err(|_| "cutoff overflows i64".to_string())?;
-        call_resolver_static(
-            &mut env,
+        let cutoff: i64 =
+            older_than_ms.try_into().map_err(|_| "cutoff overflows i64".to_string())?;
+        let class = load_app_class(&mut env, RESOLVER_CLASS_DOTTED)?;
+        let raw = env.call_static_method(
+            class,
             "sweepStagingOlderThan",
             "(Landroid/content/Context;J)I",
             &[JValue::Object(&context), JValue::Long(cutoff)],
-            |_env, result| result.i().map_err(|e| e.to_string()),
-        )
+        );
+        let result = match raw {
+            Ok(r) => r,
+            Err(e) => return Err(drain_exception(&mut env, e)),
+        };
+        result.i().map_err(|e| e.to_string())
     }
 
     /// Wall-clock epoch (ms) for a "older than 24h" cutoff used at app boot.
