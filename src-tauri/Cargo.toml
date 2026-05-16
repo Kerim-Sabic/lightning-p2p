@@ -1,6 +1,6 @@
 [package]
 name = "lightning-p2p"
-version = "0.4.5"
+version = "0.4.6"
 edition = "2021"
 rust-version = "1.81"
 description = "Lightning P2P - direct peer-to-peer file sharing for Windows"
@@ -53,6 +53,7 @@ keyring = "3"
 # Utilities
 dirs = "6"
 hex = "0.4"
+mime_guess = "2"
 qrcode = "0.14"
 rand = "0.8"
 sha2 = "0.10"
@@ -70,6 +71,11 @@ windows-sys = { version = "0.59", features = [
   "Win32_Foundation",
   "Win32_Storage_FileSystem",
 ] }
+
+[target.'cfg(target_os = "android")'.dependencies]
+jni = "0.21"
+ndk-context = "0.1"
+uuid = { version = "1", features = ["v4"] }
 
 [features]
 default = ["custom-protocol"]

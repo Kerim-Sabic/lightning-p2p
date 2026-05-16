@@ -3,6 +3,7 @@
 mod destination;
 pub(crate) mod export;
 pub mod metrics;
+pub mod mime;
 
 pub mod progress;
 pub mod queue;
