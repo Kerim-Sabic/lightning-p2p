@@ -764,11 +764,15 @@ jobs:
           packages: "platforms;android-36 build-tools;36.0.0 ndk;26.3.11579264"
 
       - name: Free Android runner disk space
-        run: |
-          df -h
-          sudo rm -rf /usr/share/dotnet /usr/local/share/boost /opt/ghc /opt/hostedtoolcache/CodeQL || true
-          sudo apt-get clean
-          df -h
+        uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          tool-cache: false
+          android: false
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
 
       - name: Install Rust Android targets
         uses: dtolnay/rust-toolchain@stable
@@ -788,11 +792,6 @@ jobs:
 
       - name: Build frontend
         run: pnpm build
-
-      - name: Build Android debug APK
-        env:
-          NDK_HOME: ${{ env.ANDROID_NDK_HOME }}
-        run: pnpm android:build:debug
 
       - name: Build Android release APK smoke
         env:
@@ -850,12 +849,6 @@ jobs:
           "$build_tools/apksigner" verify --verbose "$signed_apk"
           rm -f "$keystore"
           ls -lh "$stage"
-
-      - name: Upload debug APK artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: lightning-p2p-android-debug-apk
-          path: src-tauri/gen/android/app/build/outputs/apk/**/debug/*.apk
 
       - name: Upload signed release smoke APK artifact
         uses: actions/upload-artifact@v4
@@ -986,11 +979,15 @@ jobs:
           packages: "platforms;android-36 build-tools;36.0.0 ndk;26.3.11579264"
 
       - name: Free Android runner disk space
-        run: |
-          df -h
-          sudo rm -rf /usr/share/dotnet /usr/local/share/boost /opt/ghc /opt/hostedtoolcache/CodeQL || true
-          sudo apt-get clean
-          df -h
+        uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          tool-cache: false
+          android: false
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
 
       - name: Install Rust Android targets
         uses: dtolnay/rust-toolchain@stable
