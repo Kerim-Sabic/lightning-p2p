@@ -8,8 +8,12 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.net.wifi.WifiManager
+import android.nfc.NdefMessage
+import android.nfc.NdefRecord
+import android.nfc.NfcAdapter
 import android.os.Build
 import android.os.Bundle
+import android.os.Parcelable
 import android.system.Os
 import androidx.activity.enableEdgeToEdge
 import androidx.core.app.ActivityCompat
@@ -33,6 +37,7 @@ class MainActivity : TauriActivity() {
         TransferForegroundService.start(applicationContext, 0)
       }
       safeStep("handle cold-start share intent") { handleShareIntent(intent) }
+      safeStep("handle cold-start NFC intent") { handleNfcIntent(intent) }
       AndroidDiagnostics.info(this, "MainActivity.onCreate complete")
     } catch (error: Throwable) {
       AndroidDiagnostics.error(this, "MainActivity.onCreate failed", error)
@@ -44,6 +49,45 @@ class MainActivity : TauriActivity() {
     super.onNewIntent(intent)
     setIntent(intent)
     safeStep("handle warm share intent") { handleShareIntent(intent) }
+    safeStep("handle warm NFC intent") { handleNfcIntent(intent) }
+  }
+
+  /**
+   * Parse a Lightning P2P NFC tap. The other phone embeds the iroh receive
+   * ticket in an NDEF record with MIME `application/vnd.lightning-p2p.ticket`;
+   * we extract the UTF-8 payload and stash it on [ContentUriResolver] for
+   * the JS layer to drain on focus.
+   */
+  private fun handleNfcIntent(intent: Intent?) {
+    if (intent == null) return
+    if (intent.action != NfcAdapter.ACTION_NDEF_DISCOVERED) return
+    try {
+      val rawMessages = extractNdefMessages(intent) ?: return
+      for (raw in rawMessages) {
+        val msg = raw as? NdefMessage ?: continue
+        for (record in msg.records) {
+          if (record.tnf != NdefRecord.TNF_MIME_MEDIA) continue
+          val mime = String(record.type, Charsets.US_ASCII)
+          if (mime != "application/vnd.lightning-p2p.ticket") continue
+          val ticket = String(record.payload, Charsets.UTF_8).trim()
+          if (ticket.isEmpty()) continue
+          ContentUriResolver.setPendingSharedTicket(ticket)
+          AndroidDiagnostics.info(this, "Stashed NFC-received ticket (${ticket.length} chars)")
+          return
+        }
+      }
+    } catch (error: Throwable) {
+      AndroidDiagnostics.error(this, "Failed to parse NFC NDEF intent", error)
+    }
+  }
+
+  @Suppress("DEPRECATION")
+  private fun extractNdefMessages(intent: Intent): Array<Parcelable>? {
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+      intent.getParcelableArrayExtra(NfcAdapter.EXTRA_NDEF_MESSAGES, Parcelable::class.java)
+    } else {
+      intent.getParcelableArrayExtra(NfcAdapter.EXTRA_NDEF_MESSAGES)
+    }
   }
 
   /**

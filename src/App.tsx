@@ -14,6 +14,7 @@ import { WindowChrome } from "./components/WindowChrome";
 import { useTransfer } from "./hooks/useTransfer";
 import {
   drainPendingSharedFiles,
+  drainPendingSharedTicket,
   getRuntimeKind,
   onDeepLinkOpened,
   recordFrontendDiagnostic,
@@ -95,17 +96,27 @@ function NativeAppShell({ runtimeKind }: NativeAppShellProps) {
 
     const drainAndSeed = async (): Promise<void> => {
       const paths = await drainPendingSharedFiles();
-      if (!active || paths.length === 0) {
-        return;
+      if (active && paths.length > 0) {
+        startTransition(() => {
+          setView("send");
+        });
+        try {
+          await prepareShareSelection(paths);
+          await createShare();
+        } catch {
+          // store already surfaces errors via setError
+        }
       }
-      startTransition(() => {
-        setView("send");
-      });
-      try {
-        await prepareShareSelection(paths);
-        await createShare();
-      } catch {
-        // store already surfaces errors via setError
+
+      // Drain any NFC-pushed receive ticket. When two phones tap, the
+      // sender's active ticket lands here; route the user directly to
+      // the Receive view with the ticket pre-filled.
+      const ticket = await drainPendingSharedTicket();
+      if (active && ticket) {
+        setPendingReceiveTicket(ticket);
+        startTransition(() => {
+          setView("receive");
+        });
       }
     };
 
@@ -119,7 +130,12 @@ function NativeAppShell({ runtimeKind }: NativeAppShellProps) {
       active = false;
       window.removeEventListener("focus", onFocus);
     };
-  }, [createShare, mobileRuntime, prepareShareSelection]);
+  }, [
+    createShare,
+    mobileRuntime,
+    prepareShareSelection,
+    setPendingReceiveTicket,
+  ]);
 
   const handleNavigate = (nextView: View): void => {
     startTransition(() => {

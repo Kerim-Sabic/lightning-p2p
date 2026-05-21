@@ -33,6 +33,22 @@ object ContentUriResolver {
     private const val MEDIASTORE_SUBDIR = "Lightning P2P"
 
     private val pendingSharedFiles = AtomicReference<List<String>>(emptyList())
+    private val pendingSharedTicket = AtomicReference<String?>(null)
+
+    /**
+     * Stash a Lightning P2P receive ticket dropped here by the NFC handler
+     * (or any other side channel). The JS layer drains via JNI on focus.
+     */
+    @JvmStatic
+    fun setPendingSharedTicket(ticket: String) {
+        pendingSharedTicket.set(ticket)
+    }
+
+    /** Drain the pending NFC/side-channel ticket if any. */
+    @JvmStatic
+    fun takePendingSharedTicket(): String? {
+        return pendingSharedTicket.getAndSet(null)
+    }
 
     @JvmStatic
     fun resolveContentUris(context: Context, uris: Array<String>): Array<String> {

@@ -235,6 +235,117 @@ pub(crate) mod android {
         result.i().map_err(|e| e.to_string())
     }
 
+    const BLE_CLASS_DOTTED: &str = "com.lightningp2p.app.LightningBleService";
+
+    pub fn take_pending_shared_ticket() -> Result<Option<String>, String> {
+        let vm = jvm()?;
+        let mut env = vm.attach_current_thread().map_err(|e| e.to_string())?;
+        let class = load_app_class(&mut env, RESOLVER_CLASS_DOTTED)?;
+        let raw = env.call_static_method(
+            class,
+            "takePendingSharedTicket",
+            "()Ljava/lang/String;",
+            &[],
+        );
+        let result = match raw {
+            Ok(r) => r,
+            Err(e) => return Err(drain_exception(&mut env, e)),
+        };
+        let obj: JObject<'_> = result.l().map_err(|e| e.to_string())?;
+        if obj.is_null() {
+            return Ok(None);
+        }
+        let jstr: JString<'_> = obj.into();
+        let value: String = env.get_string(&jstr).map_err(|e| e.to_string())?.into();
+        Ok(Some(value))
+    }
+
+    pub fn ble_start_advertise(node_id_prefix_hex: &str) -> Result<bool, String> {
+        let vm = jvm()?;
+        let mut env = vm.attach_current_thread().map_err(|e| e.to_string())?;
+        let context = context_obj(&mut env)?;
+        let payload = env.new_string(node_id_prefix_hex).map_err(|e| e.to_string())?;
+        let class = load_app_class(&mut env, BLE_CLASS_DOTTED)?;
+        let raw = env.call_static_method(
+            class,
+            "advertiseNodeId",
+            "(Landroid/content/Context;Ljava/lang/String;)Z",
+            &[JValue::Object(&context), JValue::Object(&payload)],
+        );
+        let result = match raw {
+            Ok(r) => r,
+            Err(e) => return Err(drain_exception(&mut env, e)),
+        };
+        result.z().map_err(|e| e.to_string())
+    }
+
+    pub fn ble_stop_advertise() -> Result<(), String> {
+        let vm = jvm()?;
+        let mut env = vm.attach_current_thread().map_err(|e| e.to_string())?;
+        let class = load_app_class(&mut env, BLE_CLASS_DOTTED)?;
+        let raw = env.call_static_method(class, "stopAdvertising", "()V", &[]);
+        if let Err(e) = raw {
+            return Err(drain_exception(&mut env, e));
+        }
+        Ok(())
+    }
+
+    pub fn ble_start_scan() -> Result<bool, String> {
+        let vm = jvm()?;
+        let mut env = vm.attach_current_thread().map_err(|e| e.to_string())?;
+        let context = context_obj(&mut env)?;
+        let class = load_app_class(&mut env, BLE_CLASS_DOTTED)?;
+        let raw = env.call_static_method(
+            class,
+            "startScan",
+            "(Landroid/content/Context;)Z",
+            &[JValue::Object(&context)],
+        );
+        let result = match raw {
+            Ok(r) => r,
+            Err(e) => return Err(drain_exception(&mut env, e)),
+        };
+        result.z().map_err(|e| e.to_string())
+    }
+
+    pub fn ble_stop_scan() -> Result<(), String> {
+        let vm = jvm()?;
+        let mut env = vm.attach_current_thread().map_err(|e| e.to_string())?;
+        let class = load_app_class(&mut env, BLE_CLASS_DOTTED)?;
+        let raw = env.call_static_method(class, "stopScan", "()V", &[]);
+        if let Err(e) = raw {
+            return Err(drain_exception(&mut env, e));
+        }
+        Ok(())
+    }
+
+    /// Drain BLE discoveries as a flat (`hex`, `epoch_ms`) string pair list.
+    pub fn ble_drain_discoveries() -> Result<Vec<(String, i64)>, String> {
+        let vm = jvm()?;
+        let mut env = vm.attach_current_thread().map_err(|e| e.to_string())?;
+        let class = load_app_class(&mut env, BLE_CLASS_DOTTED)?;
+        let raw = env.call_static_method(
+            class,
+            "drainDiscoveries",
+            "()[Ljava/lang/String;",
+            &[],
+        );
+        let result = match raw {
+            Ok(r) => r,
+            Err(e) => return Err(drain_exception(&mut env, e)),
+        };
+        let obj: JObject<'_> = result.l().map_err(|e| e.to_string())?;
+        let arr: JObjectArray<'_> = obj.into();
+        let flat = jstring_array_to_vec(&mut env, arr)?;
+        let mut pairs = Vec::with_capacity(flat.len() / 2);
+        let mut iter = flat.into_iter();
+        while let (Some(hex), Some(ts)) = (iter.next(), iter.next()) {
+            let parsed: i64 = ts.parse().unwrap_or(0);
+            pairs.push((hex, parsed));
+        }
+        Ok(pairs)
+    }
+
     /// Wall-clock epoch (ms) for a "older than 24h" cutoff used at app boot.
     pub fn epoch_ms_24h_ago() -> u128 {
         let now = SystemTime::now()
@@ -303,5 +414,68 @@ pub async fn open_android_bucket(bucket: String) -> Result<(), String> {
     {
         let _ = bucket;
         Err("open_android_bucket is only available on Android".into())
+    }
+}
+
+/// Drain any Lightning P2P receive ticket dropped here via NFC tap or any
+/// other side channel since the last call. Returns `null` if nothing is
+/// queued. Empty / no-op on non-Android.
+///
+/// # Errors
+///
+/// Returns an error string if the JNI drain fails.
+#[tauri::command]
+pub async fn take_pending_shared_ticket() -> Result<Option<String>, String> {
+    #[cfg(target_os = "android")]
+    {
+        android::take_pending_shared_ticket()
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        Ok(None)
+    }
+}
+
+/// Start the experimental Lightning P2P BLE advertise + scan pair on
+/// Android. The local node id short-prefix is broadcast in the BLE
+/// service data so other Lightning P2P phones in range can discover us.
+///
+/// Returns whether the advertise + scan started. Either may legitimately
+/// return false if the BLE adapter is disabled or permissions are denied.
+///
+/// # Errors
+///
+/// Returns an error string if the JNI bridge fails.
+#[tauri::command]
+pub async fn start_ble_discovery(node_id_prefix_hex: String) -> Result<bool, String> {
+    #[cfg(target_os = "android")]
+    {
+        let advertising = android::ble_start_advertise(&node_id_prefix_hex)?;
+        let scanning = android::ble_start_scan()?;
+        Ok(advertising || scanning)
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = node_id_prefix_hex;
+        Ok(false)
+    }
+}
+
+/// Stop the Lightning P2P BLE advertise + scan pair. Idempotent.
+///
+/// # Errors
+///
+/// Returns an error string if the JNI bridge fails.
+#[tauri::command]
+pub async fn stop_ble_discovery() -> Result<(), String> {
+    #[cfg(target_os = "android")]
+    {
+        let _ = android::ble_stop_scan();
+        android::ble_stop_advertise()?;
+        Ok(())
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        Ok(())
     }
 }

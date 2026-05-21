@@ -33,6 +33,11 @@
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
 
+    <!-- NFC tap-to-transfer (v0.5.0 experimental). The tag payload is the
+         iroh receive ticket; file bytes still ride on iroh QUIC. -->
+    <uses-permission android:name="android.permission.NFC" />
+    <uses-feature android:name="android.hardware.nfc" android:required="false" />
+
     <application
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
@@ -87,6 +92,15 @@
                 <data android:mimeType="audio/*" />
                 <data android:mimeType="application/*" />
                 <data android:mimeType="*/*" />
+            </intent-filter>
+
+            <!-- NFC tap-to-transfer intent filter. When another Lightning P2P
+                 phone is held against this device, the OS routes the NDEF
+                 record containing the iroh receive ticket here. -->
+            <intent-filter>
+                <action android:name="android.nfc.action.NDEF_DISCOVERED" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/vnd.lightning-p2p.ticket" />
             </intent-filter>
             <!-- DEEP LINK PLUGIN. AUTO-GENERATED. DO NOT REMOVE. -->
 

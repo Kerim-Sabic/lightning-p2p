@@ -906,6 +906,54 @@ export async function drainPendingSharedFiles(): Promise<string[]> {
 }
 
 /**
+ * Drain any Lightning P2P receive ticket dropped here via NFC tap or any
+ * other side channel since the last call. Returns null if nothing queued.
+ */
+export async function drainPendingSharedTicket(): Promise<string | null> {
+  if (!isMobileRuntime()) {
+    return null;
+  }
+  try {
+    const result = await invoke<string | null>("take_pending_shared_ticket");
+    return result ?? null;
+  } catch (error) {
+    console.error("take_pending_shared_ticket failed", error);
+    return null;
+  }
+}
+
+/**
+ * Start the experimental Lightning P2P BLE proximity discovery on Android.
+ * Returns whether at least one of advertise / scan started. May return false
+ * if the BLE adapter is off or runtime permissions are denied.
+ */
+export async function startBleDiscovery(
+  nodeIdPrefixHex: string,
+): Promise<boolean> {
+  if (!isMobileRuntime()) {
+    return false;
+  }
+  try {
+    return await invoke<boolean>("start_ble_discovery", { nodeIdPrefixHex });
+  } catch (error) {
+    console.error("start_ble_discovery failed", error);
+    return false;
+  }
+}
+
+/** Stop Lightning P2P BLE advertise + scan. Idempotent. */
+export async function stopBleDiscovery(): Promise<void> {
+  if (!isMobileRuntime()) {
+    return;
+  }
+  try {
+    await invoke("stop_ble_discovery");
+  } catch (error) {
+    console.error("stop_ble_discovery failed", error);
+  }
+}
+
+/**
  * Opens the Android system folder UI for a MediaStore bucket. Buckets
  * are "Pictures" | "Movies" | "Music" | "Downloads".
  */
