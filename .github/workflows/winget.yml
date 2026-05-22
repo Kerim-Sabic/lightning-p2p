@@ -7,6 +7,11 @@ name: Publish to winget
 # Required secret: WINGET_TOKEN
 #   A classic Personal Access Token with `public_repo` scope on a
 #   fork of microsoft/winget-pkgs. Set it in repo settings.
+#
+# Optional variable: WINGET_AUTO_SUBMIT
+#   Set repository variable WINGET_AUTO_SUBMIT=true after the first
+#   LightningP2P.LightningP2P manifest exists in microsoft/winget-pkgs.
+#   Until then, use workflow_dispatch for manual/bootstrap submissions.
 
 on:
   release:
@@ -22,6 +27,7 @@ permissions:
 
 jobs:
   publish:
+    if: github.event_name == 'workflow_dispatch' || (github.event.release.draft == false && github.event.release.prerelease == false && vars.WINGET_AUTO_SUBMIT == 'true')
     runs-on: windows-latest
     steps:
       - name: Require Winget token
