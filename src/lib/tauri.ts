@@ -447,7 +447,7 @@ export const browserPlatformProfile: PlatformProfile = {
     online_notice:
       "Online sharing is a handoff link into the native iroh app. No WebRTC, HTTP transfer server, or WebSocket transfer path is used.",
     release_notice:
-      "Use the Windows app or Android alpha build for real transfers.",
+      "Use the Windows app or Android 10+ sideload build for real transfers.",
     benchmark_notice:
       "Do not claim speed leadership until repeatable benchmark results are published.",
   },
@@ -499,7 +499,7 @@ export function isDesktopRuntime(): boolean {
 }
 
 export function desktopRuntimeMessage(feature = "This feature"): string {
-  return `${feature} requires the native Lightning P2P app runtime. Use \`pnpm tauri dev\`, the installed Windows app, or an Android alpha build instead of the browser preview.`;
+  return `${feature} requires the native Lightning P2P app runtime. Use \`pnpm tauri dev\`, the installed Windows app, or the Android 10+ sideload build instead of the browser preview.`;
 }
 
 function requireNativeRuntime(feature: string): void {

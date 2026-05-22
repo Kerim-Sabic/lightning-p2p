@@ -50,8 +50,8 @@ New-TestFile -Path (Join-Path $payloadDir "500mb.bin") -SizeBytes 524288000
 New-TestFile -Path (Join-Path $payloadDir "1gb.bin") -SizeBytes 1073741824
 New-ManySmallFiles -Directory (Join-Path $payloadDir "many-small")
 
-$csvPath = Join-Path $output "v0.4.5-benchmark-matrix.csv"
-$runbookPath = Join-Path $output "v0.4.5-benchmark-runbook.md"
+$csvPath = Join-Path $output "v0.4.6-benchmark-matrix.csv"
+$runbookPath = Join-Path $output "v0.4.6-benchmark-runbook.md"
 
 $scenarios = @(
   @{ name = "lan-direct-10mb"; payload = "10mb.bin"; route = "direct"; note = "Windows to Android and Android to Windows on same Wi-Fi" },
@@ -69,13 +69,13 @@ foreach ($scenario in $scenarios) {
     $payload = $scenario.payload
     $route = $scenario.route
     $note = $scenario.note
-    $rows.Add("v0.4.5,$name,$run,,,$payload,$route,,,,,,,,,`"$note`"")
+    $rows.Add("v0.4.6,$name,$run,,,$payload,$route,,,,,,,,,`"$note`"")
   }
 }
 $rows | Set-Content -LiteralPath $csvPath -Encoding UTF8
 
 $runbook = @"
-# Lightning P2P v0.4.5 Benchmark Runbook
+# Lightning P2P v0.4.6 Benchmark Runbook
 
 Use this matrix only after the Android APK launch gate passes on a physical phone.
 

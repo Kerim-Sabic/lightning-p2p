@@ -70,14 +70,14 @@ This prevents `LIGHTNING_P2P_PROFILE=alice` and `LIGHTNING_P2P_PROFILE=bob` from
 
 ## Android Foundation
 
-The Rust crate already builds as `lib`, `staticlib`, and `cdylib`, and `lib.rs` exposes the Tauri mobile entry point. Android remains alpha until these are verified on real devices:
+The Rust crate builds as `lib`, `staticlib`, and `cdylib`, and `lib.rs` exposes the Tauri mobile entry point. The stable Android sideload path starts at `v0.4.6` and depends on these boundaries staying clean:
 
-- file picker/content URI import path
-- receive/export path behavior under scoped storage
-- QR scanner permission flow
-- local-network discovery and multicast behavior
-- Windows-to-Android and Android-to-Windows transfers
-- signed APK/AAB install path
+- file picker and share-sheet `content://` imports are resolved by Android glue before Rust imports content
+- receive/export behavior stays in Rust, with Android `MediaStore` publishing at the platform boundary
+- QR scanner permission flow remains a thin Tauri/platform adapter
+- local-network discovery and multicast behavior stay diagnostic and user-controlled
+- Windows-to-Android and Android-to-Windows transfers still use iroh QUIC and iroh-blobs
+- signed APK/AAB install trust is documented through release notes, checksums, and signer fingerprints
 
 See [android-alpha.md](android-alpha.md).
 

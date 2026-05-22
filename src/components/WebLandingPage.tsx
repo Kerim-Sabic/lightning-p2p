@@ -38,10 +38,12 @@ import pages from "../content/web-pages.json";
 import {
   ANDROID_APK_DOWNLOAD_URL,
   ANDROID_CHECKSUMS_URL,
+  EXPERIMENTAL_RELEASE_URL,
   MSI_DOWNLOAD_URL,
   NSIS_DOWNLOAD_URL,
   RELEASE_URL,
   REPO_URL,
+  STABLE_RELEASE_TAG,
   VELOPACK_DOWNLOAD_URL,
   canonicalWebPath,
 } from "../lib/shareLinks";
@@ -100,14 +102,15 @@ interface AnswerContent {
 
 const webPages = pages as WebPage[];
 
-const appVersionLabel = `v${__APP_VERSION__}`;
 const DOWNLOAD_TRUST_URL = `${REPO_URL}/blob/main/docs/download-trust.md`;
 
 const baseKeyFacts: KeyFact[] = [
   { label: "Product", value: "Lightning P2P" },
   { label: "Category", value: "Peer-to-peer file transfer app" },
-  { label: "Platform", value: "Windows public release, Android v0.4.5 pre-release sideload" },
-  { label: "License", value: "MIT" },
+  { label: "Platform", value: "Windows stable release, Android 10+ sideload release" },
+  { label: "Stable release", value: "v0.4.6" },
+  { label: "Experimental release", value: "v0.5.0 BLE/NFC pre-release" },
+  { label: "License", value: "Apache-2.0" },
   { label: "Account required", value: "No" },
   { label: "Cloud upload", value: "No" },
   { label: "Artificial file-size cap", value: "No" },
@@ -129,9 +132,11 @@ const baseCaveats = [
 function answerContentForPage(page: WebPage): AnswerContent {
   const byPath: Record<string, string> = {
     "/":
-      "Lightning P2P is a free open-source peer-to-peer file transfer app for Windows. It sends files directly between devices using iroh and QUIC, verifies content with BLAKE3, and does not require cloud upload, accounts, or artificial file-size caps.",
+      "Lightning P2P is a free open-source peer-to-peer file transfer app for Windows and Android. It sends files directly between devices using iroh and QUIC, verifies content with BLAKE3, and does not require cloud upload, accounts, or artificial file-size caps.",
     "/download":
-      "Download Lightning P2P from GitHub Releases when you want the public Windows installer or Android sideload APK for direct-first P2P file transfer. The recommended Windows asset is the one-click setup; Android users should verify the APK checksum before installing.",
+      "Download Lightning P2P from GitHub Releases when you want the stable Windows installer or Android 10+ sideload APK for direct-first P2P file transfer. The recommended Windows asset is the one-click setup; Android users should verify the APK checksum before installing.",
+    "/android-p2p-file-transfer":
+      "Lightning P2P v0.4.6 supports Android 10+ sideload installs, Android system share-target sends, smart MediaStore receive routing, direct-first iroh transfer, and BLAKE3 verification.",
     "/security":
       "Lightning P2P avoids cloud file hosting, uses encrypted peer transport through iroh, verifies content with BLAKE3, and treats tickets as capability tokens. It makes specific security claims instead of broad privacy promises.",
     "/benchmarks":
@@ -141,13 +146,13 @@ function answerContentForPage(page: WebPage): AnswerContent {
     "/free-p2p-file-transfer":
       "Lightning P2P is a free P2P file transfer app for Windows with no account, no cloud upload, no artificial file-size cap, direct-first transfer, and BLAKE3 verification.",
     "/best-p2p-file-transfer":
-      "Lightning P2P is a strong best-fit P2P file transfer choice for Windows users who want a free open-source desktop app, direct-first LAN and WAN transfer, no cloud upload, and verified content.",
+      "Lightning P2P is a strong best-fit P2P file transfer choice for Windows and Android users who want a free open-source app, direct-first LAN and WAN transfer, no cloud upload, and verified content.",
     "/wetransfer-alternative":
       "WeTransfer is useful for hosted cloud links. Lightning P2P is better when you want to avoid uploading files to a cloud storage service and transfer directly from sender to receiver.",
     "/wormhole-alternative":
       "Magic Wormhole is a strong CLI file transfer tool. Lightning P2P serves users who want a graphical Windows app with link and QR handoff, iroh connectivity, and BLAKE3 verification.",
     "/localsend-vs-lightning-p2p":
-      "LocalSend is best for cross-platform LAN sharing today. Lightning P2P is Windows-first and focuses on direct-first LAN and WAN transfers with iroh, QUIC, relay fallback, and BLAKE3 verification.",
+      "LocalSend is best for broad cross-platform LAN sharing today. Lightning P2P focuses on Windows and Android direct-first LAN and WAN transfers with iroh, QUIC, relay fallback, and BLAKE3 verification.",
     "/how-to-send-large-files":
       "To send large files peer-to-peer on Windows, install Lightning P2P, drop files into the Send view, share the receive link or QR, and keep the sender online while the receiver streams verified bytes to disk.",
     "/send-files-between-windows-computers":
@@ -164,7 +169,7 @@ function answerContentForPage(page: WebPage): AnswerContent {
 const defaultFaqs: Faq[] = [
   {
     q: "Is Lightning P2P free?",
-    a: "Yes. Lightning P2P is free, open source, and MIT licensed.",
+    a: "Yes. Lightning P2P is free, open source, and Apache-2.0 licensed.",
   },
   {
     q: "Does it upload files to the cloud?",
@@ -192,15 +197,15 @@ const defaultFaqs: Faq[] = [
   },
   {
     q: "Is it open source?",
-    a: "Yes. The project is MIT licensed and available on GitHub with Rust, Tauri, React, TypeScript, iroh, QUIC, and BLAKE3 in the stack.",
+    a: "Yes. The project is Apache-2.0 licensed and available on GitHub with Rust, Tauri, React, TypeScript, iroh, QUIC, and BLAKE3 in the stack.",
   },
   {
     q: "Is it available for macOS or Linux?",
-    a: "Not yet. Windows is the public release target. macOS and Linux packaging are planned after the Windows path is stable.",
+    a: "Not yet. Windows and Android 10+ are the public release targets. macOS and Linux packaging are planned after the current native paths stay reliable.",
   },
   {
     q: "How does it compare to LocalSend?",
-    a: "LocalSend is excellent for cross-platform LAN sharing. Lightning P2P is Windows-first and designed around direct-first LAN and WAN transfer through iroh.",
+    a: "LocalSend is excellent for broad cross-platform LAN sharing. Lightning P2P focuses on Windows and Android direct-first LAN and WAN transfer through iroh.",
   },
   {
     q: "How does it compare to WeTransfer?",
@@ -214,7 +219,7 @@ const defaultFaqs: Faq[] = [
 
 const trustBadges: Array<{ icon: LucideIcon; label: string }> = [
   { icon: Github, label: "Open source" },
-  { icon: BadgeCheck, label: "MIT licensed" },
+  { icon: BadgeCheck, label: "Apache-2.0 licensed" },
   { icon: Code2, label: "Rust-native" },
   { icon: MonitorDown, label: "Tauri v2" },
   { icon: Route, label: "QUIC transport" },
@@ -300,7 +305,7 @@ const featureCards: Array<{
   {
     icon: Github,
     title: "Open source",
-    copy: "MIT licensed and auditable.",
+    copy: "Apache-2.0 licensed and auditable.",
   },
   {
     icon: Code2,
@@ -461,8 +466,8 @@ const benchmarkCards = [
 ];
 
 const platformStatus = [
-  { label: "Windows", value: "Public release", tone: "positive" },
-  { label: "Android", value: "Alpha foundation", tone: "neutral" },
+  { label: "Windows", value: "Stable release", tone: "positive" },
+  { label: "Android", value: "Stable sideload", tone: "positive" },
   { label: "macOS / Linux", value: "Planned", tone: "neutral" },
   { label: "iOS", value: "Not shipped", tone: "muted" },
   { label: "Browser", value: "Receive handoff only", tone: "muted" },
@@ -769,11 +774,11 @@ function Hero({ page, isHome }: { page: WebPage; isHome: boolean }) {
           </div>
           <ul className="mt-7 flex max-w-[calc(100vw-2rem)] flex-wrap gap-x-4 gap-y-2 text-sm text-slate-400 sm:max-w-[620px]">
             {[
-              "MIT licensed",
+              "Apache-2.0 licensed",
               "No account",
               "No cloud storage",
               "Verified transfers",
-              "Windows-first",
+              "Windows and Android",
             ].map((item) => (
               <li key={item} className="flex items-center gap-2">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
@@ -1328,7 +1333,7 @@ function DownloadCards() {
         <SectionHeading
           eyebrow="Download"
           title="Start with the native app."
-          copy="Windows is the stable public path. Android is a v0.4.5 pre-release sideload — CI emulator launch smoke passes, but physical phone acceptance is still pending, so the APK is not yet marked latest."
+          copy="Windows and Android are the stable v0.4.6 paths. The v0.5.0 release is available separately for experimental BLE proximity discovery and NFC ticket handoff."
         />
 
         <div className="mt-12 grid gap-4 lg:grid-cols-[1.15fr_0.85fr_0.85fr]">
@@ -1338,7 +1343,7 @@ function DownloadCards() {
               Recommended
             </span>
             <span className="relative ml-2 inline-flex rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs font-semibold text-slate-200">
-              App version: {appVersionLabel}
+              Stable release: {STABLE_RELEASE_TAG}
             </span>
             <div className="relative mt-8 flex items-start gap-4">
               <span className="grid h-12 w-12 place-items-center rounded-[16px] border border-emerald-200/24 bg-emerald-200/12 text-emerald-100">
@@ -1366,7 +1371,7 @@ function DownloadCards() {
             </div>
             <div className="relative mt-7 flex flex-wrap gap-2 text-xs text-slate-300">
               {[
-                "MIT licensed",
+                "Apache-2.0 licensed",
                 "No account required",
                 "GitHub Releases",
                 "SHA256SUMS.txt published",
@@ -1385,8 +1390,8 @@ function DownloadCards() {
           <DownloadOption
             icon={Download}
             title="Android APK"
-            subtitle="v0.4.5 pre-release"
-            copy="Install the signed v0.4.5 pre-release APK on Android 7.0 or newer. Physical phone acceptance is still pending. Verify SHA256 first, then allow install from your browser or file manager."
+            subtitle="v0.4.6 stable sideload"
+            copy="Install the stable Android 10+ APK from GitHub Releases. Verify SHA256 first, then allow install from your browser or file manager."
             href={ANDROID_APK_DOWNLOAD_URL}
             action="Download APK"
           />
@@ -1429,13 +1434,20 @@ function DownloadCards() {
             <ShieldCheck className="h-4 w-4" />
             Download trust guide
           </a>
+          <a
+            href={EXPERIMENTAL_RELEASE_URL}
+            className="inline-flex items-center gap-2 underline-offset-4 transition hover:text-white hover:underline"
+          >
+            <RadioTower className="h-4 w-4" />
+            v0.5.0 experimental BLE/NFC release
+          </a>
         </div>
 
         <div className="mt-10 grid gap-4 lg:grid-cols-4">
           {[
             {
               title: "Requirements",
-              copy: "Windows 10/11 x64 for desktop, or Android 7.0+ for the v0.4.5 pre-release sideload.",
+              copy: "Windows 10/11 x64 for desktop, or Android 10+ for the stable sideload APK.",
             },
             {
               title: "Install steps",
@@ -1489,8 +1501,9 @@ function AndroidInstallGuide() {
           </h3>
           <p className="mt-3 text-sm leading-6 text-slate-300">
             The APK is distributed through GitHub Releases. The website button
-            downloads the v0.4.5 pre-release APK; physical phone acceptance is
-            still pending, so v0.4.5 is not marked latest.
+            downloads the stable v0.4.6 APK. The v0.5.0 release is separate
+            because BLE proximity discovery and NFC ticket handoff are still
+            experimental.
           </p>
         </div>
         <div className="flex flex-col gap-3 sm:flex-row lg:flex-col">
@@ -1707,7 +1720,7 @@ function PlatformStatus() {
       <div className="mx-auto max-w-7xl">
         <SectionHeading
           eyebrow="Status"
-          title="Windows-first, with a clear platform roadmap."
+          title="Windows and Android now, with a clear platform roadmap."
           copy="The project is public where the desktop path is strongest. Other platforms are tracked deliberately."
         />
         <div className="mt-12 grid gap-4 md:grid-cols-5">
@@ -1885,6 +1898,7 @@ function Footer() {
       title: "Product",
       links: [
         ["Download", "/download"],
+        ["Android", "/android-p2p-file-transfer"],
         ["Security", "/security"],
         ["Benchmarks", "/benchmarks"],
         ["Receive", "/receive"],
@@ -1922,11 +1936,11 @@ function Footer() {
             <span className="font-semibold text-white">Lightning P2P</span>
           </a>
           <p className="mt-4 max-w-sm leading-6">
-            Free, open-source peer-to-peer file transfer for Windows. No cloud
-            upload, no account, no artificial file-size cap.
+            Free, open-source peer-to-peer file transfer for Windows and
+            Android. No cloud upload, no account, no artificial file-size cap.
           </p>
           <p className="mt-4 text-xs text-slate-600">
-            MIT licensed. Built with Rust, Tauri, iroh, QUIC, and BLAKE3.
+            Apache-2.0 licensed. Built with Rust, Tauri, iroh, QUIC, and BLAKE3.
           </p>
         </div>
         <div className="grid gap-8 sm:grid-cols-3">

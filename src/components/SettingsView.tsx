@@ -130,7 +130,7 @@ function platformLabel(profile: PlatformProfile): string {
     case "linux":
       return "Linux";
     case "android":
-      return "Android alpha";
+      return "Android sideload";
     case "ios":
       return "iOS prepared";
     case "browser":
@@ -818,8 +818,8 @@ export function SettingsView() {
           </p>
         ) : mobileRuntime ? (
           <p className="mt-3 text-xs leading-6 text-slate-400">
-            Android alpha uses app-private storage; public Downloads export is a
-            later milestone.
+            Android publishes single-file receives through MediaStore where
+            possible; folder receives remain app-private in this build.
           </p>
         ) : null}
 

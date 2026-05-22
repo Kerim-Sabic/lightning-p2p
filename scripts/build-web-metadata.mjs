@@ -53,8 +53,10 @@ function findPage(path) {
 const baseKeyFacts = [
   ["Product", "Lightning P2P"],
   ["Category", "peer-to-peer file transfer app"],
-  ["Platform", "Windows public release, Android sideload alpha"],
-  ["License", "MIT"],
+  ["Platform", "Windows stable release, Android 10+ sideload release"],
+  ["Stable release", "v0.4.6"],
+  ["Experimental release", "v0.5.0 BLE/NFC pre-release"],
+  ["License", "Apache-2.0"],
   ["Account required", "no"],
   ["Cloud upload", "no"],
   ["Artificial file-size cap", "no"],
@@ -78,7 +80,9 @@ function answerForPath(page) {
     "/":
       "Lightning P2P is a free open-source peer-to-peer file transfer app for Windows. It sends files directly between devices using iroh and QUIC, verifies content with BLAKE3, and does not require cloud upload, accounts, or artificial file-size caps.",
     "/download":
-      "Download Lightning P2P from GitHub Releases when you want the public Windows installer or Android sideload APK for direct-first P2P file transfer.",
+      "Download Lightning P2P from GitHub Releases when you want the stable Windows installer or Android 10+ sideload APK for direct-first P2P file transfer.",
+    "/android-p2p-file-transfer":
+      "Lightning P2P v0.4.6 supports Android 10+ sideload installs, Android system share-target sends, smart MediaStore receive routing, direct-first iroh transfer, and BLAKE3 verification.",
     "/security":
       "Lightning P2P avoids cloud file hosting, uses encrypted peer transport through iroh, verifies content with BLAKE3, and treats tickets as capability tokens.",
     "/benchmarks":
@@ -94,7 +98,7 @@ function answerForPath(page) {
     "/wormhole-alternative":
       "Magic Wormhole is a strong CLI file transfer tool. Lightning P2P serves users who want a graphical Windows app with link and QR handoff, iroh connectivity, and BLAKE3 verification.",
     "/localsend-vs-lightning-p2p":
-      "LocalSend is best for cross-platform LAN sharing today. Lightning P2P is Windows-first and focuses on direct-first LAN and WAN transfers with iroh, QUIC, relay fallback, and BLAKE3 verification.",
+      "LocalSend is best for broad cross-platform LAN sharing today. Lightning P2P focuses on Windows and Android direct-first LAN and WAN transfers with iroh, QUIC, relay fallback, and BLAKE3 verification.",
     "/how-to-send-large-files":
       "To send large files peer-to-peer on Windows, install Lightning P2P, drop files into the Send view, share the receive link or QR, and keep the sender online while the receiver streams verified bytes to disk.",
     "/send-files-between-windows-computers":
@@ -221,7 +225,7 @@ function softwareApplicationJsonLd(page) {
     "@type": "SoftwareApplication",
     name: "Lightning P2P",
     applicationCategory: "UtilitiesApplication",
-    operatingSystem: "Windows 10, Windows 11, Android 7.0+",
+    operatingSystem: "Windows 10, Windows 11, Android 10+",
     description: page.description,
     softwareVersion: appVersion,
     isAccessibleForFree: true,
@@ -240,6 +244,7 @@ function softwareApplicationJsonLd(page) {
       "QUIC transport with relay-assisted fallback",
       "BLAKE3 verified streaming",
       "No account and no cloud file storage",
+      "Android 10+ sideload release with system share-target sends and MediaStore receive routing",
       "Release pipeline support for unsigned community builds, SHA256 checksums, optional updater metadata signatures, and optional Windows code-signing",
     ],
     publisher: {
@@ -269,11 +274,11 @@ function softwareSourceCodeJsonLd() {
     codeRepository: repoUrl,
     license: `${repoUrl}/blob/main/LICENSE`,
     programmingLanguage: ["Rust", "TypeScript"],
-    runtimePlatform: "Windows",
+    runtimePlatform: "Windows, Android",
     targetProduct: {
       "@type": "SoftwareApplication",
       name: "Lightning P2P",
-      operatingSystem: "Windows 10, Windows 11",
+      operatingSystem: "Windows 10, Windows 11, Android 10+",
     },
   });
 }

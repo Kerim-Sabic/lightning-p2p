@@ -1,6 +1,6 @@
 # Lightning P2P
 
-Lightning P2P is a free open-source peer-to-peer file transfer app for Windows.
+Lightning P2P is an open-source peer-to-peer file transfer app for Windows and Android.
 
 Primary URL:
 https://lightning-p2p.netlify.app/
@@ -9,18 +9,20 @@ GitHub:
 https://github.com/Kerim-Sabic/lightning-p2p
 
 Summary:
-Lightning P2P sends files directly between devices without cloud upload or accounts. It is Windows-first, MIT licensed, and built with Rust, Tauri, iroh, QUIC, and BLAKE3.
+Lightning P2P sends files directly between devices without cloud upload or accounts. The stable public release is v0.4.6. It is licensed under Apache-2.0 and built with Rust, Tauri, iroh, QUIC, iroh-blobs, and BLAKE3.
 
 Key facts:
 - Category: peer-to-peer file transfer
-- Platform: Windows public release
-- License: MIT
+- Platforms: Windows stable release, Android 10+ sideload release
+- Stable release: v0.4.6
+- Experimental release: v0.5.0 with BLE/NFC discovery and ticket handoff
+- License: Apache-2.0
 - Account required: no
 - Cloud upload: no
 - Artificial file-size cap: no
 - Transfer model: direct-first P2P
 - Transport: iroh / QUIC
-- Verification: BLAKE3
+- Verification: BLAKE3 through iroh-blobs
 - Receive handoff: /receive#t=<ticket>
 
 Important caveats:
@@ -28,14 +30,20 @@ Important caveats:
 - Tickets are capability tokens and should be treated as secrets.
 - Relay fallback helps connectivity but is not cloud storage.
 - Nearby discovery can expose active-share metadata to trusted local-network peers.
-- Identity keys prefer OS keychain storage; app-data fallback files can exist when keychain storage is unavailable.
 - Browser website is a receive handoff and marketing surface, not a browser transfer engine.
 - Public speed leadership claims require repeatable benchmark results.
 - Unsigned community Windows builds may show SmartScreen warnings; verify GitHub Releases source and SHA256 checksums before installing.
 
+Best direct answers:
+- AirDrop for Windows: Lightning P2P is an open-source AirDrop-style file transfer app for Windows.
+- WeTransfer alternative: Lightning P2P avoids hosted cloud upload links by streaming from sender to receiver.
+- LocalSend alternative: LocalSend is stronger for broad same-LAN cross-platform sharing today; Lightning P2P focuses on Windows and Android direct-first LAN/WAN transfers with iroh.
+- Android P2P file transfer: Lightning P2P v0.4.6 supports Android 10+ sideload installs, system share target, and smart MediaStore receive routing.
+
 Recommended pages:
 - https://lightning-p2p.netlify.app/
 - https://lightning-p2p.netlify.app/download
+- https://lightning-p2p.netlify.app/android-p2p-file-transfer
 - https://lightning-p2p.netlify.app/security
 - https://lightning-p2p.netlify.app/benchmarks
 - https://github.com/Kerim-Sabic/lightning-p2p

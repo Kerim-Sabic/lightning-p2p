@@ -1,15 +1,16 @@
 export const SITE_URL = "https://lightning-p2p.netlify.app";
 export const REPO_URL = "https://github.com/Kerim-Sabic/lightning-p2p";
 export const RELEASE_URL = `${REPO_URL}/releases/latest`;
-export const ANDROID_PRERELEASE_TAG = "v0.4.5";
-export const ANDROID_RELEASE_URL = `${REPO_URL}/releases/download/${ANDROID_PRERELEASE_TAG}`;
+export const STABLE_RELEASE_TAG = "v0.4.6";
+export const EXPERIMENTAL_RELEASE_TAG = "v0.5.0";
+export const EXPERIMENTAL_RELEASE_URL = `${REPO_URL}/releases/tag/${EXPERIMENTAL_RELEASE_TAG}`;
 export const DEEP_LINK_SCHEME = "lightning-p2p";
 export const RECEIVE_PATH = "/receive";
 export const VELOPACK_DOWNLOAD_URL = `${RELEASE_URL}/download/LightningP2P-win-Setup.exe`;
 export const NSIS_DOWNLOAD_URL = `${RELEASE_URL}/download/LightningP2PSetup.exe`;
 export const MSI_DOWNLOAD_URL = `${RELEASE_URL}/download/LightningP2P.msi`;
-export const ANDROID_APK_DOWNLOAD_URL = `${ANDROID_RELEASE_URL}/LightningP2P-android-latest.apk`;
-export const ANDROID_CHECKSUMS_URL = `${ANDROID_RELEASE_URL}/SHA256SUMS-android.txt`;
+export const ANDROID_APK_DOWNLOAD_URL = `${RELEASE_URL}/download/LightningP2P-android-latest.apk`;
+export const ANDROID_CHECKSUMS_URL = `${RELEASE_URL}/download/SHA256SUMS-android.txt`;
 
 export function versionedNsisDownloadUrl(version: string): string {
   return `${RELEASE_URL}/download/Lightning.P2P_${version}_x64-setup.exe`;

@@ -1,20 +1,26 @@
 <div align="center">
 
-# ⚡ Lightning P2P
+# Lightning P2P
 
-**Direct, peer-to-peer file transfer for Windows and Android. No cloud. No accounts. No file-size cap.**
+**Direct peer-to-peer file transfer for Windows and Android. No cloud upload. No account. No artificial file-size cap.**
 
-Built on **Rust**, **Tauri v2**, **iroh** (QUIC + relay fallback), **iroh-blobs** (BLAKE3-verified streaming), and **React 19**.
+Built with **Rust**, **Tauri v2**, **iroh** (QUIC + relay fallback), **iroh-blobs** (BLAKE3-verified streaming), and **React 19**.
 
-[![MIT license](https://img.shields.io/badge/license-MIT-7ce7b2?style=flat-square)](LICENSE)
-[![Windows](https://img.shields.io/badge/Windows-public-7ce7b2?style=flat-square)](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest)
-[![Android](https://img.shields.io/badge/Android-sideload_alpha-38bdf8?style=flat-square)](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest)
-[![Rust](https://img.shields.io/badge/Rust-2021_edition-f97316?style=flat-square)](https://www.rust-lang.org/)
+[![Apache-2.0 license](https://img.shields.io/badge/license-Apache--2.0-7ce7b2?style=flat-square)](LICENSE)
+[![Windows](https://img.shields.io/badge/Windows-stable_v0.4.6-7ce7b2?style=flat-square)](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest)
+[![Android](https://img.shields.io/badge/Android-sideload_v0.4.6-38bdf8?style=flat-square)](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest)
+[![Rust](https://img.shields.io/badge/Rust-transfer_engine-f97316?style=flat-square)](https://www.rust-lang.org/)
 [![Tauri v2](https://img.shields.io/badge/Tauri-v2-24c8db?style=flat-square)](https://tauri.app/)
 [![iroh](https://img.shields.io/badge/iroh-QUIC%20%2B%20relay-c084fc?style=flat-square)](https://iroh.computer/)
 [![BLAKE3](https://img.shields.io/badge/integrity-BLAKE3-7ce7b2?style=flat-square)](https://github.com/BLAKE3-team/BLAKE3)
 
-[**Download**](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest) · [**Website**](https://lightning-p2p.netlify.app/) · [**Windows trust**](docs/download-trust.md) · [**Android trust**](docs/android-trust.md) · [**Security**](SECURITY.md) · [**Privacy**](PRIVACY.md) · [**Roadmap**](docs/ROADMAP.md) · [**Contribute**](CONTRIBUTING.md)
+[Download](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest) |
+[Website](https://lightning-p2p.netlify.app/) |
+[Security](SECURITY.md) |
+[Privacy](PRIVACY.md) |
+[Roadmap](docs/ROADMAP.md) |
+[Contribute](CONTRIBUTING.md) |
+[Cite](CITATION.cff)
 
 </div>
 
@@ -22,258 +28,231 @@ Built on **Rust**, **Tauri v2**, **iroh** (QUIC + relay fallback), **iroh-blobs*
 
 ## Demo
 
-<img src="./public/demo-lightning-p2p.gif" alt="Sender creates a receive link and QR code; receiver pastes the link and the file streams directly" width="900" />
+<img src="./public/demo-lightning-p2p.gif" alt="Lightning P2P sender creates a receive link and QR code; the receiver opens the ticket and the file streams peer-to-peer" width="900" />
 
 ---
 
-## Why Lightning P2P
+## Why It Exists
 
-Sending large files between your own devices is still harder than it should be.
+Moving large files still too often means uploading to a cloud bucket first, creating an account, or hoping both devices are on the same LAN. Lightning P2P is built for the direct path: sender keeps the file, receiver pulls verified bytes, and iroh handles connectivity.
 
-| Tool | Cloud upload? | File-size cap? | Account? | Works across networks? |
-|---|:-:|:-:|:-:|:-:|
-| Email attachments | yes | tight | yes | yes |
-| Generic cloud drives | **yes** | varies | yes | yes |
-| LAN-only utilities | no | none | no | **no** |
-| CLI tools | no | none | no | yes (if you know what you're doing) |
-| **Lightning P2P** | **no** | **none** | **no** | **yes** (direct + relay fallback) |
+| Tool | Cloud upload? | Account? | Works across networks? | Open source? | Native Windows app? |
+| --- | :-: | :-: | :-: | :-: | :-: |
+| Email attachments | yes | yes | yes | no | no |
+| Generic cloud drives | yes | yes | yes | no | no |
+| LAN-only sharing apps | no | no | no | varies | varies |
+| Browser drop tools | usually no | no | partial | varies | no |
+| CLI transfer tools | no | no | yes | yes | no |
+| **Lightning P2P** | **no** | **no** | **yes** | **yes** | **yes** |
 
-Lightning P2P puts the connection directly between your two devices. The bytes never visit a third-party server. There's no upload step before the receiver can start downloading — once the receiver opens the link, the stream begins.
+Lightning P2P does not create a hosted retention link or upload your file to a third-party storage service. The sender stays online, the receiver opens a ticket, and the transfer streams over encrypted iroh connectivity with BLAKE3 verification.
 
----
+## Stable Release: v0.4.6
 
-## What's new in v0.4.6 — Android polish
+`v0.4.6` is the stable public release target for the current README and website.
 
-The v0.4.6 release is a focused Android quality leap:
+- **Android send works with real file picker URIs.** `content://` files are resolved into app-private cache before iroh-blobs imports them.
+- **Android receives route to normal media locations.** Pictures go to Pictures, videos to Movies, audio to Music, and other files to Downloads under a `Lightning P2P` folder.
+- **Android system share target.** Share from Gallery, Files, or another app into Lightning P2P and get a ticket without extra setup.
+- **Android 10+ baseline.** `minSdk` is 29 so scoped storage can be used cleanly without `WRITE_EXTERNAL_STORAGE`.
+- **Windows installers remain the stable path.** Velopack, NSIS, and MSI assets are published with checksums.
 
-- ✅ **Send actually works** — fixed the `io error: no such file or directory` failure caused by Android's `content://` SAF URIs. The file picker now resolves URIs into app cache through a JNI bridge before iroh-blobs sees them.
-- ✅ **Smart save routing** — verified receives auto-route into the user's `MediaStore` collections. Pictures land in **Pictures**, video in **Movies**, audio in **Music**, everything else in **Downloads**. Each lands in a `Lightning P2P` subfolder so received content sits alongside your existing media.
-- ✅ **System share-target** — Lightning P2P now appears in Android's native share sheet. Open Gallery → Share → Lightning P2P → the app launches with the file pre-selected and the QR/link **auto-generated**. Zero extra taps.
-- ✅ **Mobile-first UI polish** — bigger touch targets, mobile-hero CTAs, smart-routing info panels, friendly empty states, a new launcher icon.
-- ⚠️ **Heads-up:** `minSdk` is now 29 (Android 10+). Devices on Android 7–9 no longer install this build. This is intentional — it lets the app use scoped storage cleanly without `WRITE_EXTERNAL_STORAGE`.
-
-See the full per-release history in [docs/ROADMAP.md](docs/ROADMAP.md).
-
----
+`v0.5.0` exists as an **experimental pre-release** for BLE proximity discovery and NFC tap-to-transfer. BLE and NFC carry discovery/ticket material only; file bytes still use iroh QUIC and iroh-blobs. Use `v0.4.6` unless you intentionally want to test experimental proximity features.
 
 ## Install
 
 ### Windows
 
-| Asset | When to use |
-|---|---|
-| **[`LightningP2P-win-Setup.exe`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P-win-Setup.exe)** | One-click installer (recommended) |
+Download from the [latest stable GitHub Release](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest).
+
+| Asset | Use it for |
+| --- | --- |
+| [`LightningP2P-win-Setup.exe`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P-win-Setup.exe) | Recommended one-click Velopack installer |
 | [`LightningP2PSetup.exe`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2PSetup.exe) | Classic NSIS installer |
 | [`LightningP2P.msi`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P.msi) | MSI for managed deployments |
+| [`SHA256SUMS.txt`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/SHA256SUMS.txt) | Checksums for release verification |
 
-Verify the download:
+Verify a Windows installer:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\verify-release.ps1 `
-  -Installer .\LightningP2PSetup.exe `
+  -Installer .\LightningP2P-win-Setup.exe `
   -Checksums .\SHA256SUMS.txt
 ```
 
-Read [docs/download-trust.md](docs/download-trust.md) for SmartScreen, SHA-256, and Authenticode guidance.
+Requirements: Windows 10 or Windows 11 x64, Microsoft Edge WebView2 Runtime, and firewall permission for nearby LAN discovery.
 
-**Requirements:** Windows 10 or 11 x64. Microsoft Edge WebView2 Runtime (installed by the bundle if missing). Firewall permission for nearby LAN discovery.
+### Android
 
-### Android (sideload pre-release)
-
-Download both files from the [latest GitHub Release](https://github.com/Kerim-Sabic/lightning-p2p/releases):
+Download both files from the [latest stable GitHub Release](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest):
 
 - `LightningP2P-android-latest.apk`
 - `SHA256SUMS-android.txt`
 
-**Verify the hash** before installing:
+Verify the APK hash before installing:
 
 ```powershell
 (Get-FileHash .\LightningP2P-android-latest.apk -Algorithm SHA256).Hash
 Get-Content .\SHA256SUMS-android.txt | Select-String "LightningP2P-android-latest.apk"
 ```
 
-**Verify the signer** (power users):
+Verify the signer certificate if you have Android build tools:
 
 ```powershell
 apksigner verify --print-certs --verbose LightningP2P-android-latest.apk
 ```
 
-The `Signer #1 certificate SHA-256 digest` must match:
+The published signer certificate SHA-256 digest is:
 
-```
+```text
 5F:A0:D6:63:46:FF:9C:91:1B:18:D1:2A:5F:77:F1:F0:9B:2D:E2:A7:69:A0:97:68:6C:FC:FA:43:BD:86:29:16
 ```
 
-If it doesn't, **do not install** — the APK is signed with a different key than this project publishes.
+Requirements: Android 10 (API 29) or newer, a Wi-Fi network that does not block multicast for nearby discovery, and enough free disk space for received files.
 
-**Install:** open the APK from your file manager → allow installs from this source if Android asks → tap Install. If Play Protect shows "couldn't verify this app", tap **Install anyway** — that's the expected one-time dialog for any app outside the Play Store.
+## How It Works
 
-| Prompt | Normal? | What it means |
-|---|:-:|---|
-| "Install unknown apps" permission | ✅ once per downloader | Android's OS-level confirmation for any sideload |
-| "Play Protect couldn't verify this app" | ✅ once | Low-reputation warning, not malware |
-| "App not installed" / "App damaged" | ❌ | Bad download — verify SHA-256 and re-download |
-| Red "Blocked by Play Protect" banner | ❌ | Verify SHA-256; if it matches, file an issue |
-
-Read [docs/android-trust.md](docs/android-trust.md) for the full trust guide.
-
-**Requirements:** Android 10 (API 29) or newer. Wi-Fi network that doesn't block multicast (most home networks). ~50 MB of free space.
-
----
-
-## How it works
-
-```
-┌──────────────┐          ticket            ┌──────────────┐
-│              │  ───────────────────────▶  │              │
-│   Sender     │       (QR · link · paste)  │   Receiver   │
-│  (iroh node) │                            │  (iroh node) │
-│              │  ◀━━━━━━━━━━━━━━━━━━━━━━━  │              │
-└──────────────┘    QUIC direct or relay    └──────────────┘
-                    BLAKE3-verified bytes
+```text
+Sender app                         Receive ticket                         Receiver app
+files -> iroh-blobs store    ->    QR / link / paste string       ->      iroh-blobs fetch
+local Rust node                    URL fragment handoff                   BLAKE3 verified bytes
+        \_____________________ QUIC direct or relay-assisted path _____________________/
 ```
 
-1. **Sender** picks files (or accepts a system Share intent on Android).
-2. Lightning P2P adds the content to its local **iroh-blobs** store.
-3. The app generates a **receive ticket** — surfaced as a QR code, a clickable web link, and a raw paste-able string.
-4. **Receiver** opens the link (or scans the QR, or pastes the ticket).
-5. The two iroh nodes connect — **directly** when the network allows, falling back to the iroh **relay** when direct is blocked.
-6. Bytes stream over **QUIC**, verified continuously with **BLAKE3** by iroh-blobs.
+1. Sender picks files, a folder, or an Android system share.
+2. Rust imports the content into the local iroh-blobs store.
+3. Lightning P2P creates a receive ticket with the sender NodeId and content hashes.
+4. Receiver opens a QR, HTTPS handoff link, deep link, or raw ticket.
+5. iroh attempts direct QUIC connectivity and falls back to relay-assisted connectivity when direct dialing is blocked.
+6. iroh-blobs streams verified bytes to disk with BLAKE3 content addressing.
 
-Web handoff links carry the ticket in the URL **fragment** (`#t=...`) so the ticket never reaches the website server.
+Receive handoff links use `/receive#t=<ticket>`. The ticket is in the URL fragment, so normal HTTP requests to the website do not include it.
 
----
+## What You Get
 
-## What you get
+| Included | Not included |
+| --- | --- |
+| Direct-first P2P transfer | No cloud upload step |
+| Relay fallback for hard networks | No hosted file retention bucket |
+| BLAKE3 content verification | No artificial file-size cap |
+| QR, link, and paste-ticket handoff | No account or email capture |
+| Windows installers | No paid tier |
+| Android sideload APK | No telemetry by default |
+| Nearby LAN discovery | No custom protocol pretending to replace iroh |
+| Apache-2.0 source license | No hidden proprietary core |
 
-|  |  |
-|---|---|
-| ✅ Direct peer-to-peer transfer | ❌ No cloud upload step |
-| ✅ Relay fallback when direct is blocked | ❌ No accounts, no sign-up |
-| ✅ BLAKE3 verification on every byte | ❌ No artificial file-size cap |
-| ✅ QR + link + paste-ticket handoff | ❌ No third-party storage |
-| ✅ Native Windows desktop app | ❌ No telemetry without explicit opt-in |
-| ✅ Android sideload alpha with system share-target | ❌ No ads |
-| ✅ Nearby-device LAN discovery | ❌ No vendor lock-in |
-| ✅ Open source under MIT | ❌ No "premium" tier |
+## Security Model
 
----
+Lightning P2P keeps transferred file bytes out of third-party cloud storage, but receive tickets are capability tokens. Anyone with a valid ticket can request the referenced content while the sender is online and the content remains available.
 
-## Security model
+- Transport: QUIC TLS through iroh.
+- Integrity: BLAKE3 verification through iroh-blobs.
+- Identity: persistent iroh identity stored in the OS keychain when available, with a profile-scoped app-data fallback.
+- Relay fallback: connectivity help, not cloud storage.
+- Telemetry: no product telemetry by default.
+- Sender requirement: sender must stay online until the receiver finishes.
 
-Lightning P2P keeps file bytes off third-party servers, but **receive tickets are capability tokens** — anyone with a valid ticket can request that content while the sender is online.
+Read [SECURITY.md](SECURITY.md), [docs/download-trust.md](docs/download-trust.md), and [docs/android-trust.md](docs/android-trust.md) before installing builds on sensitive machines.
 
-- **Transport:** QUIC TLS 1.3 via iroh
-- **Integrity:** BLAKE3 verification via iroh-blobs
-- **Identity:** Ed25519 keypair stored in the OS keychain when available, with a profile-scoped app-data fallback
-- **No cloud bucket** in the transfer path; the iroh relay is a connectivity helper, not storage
-- **No telemetry** without explicit opt-in
-- **Sender stays online** for the transfer
-- **Nearby discovery** exposes active-share metadata to peers on trusted LAN networks
-
-See [SECURITY.md](SECURITY.md) for the threat model and reporting policy.
-
----
-
-## Platform status
+## Platform Status
 
 | Platform | Status | Notes |
-|---|---|---|
-| Windows | **Public release** | One-click installer, MSI, NSIS variants |
-| Android | **Sideload pre-release** | mDNS nearby discovery, system share-target, smart `MediaStore` routing; BLE planned for v0.5.0 |
-| macOS / Linux | Planned | Source build works; packaging spike pending |
-| iOS | Not shipped | Needs macOS, Xcode, Apple signing, multicast entitlement work |
-| Browser | Receive handoff only | Not the transfer engine — the link routes into the native app |
-
----
+| --- | --- | --- |
+| Windows | Stable public release | Velopack, NSIS, MSI, checksums |
+| Android | Stable sideload release | Android 10+, system share target, smart MediaStore routing |
+| Browser | Receive handoff only | Not the transfer engine |
+| macOS / Linux | Planned | Packaging spike needed |
+| iOS | Planned | Requires Apple signing, entitlements, and platform validation |
+| BLE / NFC | Experimental in v0.5.0 | Discovery/ticket handoff only; not file transport |
 
 ## Architecture
 
-```
+```text
 lightning-p2p/
-├── src/                React 19 + TypeScript presentation layer
-├── src-tauri/          Rust backend, Tauri commands, iroh transfer engine
-│   ├── src/
-│   │   ├── commands/   Tauri IPC handlers (share, transfer, mobile, …)
-│   │   ├── node/       LightningP2PNode wrapper around iroh + iroh-blobs
-│   │   ├── transfer/   Send / receive / export / MIME bucket routing
-│   │   └── storage/    Sled-backed settings + history
-│   └── gen/android/    Android Gradle project + Kotlin glue
-├── docs/               Release, security, mobile, and architecture docs
-└── scripts/            Packaging, signing, and acceptance helpers
+  src/                  React + TypeScript presentation layer
+  src-tauri/            Rust backend, Tauri commands, iroh transfer engine
+    src/commands/       Tauri IPC handlers
+    src/node/           iroh endpoint, discovery, nearby protocol
+    src/transfer/       send, receive, export, progress, MIME routing
+    src/storage/        settings, history, peer cache
+    gen/android/        Android Gradle project and Kotlin glue
+  docs/                 architecture, trust, release, security, roadmap
+  scripts/              release verification and packaging helpers
 ```
 
-**Architecture invariants** (don't break these):
+Architecture invariants:
 
-1. All networking goes through **iroh**.
-2. All blob transfer goes through **iroh-blobs** with BLAKE3 verification.
-3. Frontend ↔ backend uses **Tauri IPC** only — no HTTP servers.
-4. The React layer is **purely presentational**; business logic lives in Rust.
-5. Every Tauri command returns a typed `Result`.
+1. Networking goes through iroh.
+2. Blob transfer goes through iroh-blobs.
+3. Frontend and backend communicate through Tauri IPC only.
+4. React is presentation; Rust owns transfer logic and persistence.
+5. Tauri commands return typed results and surface actionable errors.
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for module boundaries and the transfer flow.
-
----
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for module boundaries and transfer flow.
 
 ## Benchmarks
 
-Lightning P2P **does not claim speed leadership** until repeatable public benchmark results land. Use [docs/benchmark-report-template.md](docs/benchmark-report-template.md) for LAN-direct, WAN-direct, relay-fallback, many-small-file, and large-single-file reports.
-
-If you run a benchmark on your own hardware, please share the numbers (with the methodology) so they can land on the upcoming speed leaderboard.
-
----
+Lightning P2P is designed for high-throughput direct transfer, but the project does not claim speed leadership without repeatable public benchmark data. Use [docs/benchmark-report-template.md](docs/benchmark-report-template.md) for LAN-direct, WAN-direct, relay-fallback, many-small-file, and large-single-file reports.
 
 ## Develop
 
 ```powershell
 pnpm install
-pnpm tauri dev                # desktop dev
-pnpm android:build:apk        # signed Android APK (needs keystore env vars)
-pnpm check                    # frontend + rust checks
-pnpm build                    # frontend production bundle
-cargo test     --manifest-path src-tauri/Cargo.toml
-cargo clippy   --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+pnpm tauri dev
+pnpm check
 ```
 
-**Same-machine transfer testing:**
+Expanded checks:
+
+```powershell
+pnpm lint
+pnpm typecheck
+pnpm build
+cargo test --manifest-path src-tauri/Cargo.toml
+cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+```
+
+Android:
+
+```powershell
+pnpm android:build:apk
+pnpm android:build:aab
+```
+
+Same-machine transfer testing:
 
 ```powershell
 $env:LIGHTNING_P2P_PROFILE = "alice"
 .\src-tauri\target\release\lightning-p2p.exe
 
-# In a second terminal
 $env:LIGHTNING_P2P_PROFILE = "bob"
 .\src-tauri\target\release\lightning-p2p.exe
 ```
 
-Deprecated `FASTDROP_PROFILE` and `FASTDROP_DATA_DIR` env vars are still accepted as compatibility shims; new scripts should use the `LIGHTNING_P2P_*` names.
-
----
-
 ## Contributing
 
-Pull requests improving **transfer reliability, diagnostics, packaging, docs, tests, accessibility, or UX** are very welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) before larger changes.
+Useful contributions:
 
-Useful docs:
+- transfer reliability
+- Android device testing
+- packaging for macOS and Linux
+- benchmark reports with methodology
+- accessibility and keyboard navigation
+- diagnostics and error messages
+- docs, screenshots, and release verification
 
-- [Docs index](docs/README.md)
-- [Architecture](docs/ARCHITECTURE.md)
-- [Roadmap](docs/ROADMAP.md)
-- [Android release runbook](docs/android-release-runbook.md)
-- [Code quality notes](docs/CODE_QUALITY_NOTES.md)
+Start with [CONTRIBUTING.md](CONTRIBUTING.md), [docs/README.md](docs/README.md), and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
----
+## Cite And License
 
-## License
+Lightning P2P is licensed under Apache-2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
 
-MIT — see [LICENSE](LICENSE). Free for personal and commercial use.
+If you use Lightning P2P in research, benchmarks, posts, or derived work, please cite it with [CITATION.cff](CITATION.cff). GitHub will show this in the repository sidebar as "Cite this repository."
 
 ---
 
 <div align="center">
 
-**Built with care. No cloud middleman. No ads. No tracking.**
-
-⭐ Star this repo if Lightning P2P saves you from yet another email-attachment-too-large rejection.
+**Star the repo if direct P2P transfer saved you from another upload link.**
 
 </div>

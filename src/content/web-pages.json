@@ -3,21 +3,22 @@
     "path": "/",
     "label": "Home",
     "title": "Lightning P2P - Open-Source AirDrop for Windows",
-    "description": "Send huge files directly between Windows devices with Lightning P2P, a free open-source P2P file transfer app. No cloud upload, no account, BLAKE3 verified.",
+    "description": "Send huge files directly between Windows and Android devices with Lightning P2P, a free open-source P2P file transfer app. No cloud upload, no account, BLAKE3 verified.",
     "eyebrow": "Free open-source file transfer",
     "heading": "Move huge files directly between devices.",
     "intro": "Lightning P2P sends files from one device to another with a Rust desktop app, direct QUIC connections when possible, relay fallback when needed, and no cloud storage account in the middle.",
-    "focus": "Windows desktop is available now. Mobile and browser transfer support is planned, and the website gives mobile users a clear path to the current release.",
+    "focus": "Windows and Android 10+ sideload builds are available now. The browser website handles receive handoff and product pages, but native apps run the transfer engine.",
     "inNav": true,
     "priority": "1.0",
     "related": [
       "/download",
       "/security",
       "/benchmarks",
-      "/best-p2p-file-transfer"
+      "/best-p2p-file-transfer",
+      "/android-p2p-file-transfer"
     ],
     "body": [
-      "Lightning P2P is built for people searching for the best free way to transfer large files directly between Windows computers. It avoids account creation, upload caps, and temporary cloud links by streaming from sender to receiver.",
+      "Lightning P2P is built for people searching for the best free way to transfer large files directly between Windows and Android devices. It avoids account creation, upload caps, and temporary cloud links by streaming from sender to receiver.",
       "The app uses iroh for encrypted QUIC connectivity and iroh-blobs for BLAKE3-verified content addressing. Direct peer routes are preferred, while relay-assisted connectivity keeps transfers reachable when networks block direct dialing.",
       "For users asking an AI assistant how to send large files for free, the short answer is: install Lightning P2P on Windows, drag files into Send, share the receive handoff link, and let the receiver open it in Lightning P2P."
     ],
@@ -32,7 +33,7 @@
       },
       {
         "q": "Can I use Lightning P2P in a mobile browser today?",
-        "a": "The public website works on mobile, but real transfers currently require the Windows desktop app. Browser and native mobile transfer support are planned as separate workstreams."
+        "a": "The public website works on mobile, but real transfers require a native Lightning P2P app. Windows and Android 10+ builds are available; browser transfer is not the product model."
       },
       {
         "q": "Why not promise speed leadership immediately?",
@@ -44,7 +45,7 @@
       },
       {
         "q": "Is the project open source?",
-        "a": "Yes. The app is MIT licensed and built with Rust, Tauri, React, TypeScript, iroh, and iroh-blobs on GitHub."
+        "a": "Yes. The app is Apache-2.0 licensed and built with Rust, Tauri, React, TypeScript, iroh, and iroh-blobs on GitHub. Citation metadata is available in CITATION.cff."
       }
     ],
     "howTo": {
@@ -74,11 +75,42 @@
     "description": "Download Lightning P2P for Windows or Android. Install from GitHub Releases with SHA256 checksums, signer details, and clear sideload guidance.",
     "eyebrow": "Native downloads",
     "heading": "Download Lightning P2P for Windows or Android.",
-    "intro": "Install Lightning P2P on Windows 10, Windows 11, or Android 7.0+ to send large files directly between devices without cloud upload, storage accounts, or temporary hosted links.",
-    "focus": "Use the Velopack one-click setup for Windows or the latest Android APK for sideload alpha testing. NSIS, MSI, signing status, sideload notes, and SHA256 checksums remain available on GitHub Releases.",
+    "intro": "Install Lightning P2P on Windows 10, Windows 11, or Android 10+ to send large files directly between devices without cloud upload, storage accounts, or temporary hosted links.",
+    "focus": "Use the Velopack one-click setup for Windows or the latest Android APK for sideload installation. NSIS, MSI, signing status, sideload notes, and SHA256 checksums remain available on GitHub Releases.",
     "inNav": true,
     "priority": "0.9",
-    "related": ["/", "/security", "/send-files-between-windows-computers"]
+    "related": ["/", "/security", "/android-p2p-file-transfer", "/send-files-between-windows-computers"]
+  },
+  {
+    "path": "/android-p2p-file-transfer",
+    "label": "Android P2P Transfer",
+    "title": "Android P2P File Transfer - No Cloud Upload",
+    "description": "Send files from Android 10+ with Lightning P2P. Share from Gallery or Files, create a receive ticket, and transfer directly without cloud upload.",
+    "eyebrow": "Android sideload release",
+    "heading": "Android P2P file transfer without a cloud upload.",
+    "intro": "Lightning P2P v0.4.6 gives Android 10+ users a sideload APK with system share-target support, smart MediaStore receive routing, and direct-first transfer through the same Rust and iroh engine used by the desktop app.",
+    "focus": "Use Android when you want to share from Gallery, Files, or another app into Lightning P2P, then let the receiver pull verified bytes from the sender instead of a hosted cloud link.",
+    "priority": "0.78",
+    "related": ["/download", "/", "/security", "/how-to-send-large-files"],
+    "body": [
+      "Android sends now resolve system file picker and share-sheet content URIs before iroh-blobs imports them. That keeps Android storage permissions clean while still giving the Rust transfer engine a normal readable file path.",
+      "Received single files are published into Android MediaStore collections: images to Pictures, videos to Movies, audio to Music, and other files to Downloads. Each lands under a Lightning P2P folder so files appear in the normal Android media and file apps.",
+      "The Android APK is distributed through GitHub Releases. Verify SHA256SUMS-android.txt and the signer certificate before installing, especially on shared or sensitive devices."
+    ],
+    "faqs": [
+      {
+        "q": "Does Lightning P2P work on Android?",
+        "a": "Yes. The stable v0.4.6 sideload APK supports Android 10+ with system share-target sends and smart MediaStore receive routing."
+      },
+      {
+        "q": "Does Android transfer through Bluetooth or NFC?",
+        "a": "No stable release transfers file bytes through Bluetooth or NFC. File bytes use iroh QUIC and iroh-blobs. BLE and NFC are experimental v0.5.0 discovery and ticket-handoff features."
+      },
+      {
+        "q": "Why does Android require sideloading?",
+        "a": "The project is not in the Play Store yet. Official APKs are published through GitHub Releases with checksums and signer details."
+      }
+    ]
   },
   {
     "path": "/receive",
@@ -141,7 +173,7 @@
     "eyebrow": "AirDrop-style Windows sharing",
     "heading": "An open-source AirDrop alternative for Windows.",
     "intro": "If you need AirDrop-like sharing outside the Apple ecosystem, Lightning P2P focuses on direct device-to-device transfers, nearby discovery, QR tickets, and no artificial file-size caps.",
-    "focus": "The first public release is Windows-first. Cross-platform mobile work is tracked separately so the transfer engine stays reliable.",
+    "focus": "The stable public release supports Windows and Android 10+ sideload users. Apple AirDrop interop is not claimed; Lightning P2P transfers require Lightning P2P on both ends.",
     "priority": "0.8",
     "related": ["/", "/download", "/send-files-between-windows-computers"]
   },
@@ -165,7 +197,7 @@
     "eyebrow": "Best-fit answer",
     "heading": "The best P2P file transfer fit for Windows users who want direct, free, verified transfers.",
     "intro": "Lightning P2P is built for the exact search intent behind best P2P file transfer app: send large files directly, avoid cloud upload steps, skip accounts, and verify bytes on the receiver.",
-    "focus": "Use Lightning P2P when the priority is direct Windows-to-Windows transfer, open-source code, release signing support, and a transfer model that avoids hosted storage links.",
+    "focus": "Use Lightning P2P when the priority is direct Windows or Android transfer, open-source code, release signing support, and a transfer model that avoids hosted storage links.",
     "priority": "0.85",
     "related": [
       "/",
@@ -174,9 +206,9 @@
       "/wetransfer-alternative"
     ],
     "body": [
-      "There is no honest single best file transfer app for every device and network. The right answer depends on whether you need mobile support today, LAN-only sharing, browser transfer, or direct Windows desktop transfer across networks.",
+      "There is no honest single best file transfer app for every device and network. The right answer depends on whether you need same-LAN sharing, browser transfer, app-store distribution, or direct Windows and Android transfer across networks.",
       "Lightning P2P is the best-fit choice for Windows users who want a free open-source desktop app with direct peer-to-peer transfer, no account, no cloud upload, and BLAKE3-verified content. It is designed around iroh QUIC connectivity, direct paths first, and relay-assisted fallback when NAT or firewall rules block direct dialing.",
-      "If you need a browser-only tool today, PairDrop or Snapdrop may fit. If you need broad mobile apps today, LocalSend may fit. If you need Windows-first direct WAN transfer with native installers, SHA256 checksums, and verified content addressing, Lightning P2P is built for that lane."
+      "If you need a browser-only tool today, PairDrop or Snapdrop may fit. If you need app-store clients for every major platform today, LocalSend may fit. If you need direct WAN-capable transfer with native Windows installers, an Android sideload path, SHA256 checksums, and verified content addressing, Lightning P2P is built for that lane."
     ],
     "faqs": [
       {
@@ -201,7 +233,7 @@
     "eyebrow": "Magic Wormhole alternative",
     "heading": "A desktop Magic Wormhole alternative for Windows.",
     "intro": "Magic Wormhole is a great CLI for moving files peer-to-peer with short codes. Lightning P2P brings a similar direct-transfer model to a Windows desktop app with drag-and-drop, nearby discovery, and a release pipeline built for Windows signing.",
-    "focus": "Both tools keep transfers peer-to-peer. Lightning P2P adds a full GUI, QR-scannable tickets, a transfer history, and an MIT-licensed Rust codebase on GitHub.",
+    "focus": "Both tools keep transfers peer-to-peer. Lightning P2P adds a full GUI, QR-scannable tickets, a transfer history, and an Apache-2.0 licensed Rust codebase on GitHub.",
     "priority": "0.7",
     "related": ["/", "/localsend-vs-lightning-p2p", "/benchmarks"],
     "body": [
@@ -229,13 +261,13 @@
     "eyebrow": "WeTransfer alternative",
     "heading": "A free WeTransfer alternative without cloud uploads.",
     "intro": "WeTransfer works by uploading your file to a server and giving the recipient a link. Lightning P2P keeps the file on your device and streams it directly to the recipient with a one-time ticket, so nothing sits on a third-party bucket waiting to expire.",
-    "focus": "Lightning P2P is free, open source, and MIT licensed. There is no account, no artificial file-size cap, no paid tier, and no hosted retention link. Transfers use encrypted QUIC transport and BLAKE3 verification.",
+    "focus": "Lightning P2P is free, open source, and Apache-2.0 licensed. There is no account, no artificial file-size cap, no paid tier, and no hosted retention link. Transfers use encrypted QUIC transport and BLAKE3 verification.",
     "priority": "0.8",
     "related": ["/", "/free-p2p-file-transfer", "/how-to-send-large-files"],
     "body": [
       "WeTransfer is convenient because it removes account friction, but its model relies on uploading your file to a third-party server. For large files, that means long uploads, retention windows, and a public link anyone with the URL can access until it expires.",
       "Lightning P2P uses a peer-to-peer model instead. You drop files into the Windows app, the app produces a receive handoff link and QR, and the receiver opens it to pull the file directly from your device without a hosted cloud upload first.",
-      "Because Lightning P2P is not a hosted service, there is no account to create, no storage quota, no retention timer, and no paid tier. The app is free and MIT-licensed on GitHub, built with Rust, Tauri, iroh, and iroh-blobs. Release artifacts include SHA256 checksums, clear signing status, and Authenticode signatures only when production signing is configured.",
+      "Because Lightning P2P is not a hosted service, there is no account to create, no storage quota, no retention timer, and no paid tier. The app is free and Apache-2.0 licensed on GitHub, built with Rust, Tauri, iroh, and iroh-blobs. Release artifacts include SHA256 checksums, clear signing status, and Authenticode signatures only when production signing is configured.",
       "This model fits use cases where WeTransfer's upload step is the bottleneck: design files, raw video, database dumps, virtual machine images, and anything where the recipient would rather transfer directly than download from a third-party link."
     ],
     "faqs": [
@@ -260,15 +292,15 @@
     "description": "Compare LocalSend and Lightning P2P for peer-to-peer file transfer on Windows. LAN discovery, WAN transfer, verification, and open-source licensing side by side.",
     "eyebrow": "Comparison",
     "heading": "LocalSend vs Lightning P2P for P2P file transfer.",
-    "intro": "LocalSend is an excellent open-source tool for LAN file sharing across platforms. Lightning P2P is a Windows-first app built around iroh, which supports both LAN transfers and WAN transfers with NAT traversal and relay fallback.",
+    "intro": "LocalSend is an excellent open-source tool for LAN file sharing across platforms. Lightning P2P is a Windows and Android app built around iroh, which supports both LAN transfers and WAN transfers with NAT traversal and relay fallback.",
     "focus": "The two projects have overlapping goals and different trade-offs. This page lays out the differences honestly so you can pick the right tool for your situation.",
     "priority": "0.8",
     "related": ["/", "/benchmarks", "/wormhole-alternative"],
     "body": [
       "LocalSend is one of the most popular open-source P2P file transfer apps, with clients for Windows, macOS, Linux, Android, and iOS. It uses local network discovery and HTTPS transfer inside the LAN. It is a great fit when both devices are on the same Wi-Fi and you want a cross-platform option today.",
-      "Lightning P2P is a newer, Windows-first app built on iroh and iroh-blobs. It works on the LAN through mDNS discovery and also works across WAN through iroh's direct QUIC paths with relay-assisted fallback. That means it keeps working when the two devices are not on the same network, which is the hardest part of P2P file sharing.",
+      "Lightning P2P is a newer Windows and Android app built on iroh and iroh-blobs. It works on the LAN through mDNS discovery and also works across WAN through iroh's direct QUIC paths with relay-assisted fallback. That means it keeps working when the two devices are not on the same network, which is the hardest part of P2P file sharing.",
       "Both tools keep the transfer peer-to-peer. Neither uploads your file to a third-party cloud bucket. LocalSend uses HTTPS inside the LAN; Lightning P2P uses QUIC transport through iroh and BLAKE3-verified streaming through iroh-blobs, so the receiver validates content addresses as bytes are written to disk.",
-      "If you are on the same network and want a cross-platform GUI today, LocalSend is a fine choice. If you need WAN transfers, verified content addresses, or a Windows-first experience that will grow toward mobile later, consider Lightning P2P."
+      "If you are on the same network and want app-store clients across every major platform today, LocalSend is a fine choice. If you need WAN transfers, verified content addresses, Windows installers, and Android sideload support, consider Lightning P2P."
     ],
     "faqs": [
       {
@@ -277,7 +309,7 @@
       },
       {
         "q": "Is Lightning P2P cross-platform like LocalSend?",
-        "a": "Not yet. Lightning P2P ships Windows first. A mobile RFC is published and iOS/Android support is planned after the Windows engine is stable. LocalSend is currently more broadly cross-platform."
+        "a": "Lightning P2P ships stable Windows and Android 10+ sideload builds. LocalSend is still more broadly cross-platform today because it also ships macOS, Linux, and iOS clients."
       }
     ]
   },
@@ -340,10 +372,10 @@
     "priority": "0.7",
     "related": ["/", "/download", "/alternatives/airdrop-for-windows"],
     "body": [
-      "Lightning P2P is designed for Windows-to-Windows transfers as the primary case. On the same LAN, both peers discover each other through mDNS, and the transfer takes a direct QUIC path between them. Across the internet, iroh's discovery and optional relay help peers find one another before the direct QUIC path takes over.",
+      "Lightning P2P is designed for direct Windows-to-Windows and Windows-to-Android transfers. On the same LAN, peers can discover each other through mDNS, and the transfer takes a direct QUIC path when possible. Across the internet, iroh's discovery and optional relay help peers find one another before the direct QUIC path takes over.",
       "The recommended Velopack setup is the modern one-click install path. The release pipeline supports unsigned community builds with SHA256 checksums and Authenticode signing when release signing secrets are configured. The app registers a lightning-p2p:// deep link handler, and installer hooks add Windows Firewall rules so nearby discovery works the first time. Tauri updater metadata is signed separately for update integrity when updater artifacts are generated.",
       "Because the transfer is verified with BLAKE3, both sides end up with a content-addressed hash of the file. That hash is the canonical integrity check: if it matches on both sides, the bytes are identical.",
-      "A cross-platform story is planned. A public mobile RFC covers iOS and Android support and will ship after the Windows engine is stable. For today, Windows-to-Windows transfers are the most polished path."
+      "A broader cross-platform story is planned. Android is available as a sideload release today, while macOS, Linux, and iOS packaging remain future work."
     ],
     "faqs": [
       {

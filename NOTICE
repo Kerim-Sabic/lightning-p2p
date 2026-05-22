@@ -1,0 +1,9 @@
+Lightning P2P
+Copyright 2025 Kerim Sabic
+
+Lightning P2P is a peer-to-peer file transfer application built with Rust,
+Tauri, React, TypeScript, iroh, and iroh-blobs.
+
+This product includes software developed by the Lightning P2P project.
+If you distribute a derivative work, preserve this NOTICE where the
+Apache License, Version 2.0 requires attribution notices to be preserved.

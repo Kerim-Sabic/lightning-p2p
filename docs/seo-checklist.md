@@ -56,6 +56,7 @@ Track month-over-month position for these queries. Free tools: Google Search Con
 | `localsend alternative`         | Navigational | TBD           | TBD              |
 | `send large files peer to peer` | Navigational | TBD           | TBD              |
 | `free p2p file transfer`        | Commercial   | TBD           | TBD              |
+| `android p2p file transfer`     | Navigational | TBD           | TBD              |
 
 Recheck at `+4 weeks`, `+12 weeks`, `+26 weeks`.
 
@@ -68,6 +69,7 @@ Query these prompts in ChatGPT (Search on), Claude (web search on), Perplexity, 
 3. "Free WeTransfer alternative that does not upload to the cloud"
 4. "Magic Wormhole alternative with a GUI"
 5. "How do I send a large file to someone without using WeTransfer?"
+6. "What is a good Android P2P file transfer app with no cloud upload?"
 
 Recheck at `+4 weeks` (retrieval-time pickup) and `+12 weeks` (for any training-time effect).
 

@@ -1,85 +1,135 @@
 # Changelog
 
-All notable changes to Lightning P2P are documented here. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver.
+All notable changes to Lightning P2P are documented here. The project follows semantic versioning where practical.
 
 ## [Unreleased]
 
-These changes are staged for the next `v0.4.1` polish release. The latest public GitHub Release remains `v0.4.0` until the `v0.4.1` release is published.
+### Changed
+
+- Default branch continues the `v0.5.x` experimental track for BLE proximity discovery and NFC ticket handoff.
+- Public README, website metadata, and LLM context now point stable users to `v0.4.6`.
+- Project license changed to Apache-2.0 with `NOTICE` and `CITATION.cff`.
+
+## [0.5.0] - 2026-05-22
 
 ### Added
 
-- Browser receive handoff route at `/receive` for `https://lightning-p2p.netlify.app/receive#t=<ticket>` links that open the desktop deep link without sending tickets to the website server.
-- Windows Authenticode signing hook and release workflow checks for Microsoft Artifact Signing / Trusted Signing.
-- Windows release verification script, download-trust guide, privacy policy, Store readiness checklist, and SmartScreen-safe issue template.
-- Rust-owned platform capability policy exposed through Tauri IPC for desktop, Android, iOS-prepared, and browser handoff behavior.
-- Online handoff documentation that keeps real transfers in the native iroh app without WebRTC, HTTP transfer endpoints, or WebSocket transfer paths.
-- Launch-focused README demo asset, `SECURITY.md`, and internal `docs/launch-checklist.md`.
+- Experimental Bluetooth LE proximity discovery.
+- Experimental NFC tap-to-transfer ticket handoff.
+- Refreshed app icon assets.
+
+### Notes
+
+- `v0.5.0` is a pre-release. BLE and NFC carry discovery or ticket material only; file bytes still transfer through iroh QUIC and iroh-blobs.
+
+## [0.4.6] - 2026-05-22
+
+### Added
+
+- Android `content://` resolver for system file picker and share-sheet files.
+- Android `MediaStore` save routing for received images, videos, audio, and other files.
+- Android system share-target integration for Gallery, Files, browser, and other apps.
+- Mobile UX polish for larger touch targets, empty states, and smart-routing copy.
 
 ### Changed
 
-- Velopack is now the primary download path in web metadata, landing page copy, README, release notes, and LLM context files.
-- Send and History copy actions now default to HTTPS receive handoff links while preserving raw ticket copy as a fallback.
-- Generated sitemap and canonical URLs now use the extensionless no-trailing-slash route form served by Netlify.
-- GitHub language accounting now excludes generated Android scaffolding, binary assets, lockfiles, and documentation so the Rust/Tauri backend is represented accurately.
-- Renamed the Rust package, library crate, generated executable, tracing filters, and public docs from FastDrop-era names to Lightning P2P names.
-- Added compatibility for deprecated `FASTDROP_*` environment variables while documenting `LIGHTNING_P2P_*` replacements.
-- Split Windows release automation into draft unsigned community releases and production signed releases, with SHA256 checksums in both modes.
+- Android `minSdk` moved to 29 (Android 10+) to support scoped storage cleanly.
+- Stable public Android downloads now point at the latest stable GitHub Release.
+
+### Fixed
+
+- Android sends no longer fail because iroh-blobs received an unreadable `content://` URI.
+- Android target compile issue fixed before the `v0.4.6` tag cutoff.
+
+## [0.4.5] - 2026-05-16
+
+### Added
+
+- Android reliability pre-release with signed APK/AAB artifacts.
+- Node supervisor diagnostics, transfer diagnostics, benchmark scripts, and physical Android acceptance script.
+
+### Fixed
+
+- Android startup/freeze reliability issues found during early sideload testing.
+- Settings restart clippy warning.
+
+## [0.4.4] - 2026-05-14
+
+### Added
+
+- Public Android APK launch smoke in CI.
+- Android signing fingerprint surfaced in docs.
+- Windows package smoke and release artifact verification.
+
+### Fixed
+
+- Android startup diagnostics and release APK launch path.
+- QR rendering contrast for mobile receive handoff.
+
+## [0.4.3] - 2026-05-14
+
+### Changed
+
+- Community unsigned release packaging and installer trust wording.
+
+## [0.4.2] - 2026-05-13
+
+### Added
+
+- Signed Android sideload support.
+- Android release certificate fingerprint documentation.
+- Helper script for Android signing secrets.
+
+## [0.4.1] - 2026-05-13
+
+### Added
+
+- Android foundation.
+- Browser receive handoff route at `/receive#t=<ticket>`.
+- Launch website and SEO/AEO route metadata.
+- Download trust, privacy, store readiness, and release checklist docs.
+
+### Changed
+
+- Public docs and metadata moved from FastDrop-era naming to Lightning P2P naming.
+- Velopack became the recommended Windows installer path.
 
 ## [0.4.0] - 2026-04-20
 
 ### Added
 
-- Settings diagnostics copy flow with app version, node ID, relay state, direct address count, LAN discovery status, download folder health, and latest route kind.
-- Transfer event metadata for user-visible phases, failure categories, and final receive output paths.
-- Benchmark report template under `docs/benchmark-report-template.md` for repeatable LAN, WAN, relay, large-file, and many-small-file measurements.
-- Stable release aliases planned for tagged release assets: `LightningP2PSetup.exe` and `LightningP2P.msi`.
-
-### Changed
-
-- Receive UX now shows clearer route and phase labels, plus saved output locations after completion.
-- Release workflow now copies latest NSIS/MSI installers to stable aliases while keeping versioned updater artifacts.
+- Settings diagnostics copy flow.
+- Transfer event metadata for phases, route kind, and receive output paths.
+- Benchmark report template.
+- Stable release aliases for Windows installer assets.
 
 ### Fixed
 
-- Receive startup now preflights the configured destination folder before creating an active transfer.
-- Completed receives no longer risk overwriting existing files or folders; conflicting outputs are moved to a safe suffixed path.
-- Receive failures are categorized as unreachable, interrupted, cancelled, destination, disk-space, export, or unknown where possible.
+- Receive destination preflight.
+- Safe output suffixing for completed receives.
+- User-facing receive failure categories.
 
 ## [0.3.2] - 2026-04-19
 
 ### Added
 
-- Dark website logo asset from the new mark, plus updated favicon and Web App Manifest logo entries.
-- **Velopack installer** as a second official Windows install path alongside NSIS. Modern one-click flow, per-user install, delta updates. NSIS remains the default and continues to use `tauri-plugin-updater`; Velopack ships its own updater with its artifact.
-- **winget manifest workflow** (`.github/workflows/winget.yml`) auto-publishes to `microsoft/winget-pkgs` after each GitHub release. First submission is manual.
-- WiX `upgradeCode` GUID pinned in `tauri.conf.json` to avoid MSI upgrade-code collisions ([tauri#14968](https://github.com/tauri-apps/tauri/issues/14968)).
-- Velopack post-install / post-uninstall PowerShell hooks that mirror the NSIS firewall-rule behavior.
-- Landing page Download section rebuilt as a three-column NSIS / Velopack / winget picker.
-- `llms.txt` and `llms-full.txt` at site root for LLM discoverability.
-- Five new SEO-targeted pages: `/wormhole-alternative`, `/wetransfer-alternative`, `/localsend-vs-lightning-p2p`, `/how-to-send-large-files`, `/send-files-between-windows-computers`.
-- Per-page structured data: `WebSite`, `Organization`, `BreadcrumbList`, `FAQPage`, `HowTo` JSON-LD in addition to the existing `SoftwareApplication`.
-- `<meta name="keywords">`, `preconnect`/`dns-prefetch` hints, and per-page priority in the sitemap.
-- Static SEO fallback content now includes body paragraphs, FAQ, and related-page links for each generated route.
-- `docs/seo-checklist.md` for off-page SEO submissions.
+- Website logo and updated icon assets.
+- Velopack installer path.
+- `llms.txt`, `llms-full.txt`, and SEO-targeted comparison pages.
+- Per-page structured data and sitemap metadata.
 
 ## [0.3.1] - 2026-04
 
 ### Added
 
-- Custom NSIS installer artwork (header and sidebar BMPs).
-- Browser landing page at `lightning-p2p.netlify.app` with six SEO pages.
-- `lightning-p2p://receive?t=<ticket>` deep-link handler registration.
-- Clipboard auto-detect chip on the Receive view.
-
-### Changed
-
-- Adaptive blob import parallelism (up to 128 workers, I/O-scaled).
-- Relay-readiness cold-start timeout reduced from 15 s to 6 s.
-- Release profile: `lto = "fat"`, `panic = "abort"`.
+- Custom NSIS installer artwork.
+- Browser landing page.
+- `lightning-p2p://receive?t=<ticket>` deep-link handler.
+- Clipboard auto-detect chip on Receive.
 
 ### Fixed
 
-- LAN discovery on Windows: firewall rule registered at install, widened the remote-info candidate filter to include session-seen peers, logs explicit warnings when the mDNS subscription fails.
+- Windows LAN discovery firewall and mDNS diagnostic behavior.
 
 ## [0.3.0] - 2026-03
 

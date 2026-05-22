@@ -208,7 +208,7 @@ export function ReceiveView() {
 
           <div className="glass-subtle flex w-full max-w-[340px] flex-col gap-3 px-4 py-4">
             <p className="metric-label">
-              {mobileRuntime ? "Android alpha storage" : "Receive folder"}
+              {mobileRuntime ? "Android receive storage" : "Receive folder"}
             </p>
             <div className="flex items-start gap-3">
               <div className="glass-icon h-10 w-10 shrink-0">

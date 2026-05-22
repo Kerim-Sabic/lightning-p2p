@@ -3,18 +3,18 @@
 Status: **Historical / in progress** · Target: phase 2 after desktop reliability work
 Authors: @Kerim-Sabic
 
-Current update: Android alpha foundation is implemented and documented in [android-alpha.md](android-alpha.md). The AirDrop-style nearby push flow (devices list + tap-to-accept offer) and Android background-safe transfers (foreground service + MulticastLock) are now in tree. BLE-based proximity discovery is permissioned in the Android manifest and has a default-off setting, but the scanner/advertiser is not yet wired up. iOS remains prepared but not shipped.
+Current update: Android 10+ sideload support is public in `v0.4.6` and documented in [android-alpha.md](android-alpha.md). Android file picker/share-target `content://` inputs resolve into app cache, receives publish through MediaStore where possible, and background-safe transfers use the foreground service plus MulticastLock. BLE proximity discovery and NFC ticket handoff are experimental in `v0.5.0`. iOS remains prepared but not shipped.
 
 ## 1. Motivation
 
-Lightning P2P today is Windows-only. The single biggest asks from users are:
+Lightning P2P started Windows-only. The biggest asks from users remain:
 
 1. "Does it run on my phone?"
 2. "Can I AirDrop between my laptop and my phone?"
 
 Both are answered by shipping iOS and Android builds. The core engine already has the properties we need: [iroh](https://iroh.computer) works on both platforms, iroh-blobs does verified streaming without any desktop-specific assumptions, and Tauri v2 natively supports `tauri ios init` / `tauri android init` against the same Rust crate.
 
-The goal of this RFC is to preserve scope, sequencing, and known risks while Android alpha work proceeds, so we do not regress the desktop build while we experiment.
+The goal of this RFC is to preserve scope, sequencing, and known risks while Android and iOS work proceeds, so we do not regress the desktop build while we expand platforms.
 
 ## 2. Non-goals
 

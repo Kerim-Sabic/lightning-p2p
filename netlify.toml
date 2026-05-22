@@ -19,6 +19,18 @@
   force = true
 
 [[redirects]]
+  from = "/android-p2p-file-transfer"
+  to = "/android-p2p-file-transfer/index.html"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/android-p2p-file-transfer/"
+  to = "/android-p2p-file-transfer/index.html"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/receive"
   to = "/receive/index.html"
   status = 200

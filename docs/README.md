@@ -6,7 +6,7 @@ This directory keeps project docs that are too detailed for the README.
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) - runtime split, Rust module boundaries, transfer flow, discovery flow, Android foundation.
 - [CODE_QUALITY_NOTES.md](CODE_QUALITY_NOTES.md) - audit findings, fixes completed, remaining high-priority refactors.
-- [ROADMAP.md](ROADMAP.md) - promotion roadmap, discovery hardening, Android alpha milestones, packaging work.
+- [ROADMAP.md](ROADMAP.md) - promotion roadmap, discovery hardening, Android sideload milestones, packaging work.
 
 ## Security and Privacy
 
@@ -25,7 +25,7 @@ This directory keeps project docs that are too detailed for the README.
 
 ## Mobile
 
-- [android-alpha.md](android-alpha.md) - Android alpha build and testing notes.
+- [android-alpha.md](android-alpha.md) - Android sideload build and testing notes.
 - [mobile-rfc.md](mobile-rfc.md) - mobile design RFC, now historical/in-progress.
 - [ios-testflight.md](ios-testflight.md) - future iOS TestFlight notes.
 

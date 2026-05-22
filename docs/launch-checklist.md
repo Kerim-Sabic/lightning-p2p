@@ -12,11 +12,11 @@ Internal checklist for repository promotion work. Keep this out of the README so
 
 ## Release Readiness
 
-- [x] Release mismatch audited: `v0.4.0` was the latest public release on April 20, 2026; the next promotion target is `v0.4.1`.
-- [x] Release assets include `LightningP2P-win-Setup.exe`, `LightningP2PSetup.exe`, `LightningP2P.msi`, updater metadata, and checksums.
-- [ ] Tag and publish `v0.4.1` after launch polish lands.
+- [x] Release mismatch audited: `v0.4.6` is the intended latest stable public release; `v0.5.0` remains experimental.
+- [ ] Tag and publish `v0.4.6` from commit `9f7dfaa`.
+- [ ] Create historical GitHub Release pages for `v0.2.5`, `v0.4.1`, and `v0.4.2`.
 - [ ] Confirm the release body says "no artificial file-size cap" instead of "no limits".
-- [ ] Confirm Velopack, NSIS, MSI, and winget docs point at current release assets.
+- [ ] Confirm Velopack, NSIS, MSI, Android APK, and checksum links point at current stable release assets.
 
 ## Public Proof
 
