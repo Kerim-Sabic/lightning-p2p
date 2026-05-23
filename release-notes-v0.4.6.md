@@ -23,6 +23,10 @@ This is the stable public release for Windows and Android sideload users.
 
 ### Trust and verification
 
+Windows files in this release are community unsigned. Windows Defender SmartScreen
+may show an unrecognized-app warning because there is no Authenticode publisher
+identity on these artifacts. Verify the SHA256 checksums before installing.
+
 Verify files before installing:
 
 ```powershell
