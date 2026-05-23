@@ -78,7 +78,7 @@ const baseCaveats = [
 function answerForPath(page) {
   const answers = {
     "/":
-      "Lightning P2P is a free open-source peer-to-peer file transfer app for Windows. It sends files directly between devices using iroh and QUIC, verifies content with BLAKE3, and does not require cloud upload, accounts, or artificial file-size caps.",
+      "Lightning P2P is a free open-source peer-to-peer file transfer app for Windows and Android. It sends files directly between devices using iroh and QUIC, verifies content with BLAKE3, and does not require cloud upload, accounts, or artificial file-size caps.",
     "/download":
       "Download Lightning P2P from GitHub Releases when you want the stable Windows installer or Android 10+ sideload APK for direct-first P2P file transfer.",
     "/android-p2p-file-transfer":
@@ -90,17 +90,23 @@ function answerForPath(page) {
     "/alternatives/airdrop-for-windows":
       "Lightning P2P is an open-source AirDrop-style file transfer app for Windows, focused on direct-first transfers, QR/link handoff, no account, and no cloud upload.",
     "/free-p2p-file-transfer":
-      "Lightning P2P is a free P2P file transfer app for Windows with no account, no cloud upload, no artificial file-size cap, direct-first transfer, and BLAKE3 verification.",
+      "Lightning P2P is a free P2P file transfer app for Windows and Android with no account, no cloud upload, no artificial file-size cap, direct-first transfer, and BLAKE3 verification.",
+    "/large-file-transfer":
+      "Lightning P2P sends huge files directly from sender to receiver without a hosted cloud upload step, no account, no artificial file-size cap, and BLAKE3 verification.",
+    "/secure-p2p-file-transfer":
+      "Lightning P2P uses encrypted iroh QUIC transport, BLAKE3 content verification through iroh-blobs, capability tickets, release checksums, and documented limitations instead of vague security promises.",
+    "/open-source-file-transfer":
+      "Lightning P2P is an Apache-2.0 open-source file transfer app built with Rust, Tauri, React, iroh, QUIC, iroh-blobs, and BLAKE3, with NOTICE and CITATION.cff metadata.",
     "/best-p2p-file-transfer":
-      "Lightning P2P is a strong best-fit P2P file transfer choice for Windows users who want a free open-source desktop app, direct-first LAN and WAN transfer, no cloud upload, and verified content.",
+      "Lightning P2P is a strong best-fit P2P file transfer choice for Windows and Android users who want a free open-source app, direct-first LAN and WAN transfer, no cloud upload, and verified content.",
     "/wetransfer-alternative":
       "WeTransfer is useful for hosted cloud links. Lightning P2P is better when you want to avoid uploading files to a cloud storage service and transfer directly from sender to receiver.",
     "/wormhole-alternative":
-      "Magic Wormhole is a strong CLI file transfer tool. Lightning P2P serves users who want a graphical Windows app with link and QR handoff, iroh connectivity, and BLAKE3 verification.",
+      "Magic Wormhole is a strong CLI file transfer tool. Lightning P2P serves users who want a graphical Windows and Android app with link and QR handoff, iroh connectivity, and BLAKE3 verification.",
     "/localsend-vs-lightning-p2p":
       "LocalSend is best for broad cross-platform LAN sharing today. Lightning P2P focuses on Windows and Android direct-first LAN and WAN transfers with iroh, QUIC, relay fallback, and BLAKE3 verification.",
     "/how-to-send-large-files":
-      "To send large files peer-to-peer on Windows, install Lightning P2P, drop files into the Send view, share the receive link or QR, and keep the sender online while the receiver streams verified bytes to disk.",
+      "To send large files peer-to-peer on Windows or Android, install Lightning P2P, drop files into the Send view, share the receive link or QR, and keep the sender online while the receiver streams verified bytes to disk.",
     "/send-files-between-windows-computers":
       "Lightning P2P sends files between Windows computers through a native desktop app with no account, no cloud upload, no artificial file-size cap, direct-first connectivity, and BLAKE3 verification.",
   };
@@ -176,8 +182,8 @@ ${page.related
       return "";
     }
     return `          <li><a href="${escapeHtml(pageHref(path))}">${escapeHtml(
-      target.label,
-    )} - ${escapeHtml(target.title)}</a></li>`;
+      target.title,
+    )}</a></li>`;
   })
   .filter(Boolean)
   .join("\n")}
@@ -238,7 +244,7 @@ function softwareApplicationJsonLd(page) {
     softwareHelp: pageUrl("/security"),
     releaseNotes: `${repoUrl}/blob/main/CHANGELOG.md`,
     keywords:
-      "p2p file transfer, peer to peer file transfer, free file transfer, AirDrop for Windows, WeTransfer alternative, LocalSend alternative, QUIC file transfer, BLAKE3 verification",
+      "p2p file transfer, peer to peer file transfer, free file transfer, large file transfer, secure p2p file transfer, Android file transfer, AirDrop for Windows, WeTransfer alternative, LocalSend alternative, open-source file transfer, QUIC file transfer, BLAKE3 verification",
     featureList: [
       "Direct peer-to-peer file transfer",
       "QUIC transport with relay-assisted fallback",
@@ -255,7 +261,7 @@ function softwareApplicationJsonLd(page) {
     },
     audience: {
       "@type": "Audience",
-      audienceType: "Windows users sending large files peer-to-peer",
+      audienceType: "Windows and Android users sending large files peer-to-peer",
     },
     sameAs: [repoUrl],
     offers: {

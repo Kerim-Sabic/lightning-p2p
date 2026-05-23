@@ -47,7 +47,7 @@ This is a direct-first peer-to-peer app. It is not a hosted cloud storage servic
 - Content is addressed and verified with BLAKE3 through iroh-blobs.
 - Receive handoff links keep tickets in URL fragments: `/receive#t=<ticket>`.
 - Browser receive pages do not receive the ticket in normal HTTP requests.
-- Local identity keys prefer the OS keychain. If the keychain is unavailable, current alpha/development builds fall back to an app-data key file so the iroh identity remains stable.
+- Local identity keys prefer the OS keychain. If the keychain is unavailable, development, CI, or platform-specific builds can fall back to an app-data key file so the iroh identity remains stable.
 - No telemetry is collected without explicit opt-in.
 
 ## What Lightning P2P Does Not Protect

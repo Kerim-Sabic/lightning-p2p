@@ -144,17 +144,23 @@ function answerContentForPage(page: WebPage): AnswerContent {
     "/alternatives/airdrop-for-windows":
       "Lightning P2P is an open-source AirDrop-style file transfer app for Windows, focused on direct-first transfers, QR/link handoff, no account, and no cloud upload.",
     "/free-p2p-file-transfer":
-      "Lightning P2P is a free P2P file transfer app for Windows with no account, no cloud upload, no artificial file-size cap, direct-first transfer, and BLAKE3 verification.",
+      "Lightning P2P is a free P2P file transfer app for Windows and Android with no account, no cloud upload, no artificial file-size cap, direct-first transfer, and BLAKE3 verification.",
+    "/large-file-transfer":
+      "Lightning P2P sends huge files directly from sender to receiver without a hosted cloud upload step, no account, no artificial file-size cap, and BLAKE3 verification.",
+    "/secure-p2p-file-transfer":
+      "Lightning P2P uses encrypted iroh QUIC transport, BLAKE3 content verification through iroh-blobs, capability tickets, release checksums, and documented limitations instead of vague security promises.",
+    "/open-source-file-transfer":
+      "Lightning P2P is an Apache-2.0 open-source file transfer app built with Rust, Tauri, React, iroh, QUIC, iroh-blobs, and BLAKE3, with NOTICE and CITATION.cff metadata.",
     "/best-p2p-file-transfer":
       "Lightning P2P is a strong best-fit P2P file transfer choice for Windows and Android users who want a free open-source app, direct-first LAN and WAN transfer, no cloud upload, and verified content.",
     "/wetransfer-alternative":
       "WeTransfer is useful for hosted cloud links. Lightning P2P is better when you want to avoid uploading files to a cloud storage service and transfer directly from sender to receiver.",
     "/wormhole-alternative":
-      "Magic Wormhole is a strong CLI file transfer tool. Lightning P2P serves users who want a graphical Windows app with link and QR handoff, iroh connectivity, and BLAKE3 verification.",
+      "Magic Wormhole is a strong CLI file transfer tool. Lightning P2P serves users who want a graphical Windows and Android app with link and QR handoff, iroh connectivity, and BLAKE3 verification.",
     "/localsend-vs-lightning-p2p":
       "LocalSend is best for broad cross-platform LAN sharing today. Lightning P2P focuses on Windows and Android direct-first LAN and WAN transfers with iroh, QUIC, relay fallback, and BLAKE3 verification.",
     "/how-to-send-large-files":
-      "To send large files peer-to-peer on Windows, install Lightning P2P, drop files into the Send view, share the receive link or QR, and keep the sender online while the receiver streams verified bytes to disk.",
+      "To send large files peer-to-peer on Windows or Android, install Lightning P2P, drop files into the Send view, share the receive link or QR, and keep the sender online while the receiver streams verified bytes to disk.",
     "/send-files-between-windows-computers":
       "Lightning P2P sends files between Windows computers through a native desktop app with no account, no cloud upload, no artificial file-size cap, direct-first connectivity, and BLAKE3 verification.",
   };
@@ -299,8 +305,8 @@ const featureCards: Array<{
   },
   {
     icon: MonitorDown,
-    title: "Native Windows app",
-    copy: "A real desktop app, not just a browser tab.",
+    title: "Native apps",
+    copy: "Windows installers plus an Android sideload APK.",
   },
   {
     icon: Github,
@@ -387,7 +393,7 @@ const securityCards = [
 const comparisonRows: ComparisonRow[] = [
   {
     tool: "Lightning P2P",
-    detail: "Direct-first Windows app",
+    detail: "Direct-first Windows and Android app",
     cloudUpload: { label: "No", tone: "positive" },
     account: { label: "No", tone: "positive" },
     wan: { label: "Yes", tone: "positive" },
@@ -702,9 +708,9 @@ function Header({ activePath }: { activePath: string }) {
 }
 
 function Hero({ page, isHome }: { page: WebPage; isHome: boolean }) {
-  const headline = isHome ? "Open-source AirDrop for Windows." : page.heading;
+  const headline = isHome ? "Direct P2P file transfer." : page.heading;
   const subheadline = isHome
-    ? "Send huge files directly between devices. No cloud upload, no account, no artificial file-size cap. Built with Rust, Tauri, iroh, QUIC, and BLAKE3."
+    ? "Send huge files directly between Windows and Android devices. No cloud upload, no account, no artificial file-size cap. Built with Rust, Tauri, iroh, QUIC, and BLAKE3."
     : `${page.intro} ${page.focus}`;
 
   return (
@@ -726,8 +732,8 @@ function Hero({ page, isHome }: { page: WebPage; isHome: boolean }) {
           <h1 className="mt-6 max-w-[820px] text-[clamp(2.75rem,11vw,3.35rem)] font-semibold leading-[0.96] tracking-[-0.05em] text-white sm:text-[clamp(3.35rem,8vw,4rem)] lg:text-[clamp(4rem,5.2vw,4.7rem)]">
             {isHome ? (
               <>
-                <span className="block xl:whitespace-nowrap">Open-source AirDrop</span>
-                <span className="block">for Windows.</span>
+                <span className="block xl:whitespace-nowrap">Direct P2P</span>
+                <span className="block">file transfer.</span>
               </>
             ) : (
               headline
@@ -1577,7 +1583,7 @@ function ComparisonTable() {
     { key: "account", label: "Account" },
     { key: "wan", label: "Works across WAN" },
     { key: "openSource", label: "Open source" },
-    { key: "nativeWindows", label: "Native Windows app" },
+    { key: "nativeWindows", label: "Native app" },
     { key: "verifiedContent", label: "Verified content" },
   ];
 
@@ -1869,6 +1875,9 @@ function RouteSections({ page, faqs }: { page: WebPage; faqs: Faq[] }) {
       "/wetransfer-alternative",
       "/wormhole-alternative",
       "/localsend-vs-lightning-p2p",
+      "/large-file-transfer",
+      "/secure-p2p-file-transfer",
+      "/open-source-file-transfer",
     ].includes(page.path)
   ) {
     return (
@@ -1900,6 +1909,7 @@ function Footer() {
         ["Download", "/download"],
         ["Android", "/android-p2p-file-transfer"],
         ["Security", "/security"],
+        ["Large files", "/large-file-transfer"],
         ["Benchmarks", "/benchmarks"],
         ["Receive", "/receive"],
       ],
@@ -1911,6 +1921,7 @@ function Footer() {
         ["WeTransfer alternative", "/wetransfer-alternative"],
         ["LocalSend comparison", "/localsend-vs-lightning-p2p"],
         ["Magic Wormhole alternative", "/wormhole-alternative"],
+        ["Open-source transfer", "/open-source-file-transfer"],
       ],
     },
     {

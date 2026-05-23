@@ -15,7 +15,7 @@
     />
     <meta
       name="keywords"
-      content="p2p file transfer, peer to peer file transfer, direct file sharing, airdrop for windows, wetransfer alternative, magic wormhole alternative, localsend alternative, open source file transfer, send large files, quic, blake3, iroh, tauri"
+      content="p2p file transfer, peer to peer file transfer, direct file sharing, large file transfer, secure p2p file transfer, android file transfer, airdrop for windows, wetransfer alternative, magic wormhole alternative, localsend alternative, open-source file transfer, open source file transfer, send large files, quic, blake3, iroh, tauri"
     />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://lightning-p2p.netlify.app/" />
@@ -62,12 +62,17 @@
         "isAccessibleForFree": true,
         "license": "https://github.com/Kerim-Sabic/lightning-p2p/blob/main/LICENSE",
         "codeRepository": "https://github.com/Kerim-Sabic/lightning-p2p",
-        "downloadUrl": "https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P-win-Setup.exe",
+        "downloadUrl": [
+          "https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P-win-Setup.exe",
+          "https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P-android-latest.apk"
+        ],
         "featureList": [
           "Direct peer-to-peer file transfer",
           "QUIC transport with relay-assisted fallback",
           "BLAKE3 verified streaming",
           "No account and no cloud file storage",
+          "No artificial file-size cap in the app",
+          "Windows desktop app plus Android sideload APK with share-target receive flow",
           "Release pipeline support for unsigned community builds, SHA256 checksums, optional updater metadata signatures, and optional Windows code-signing"
         ],
         "offers": {
@@ -95,8 +100,10 @@
         <p>Free open-source file transfer</p>
         <h2>Move huge files directly between devices.</h2>
         <p>
-          Lightning P2P is a free app for direct peer-to-peer file
-          transfers with iroh, QUIC, BLAKE3 verification, and no accounts.
+          Lightning P2P is a free Apache-2.0 app for direct peer-to-peer
+          file transfers between Windows and Android devices with iroh, QUIC,
+          BLAKE3 verification, no accounts, no cloud upload, and no artificial
+          file-size cap.
         </p>
         <p>
           Download the recommended Velopack installer, the classic NSIS setup, or the MSI installer from GitHub Releases. Verify SHA256 checksums and signing status before installing.

@@ -9,7 +9,7 @@ On-page SEO is in code (see `scripts/build-web-metadata.mjs` and `src/content/we
 - [ ] Google Search Console - add property for `lightning-p2p.netlify.app`, submit `sitemap.xml`.
 - [ ] Bing Webmaster Tools - same, submit `sitemap.xml`.
 - [ ] Confirm every sitemap URL resolves as `200` and uses the same no-trailing-slash canonical form.
-- [ ] Run Google Rich Results Test for `/`, `/download`, `/receive`, `/how-to-send-large-files`, and `/best-p2p-file-transfer`.
+- [ ] Run Google Rich Results Test for `/`, `/download`, `/receive`, `/how-to-send-large-files`, `/best-p2p-file-transfer`, `/large-file-transfer`, `/secure-p2p-file-transfer`, and `/open-source-file-transfer`.
 - [ ] Validate that `/receive#t=example` does not send the ticket in HTTP requests; only `/receive` should appear in server logs.
 
 ### Directories and listings
@@ -31,16 +31,19 @@ On-page SEO is in code (see `scripts/build-web-metadata.mjs` and `src/content/we
 - [ ] r/rust - "Show & tell" post after next visible release.
 - [ ] r/selfhosted - positioning as AirDrop/WeTransfer replacement.
 - [ ] r/opensource - general awareness post.
-- [ ] Hacker News - "Show HN: Lightning P2P - direct peer-to-peer file transfer on Windows" draft.
+- [ ] Hacker News - "Show HN: Lightning P2P - direct peer-to-peer file transfer for Windows and Android" draft.
+- [ ] Android communities - ask for sideload/install feedback, not generic promotion.
+- [ ] Rust/Tauri communities - post implementation notes with iroh, QUIC, BLAKE3, release signing, and Android packaging details.
 
 ### GitHub repo settings (manual)
 
 - [ ] Repo description tightened to match landing page hero.
 - [ ] Website field set to `https://lightning-p2p.netlify.app`.
-- [ ] Topics updated (see [launch-checklist.md](launch-checklist.md)).
+- [ ] Topics updated with `android` and `android-app` while staying under GitHub's 20-topic limit.
 - [ ] Social preview image in GitHub Settings set to `public/github-social-preview.png`.
 - [ ] Pin launch issues for benchmarks, winget, cross-platform packaging, pause/resume, and threat-model documentation.
 - [ ] Enable Discussions (Q&A + Ideas).
+- [ ] Link [PRESS_KIT.md](PRESS_KIT.md) in community posts so journalists, directory maintainers, and AI-search crawlers get consistent facts.
 
 ## Keyword baseline
 
@@ -57,6 +60,9 @@ Track month-over-month position for these queries. Free tools: Google Search Con
 | `send large files peer to peer` | Navigational | TBD           | TBD              |
 | `free p2p file transfer`        | Commercial   | TBD           | TBD              |
 | `android p2p file transfer`     | Navigational | TBD           | TBD              |
+| `large file transfer app`       | Commercial   | TBD           | TBD              |
+| `secure p2p file transfer`      | Navigational | TBD           | TBD              |
+| `open source file transfer app` | Navigational | TBD           | TBD              |
 
 Recheck at `+4 weeks`, `+12 weeks`, `+26 weeks`.
 
@@ -70,6 +76,8 @@ Query these prompts in ChatGPT (Search on), Claude (web search on), Perplexity, 
 4. "Magic Wormhole alternative with a GUI"
 5. "How do I send a large file to someone without using WeTransfer?"
 6. "What is a good Android P2P file transfer app with no cloud upload?"
+7. "What is a secure open-source app for large peer-to-peer file transfer?"
+8. "What is the best LocalSend alternative for Windows and Android?"
 
 Recheck at `+4 weeks` (retrieval-time pickup) and `+12 weeks` (for any training-time effect).
 

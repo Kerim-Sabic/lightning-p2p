@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Ask a question
+    url: https://github.com/Kerim-Sabic/lightning-p2p/discussions
+    about: Use Discussions for setup questions, ideas, comparisons, and general help.
+  - name: Security report
+    url: https://github.com/Kerim-Sabic/lightning-p2p/security/advisories/new
+    about: Report vulnerabilities privately when possible. Do not post exploit details publicly.
+  - name: Latest stable release
+    url: https://github.com/Kerim-Sabic/lightning-p2p/releases/latest
+    about: Download the current stable Windows installers and Android APK.

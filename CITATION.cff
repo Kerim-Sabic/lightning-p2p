@@ -2,9 +2,9 @@ cff-version: 1.2.0
 message: "If you use Lightning P2P in research, articles, benchmarks, or derived work, please cite it using this metadata."
 type: software
 title: "Lightning P2P"
-version: "0.5.0"
+version: "0.4.6"
 date-released: "2026-05-22"
-abstract: "Lightning P2P is an open-source peer-to-peer file transfer app for direct-first transfers with Rust, Tauri, iroh, QUIC, iroh-blobs, and BLAKE3 verification."
+abstract: "Lightning P2P is an open-source peer-to-peer file transfer app for direct-first Windows and Android transfers with Rust, Tauri, iroh, QUIC, iroh-blobs, and BLAKE3 verification."
 authors:
   - family-names: "Sabic"
     given-names: "Kerim"
@@ -14,6 +14,8 @@ license: "Apache-2.0"
 keywords:
   - "peer-to-peer"
   - "file-transfer"
+  - "windows"
+  - "android"
   - "rust"
   - "tauri"
   - "iroh"

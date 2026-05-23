@@ -11,14 +11,14 @@ body:
     id: version
     attributes:
       label: Lightning P2P version
-      placeholder: "0.4.1"
+      placeholder: "0.4.6"
     validations:
       required: true
   - type: input
     id: os
     attributes:
       label: Operating system
-      placeholder: "Windows 11 23H2"
+      placeholder: "Windows 11 23H2, Windows 10 22H2, or Android 15"
     validations:
       required: true
   - type: dropdown
@@ -30,6 +30,8 @@ body:
         - WAN direct
         - Relay fallback
         - Nearby discovery
+        - Android share target
+        - Android receive/export
         - Not transfer-related
         - Unknown
     validations:

@@ -8,6 +8,8 @@ body:
       value: |
         Windows may warn on unsigned or new downloads. This template helps separate expected SmartScreen reputation friction from real integrity problems.
 
+        For general download or install issues, use the Download or install issue template.
+
         Do not include private tickets, personal files, or sensitive screenshots.
   - type: input
     id: windows-version

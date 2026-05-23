@@ -17,6 +17,8 @@ This directory keeps project docs that are too detailed for the README.
 
 ## Release and Launch
 
+- [PRESS_KIT.md](PRESS_KIT.md) - short descriptions, comparison copy, links, assets, and community-safe claims.
+- [GROWTH_PLAYBOOK.md](GROWTH_PLAYBOOK.md) - launch channels, pinned-issue strategy, evidence ladder, and follow-up content.
 - [release-checklist.md](release-checklist.md) - tagged-release checklist.
 - [release-operations.md](release-operations.md) - manual release tasks such as winget, signing, and clean-VM verification.
 - [store-readiness.md](store-readiness.md) - Microsoft Store preparation checklist.

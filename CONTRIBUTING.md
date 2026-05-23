@@ -11,6 +11,7 @@ Before making changes, read:
 - [`agents.md`](./agents.md)
 - [`README.md`](./README.md)
 - [`docs/README.md`](./docs/README.md)
+- [`SUPPORT.md`](./SUPPORT.md)
 - [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md)
 
 ## Project Rules
@@ -114,8 +115,10 @@ A strong PR in this repo usually has:
 - WAN diagnostics and relay visibility
 - send picker UX
 - release notes, checksums, and installer polish
+- Android device testing, sideload verification, and share-target receive UX
 - integration test coverage
 - UX polish for send, receive, history, and settings
+- docs, screenshots, community answers, and benchmark reports
 
 ## Repository Hygiene
 
@@ -124,7 +127,9 @@ Recommended GitHub settings for this repository:
 - enable GitHub Discussions for questions and ideas
 - keep Dependabot enabled for `cargo`, `pnpm`, and GitHub Actions updates
 - keep `CODEOWNERS` pointed at the maintainer for docs and release-touching changes
-- use repo topics such as `p2p`, `file-transfer`, `tauri`, `rust`, `react`, `iroh`, `quic`, `blake3`, `desktop-app`, and `windows`
+- use repo topics such as `p2p`, `peer-to-peer`, `file-transfer`, `windows`, `android`, `android-app`, `airdrop-alternative`, `wetransfer-alternative`, `localsend-alternative`, `magic-wormhole-alternative`, `rust`, `tauri`, `iroh`, `quic`, `blake3`, `privacy`, `open-source`, `desktop-app`, `react`, and `typescript`
+- keep issue forms focused: bug reports, Android reports, benchmark reports, download/install trust, feature requests, and Windows warning reports
+- keep [docs/PRESS_KIT.md](docs/PRESS_KIT.md) and [docs/GROWTH_PLAYBOOK.md](docs/GROWTH_PLAYBOOK.md) current before public launch pushes
 - add `FUNDING.yml` only if sponsorship is intentionally supported
 
 ## Reporting Issues
@@ -132,6 +137,7 @@ Recommended GitHub settings for this repository:
 When filing a bug, include:
 
 - operating system and version
+- Lightning P2P version
 - whether you used `pnpm tauri dev` or a packaged build
 - sender and receiver environment
 - ticket type: file or directory

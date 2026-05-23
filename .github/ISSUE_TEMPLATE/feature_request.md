@@ -1,6 +1,6 @@
 ---
-name: Feature Request
-about: Suggest an idea for Lightning P2P
+name: Feature request
+about: Suggest a focused idea for Lightning P2P
 title: "[Feature] "
 labels: enhancement
 assignees: ''

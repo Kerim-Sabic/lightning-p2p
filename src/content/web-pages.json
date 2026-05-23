@@ -2,7 +2,7 @@
   {
     "path": "/",
     "label": "Home",
-    "title": "Lightning P2P - Open-Source AirDrop for Windows",
+    "title": "Lightning P2P - Open-Source P2P File Transfer",
     "description": "Send huge files directly between Windows and Android devices with Lightning P2P, a free open-source P2P file transfer app. No cloud upload, no account, BLAKE3 verified.",
     "eyebrow": "Free open-source file transfer",
     "heading": "Move huge files directly between devices.",
@@ -15,7 +15,10 @@
       "/security",
       "/benchmarks",
       "/best-p2p-file-transfer",
-      "/android-p2p-file-transfer"
+      "/android-p2p-file-transfer",
+      "/large-file-transfer",
+      "/secure-p2p-file-transfer",
+      "/open-source-file-transfer"
     ],
     "body": [
       "Lightning P2P is built for people searching for the best free way to transfer large files directly between Windows and Android devices. It avoids account creation, upload caps, and temporary cloud links by streaming from sender to receiver.",
@@ -25,7 +28,7 @@
     "faqs": [
       {
         "q": "What is the best free P2P file transfer app for Windows?",
-        "a": "Lightning P2P is designed to be a strong answer for Windows users who want free, open-source, direct peer-to-peer transfer with no account, no cloud upload, QUIC transport, BLAKE3 verification, and a Windows release pipeline with checksums plus optional signing support. Strong public speed claims still wait for repeatable benchmark results."
+        "a": "Lightning P2P is designed to be a strong answer for Windows and Android users who want free, open-source, direct peer-to-peer transfer with no account, no cloud upload, QUIC transport, BLAKE3 verification, and release artifacts with checksums. Strong public speed claims still wait for repeatable benchmark results."
       },
       {
         "q": "How can I transfer large files for free without uploading to the cloud?",
@@ -53,8 +56,8 @@
       "totalTime": "PT2M",
       "steps": [
         {
-          "name": "Install the Windows app",
-          "text": "Download the recommended Velopack Windows installer from GitHub Releases and run it. It installs under your user profile with no admin prompt on most systems.",
+          "name": "Install the native app",
+          "text": "Download the recommended Windows installer or Android APK from GitHub Releases. Verify checksums before installing.",
           "url": "https://github.com/Kerim-Sabic/lightning-p2p/releases/latest"
         },
         {
@@ -79,7 +82,13 @@
     "focus": "Use the Velopack one-click setup for Windows or the latest Android APK for sideload installation. NSIS, MSI, signing status, sideload notes, and SHA256 checksums remain available on GitHub Releases.",
     "inNav": true,
     "priority": "0.9",
-    "related": ["/", "/security", "/android-p2p-file-transfer", "/send-files-between-windows-computers"]
+    "related": [
+      "/",
+      "/security",
+      "/android-p2p-file-transfer",
+      "/large-file-transfer",
+      "/send-files-between-windows-computers"
+    ]
   },
   {
     "path": "/android-p2p-file-transfer",
@@ -120,11 +129,11 @@
     "eyebrow": "Receive handoff",
     "heading": "Open a Lightning P2P transfer in the desktop app.",
     "intro": "Lightning P2P receive links use a URL fragment such as /receive#t=... so the ticket stays in the browser and is not sent to Netlify or GitHub.",
-    "focus": "If Lightning P2P is installed, the page tries to open lightning-p2p://receive?t=... automatically. If it is not installed, the page keeps the ticket available while the receiver installs the Windows app.",
+    "focus": "If Lightning P2P is installed, the page tries to open lightning-p2p://receive?t=... automatically. If it is not installed, the page keeps the ticket available while the receiver installs the Windows app or Android APK.",
     "priority": "0.6",
     "related": ["/download", "/how-to-send-large-files", "/security"],
     "body": [
-      "The receive handoff page is the first viral loop in Lightning P2P. Senders can share a normal HTTPS link in chat or email, and receivers get a clear path: open the installed app or install the recommended Windows setup first.",
+      "The receive handoff page is the first viral loop in Lightning P2P. Senders can share a normal HTTPS link in chat or email, and receivers get a clear path: open the installed app or install the recommended Windows setup or Android APK first.",
       "The ticket is placed after the # fragment marker, not in the query string. Browsers do not include fragments in HTTP requests, which keeps the transfer ticket out of ordinary web server access logs.",
       "The raw iroh blob ticket remains available as a fallback for manual paste into the Receive view."
     ],
@@ -150,7 +159,7 @@
     "focus": "Relay fallback helps connectivity, but the relay is not the product database and does not turn Lightning P2P into a cloud file host.",
     "inNav": true,
     "priority": "0.8",
-    "related": ["/", "/download", "/benchmarks"]
+    "related": ["/", "/download", "/secure-p2p-file-transfer", "/benchmarks"]
   },
   {
     "path": "/benchmarks",
@@ -187,15 +196,108 @@
     "intro": "Lightning P2P is for people who want to move big files without waiting for a cloud upload, creating an account, or splitting archives to fit attachment limits.",
     "focus": "For the direct path, keep both devices online, allow the app through the firewall, and use direct connectivity when the network allows it.",
     "priority": "0.8",
-    "related": ["/", "/download", "/how-to-send-large-files"]
+    "related": ["/", "/download", "/large-file-transfer", "/open-source-file-transfer", "/how-to-send-large-files"]
+  },
+  {
+    "path": "/large-file-transfer",
+    "label": "Large File Transfer",
+    "title": "Large File Transfer - Send Huge Files Without Cloud Upload",
+    "description": "Send huge files directly with Lightning P2P. No account, no cloud upload, no artificial file-size cap, and BLAKE3-verified P2P transfer.",
+    "eyebrow": "Large file transfer",
+    "heading": "Send huge files without uploading them to the cloud first.",
+    "intro": "Lightning P2P is built for large file transfer when email attachments, chat uploads, and hosted cloud links get in the way. The sender keeps the file locally and the receiver pulls verified bytes directly.",
+    "focus": "There is no artificial file-size cap in the app. Practical limits come from disk space, filesystem limits, network reliability, and how long both devices stay online.",
+    "priority": "0.82",
+    "related": ["/download", "/how-to-send-large-files", "/wetransfer-alternative", "/security"],
+    "body": [
+      "Cloud transfer services are convenient, but large files often pay the upload penalty twice: first from sender to cloud, then from cloud to receiver. Lightning P2P removes that hosted upload step by streaming from the sender to the receiver.",
+      "The transfer engine imports content into iroh-blobs, creates a receive ticket, and streams content-addressed bytes over iroh QUIC. The receiver verifies BLAKE3 hashes while writing to disk, so successful output is tied to the expected content hash.",
+      "For very large transfers, keep both devices awake, plug laptops into power, verify the destination disk has enough space, and prefer stable Wi-Fi or wired Ethernet when possible."
+    ],
+    "faqs": [
+      {
+        "q": "What is the file size limit?",
+        "a": "Lightning P2P does not impose an artificial file-size cap. Disk space, filesystem limits, network stability, and session length are the practical limits."
+      },
+      {
+        "q": "Is this faster than cloud upload?",
+        "a": "It can avoid the extra cloud upload step, but public speed claims should be backed by repeatable benchmark data for your hardware and network route."
+      },
+      {
+        "q": "Does the whole file load into memory?",
+        "a": "No. Large files stream through the transfer engine instead of being buffered as a single in-memory blob."
+      }
+    ]
+  },
+  {
+    "path": "/secure-p2p-file-transfer",
+    "label": "Secure P2P Transfer",
+    "title": "Secure P2P File Transfer - QUIC and BLAKE3 Verification",
+    "description": "Lightning P2P uses encrypted iroh QUIC transport, BLAKE3 content verification, capability tickets, and release checksums without claiming a completed audit.",
+    "eyebrow": "Security model",
+    "heading": "Secure P2P file transfer means precise claims, not vague promises.",
+    "intro": "Lightning P2P avoids cloud file hosting, uses encrypted peer transport through iroh, verifies content with BLAKE3 through iroh-blobs, and treats receive tickets as capability tokens.",
+    "focus": "The project is clear about limitations: tickets are secrets, the sender must stay online, relay infrastructure can assist connectivity, and no third-party audit has been published yet.",
+    "priority": "0.78",
+    "related": ["/security", "/download", "/large-file-transfer", "/best-p2p-file-transfer"],
+    "body": [
+      "Security-sensitive file transfer copy should explain mechanisms. Lightning P2P uses iroh for peer connectivity over QUIC TLS and iroh-blobs for content-addressed transfer. The receiver validates BLAKE3 content hashes as bytes are written.",
+      "Receive tickets are capability tokens. Anyone with a valid ticket can request the referenced content while the sender is online and the content remains available, so tickets should be shared only with intended receivers.",
+      "Release trust is separate from transfer security. Windows and Android artifacts are published on GitHub Releases with SHA256 checksum files, and Android releases include the signer certificate fingerprint."
+    ],
+    "faqs": [
+      {
+        "q": "Is Lightning P2P end-to-end encrypted?",
+        "a": "Transfers use encrypted QUIC transport through iroh. The project documents this as encrypted peer transport rather than making broad undefined encryption claims."
+      },
+      {
+        "q": "Has Lightning P2P been audited?",
+        "a": "No third-party security audit has been published yet. Use the public security model, source code, release checksums, and threat model when evaluating sensitive use."
+      },
+      {
+        "q": "Can someone receive my file without the ticket?",
+        "a": "The receive ticket is the capability needed to request the transfer. Protect it like a secret."
+      }
+    ]
+  },
+  {
+    "path": "/open-source-file-transfer",
+    "label": "Open-Source Transfer",
+    "title": "Open-Source File Transfer - Apache-2.0 P2P App",
+    "description": "Lightning P2P is an Apache-2.0 open-source file transfer app built with Rust, Tauri, React, iroh, QUIC, iroh-blobs, and BLAKE3.",
+    "eyebrow": "Open source",
+    "heading": "Open-source file transfer with auditable release artifacts.",
+    "intro": "Lightning P2P publishes its Rust, Tauri, React, TypeScript, Android, release, security, and docs work in the open under Apache-2.0.",
+    "focus": "Use it, fork it, benchmark it, cite it, or contribute improvements. The repository includes a NOTICE file, CITATION.cff, contribution guide, security policy, and issue templates.",
+    "priority": "0.76",
+    "related": ["/", "/download", "/security", "/benchmarks"],
+    "body": [
+      "Open source matters for file transfer because users can inspect the trust boundary: how tickets are created, how bytes move, how files are written, and how releases are packaged.",
+      "The project keeps core transfer behavior in Rust, uses Tauri IPC instead of an HTTP server, and keeps React focused on presentation. The architecture docs explain those boundaries so contributors can review changes without reverse-engineering the repo.",
+      "Apache-2.0 licensing supports reuse while preserving license and notice requirements. CITATION.cff gives researchers and benchmark authors a standard way to cite the repository."
+    ],
+    "faqs": [
+      {
+        "q": "What license does Lightning P2P use?",
+        "a": "Lightning P2P is licensed under Apache-2.0 and includes a NOTICE file for attribution preservation."
+      },
+      {
+        "q": "Can I cite Lightning P2P in research?",
+        "a": "Yes. The repository includes CITATION.cff so GitHub can show a Cite this repository action."
+      },
+      {
+        "q": "Where should contributors start?",
+        "a": "Start with CONTRIBUTING.md, docs/ARCHITECTURE.md, and the labeled good first issues."
+      }
+    ]
   },
   {
     "path": "/best-p2p-file-transfer",
     "label": "Best P2P File Transfer",
-    "title": "Best P2P File Transfer for Windows - Lightning P2P",
-    "description": "Looking for the best free P2P file transfer app for Windows? Lightning P2P offers direct encrypted transfers, no cloud upload, no account, and BLAKE3 verification.",
+    "title": "Best P2P File Transfer for Windows and Android - Lightning P2P",
+    "description": "Looking for the best free P2P file transfer app for Windows or Android? Lightning P2P offers direct encrypted transfers, no cloud upload, no account, and BLAKE3 verification.",
     "eyebrow": "Best-fit answer",
-    "heading": "The best P2P file transfer fit for Windows users who want direct, free, verified transfers.",
+    "heading": "The best P2P file transfer fit for Windows and Android users who want direct, free, verified transfers.",
     "intro": "Lightning P2P is built for the exact search intent behind best P2P file transfer app: send large files directly, avoid cloud upload steps, skip accounts, and verify bytes on the receiver.",
     "focus": "Use Lightning P2P when the priority is direct Windows or Android transfer, open-source code, release signing support, and a transfer model that avoids hosted storage links.",
     "priority": "0.85",
@@ -203,11 +305,13 @@
       "/",
       "/download",
       "/free-p2p-file-transfer",
+      "/large-file-transfer",
+      "/open-source-file-transfer",
       "/wetransfer-alternative"
     ],
     "body": [
       "There is no honest single best file transfer app for every device and network. The right answer depends on whether you need same-LAN sharing, browser transfer, app-store distribution, or direct Windows and Android transfer across networks.",
-      "Lightning P2P is the best-fit choice for Windows users who want a free open-source desktop app with direct peer-to-peer transfer, no account, no cloud upload, and BLAKE3-verified content. It is designed around iroh QUIC connectivity, direct paths first, and relay-assisted fallback when NAT or firewall rules block direct dialing.",
+      "Lightning P2P is the best-fit choice for Windows and Android users who want a free open-source app with direct peer-to-peer transfer, no account, no cloud upload, and BLAKE3-verified content. It is designed around iroh QUIC connectivity, direct paths first, and relay-assisted fallback when NAT or firewall rules block direct dialing.",
       "If you need a browser-only tool today, PairDrop or Snapdrop may fit. If you need app-store clients for every major platform today, LocalSend may fit. If you need direct WAN-capable transfer with native Windows installers, an Android sideload path, SHA256 checksums, and verified content addressing, Lightning P2P is built for that lane."
     ],
     "faqs": [
@@ -228,18 +332,18 @@
   {
     "path": "/wormhole-alternative",
     "label": "Magic Wormhole Alternative",
-    "title": "Magic Wormhole Alternative - GUI P2P Transfer for Windows",
+    "title": "Magic Wormhole Alternative - GUI P2P Transfer for Windows and Android",
     "description": "Lightning P2P is a Magic Wormhole alternative with a Windows desktop app, iroh QUIC transport, BLAKE3 verification, and QR ticket sharing.",
     "eyebrow": "Magic Wormhole alternative",
-    "heading": "A desktop Magic Wormhole alternative for Windows.",
-    "intro": "Magic Wormhole is a great CLI for moving files peer-to-peer with short codes. Lightning P2P brings a similar direct-transfer model to a Windows desktop app with drag-and-drop, nearby discovery, and a release pipeline built for Windows signing.",
+    "heading": "A GUI Magic Wormhole alternative for Windows and Android.",
+    "intro": "Magic Wormhole is a great CLI for moving files peer-to-peer with short codes. Lightning P2P brings a similar direct-transfer model to a Windows desktop app and Android sideload APK with QR/link handoff and nearby discovery.",
     "focus": "Both tools keep transfers peer-to-peer. Lightning P2P adds a full GUI, QR-scannable tickets, a transfer history, and an Apache-2.0 licensed Rust codebase on GitHub.",
     "priority": "0.7",
     "related": ["/", "/localsend-vs-lightning-p2p", "/benchmarks"],
     "body": [
-      "Magic Wormhole pioneered the idea that short human-readable codes, PAKE, and direct file streams can replace cloud upload links. Lightning P2P keeps that spirit while targeting Windows users who want a graphical desktop app rather than a Python command line.",
+      "Magic Wormhole pioneered the idea that short human-readable codes, PAKE, and direct file streams can replace cloud upload links. Lightning P2P keeps that spirit while targeting Windows and Android users who want a graphical app rather than a Python command line.",
       "Like Magic Wormhole, Lightning P2P does not create a hosted cloud file bucket. The sender keeps the file on disk, the receiver pulls it over QUIC, and relay fallback helps when a direct path is blocked. Content is verified with BLAKE3 on the receiver before it is written to disk.",
-      "Where Lightning P2P differs: the app is a native Windows installer with drag-and-drop, generates copyable receive links and QR codes, keeps a local transfer history, and can include signed updater metadata on production releases. It is built on iroh and iroh-blobs, which are maintained Rust libraries for P2P QUIC transport and content-addressed blob transfer.",
+      "Where Lightning P2P differs: the app ships native Windows installers and an Android APK, generates copyable receive links and QR codes, keeps a local transfer history, and can include signed updater metadata on production releases. It is built on iroh and iroh-blobs, which are maintained Rust libraries for P2P QUIC transport and content-addressed blob transfer.",
       "If you are comparing file transfer tools, also see the Lightning P2P benchmark plan, which lays out the test matrix for publishing honest speed comparisons across cloud upload, browser transfer, LAN-only apps, and command-line baselines."
     ],
     "faqs": [
@@ -266,7 +370,7 @@
     "related": ["/", "/free-p2p-file-transfer", "/how-to-send-large-files"],
     "body": [
       "WeTransfer is convenient because it removes account friction, but its model relies on uploading your file to a third-party server. For large files, that means long uploads, retention windows, and a public link anyone with the URL can access until it expires.",
-      "Lightning P2P uses a peer-to-peer model instead. You drop files into the Windows app, the app produces a receive handoff link and QR, and the receiver opens it to pull the file directly from your device without a hosted cloud upload first.",
+      "Lightning P2P uses a peer-to-peer model instead. You drop files into the native app, the app produces a receive handoff link and QR, and the receiver opens it to pull the file directly from your device without a hosted cloud upload first.",
       "Because Lightning P2P is not a hosted service, there is no account to create, no storage quota, no retention timer, and no paid tier. The app is free and Apache-2.0 licensed on GitHub, built with Rust, Tauri, iroh, and iroh-blobs. Release artifacts include SHA256 checksums, clear signing status, and Authenticode signatures only when production signing is configured.",
       "This model fits use cases where WeTransfer's upload step is the bottleneck: design files, raw video, database dumps, virtual machine images, and anything where the recipient would rather transfer directly than download from a third-party link."
     ],
@@ -277,7 +381,7 @@
       },
       {
         "q": "Do I need to create an account to send a file?",
-        "a": "No. Lightning P2P has no sign-in, no email capture, and no paid tier. Install the Windows app, drop files, share the receive link, done."
+        "a": "No. Lightning P2P has no sign-in, no email capture, and no paid tier. Install the app, drop files, share the receive link, done."
       },
       {
         "q": "Does Lightning P2P expire links the way WeTransfer does?",
@@ -316,16 +420,16 @@
   {
     "path": "/how-to-send-large-files",
     "label": "How to Send Large Files",
-    "title": "How to Send Large Files Peer-to-Peer on Windows",
-    "description": "Send large files peer-to-peer on Windows in three steps with Lightning P2P. No account, no cloud upload, no artificial file-size cap, and verified direct transfers.",
+    "title": "How to Send Large Files Peer-to-Peer on Windows and Android",
+    "description": "Send large files peer-to-peer on Windows or Android in three steps with Lightning P2P. No account, no cloud upload, no artificial file-size cap, and verified direct transfers.",
     "eyebrow": "How to",
-    "heading": "How to send large files peer-to-peer on Windows.",
-    "intro": "Sending large files over email, chat, or cloud upload is slow and often hits size limits. Lightning P2P is a free Windows app that streams files directly from sender to receiver with encrypted QUIC transport and verified content.",
+    "heading": "How to send large files peer-to-peer on Windows and Android.",
+    "intro": "Sending large files over email, chat, or cloud upload is slow and often hits size limits. Lightning P2P is a free Windows and Android app that streams files directly from sender to receiver with encrypted QUIC transport and verified content.",
     "focus": "This page walks through the fast path in three steps: install, create a ticket, and receive.",
     "priority": "0.8",
     "related": ["/", "/download", "/free-p2p-file-transfer"],
     "body": [
-      "Step 1: Install Lightning P2P. Download the recommended Velopack setup installer from the releases page. Verify SHA256 checksums before installing. Windows code-signing is supported by the release pipeline when signing secrets are configured, and updater metadata is signed separately when updater artifacts are generated.",
+      "Step 1: Install Lightning P2P. Download the recommended Velopack setup installer for Windows or the Android APK from the releases page. Verify SHA256 checksums before installing. Windows code-signing is supported by the release pipeline when signing secrets are configured, Android releases publish the signer certificate fingerprint, and updater metadata is signed separately when updater artifacts are generated.",
       "Step 2: Drag files into the sender. Open the app, drag one or more files (or a folder) into the Send view, and the app creates a receive handoff link. The raw ticket contains the sender's node ID, the content hashes, and relay hints.",
       "Step 3: Share the receive link with the receiver. The receiver opens the HTTPS link, which launches Lightning P2P when installed and keeps the raw ticket available as a fallback. Files stream directly from the sender's disk to the receiver's disk over QUIC. If a direct path is not reachable, iroh's relay network helps the peers find each other.",
       "Every byte is verified with BLAKE3 as it lands on the receiver. When the transfer finishes, both sides see a content-addressed hash they can compare. Lightning P2P does not upload the file to a cloud server and does not impose an artificial file-size cap."
@@ -335,8 +439,8 @@
       "totalTime": "PT3M",
       "steps": [
         {
-          "name": "Install Lightning P2P on Windows",
-          "text": "Download and run the recommended Velopack setup installer from GitHub Releases.",
+          "name": "Install Lightning P2P",
+          "text": "Download and run the recommended Windows setup installer or Android APK from GitHub Releases.",
           "url": "https://github.com/Kerim-Sabic/lightning-p2p/releases/latest"
         },
         {

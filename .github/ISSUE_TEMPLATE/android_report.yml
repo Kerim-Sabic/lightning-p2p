@@ -1,0 +1,79 @@
+name: Android report
+description: Report Android sideload, share-target, receive, or storage behavior.
+title: "[Android] "
+labels: ["android", "bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this for Android 10+ sideload builds. Redact receive tickets, personal paths, filenames, and device names before posting screenshots or logs.
+  - type: input
+    id: version
+    attributes:
+      label: Lightning P2P version
+      placeholder: "0.4.6"
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Device and Android version
+      placeholder: "Pixel 8, Android 15"
+    validations:
+      required: true
+  - type: dropdown
+    id: install-source
+    attributes:
+      label: Install source
+      options:
+        - GitHub Releases APK
+        - Locally built APK
+        - Unknown
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - APK install or sideload warning
+        - Share target send
+        - File picker send
+        - Receive to Downloads
+        - Receive to Pictures/Movies/Music
+        - Nearby discovery
+        - Transfer reliability
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: List the exact actions that trigger the behavior.
+      placeholder: |
+        1. Open Gallery
+        2. Share ...
+        3. Select Lightning P2P
+        4. See ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Redact tickets, paths, device names, and sensitive filenames.
+    validations:
+      required: false

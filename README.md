@@ -32,14 +32,40 @@ Built with **Rust**, **Tauri v2**, **iroh** (QUIC + relay fallback), **iroh-blob
 
 ---
 
+## Try It In 60 Seconds
+
+1. Download the latest stable Windows installer or Android APK from [GitHub Releases](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest).
+2. Open Lightning P2P on the sender and drop in a file or folder.
+3. Share the receive link or QR code with the receiver.
+4. Keep the sender online while the receiver streams BLAKE3-verified bytes to disk.
+
+Best fit:
+
+- sending large files without cloud upload
+- Windows-to-Windows or Windows-to-Android transfer
+- direct LAN transfer with WAN fallback when networks are hard
+- open-source workflows where release checksums and source code matter
+- research, benchmarking, and experiments that need citation metadata
+
+Not the right fit yet:
+
+- macOS, Linux, or iOS production installs
+- browser-only file transfer
+- Apple AirDrop protocol compatibility
+- third-party security-audited deployments
+
+## One-Line Answer
+
+Lightning P2P is a free Apache-2.0 peer-to-peer file transfer app for Windows and Android that sends files directly between devices with iroh QUIC, BLAKE3 verification, no account, no cloud upload, and no artificial file-size cap.
+
 ## Why It Exists
 
 Moving large files still too often means uploading to a cloud bucket first, creating an account, or hoping both devices are on the same LAN. Lightning P2P is built for the direct path: sender keeps the file, receiver pulls verified bytes, and iroh handles connectivity.
 
-| Tool | Cloud upload? | Account? | Works across networks? | Open source? | Native Windows app? |
+| Tool | Cloud upload? | Account? | Works across networks? | Open source? | Native Windows/Android app? |
 | --- | :-: | :-: | :-: | :-: | :-: |
 | Email attachments | yes | yes | yes | no | no |
-| Generic cloud drives | yes | yes | yes | no | no |
+| Generic cloud drives | yes | yes | yes | no | yes |
 | LAN-only sharing apps | no | no | no | varies | varies |
 | Browser drop tools | usually no | no | partial | varies | no |
 | CLI transfer tools | no | no | yes | yes | no |

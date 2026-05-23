@@ -5,10 +5,10 @@ Internal checklist for repository promotion work. Keep this out of the README so
 ## Repository
 
 - [x] Repository homepage is set to `https://lightning-p2p.netlify.app`.
-- [x] Repository topics include `p2p`, `peer-to-peer`, `file-transfer`, `windows`, `airdrop-alternative`, `wetransfer-alternative`, `localsend-alternative`, `magic-wormhole-alternative`, `rust`, `tauri`, `iroh`, `quic`, `blake3`, `privacy`, `open-source`, `desktop-app`, `react`, and `typescript`.
+- [x] Repository topics include `p2p`, `peer-to-peer`, `file-transfer`, `windows`, `android`, `android-app`, `airdrop-alternative`, `wetransfer-alternative`, `localsend-alternative`, `magic-wormhole-alternative`, `rust`, `tauri`, `iroh`, `quic`, `blake3`, `privacy`, `open-source`, `desktop-app`, `react`, and `typescript`.
 - [ ] Upload `public/github-social-preview.png` as the GitHub social preview image from repository settings.
 - [x] Pin the maximum supported launch issues: GitHub currently allows 3 pinned issues per repository, so `#17`, `#18`, and `#19` are pinned.
-- [ ] Enable Discussions with Q&A and Ideas categories.
+- [x] Enable Discussions with Q&A and Ideas categories.
 
 ## Release Readiness
 
@@ -27,7 +27,7 @@ Internal checklist for repository promotion work. Keep this out of the README so
 
 ## Launch Issues
 
-- [x] [Good first issue: add animated demo GIF to README](https://github.com/Kerim-Sabic/lightning-p2p/issues/17)
+- [x] [Good first issue: replace README demo with real app recording](https://github.com/Kerim-Sabic/lightning-p2p/issues/17)
 - [x] [Benchmark: Lightning P2P vs LocalSend vs PairDrop on LAN](https://github.com/Kerim-Sabic/lightning-p2p/issues/18)
 - [x] [Packaging: publish winget manifest](https://github.com/Kerim-Sabic/lightning-p2p/issues/19)
 - [x] [Platform: macOS packaging spike](https://github.com/Kerim-Sabic/lightning-p2p/issues/20)

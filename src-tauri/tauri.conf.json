@@ -30,9 +30,9 @@
   "bundle": {
     "active": true,
     "publisher": "Lightning P2P",
-    "homepage": "https://github.com/Kerim-Sabic/lightning-p2p",
-    "shortDescription": "Direct peer-to-peer file transfers with iroh and Tauri.",
-    "longDescription": "Lightning P2P is a Windows-first desktop app for direct peer-to-peer file transfer with verified iroh-blobs streaming, relay-aware WAN reachability, and polished native installers.",
+    "homepage": "https://lightning-p2p.netlify.app/",
+    "shortDescription": "Direct peer-to-peer file transfers with iroh, QUIC, and BLAKE3.",
+    "longDescription": "Lightning P2P is a Windows desktop app for direct peer-to-peer file transfer between Windows and Android devices with verified iroh-blobs streaming, relay-aware WAN reachability, and polished native installers.",
     "createUpdaterArtifacts": false,
     "targets": ["nsis", "msi"],
     "icon": [

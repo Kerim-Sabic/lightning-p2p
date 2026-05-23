@@ -91,6 +91,42 @@
   force = true
 
 [[redirects]]
+  from = "/large-file-transfer"
+  to = "/large-file-transfer/index.html"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/large-file-transfer/"
+  to = "/large-file-transfer/index.html"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/secure-p2p-file-transfer"
+  to = "/secure-p2p-file-transfer/index.html"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/secure-p2p-file-transfer/"
+  to = "/secure-p2p-file-transfer/index.html"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/open-source-file-transfer"
+  to = "/open-source-file-transfer/index.html"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/open-source-file-transfer/"
+  to = "/open-source-file-transfer/index.html"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/best-p2p-file-transfer"
   to = "/best-p2p-file-transfer/index.html"
   status = 200

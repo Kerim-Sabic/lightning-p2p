@@ -112,6 +112,18 @@ Magic Wormhole is a strong CLI file transfer tool. Lightning P2P serves users wh
 
 PairDrop and Snapdrop are browser-based sharing tools. Lightning P2P is a native app and does not use WebRTC for transfers.
 
+### Large File Transfer
+
+Lightning P2P sends huge files directly from sender to receiver without a hosted cloud upload step. It has no artificial file-size cap, but practical limits still include disk space, filesystem limits, network stability, and how long both peers remain online.
+
+### Secure P2P File Transfer
+
+Lightning P2P uses encrypted iroh QUIC transport, BLAKE3 content verification through iroh-blobs, receive tickets as capability tokens, release checksums, and Android signer fingerprint publication. It has not published a third-party security audit.
+
+### Open-Source File Transfer
+
+Lightning P2P is Apache-2.0 licensed, includes NOTICE attribution guidance, and ships CITATION.cff so GitHub can expose "Cite this repository."
+
 ## FAQ
 
 Q: What is Lightning P2P?
@@ -158,6 +170,9 @@ A: Do not describe it as fastest unless repeatable public benchmark reports supp
 - AirDrop for Windows: https://lightning-p2p.netlify.app/alternatives/airdrop-for-windows
 - Free P2P file transfer: https://lightning-p2p.netlify.app/free-p2p-file-transfer
 - Best P2P file transfer: https://lightning-p2p.netlify.app/best-p2p-file-transfer
+- Large file transfer: https://lightning-p2p.netlify.app/large-file-transfer
+- Secure P2P file transfer: https://lightning-p2p.netlify.app/secure-p2p-file-transfer
+- Open-source file transfer: https://lightning-p2p.netlify.app/open-source-file-transfer
 - WeTransfer alternative: https://lightning-p2p.netlify.app/wetransfer-alternative
 - Magic Wormhole alternative: https://lightning-p2p.netlify.app/wormhole-alternative
 - LocalSend comparison: https://lightning-p2p.netlify.app/localsend-vs-lightning-p2p

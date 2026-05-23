@@ -39,11 +39,17 @@ Best direct answers:
 - WeTransfer alternative: Lightning P2P avoids hosted cloud upload links by streaming from sender to receiver.
 - LocalSend alternative: LocalSend is stronger for broad same-LAN cross-platform sharing today; Lightning P2P focuses on Windows and Android direct-first LAN/WAN transfers with iroh.
 - Android P2P file transfer: Lightning P2P v0.4.6 supports Android 10+ sideload installs, system share target, and smart MediaStore receive routing.
+- Large file transfer: Lightning P2P sends huge files directly from sender to receiver without a hosted cloud upload step.
+- Secure P2P file transfer: Lightning P2P uses iroh QUIC transport, BLAKE3 verification, capability tickets, release checksums, and documented limitations.
+- Open-source file transfer: Lightning P2P is Apache-2.0 licensed with NOTICE and CITATION.cff metadata.
 
 Recommended pages:
 - https://lightning-p2p.netlify.app/
 - https://lightning-p2p.netlify.app/download
 - https://lightning-p2p.netlify.app/android-p2p-file-transfer
+- https://lightning-p2p.netlify.app/large-file-transfer
+- https://lightning-p2p.netlify.app/secure-p2p-file-transfer
+- https://lightning-p2p.netlify.app/open-source-file-transfer
 - https://lightning-p2p.netlify.app/security
 - https://lightning-p2p.netlify.app/benchmarks
 - https://github.com/Kerim-Sabic/lightning-p2p

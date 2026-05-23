@@ -1,0 +1,71 @@
+name: Download or install issue
+description: Report installer, checksum, SmartScreen, sideload, or browser warning friction.
+title: "[Install] "
+labels: ["download-trust"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this when a release file does not download, verify, install, or launch as expected. Do not attach private tickets or personal files.
+  - type: input
+    id: version
+    attributes:
+      label: Lightning P2P version
+      placeholder: "0.4.6"
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Windows
+        - Android
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: os-version
+    attributes:
+      label: OS version
+      placeholder: "Windows 11 23H2 or Android 15"
+    validations:
+      required: true
+  - type: input
+    id: asset
+    attributes:
+      label: Release asset filename
+      placeholder: "LightningP2P-win-Setup.exe or LightningP2P-android-latest.apk"
+    validations:
+      required: true
+  - type: input
+    id: source-url
+    attributes:
+      label: Download source URL
+      placeholder: "https://github.com/Kerim-Sabic/lightning-p2p/releases/..."
+    validations:
+      required: true
+  - type: dropdown
+    id: checksum-match
+    attributes:
+      label: Does the SHA256 hash match the published checksum file?
+      options:
+        - Yes
+        - No
+        - I could not find the checksum file
+        - I have not checked yet
+    validations:
+      required: true
+  - type: textarea
+    id: warning
+    attributes:
+      label: Warning or failure text
+      description: Paste exact warning text, or attach a screenshot if you are comfortable.
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Additional notes
+    validations:
+      required: false
