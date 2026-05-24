@@ -43,3 +43,7 @@ src-tauri/icons/*.icns
 
 # sled database files
 *.db/
+
+# Local benchmark outputs - keep only latest.{csv,json} tracked
+docs/reports/raw/local/*-local.csv
+docs/reports/raw/local/*-local.json

@@ -61,9 +61,10 @@ Honest about scope:
 - Windows and Android are the stable targets today.
 - macOS, Linux, and iOS are on the roadmap, not shipping.
 - No external security audit yet.
-- We refuse to publish "fastest" claims without a measured benchmark
-  report. The methodology is at docs/BENCHMARKS.md; the first report
-  lands with v0.5.0.
+- We refuse to publish "fastest" claims without measured data. An
+  automated same-machine harness (docs/reports/automated-local-benchmarks.md)
+  runs in CI and produces raw CSV/JSON evidence on every push. Real-
+  device WAN + Android numbers are still pending.
 
 Apache-2.0, fully open source: https://github.com/Kerim-Sabic/lightning-p2p
 

@@ -1,11 +1,21 @@
 # Launch Kit
 
 Pre-written posts for Lightning P2P launches across HN, Reddit, Twitter,
-Product Hunt, and LinkedIn. Use them as-is or as starting drafts. **Every
-file holds back speed leadership claims until the published benchmark
-report at `docs/reports/<version>-benchmarks.md` exists** and the
-corresponding row in [`docs/launch-growth.md`](../launch-growth.md) moves
-from "hold" to "approved."
+Product Hunt, and LinkedIn. Use them as-is or as starting drafts.
+
+**What you can already point to today (no manual hardware required):**
+
+- The automated same-machine harness at [`docs/reports/automated-local-benchmarks.md`](../reports/automated-local-benchmarks.md) — real, reproducible loopback throughput evidence with raw CSV/JSON.
+- `pnpm bench:local` runs that harness in ~30 s on a clean clone.
+- The CI `benchmark-local-smoke` job uploads the same evidence on every push.
+- [`docs/release-evidence.md`](../release-evidence.md) catalogs every automated check.
+
+**What still holds back "fastest" and competitor claims:** the
+real-device WAN / Wi-Fi / Android matrix in
+[`docs/BENCHMARKS.md`](../BENCHMARKS.md). The same-machine harness is
+loopback only — it does not replace real-device evidence. The rows in
+[`docs/launch-growth.md`](../launch-growth.md) labeled "Hold until
+benchmarks" stay held.
 
 ## Files
 

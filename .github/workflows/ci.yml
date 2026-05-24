@@ -60,7 +60,7 @@ jobs:
         run: cargo test
 
   frontend:
-    name: Frontend (lint + typecheck)
+    name: Frontend (lint + typecheck + test)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -75,6 +75,49 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm typecheck
+      - run: pnpm test
+      - run: node scripts/check-release-state.mjs
+
+  benchmark-local-smoke:
+    name: Benchmark (same-machine harness smoke)
+    runs-on: ubuntu-latest
+    needs: [rust]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libsoup-3.0-dev libjavascriptcoregtk-4.1-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Build benchmark-local
+        working-directory: src-tauri
+        run: cargo build --release --bin benchmark-local
+
+      - name: Run smoke benchmark (10 MB, 3 runs)
+        run: bash scripts/run-local-benchmark.sh --profile smoke --runs 3
+
+      - name: Verify benchmark report wrote summary
+        run: |
+          test -s docs/reports/raw/local/latest.json || (echo "latest.json missing or empty" && exit 1)
+          test -s docs/reports/raw/local/latest.csv || (echo "latest.csv missing or empty" && exit 1)
+          echo "--- summary ---"
+          # Print summary using node so this stays jq-free
+          node -e "const r=require('./docs/reports/raw/local/latest.json'); for (const s of r.summary) { console.log(\`  \${s.scenario}: runs=\${s.runs} ok=\${s.successes} fail=\${s.failures} median_mbps=\${s.median_effective_mbps}\`); }"
+
+      - name: Upload local benchmark evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: lightning-p2p-local-benchmark
+          path: |
+            docs/reports/raw/local/*.json
+            docs/reports/raw/local/*.csv
 
   release-plan:
     name: Resolve release mode

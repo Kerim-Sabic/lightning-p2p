@@ -40,8 +40,10 @@ What it is not:
 - Audited. No external security audit yet.
 - Cross-platform-complete. macOS / Linux / iOS are roadmap.
 - Faster than X. We refuse to claim speed leadership without a published
-  benchmark report; the methodology is in docs/BENCHMARKS.md and the
-  first matrix run lands with v0.5.0.
+  real-device benchmark report. An automated same-machine harness ships
+  in this release (pnpm bench:local; raw CSV/JSON in docs/reports/raw/
+  on every CI push) but it measures loopback only — it is not a
+  competitor comparison or a WAN claim.
 
 Source, releases, security model, threat model, and roadmap:
 https://github.com/Kerim-Sabic/lightning-p2p
@@ -60,8 +62,10 @@ guardrail.
 > QUIC with relay fallback and a native installer, so the threat model
 > and trust surface are different. Croc is CLI-only and uses PAKE
 > phrases; Lightning P2P trades the code phrase for QR + handoff link
-> and a real native UI. We're not faster until we publish the benchmark
-> report (docs/BENCHMARKS.md).
+> and a real native UI. On speed: we ship a same-machine automated
+> harness (docs/reports/automated-local-benchmarks.md) you can run
+> locally, but real-device WAN / Wi-Fi numbers and competitor
+> comparisons need a real-device matrix that we have not yet published.
 
 ### Q: "Why should I trust an unsigned installer?"
 

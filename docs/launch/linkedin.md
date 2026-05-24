@@ -26,8 +26,9 @@ What's under the hood:
 
 What it deliberately is not:
 • A hosted cloud product
-• Marketed as "the fastest" — speed claims wait for the public
-  benchmark report we're publishing with v0.5.0
+• Marketed as "the fastest" — an automated same-machine harness ships
+  in CI today, but real-device WAN and Android numbers are still
+  pending and competitor comparisons stay held until those land
 • An audited security product — there is no external audit yet
 • A macOS / Linux / iOS app — those are roadmap
 

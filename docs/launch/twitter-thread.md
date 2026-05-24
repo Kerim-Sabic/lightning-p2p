@@ -38,9 +38,9 @@ Real trust signals:
 - Published Android signer cert fingerprint
 - SHA256SUMS for every release artifact
 - verify-release.ps1 one-command verifier
-- Public benchmark methodology before any "fastest" claim
+- Automated same-machine benchmark harness in CI before any "fastest" claim
 
-(link to README install + verify section)
+(link to README install + verify section + docs/release-evidence.md)
 ```
 
 Image: screenshot of the verify command output.
@@ -64,7 +64,8 @@ What it isn't:
 - Audited (no external security audit yet)
 - macOS / Linux / iOS-ready (roadmap)
 - A sync tool (it's one-shot transfer)
-- Faster than X (until the benchmark report ships)
+- Faster than X (a same-machine harness ships in CI; real-device WAN
+  numbers are still pending)
 
 Everything is in SECURITY.md + the claims guardrail.
 ```

@@ -223,7 +223,11 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for module boundaries and trans
 
 ## Benchmarks
 
-Lightning P2P is designed for high-throughput direct transfer, but the project does not claim speed leadership without repeatable public benchmark data. Start with [docs/BENCHMARKS.md](docs/BENCHMARKS.md) for the public evidence rules, then use [docs/benchmark-report-template.md](docs/benchmark-report-template.md) for LAN-direct, WAN-direct, relay-fallback, many-small-file, and large-single-file reports.
+Lightning P2P is designed for high-throughput direct transfer, but the project does not claim speed leadership without repeatable public benchmark data.
+
+**Automated harness available today.** `pnpm bench:local` boots two `LightningP2PNode` instances in temp dirs (the same-machine `LIGHTNING_P2P_PROFILE=alice` ↔ `bob` story) and writes privacy-safe CSV + JSON evidence to [`docs/reports/raw/local/`](docs/reports/raw/local/). The CI `benchmark-local-smoke` job runs it on every push and uploads the result as an artifact. The preliminary report is at [`docs/reports/automated-local-benchmarks.md`](docs/reports/automated-local-benchmarks.md). Numbers there are **same-machine loopback only** — they measure the local code path, not WAN, NAT, Wi-Fi, relay fallback, or Windows ↔ Android.
+
+**Real-device report pending.** The full WAN / Wi-Fi / relay / Windows ↔ Android matrix requires real hardware and is documented in [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) (evidence rules) and [`docs/benchmark-report-template.md`](docs/benchmark-report-template.md) (per-run template). Until that report ships, no "fastest" or competitor-comparison claims are made.
 
 ## Develop
 

@@ -43,7 +43,9 @@ no raw sockets, no `unwrap` in library code.
 
 Repo: https://github.com/Kerim-Sabic/lightning-p2p
 Security model: https://github.com/Kerim-Sabic/lightning-p2p/blob/main/SECURITY.md
-Benchmarks (methodology, no claims yet):
+Benchmark harness (same-machine loopback, automated):
+https://github.com/Kerim-Sabic/lightning-p2p/blob/main/docs/reports/automated-local-benchmarks.md
+Real-device methodology (WAN/Wi-Fi/Android, not yet measured):
 https://github.com/Kerim-Sabic/lightning-p2p/blob/main/docs/BENCHMARKS.md
 
 Feedback on the iroh integration patterns especially welcome.

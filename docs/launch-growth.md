@@ -21,7 +21,7 @@ Use this after a release has a benchmark report attached. Do not publish fastest
 
 ## Claims Guardrail
 
-Approved before benchmarks:
+Approved before real-device benchmarks:
 
 - Free and open source.
 - Direct-first peer-to-peer transfer.
@@ -29,13 +29,22 @@ Approved before benchmarks:
 - QUIC transport through iroh.
 - BLAKE3 verified content through iroh-blobs.
 - Windows public release, Android alpha foundation, iOS prepared.
+- Designed for high-throughput direct transfer.
+- Automated same-machine benchmark harness available (`pnpm bench:local`;
+  CI uploads CSV/JSON on every push). See
+  [`reports/automated-local-benchmarks.md`](reports/automated-local-benchmarks.md).
+- Reproducible release-evidence catalog at
+  [`release-evidence.md`](release-evidence.md).
 
-Hold until benchmarks:
+Hold until real-device benchmarks:
 
 - Fastest transfer app.
 - Faster than LocalSend, PairDrop, WeTransfer, or Magic Wormhole.
 - Multi-device speed boost improves throughput in practice.
 - iOS LAN direct works without entitlement caveats.
+- Any throughput number quoted as "Lightning P2P transfer speed" (the
+  same-machine harness measures loopback only — quote it as
+  "same-machine loopback throughput" or not at all).
 
 ## Community Loop
 

@@ -31,7 +31,9 @@
     "lint": "eslint src/",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write \"src/**/*.{ts,tsx}\"",
-    "tauri": "node scripts/run-tauri.mjs"
+    "tauri": "node scripts/run-tauri.mjs",
+    "bench:local": "pwsh scripts/run-local-benchmark.ps1",
+    "bench:local:full": "pwsh scripts/run-local-benchmark.ps1 -Profile full -Runs 5"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.2.0",

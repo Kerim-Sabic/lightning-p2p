@@ -84,6 +84,10 @@ default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
 cli = ["clap"]
 
+[[bin]]
+name = "benchmark-local"
+path = "src/bin/benchmark_local.rs"
+
 [[bench]]
 name = "transfer_bench"
 harness = false

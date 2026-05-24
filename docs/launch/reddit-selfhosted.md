@@ -40,6 +40,9 @@ What it doesn't do:
 - There is no self-hosted relay knob in the UI yet — you can disable
   relay fallback in settings and force direct-only, but you cannot
   point at your own custom relay through the GUI today.
+- No published real-device speed numbers yet. The automated same-
+  machine harness lives at docs/reports/automated-local-benchmarks.md;
+  a full WAN/Wi-Fi/Android matrix needs real hardware and is pending.
 
 Repo: https://github.com/Kerim-Sabic/lightning-p2p
 Threat model: https://github.com/Kerim-Sabic/lightning-p2p/blob/main/SECURITY.md

@@ -24,8 +24,10 @@ Why it might matter to people here:
   Azure Trusted Signing), published Android signer cert fingerprint,
   SHA256SUMS for every artifact, and a verify-release.ps1 script.
 - Anti-hype claims guardrail. We refuse to publish "fastest" or
-  comparison claims without a measured, reproducible benchmark report.
-  Methodology lives in docs/BENCHMARKS.md.
+  comparison claims without measured, reproducible data. An automated
+  same-machine harness (docs/reports/automated-local-benchmarks.md)
+  runs on every CI push and produces raw CSV/JSON. Real-device WAN +
+  Android numbers are still pending and are explicitly held.
 
 What it isn't:
 
