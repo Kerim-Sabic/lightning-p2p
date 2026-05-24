@@ -1,4 +1,4 @@
-import { startTransition, useEffect, useMemo, useState } from "react";
+import { startTransition, useCallback, useEffect, useMemo, useState } from "react";
 import { DevicesView } from "./components/DevicesView";
 import { FirstRunOverlay } from "./components/FirstRunOverlay";
 import { HistoryView } from "./components/HistoryView";
@@ -138,18 +138,22 @@ function NativeAppShell({ runtimeKind }: NativeAppShellProps) {
     setPendingReceiveTicket,
   ]);
 
-  const handleNavigate = (nextView: View): void => {
+  const handleNavigate = useCallback((nextView: View): void => {
     startTransition(() => {
       setView(nextView);
     });
-  };
+  }, []);
+
+  const handleNavigateToSend = useCallback((): void => {
+    handleNavigate("send");
+  }, [handleNavigate]);
 
   const content = useMemo(() => {
     switch (view) {
       case "devices":
         return <DevicesView />;
       case "receive":
-        return <ReceiveView />;
+        return <ReceiveView onNavigateSend={handleNavigateToSend} />;
       case "history":
         return <HistoryView />;
       case "settings":
@@ -158,7 +162,7 @@ function NativeAppShell({ runtimeKind }: NativeAppShellProps) {
       default:
         return <SendView />;
     }
-  }, [view]);
+  }, [view, handleNavigateToSend]);
 
   return (
     <div className="relative h-screen overflow-hidden bg-[var(--canvas-0)] text-[var(--fg-primary)]">

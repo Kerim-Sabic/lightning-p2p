@@ -5,10 +5,13 @@ import {
   ClipboardCheck,
   Copy,
   ExternalLink,
+  FolderOpen,
+  Send,
+  Star,
   StopCircle,
   TimerReset,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   formatBytes,
   formatDurationMs,
@@ -16,13 +19,22 @@ import {
   formatSpeed,
   formatTimestamp,
 } from "../lib/format";
-import { collectDiagnosticBundle, writeClipboardText } from "../lib/tauri";
-import type { TransferEntry } from "../stores/transferStore";
+import {
+  collectDiagnosticBundle,
+  openExternalUrl,
+  writeClipboardText,
+} from "../lib/tauri";
+import { summarizeTransfer } from "../lib/transferSummary";
+import { useTransferStore, type TransferEntry } from "../stores/transferStore";
 
 interface TransferCardProps {
   transfer: TransferEntry;
   onCancel?: (transferId: string) => void;
+  onSendAnother?: () => void;
 }
+
+const STAR_CTA_DISMISSED_KEY = "lightning-p2p:star-cta-dismissed";
+const STAR_CTA_URL = "https://github.com/Kerim-Sabic/lightning-p2p";
 
 function statusLabel(transfer: TransferEntry): string {
   if (transfer.phase === "cancelled") {
@@ -117,10 +129,44 @@ function failureHelp(transfer: TransferEntry): string | null {
   }
 }
 
-export function TransferCard({ transfer, onCancel }: TransferCardProps) {
+function readStarCtaDismissed(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+  try {
+    return window.localStorage.getItem(STAR_CTA_DISMISSED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writeStarCtaDismissed(): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  try {
+    window.localStorage.setItem(STAR_CTA_DISMISSED_KEY, "1");
+  } catch {
+    // localStorage may be blocked; CTA simply stays available
+  }
+}
+
+export function TransferCard({
+  transfer,
+  onCancel,
+  onSendAnother,
+}: TransferCardProps) {
+  const openDownloadDir = useTransferStore((state) => state.openDownloadDir);
   const [diagnosticsState, setDiagnosticsState] = useState<
     "idle" | "copied" | "error"
   >("idle");
+  const [summaryState, setSummaryState] = useState<
+    "idle" | "copied" | "error"
+  >("idle");
+  const [folderState, setFolderState] = useState<"idle" | "error">("idle");
+  const [starCtaDismissed, setStarCtaDismissed] = useState<boolean>(() =>
+    readStarCtaDismissed(),
+  );
   const hasTotal = transfer.total > 0;
   const percent = hasTotal
     ? Math.min((transfer.bytes / transfer.total) * 100, 100)
@@ -156,6 +202,41 @@ export function TransferCard({ transfer, onCancel }: TransferCardProps) {
       window.setTimeout(() => setDiagnosticsState("idle"), 2200);
     }
   };
+
+  const handleCopySummary = async (): Promise<void> => {
+    try {
+      await writeClipboardText(summarizeTransfer(transfer));
+      setSummaryState("copied");
+      window.setTimeout(() => setSummaryState("idle"), 1800);
+    } catch {
+      setSummaryState("error");
+      window.setTimeout(() => setSummaryState("idle"), 2200);
+    }
+  };
+
+  const handleOpenFolder = async (): Promise<void> => {
+    try {
+      await openDownloadDir();
+    } catch {
+      setFolderState("error");
+      window.setTimeout(() => setFolderState("idle"), 2200);
+    }
+  };
+
+  const handleDismissStarCta = (): void => {
+    writeStarCtaDismissed();
+    setStarCtaDismissed(true);
+  };
+
+  const showCompletionActions =
+    transfer.status === "completed" && transfer.direction === "receive";
+  const showStarCta = showCompletionActions && !starCtaDismissed;
+
+  useEffect(() => {
+    if (showCompletionActions) {
+      setStarCtaDismissed(readStarCtaDismissed());
+    }
+  }, [showCompletionActions]);
 
   return (
     <article className="glass-panel p-4">
@@ -321,6 +402,67 @@ export function TransferCard({ transfer, onCancel }: TransferCardProps) {
               {transfer.outputPath}
             </p>
           </div>
+        ) : null}
+
+        {showCompletionActions ? (
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => void handleOpenFolder()}
+              className="glass-button inline-flex items-center gap-2 px-3 py-2 text-xs font-medium text-slate-100"
+            >
+              <FolderOpen className="h-3.5 w-3.5 text-emerald-200" />
+              {folderState === "error" ? "Open failed" : "Open download folder"}
+            </button>
+            {onSendAnother ? (
+              <button
+                onClick={onSendAnother}
+                className="glass-button inline-flex items-center gap-2 px-3 py-2 text-xs font-medium text-slate-100"
+              >
+                <Send className="h-3.5 w-3.5 text-sky-200" />
+                Send another file
+              </button>
+            ) : null}
+            <button
+              onClick={() => void handleCopySummary()}
+              className="glass-button inline-flex items-center gap-2 px-3 py-2 text-xs font-medium text-slate-100"
+            >
+              {summaryState === "copied" ? (
+                <ClipboardCheck className="h-3.5 w-3.5 text-emerald-200" />
+              ) : (
+                <Copy className="h-3.5 w-3.5" />
+              )}
+              {summaryState === "copied"
+                ? "Summary copied"
+                : summaryState === "error"
+                  ? "Copy failed"
+                  : "Copy transfer summary"}
+            </button>
+          </div>
+        ) : null}
+
+        {showStarCta ? (
+          <p className="text-[11px] leading-5 text-slate-400">
+            <Star className="mr-1 inline h-3 w-3 align-[-1px] text-amber-200" />
+            Nice transfer. If Lightning P2P saved you a cloud upload,{" "}
+            <a
+              href={STAR_CTA_URL}
+              onClick={(event) => {
+                event.preventDefault();
+                handleDismissStarCta();
+                void openExternalUrl(STAR_CTA_URL);
+              }}
+              className="font-semibold text-slate-200 underline decoration-slate-400 underline-offset-4 hover:text-white"
+            >
+              star it on GitHub
+            </a>
+            .{" "}
+            <button
+              onClick={handleDismissStarCta}
+              className="text-slate-500 underline decoration-slate-600 underline-offset-4 hover:text-slate-300"
+            >
+              Don't show again
+            </button>
+          </p>
         ) : null}
 
         <div className="flex items-center justify-between gap-3 text-[10px] text-slate-500">

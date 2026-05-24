@@ -95,8 +95,10 @@ interface TransferStore {
   shareSelection: SharePathInfo[];
   shareTicket: string | null;
   isSharing: boolean;
+  isPreparingSelection: boolean;
   error: string | null;
   appError: AppError | null;
+  errorQueue: AppError[];
   pendingReceiveTicket: string | null;
   setPendingReceiveTicket: (ticket: string | null) => void;
   consumePendingReceiveTicket: () => string | null;
@@ -364,18 +366,46 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
   shareSelection: [],
   shareTicket: null,
   isSharing: false,
+  isPreparingSelection: false,
   error: null,
   appError: null,
+  errorQueue: [],
   pendingReceiveTicket: null,
 
   setError: (message) =>
-    set({
-      error: message,
-      appError: message ? normalizeAppError(message) : null,
+    set((state) => {
+      if (message === null) {
+        return { error: null, appError: null, errorQueue: [] };
+      }
+      const next = normalizeAppError(message);
+      if (state.appError) {
+        return { errorQueue: [...state.errorQueue, next] };
+      }
+      return { error: message, appError: next };
     }),
   setAppError: (error) =>
-    set(error === null ? { error: null, appError: null } : errorState(error)),
-  clearError: () => set({ error: null, appError: null }),
+    set((state) => {
+      if (error === null) {
+        return { error: null, appError: null, errorQueue: [] };
+      }
+      const next = errorState(error);
+      if (state.appError) {
+        return { errorQueue: [...state.errorQueue, next.appError] };
+      }
+      return next;
+    }),
+  clearError: () =>
+    set((state) => {
+      if (state.errorQueue.length === 0) {
+        return { error: null, appError: null };
+      }
+      const [head, ...rest] = state.errorQueue;
+      return {
+        appError: head,
+        error: head ? messageFromAppError(head) : null,
+        errorQueue: rest,
+      };
+    }),
   setPendingReceiveTicket: (ticket) => set({ pendingReceiveTicket: ticket }),
   consumePendingReceiveTicket: () => {
     const current = get().pendingReceiveTicket;
@@ -389,6 +419,7 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
       shareSelection: [],
       shareTicket: null,
       isSharing: false,
+      isPreparingSelection: false,
     });
     if (tauri.isDesktopRuntime()) {
       void tauri.clearActiveShare().catch((error: unknown) => {
@@ -398,15 +429,22 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
   },
 
   prepareShareSelection: async (paths) => {
-    set({ error: null, appError: null, shareTicket: null, isSharing: false });
+    set({
+      error: null,
+      appError: null,
+      errorQueue: [],
+      shareTicket: null,
+      isSharing: false,
+      isPreparingSelection: true,
+    });
     try {
       if (tauri.isDesktopRuntime()) {
         await tauri.clearActiveShare();
       }
       const shareSelection = await tauri.describeSharePaths(uniquePaths(paths));
-      set({ shareSelection });
+      set({ shareSelection, isPreparingSelection: false });
     } catch (error) {
-      set({ ...errorState(error), shareSelection: [] });
+      set({ ...errorState(error), shareSelection: [], isPreparingSelection: false });
     }
   },
 

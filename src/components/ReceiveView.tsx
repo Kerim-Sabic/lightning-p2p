@@ -40,7 +40,11 @@ function networkLabel(onlineState: string): string {
   }
 }
 
-export function ReceiveView() {
+interface ReceiveViewProps {
+  onNavigateSend?: () => void;
+}
+
+export function ReceiveView({ onNavigateSend }: ReceiveViewProps = {}) {
   const downloadDir = useTransferStore((state) => state.downloadDir);
   const nodeStatus = useTransferStore((state) => state.nodeStatus);
   const settings = useTransferStore((state) => state.settings);
@@ -432,6 +436,7 @@ export function ReceiveView() {
               key={transfer.transferId}
               transfer={transfer}
               onCancel={(transferId) => void cancelTransfer(transferId)}
+              onSendAnother={onNavigateSend}
             />
           ))
         )}

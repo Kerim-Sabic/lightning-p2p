@@ -7,6 +7,7 @@ import {
   Folder,
   ImageIcon,
   Link2,
+  Loader2,
   Trash2,
   Upload,
   Video,
@@ -85,6 +86,9 @@ export function SendView() {
   );
   const createShare = useTransferStore((state) => state.createShare);
   const isSharing = useTransferStore((state) => state.isSharing);
+  const isPreparingSelection = useTransferStore(
+    (state) => state.isPreparingSelection,
+  );
   const nodeStatus = useTransferStore((state) => state.nodeStatus);
   const settings = useTransferStore((state) => state.settings);
   const pickShareFiles = useTransferStore((state) => state.pickShareFiles);
@@ -351,6 +355,23 @@ export function SendView() {
         </div>
       </section>
 
+      {isPreparingSelection && shareSelection.length === 0 ? (
+        <section
+          className="glass-panel flex items-center gap-3 p-5"
+          aria-live="polite"
+        >
+          <Loader2 className="h-4 w-4 animate-spin text-sky-300" />
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-white">
+              Reading your selection
+            </p>
+            <p className="meta-copy mt-1">
+              Scanning files and folders before staging them for share.
+            </p>
+          </div>
+        </section>
+      ) : null}
+
       {shareSelection.length > 0 ? (
         <section className="glass-panel p-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -379,7 +400,11 @@ export function SendView() {
                 className="btn-primary"
               >
                 <span className="relative inline-flex items-center gap-2">
-                  <Link2 className="h-4 w-4" />
+                  {isSharing ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Link2 className="h-4 w-4" />
+                  )}
                   {isSharing ? "Generating link..." : "Generate receive link"}
                 </span>
               </button>

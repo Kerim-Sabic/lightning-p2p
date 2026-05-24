@@ -13,6 +13,7 @@ import {
 } from "@tauri-apps/plugin-clipboard-manager";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { platform as nativePlatform } from "@tauri-apps/plugin-os";
+import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import {
   check,
   type DownloadEvent,
@@ -847,6 +848,19 @@ export async function completeFirstRun(): Promise<AppSettings> {
 export async function openDownloadDir(): Promise<void> {
   requireNativeRuntime("Opening the download folder");
   await invoke("open_download_dir");
+}
+
+/**
+ * Open an external https:// or http:// URL in the user's default browser
+ * (or hand off to the OS handler on Android). Uses the Tauri shell plugin
+ * so the URL is opened outside the embedded webview.
+ */
+export async function openExternalUrl(url: string): Promise<void> {
+  if (!isTauri()) {
+    window.open(url, "_blank", "noopener,noreferrer");
+    return;
+  }
+  await shellOpen(url);
 }
 
 export async function clearActiveShare(): Promise<void> {
