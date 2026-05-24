@@ -20,7 +20,18 @@ import {
 } from "@tauri-apps/plugin-updater";
 import { getCurrentWindow, type DragDropEvent } from "@tauri-apps/api/window";
 import { extractBlobTicket } from "./format";
+import {
+  normalizeAppError,
+  type BackendAppErrorPayload,
+} from "./appErrors";
 import { DEEP_LINK_SCHEME, RECEIVE_PATH, SITE_URL } from "./shareLinks";
+export type {
+  AppError,
+  AppErrorCategory,
+  AppErrorCode,
+  AppErrorSeverity,
+  BackendAppErrorPayload,
+} from "./appErrors";
 
 export type RuntimeKind = "desktop" | "android" | "ios" | "browser";
 export type NativePlatformKind =
@@ -47,7 +58,11 @@ export type NodeOnlineState =
   | "relay_ready"
   | "degraded"
   | "offline";
-export type RouteKind = "unknown" | "direct" | "relay";
+export type RouteKind = "unknown" | "direct" | "relay" | "mixed";
+export type TransferStrategy =
+  | "unknown"
+  | "queued_single_provider"
+  | "queued_multi_provider";
 export type TransferPhase =
   | "preparing"
   | "connecting"
@@ -130,6 +145,12 @@ export interface ActiveTransfer {
   connect_ms: number;
   download_ms: number;
   export_ms: number;
+  provider_count: number;
+  direct_provider_count: number;
+  relay_provider_count: number;
+  strategy: TransferStrategy;
+  first_byte_ms: number;
+  effective_mbps: number;
 }
 
 export interface TransferRecord {
@@ -311,6 +332,12 @@ export type TransferEvent =
       connect_ms: number;
       download_ms: number;
       export_ms: number;
+      provider_count: number;
+      direct_provider_count: number;
+      relay_provider_count: number;
+      strategy: TransferStrategy;
+      first_byte_ms: number;
+      effective_mbps: number;
     }
   | {
       type: "progress";
@@ -323,6 +350,12 @@ export type TransferEvent =
       connect_ms: number;
       download_ms: number;
       export_ms: number;
+      provider_count: number;
+      direct_provider_count: number;
+      relay_provider_count: number;
+      strategy: TransferStrategy;
+      first_byte_ms: number;
+      effective_mbps: number;
     }
   | {
       type: "completed";
@@ -339,6 +372,12 @@ export type TransferEvent =
       connect_ms: number;
       download_ms: number;
       export_ms: number;
+      provider_count: number;
+      direct_provider_count: number;
+      relay_provider_count: number;
+      strategy: TransferStrategy;
+      first_byte_ms: number;
+      effective_mbps: number;
     }
   | {
       type: "failed";
@@ -347,6 +386,7 @@ export type TransferEvent =
       route_kind: RouteKind;
       phase?: TransferPhase;
       failure_category?: FailureCategory | null;
+      error_payload?: BackendAppErrorPayload | null;
     };
 
 let pendingUpdate: Update | null = null;
@@ -880,11 +920,11 @@ export async function resolveAndroidUris(paths: string[]): Promise<string[]> {
     return await invoke<string[]>("resolve_content_uris", { uris: paths });
   } catch (error) {
     console.error("resolve_content_uris failed", error);
-    throw new Error(
-      typeof error === "string"
-        ? error
-        : "Could not read the selected file from the system picker.",
-    );
+    const appError = normalizeAppError(error);
+    if (appError.source !== "unknown") {
+      throw appError;
+    }
+    throw new Error("Could not read the selected file from the system picker.");
   }
 }
 

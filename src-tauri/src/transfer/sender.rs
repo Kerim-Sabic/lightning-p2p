@@ -3,7 +3,7 @@
 use crate::error::{LightningP2PError, Result};
 use crate::node::LightningP2PNode;
 use crate::storage::history::{self, TransferRecord};
-use crate::transfer::metrics::{RouteKind, TransferMetrics};
+use crate::transfer::metrics::{RouteKind, TransferMetrics, TransferStrategy};
 use crate::transfer::progress::{
     EventReporter, FailureCategory, ProgressHandle, ProgressSampler, TransferDirection,
     TransferPhase,
@@ -91,6 +91,12 @@ pub async fn send_files(
                 connect_ms: elapsed_ms(started_at.elapsed()),
                 download_ms: 0,
                 export_ms: 0,
+                provider_count: 1,
+                direct_provider_count: 0,
+                relay_provider_count: 0,
+                strategy: TransferStrategy::QueuedSingleProvider,
+                first_byte_ms: 0,
+                effective_mbps: 0,
             };
             progress.set(outcome.total_size, outcome.total_size);
             progress.set_metrics(metrics);
@@ -101,10 +107,13 @@ pub async fn send_files(
         }
         Err(error) => {
             let _ = sampler.finish().await;
-            let _ = reporter.emit_failed(
-                &error.to_string(),
+            let error_payload = error.to_payload();
+            let error_message = error_payload.message.clone();
+            let _ = reporter.emit_failed_with_payload(
+                &error_message,
                 progress.metrics_snapshot().route_kind,
                 Some(FailureCategory::Unknown),
+                Some(error_payload),
             );
             Err(error)
         }

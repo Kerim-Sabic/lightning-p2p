@@ -1,14 +1,26 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { AlertTriangle, Info, X, XCircle } from "lucide-react";
+import type { AppError } from "../lib/appErrors";
 
 interface InlineAlertProps {
+  appError?: AppError | null;
   message: string | null;
   onDismiss: () => void;
 }
 
 type AlertTone = "info" | "warning" | "error";
 
-function toneForMessage(message: string): AlertTone {
+function toneForMessage(message: string, appError?: AppError | null): AlertTone {
+  if (appError) {
+    if (appError.severity === "info") {
+      return "info";
+    }
+    if (appError.severity === "warning") {
+      return "warning";
+    }
+    return "error";
+  }
+
   const normalized = message.toLowerCase();
 
   if (
@@ -73,24 +85,31 @@ function alertPresentation(tone: AlertTone) {
   }
 }
 
-export function InlineAlert({ message, onDismiss }: InlineAlertProps) {
+export function InlineAlert({ appError, message, onDismiss }: InlineAlertProps) {
   return (
     <AnimatePresence initial={false}>
       {message ? (
-        <InlineAlertBody message={message} onDismiss={onDismiss} />
+        <InlineAlertBody
+          appError={appError}
+          message={message}
+          onDismiss={onDismiss}
+        />
       ) : null}
     </AnimatePresence>
   );
 }
 
-function InlineAlertBody({ message, onDismiss }: InlineAlertProps) {
+function InlineAlertBody({ appError, message, onDismiss }: InlineAlertProps) {
   if (!message) {
     return null;
   }
 
-  const tone = toneForMessage(message);
+  const tone = toneForMessage(message, appError);
   const presentation = alertPresentation(tone);
   const { Icon } = presentation;
+  const title = appError?.title ?? presentation.title;
+  const body = appError?.message ?? message;
+  const hint = appError?.hint ?? null;
 
   return (
     <motion.section
@@ -108,9 +127,20 @@ function InlineAlertBody({ message, onDismiss }: InlineAlertProps) {
         </div>
         <div className="min-w-0">
           <p className="text-sm font-semibold text-white">
-            {presentation.title}
+            {title}
           </p>
-          <p className="mt-1 text-sm leading-6">{message}</p>
+          <p className="mt-1 text-sm leading-6">{body}</p>
+          {hint ? <p className="mt-1 text-xs leading-5 opacity-80">{hint}</p> : null}
+          {appError?.helpUrl ? (
+            <a
+              href={appError.helpUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-2 inline-flex text-xs font-semibold underline decoration-current/30 underline-offset-4"
+            >
+              Help docs
+            </a>
+          ) : null}
         </div>
       </div>
       <button

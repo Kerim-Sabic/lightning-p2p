@@ -60,6 +60,12 @@ impl TransferQueue {
             entry.info.connect_ms = metrics.connect_ms;
             entry.info.download_ms = metrics.download_ms;
             entry.info.export_ms = metrics.export_ms;
+            entry.info.provider_count = metrics.provider_count;
+            entry.info.direct_provider_count = metrics.direct_provider_count;
+            entry.info.relay_provider_count = metrics.relay_provider_count;
+            entry.info.strategy = metrics.strategy;
+            entry.info.first_byte_ms = metrics.first_byte_ms;
+            entry.info.effective_mbps = metrics.effective_mbps;
         }
     }
 
@@ -124,6 +130,12 @@ mod tests {
             connect_ms: 0,
             download_ms: 0,
             export_ms: 0,
+            provider_count: 1,
+            direct_provider_count: 0,
+            relay_provider_count: 0,
+            strategy: crate::transfer::metrics::TransferStrategy::QueuedSingleProvider,
+            first_byte_ms: 0,
+            effective_mbps: 0,
         }
     }
 

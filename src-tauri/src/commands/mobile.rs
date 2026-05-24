@@ -10,6 +10,10 @@
 //! so the IPC handler list stays uniform and the frontend can call them
 //! unconditionally.
 
+use crate::commands::{command_error, CommandResult};
+#[cfg(target_os = "android")]
+use crate::error::AppErrorPayload;
+
 #[cfg(target_os = "android")]
 pub(crate) mod android {
     use jni::objects::{JClass, JObject, JObjectArray, JString, JValue};
@@ -46,12 +50,7 @@ pub(crate) mod android {
     ) -> Result<JClass<'local>, String> {
         let context = context_obj(env)?;
         let loader = env
-            .call_method(
-                &context,
-                "getClassLoader",
-                "()Ljava/lang/ClassLoader;",
-                &[],
-            )
+            .call_method(&context, "getClassLoader", "()Ljava/lang/ClassLoader;", &[])
             .map_err(|e| e.to_string())?
             .l()
             .map_err(|e| e.to_string())?;
@@ -76,7 +75,9 @@ pub(crate) mod android {
         let len = jsize::try_from(values.len()).map_err(|e| e.to_string())?;
         // `java.lang.String` lives in the system classloader so plain
         // `find_class` works for it.
-        let string_class = env.find_class("java/lang/String").map_err(|e| e.to_string())?;
+        let string_class = env
+            .find_class("java/lang/String")
+            .map_err(|e| e.to_string())?;
         let empty = env.new_string("").map_err(|e| e.to_string())?;
         let array = env
             .new_object_array(len, string_class, empty)
@@ -101,10 +102,7 @@ pub(crate) mod android {
                 .get_object_array_element(&array, i)
                 .map_err(|e| e.to_string())?;
             let jstr = JString::from(element);
-            let value: String = env
-                .get_string(&jstr)
-                .map_err(|e| e.to_string())?
-                .into();
+            let value: String = env.get_string(&jstr).map_err(|e| e.to_string())?.into();
             out.push(value);
         }
         Ok(out)
@@ -219,8 +217,9 @@ pub(crate) mod android {
         let vm = jvm()?;
         let mut env = vm.attach_current_thread().map_err(|e| e.to_string())?;
         let context = context_obj(&mut env)?;
-        let cutoff: i64 =
-            older_than_ms.try_into().map_err(|_| "cutoff overflows i64".to_string())?;
+        let cutoff: i64 = older_than_ms
+            .try_into()
+            .map_err(|_| "cutoff overflows i64".to_string())?;
         let class = load_app_class(&mut env, RESOLVER_CLASS_DOTTED)?;
         let raw = env.call_static_method(
             class,
@@ -264,7 +263,9 @@ pub(crate) mod android {
         let vm = jvm()?;
         let mut env = vm.attach_current_thread().map_err(|e| e.to_string())?;
         let context = context_obj(&mut env)?;
-        let payload = env.new_string(node_id_prefix_hex).map_err(|e| e.to_string())?;
+        let payload = env
+            .new_string(node_id_prefix_hex)
+            .map_err(|e| e.to_string())?;
         let class = load_app_class(&mut env, BLE_CLASS_DOTTED)?;
         let raw = env.call_static_method(
             class,
@@ -324,12 +325,7 @@ pub(crate) mod android {
         let vm = jvm()?;
         let mut env = vm.attach_current_thread().map_err(|e| e.to_string())?;
         let class = load_app_class(&mut env, BLE_CLASS_DOTTED)?;
-        let raw = env.call_static_method(
-            class,
-            "drainDiscoveries",
-            "()[Ljava/lang/String;",
-            &[],
-        );
+        let raw = env.call_static_method(class, "drainDiscoveries", "()[Ljava/lang/String;", &[]);
         let result = match raw {
             Ok(r) => r,
             Err(e) => return Err(drain_exception(&mut env, e)),
@@ -368,10 +364,11 @@ pub(crate) mod android {
 /// Returns an error string if the JNI bridge or `ContentResolver` fails
 /// to stream any of the URIs.
 #[tauri::command]
-pub async fn resolve_content_uris(uris: Vec<String>) -> Result<Vec<String>, String> {
+pub async fn resolve_content_uris(uris: Vec<String>) -> CommandResult<Vec<String>> {
     #[cfg(target_os = "android")]
     {
         android::resolve_content_uris(uris)
+            .map_err(|error| command_error(AppErrorPayload::android_content_uri_failed(error)))
     }
     #[cfg(not(target_os = "android"))]
     {
@@ -405,15 +402,18 @@ pub async fn take_pending_shared_files() -> Result<Vec<String>, String> {
 /// Returns an error string if the JNI bridge fails. The Kotlin side
 /// already swallows missing-handler errors as best-effort.
 #[tauri::command]
-pub async fn open_android_bucket(bucket: String) -> Result<(), String> {
+pub async fn open_android_bucket(bucket: String) -> CommandResult<()> {
     #[cfg(target_os = "android")]
     {
         android::open_system_folder(&bucket)
+            .map_err(|error| command_error(AppErrorPayload::android_content_uri_failed(error)))
     }
     #[cfg(not(target_os = "android"))]
     {
         let _ = bucket;
-        Err("open_android_bucket is only available on Android".into())
+        Err(command_error(
+            "open_android_bucket is only available on Android",
+        ))
     }
 }
 

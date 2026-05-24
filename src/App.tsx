@@ -55,6 +55,7 @@ interface NativeAppShellProps {
 function NativeAppShell({ runtimeKind }: NativeAppShellProps) {
   const [view, setView] = useState<View>("send");
   const error = useTransferStore((state) => state.error);
+  const appError = useTransferStore((state) => state.appError);
   const clearError = useTransferStore((state) => state.clearError);
   const setPendingReceiveTicket = useTransferStore(
     (state) => state.setPendingReceiveTicket,
@@ -182,7 +183,11 @@ function NativeAppShell({ runtimeKind }: NativeAppShellProps) {
                   : "pb-5"
               }`}
             >
-              <InlineAlert message={error} onDismiss={clearError} />
+              <InlineAlert
+                appError={appError}
+                message={error}
+                onDismiss={clearError}
+              />
               {content}
             </div>
           </main>

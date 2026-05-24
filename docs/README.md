@@ -33,4 +33,5 @@ This directory keeps project docs that are too detailed for the README.
 
 ## Benchmarks
 
+- [BENCHMARKS.md](BENCHMARKS.md) - public benchmark evidence rules and required scenarios.
 - [benchmark-report-template.md](benchmark-report-template.md) - repeatable benchmark template. Do not publish speed-leadership claims until reports are filled with real data.

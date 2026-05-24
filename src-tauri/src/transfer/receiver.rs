@@ -1,16 +1,17 @@
 //! Receiver: downloads shared content from peers using blob tickets.
 
-use crate::error::{LightningP2PError, Result};
+use crate::error::{AppErrorPayload, LightningP2PError, Result};
 use crate::node::LightningP2PNode;
 use crate::storage::history::{self, TransferRecord};
 use crate::storage::peers::{self, PeerRecord};
 use crate::transfer::export;
-use crate::transfer::metrics::{RouteKind, TransferMetrics};
+use crate::transfer::metrics::{RouteKind, TransferMetrics, TransferStrategy};
 use crate::transfer::progress::{
     EventReporter, FailureCategory, ProgressHandle, ProgressSampler, QueueProgressTarget,
     TransferDirection, TransferPhase,
 };
 use crate::transfer::queue::TransferQueue;
+use crate::transfer::ticket::ShareTicket;
 use futures_util::StreamExt;
 use iroh_blobs::get::db::DownloadProgress;
 use iroh_blobs::get::progress::{BlobProgress, BlobState, TransferState};
@@ -41,6 +42,7 @@ struct DownloadLifecycle {
     contacted_peer: bool,
     route_kind: RouteKind,
     connect_ms: u64,
+    first_byte_ms: u64,
 }
 
 #[derive(Debug)]
@@ -85,25 +87,29 @@ pub async fn receive_blob(
     queue: TransferQueue,
     window: Window,
     transfer_id: String,
-    ticket: BlobTicket,
+    ticket: ShareTicket,
     destination: PathBuf,
     mut cancel_rx: watch::Receiver<bool>,
 ) -> Result<()> {
-    let peer = ticket.node_addr().node_id.to_string();
+    let peer = ticket.primary().node_addr().node_id.to_string();
+    let initial_metrics = metrics_for_ticket(&ticket);
     let reporter = EventReporter::new(
         window,
         transfer_id.clone(),
         TransferDirection::Receive,
-        ticket.hash().to_string(),
+        ticket
+            .label()
+            .map_or_else(|| ticket.primary().hash().to_string(), str::to_string),
         Some(peer.clone()),
     );
-    reporter.emit_started(0, TransferMetrics::default(), TransferPhase::Connecting)?;
+    reporter.emit_started(0, initial_metrics, TransferPhase::Connecting)?;
 
     let sampler = ProgressSampler::spawn(
         reporter.clone(),
         Some(QueueProgressTarget::new(queue.clone(), transfer_id.clone())),
     );
     let progress = sampler.handle();
+    progress.set_metrics(initial_metrics);
     progress.set_phase(TransferPhase::Connecting);
     let result = receive_core(node, &ticket, destination, &mut cancel_rx, Some(&progress)).await;
 
@@ -128,14 +134,21 @@ pub async fn receive_blob(
         Err(error) => {
             queue.remove(&transfer_id).await;
             let phase = progress.phase_snapshot();
-            let failure_category = categorize_receive_error(&error, phase);
+            let error_payload = receive_error_payload(&error, phase);
+            let failure_category = failure_category_from_payload(&error_payload, phase, &error);
             progress.set_phase(match failure_category {
                 FailureCategory::Cancelled => TransferPhase::Cancelled,
                 _ => TransferPhase::Failed,
             });
             let route_kind = progress.metrics_snapshot().route_kind;
             let _ = sampler.finish().await;
-            let _ = reporter.emit_failed(&error.to_string(), route_kind, Some(failure_category));
+            let error_message = error_payload.message.clone();
+            let _ = reporter.emit_failed_with_payload(
+                &error_message,
+                route_kind,
+                Some(failure_category),
+                Some(error_payload),
+            );
             Err(error)
         }
     }
@@ -148,7 +161,7 @@ pub async fn receive_blob(
 /// Returns `LightningP2PError` if the download or final export fails.
 pub async fn receive_ticket(
     node: &LightningP2PNode,
-    ticket: BlobTicket,
+    ticket: ShareTicket,
     destination: PathBuf,
 ) -> Result<ReceiveOutcome> {
     let (_cancel_tx, mut cancel_rx) = watch::channel(false);
@@ -168,7 +181,7 @@ pub async fn receive_ticket(
 
 async fn receive_core(
     node: &LightningP2PNode,
-    ticket: &BlobTicket,
+    ticket: &ShareTicket,
     destination: PathBuf,
     cancel_rx: &mut watch::Receiver<bool>,
     progress: Option<&ProgressHandle>,
@@ -181,23 +194,31 @@ async fn receive_core(
         progress.set_phase(TransferPhase::Verifying);
     }
     let export_started_at = Instant::now();
+    let primary = ticket.primary();
     let export_summary =
-        export::export_ticket(node.blobs_client(), ticket, &destination, tracked_total).await?;
+        export::export_ticket(node.blobs_client(), primary, &destination, tracked_total).await?;
     let export_ms = elapsed_ms(export_started_at.elapsed());
+    let effective_mbps = effective_mbps(export_summary.size, download_ms);
     let metrics = TransferMetrics {
         route_kind: download.metrics.route_kind,
         connect_ms: download.metrics.connect_ms,
         download_ms,
         export_ms,
+        provider_count: download.metrics.provider_count,
+        direct_provider_count: download.metrics.direct_provider_count,
+        relay_provider_count: download.metrics.relay_provider_count,
+        strategy: download.metrics.strategy,
+        first_byte_ms: download.metrics.first_byte_ms,
+        effective_mbps,
     };
     if let Some(progress) = progress {
         progress.set_metrics(metrics);
     }
     Ok(ReceiveSummary {
-        hash: ticket.hash().to_string(),
+        hash: primary.hash().to_string(),
         label: export_summary.label,
         size: export_summary.size,
-        peer: ticket.node_addr().node_id.to_string(),
+        peer: primary.node_addr().node_id.to_string(),
         metrics,
         output_path: export_summary.output_path,
     })
@@ -205,12 +226,12 @@ async fn receive_core(
 
 async fn download_to_store(
     node: &LightningP2PNode,
-    ticket: &BlobTicket,
+    ticket: &ShareTicket,
     cancel_rx: &mut watch::Receiver<bool>,
     progress: Option<&ProgressHandle>,
 ) -> Result<DownloadSummary> {
     let mut stream = start_download(node, ticket).await?;
-    let mut state = TransferState::new(ticket.hash());
+    let mut state = TransferState::new(ticket.primary().hash());
     let mut lifecycle = DownloadLifecycle::default();
     let started_at = Instant::now();
 
@@ -230,6 +251,8 @@ async fn download_to_store(
                     connect_ms: lifecycle.connect_ms,
                     download_ms: 0,
                     export_ms: 0,
+                    first_byte_ms: lifecycle.first_byte_ms,
+                    ..metrics_for_ticket(ticket)
                 },
             });
         }
@@ -238,16 +261,16 @@ async fn download_to_store(
 
 async fn start_download(
     node: &LightningP2PNode,
-    ticket: &BlobTicket,
+    ticket: &ShareTicket,
 ) -> Result<ClientDownloadProgress> {
     node.blobs_client()
         .download_with_opts(
-            ticket.hash(),
+            ticket.primary().hash(),
             DownloadOptions {
-                format: ticket.format(),
-                nodes: vec![ticket.node_addr().clone()],
+                format: ticket.primary().format(),
+                nodes: ticket.provider_node_addrs(),
                 tag: SetTagOption::Auto,
-                mode: DownloadMode::Direct,
+                mode: DownloadMode::Queued,
             },
         )
         .await
@@ -279,7 +302,7 @@ async fn next_event(
 
 fn handle_download_event(
     node: &LightningP2PNode,
-    ticket: &BlobTicket,
+    ticket: &ShareTicket,
     state: &mut TransferState,
     lifecycle: &mut DownloadLifecycle,
     event: DownloadProgress,
@@ -299,7 +322,8 @@ fn handle_download_event(
     }
 
     state.on_progress(event);
-    if transferred_bytes(ticket, state) > 0 {
+    if transferred_bytes(ticket.primary(), state) > 0 {
+        mark_first_byte(lifecycle, started_at);
         mark_contacted(node, ticket, lifecycle, started_at);
     }
     Ok(false)
@@ -307,14 +331,18 @@ fn handle_download_event(
 
 fn update_progress(
     progress: Option<&ProgressHandle>,
-    ticket: &BlobTicket,
+    ticket: &ShareTicket,
     state: &TransferState,
     lifecycle: DownloadLifecycle,
 ) {
     if let Some(progress) = progress {
-        progress.set(transferred_bytes(ticket, state), total_bytes(ticket, state));
+        progress.set(
+            transferred_bytes(ticket.primary(), state),
+            total_bytes(ticket.primary(), state),
+        );
         progress.set_route_kind(lifecycle.route_kind);
         progress.set_connect_ms(lifecycle.connect_ms);
+        progress.set_first_byte_ms(lifecycle.first_byte_ms);
         progress.set_phase(if lifecycle.contacted_peer {
             TransferPhase::Downloading
         } else {
@@ -325,7 +353,7 @@ fn update_progress(
 
 fn mark_contacted(
     node: &LightningP2PNode,
-    ticket: &BlobTicket,
+    ticket: &ShareTicket,
     lifecycle: &mut DownloadLifecycle,
     started_at: Instant,
 ) {
@@ -334,7 +362,7 @@ fn mark_contacted(
         lifecycle.connect_ms = elapsed_ms(started_at.elapsed());
     }
 
-    let route_kind = node.route_kind(ticket.node_addr().node_id);
+    let route_kind = node.route_kind(ticket.primary().node_addr().node_id);
     lifecycle.route_kind = if route_kind == RouteKind::Unknown {
         infer_route_kind(ticket)
     } else {
@@ -342,7 +370,27 @@ fn mark_contacted(
     };
 }
 
-fn infer_route_kind(ticket: &BlobTicket) -> RouteKind {
+fn mark_first_byte(lifecycle: &mut DownloadLifecycle, started_at: Instant) {
+    if lifecycle.first_byte_ms == 0 {
+        lifecycle.first_byte_ms = elapsed_ms(started_at.elapsed());
+    }
+}
+
+fn infer_route_kind(ticket: &ShareTicket) -> RouteKind {
+    let topology = ticket.topology();
+    match (
+        topology.direct_provider_count > 0,
+        topology.relay_provider_count > 0,
+    ) {
+        (true, true) => RouteKind::Mixed,
+        (true, false) => RouteKind::Direct,
+        (false, true) => RouteKind::Relay,
+        (false, false) => RouteKind::Unknown,
+    }
+}
+
+#[cfg(test)]
+fn legacy_ticket_route_kind(ticket: &BlobTicket) -> RouteKind {
     let node_addr = ticket.node_addr();
     match (
         node_addr.direct_addresses.is_empty(),
@@ -352,6 +400,30 @@ fn infer_route_kind(ticket: &BlobTicket) -> RouteKind {
         (true, true) => RouteKind::Relay,
         _ => RouteKind::Unknown,
     }
+}
+
+fn metrics_for_ticket(ticket: &ShareTicket) -> TransferMetrics {
+    let topology = ticket.topology();
+    TransferMetrics {
+        route_kind: infer_route_kind(ticket),
+        provider_count: topology.provider_count,
+        direct_provider_count: topology.direct_provider_count,
+        relay_provider_count: topology.relay_provider_count,
+        strategy: if topology.provider_count > 1 {
+            TransferStrategy::QueuedMultiProvider
+        } else {
+            TransferStrategy::QueuedSingleProvider
+        },
+        ..TransferMetrics::default()
+    }
+}
+
+fn effective_mbps(bytes: u64, duration_ms: u64) -> u64 {
+    if duration_ms == 0 {
+        return 0;
+    }
+    let megabits_per_second = u128::from(bytes).saturating_mul(8) / u128::from(duration_ms) / 1000;
+    u64::try_from(megabits_per_second).unwrap_or(u64::MAX)
 }
 
 async fn drain_download_stream(stream: &mut ClientDownloadProgress) -> Result<()> {
@@ -410,6 +482,35 @@ fn categorize_receive_error(error: &LightningP2PError, phase: TransferPhase) -> 
         return FailureCategory::Interrupted;
     }
     FailureCategory::Unknown
+}
+
+fn receive_error_payload(error: &LightningP2PError, phase: TransferPhase) -> AppErrorPayload {
+    let mut payload = if phase == TransferPhase::Verifying {
+        AppErrorPayload::export_failed(error.to_string())
+    } else {
+        error.to_payload()
+    };
+    let category = payload.category;
+    payload = payload.with_redacted_diagnostics(format!("phase={phase:?} category={category:?}"));
+    payload
+}
+
+fn failure_category_from_payload(
+    payload: &AppErrorPayload,
+    phase: TransferPhase,
+    legacy_error: &LightningP2PError,
+) -> FailureCategory {
+    match payload.code {
+        crate::error::AppErrorCode::TransferCancelled => FailureCategory::Cancelled,
+        crate::error::AppErrorCode::SenderOffline => FailureCategory::Unreachable,
+        crate::error::AppErrorCode::ConnectionTimeout => FailureCategory::Interrupted,
+        crate::error::AppErrorCode::DiskFull => FailureCategory::DiskSpace,
+        crate::error::AppErrorCode::DestinationUnavailable
+        | crate::error::AppErrorCode::PermissionDenied => FailureCategory::Destination,
+        crate::error::AppErrorCode::ExportFailed => FailureCategory::Export,
+        crate::error::AppErrorCode::InvalidTicket => FailureCategory::InvalidTicket,
+        _ => categorize_receive_error(legacy_error, phase),
+    }
 }
 
 fn transferred_bytes(ticket: &BlobTicket, state: &TransferState) -> u64 {
@@ -543,6 +644,12 @@ mod tests {
         )
         .expect("ticket should build");
 
-        assert_eq!(infer_route_kind(&ticket), RouteKind::Relay);
+        assert_eq!(legacy_ticket_route_kind(&ticket), RouteKind::Relay);
+    }
+
+    #[test]
+    fn effective_mbps_uses_payload_and_download_time() {
+        assert_eq!(effective_mbps(125_000_000, 1_000), 1000);
+        assert_eq!(effective_mbps(125_000_000, 0), 0);
     }
 }

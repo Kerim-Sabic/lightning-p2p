@@ -14,12 +14,12 @@ use iroh_blobs::rpc::client::blobs::{DownloadMode, DownloadOptions, MemClient};
 use iroh_blobs::ticket::BlobTicket;
 use iroh_blobs::util::SetTagOption;
 use lightning_p2p_lib::node::LightningP2PNode;
+use lightning_p2p_lib::transfer::ticket::{encode_fd2_ticket_with_providers, ShareTicket};
 use lightning_p2p_lib::transfer::{receiver, sender};
 use std::fs;
 use std::io::{BufWriter, Write};
 use std::net::{Ipv4Addr, SocketAddrV4};
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
@@ -36,7 +36,7 @@ struct AppFixture {
     sender_node: LightningP2PNode,
     receiver_node: LightningP2PNode,
     receive_dir: PathBuf,
-    ticket: BlobTicket,
+    ticket: ShareTicket,
 }
 
 struct MemoryNode {
@@ -45,9 +45,9 @@ struct MemoryNode {
 }
 
 struct MemoryFixture {
-    _sender: MemoryNode,
+    _sender: Vec<MemoryNode>,
     receiver: MemoryNode,
-    ticket: BlobTicket,
+    ticket: ShareTicket,
 }
 
 #[derive(Clone, Copy)]
@@ -83,7 +83,7 @@ impl AppFixture {
         let share = sender::create_share(&sender_node, vec![source_file])
             .await
             .expect("share creation");
-        let ticket = BlobTicket::from_str(&share.ticket.to_string()).expect("ticket parsing");
+        let ticket = ShareTicket::parse(&share.ticket.to_string()).expect("ticket parsing");
 
         Self {
             _root: root,
@@ -128,28 +128,46 @@ impl MemoryNode {
 }
 
 impl MemoryFixture {
-    async fn new(payload: &[u8]) -> Self {
-        let sender = MemoryNode::new().await;
+    async fn new(payload: &[u8], provider_count: usize) -> Self {
+        let mut senders = Vec::with_capacity(provider_count);
         let receiver = MemoryNode::new().await;
-        let add = sender
-            .client
-            .add_bytes(payload.to_vec())
-            .await
-            .expect("memory import");
-        let ticket = BlobTicket::new(
-            sender
-                .router
-                .endpoint()
-                .node_addr()
+        let mut provider_tickets = Vec::with_capacity(provider_count);
+        for _ in 0..provider_count {
+            let sender = MemoryNode::new().await;
+            let add = sender
+                .client
+                .add_bytes(payload.to_vec())
                 .await
-                .expect("sender addr"),
-            add.hash,
-            add.format,
+                .expect("memory import");
+            let ticket = BlobTicket::new(
+                sender
+                    .router
+                    .endpoint()
+                    .node_addr()
+                    .await
+                    .expect("sender addr"),
+                add.hash,
+                add.format,
+            )
+            .expect("memory ticket");
+            provider_tickets.push(ticket);
+            senders.push(sender);
+        }
+        let primary = provider_tickets
+            .first()
+            .expect("at least one provider")
+            .clone();
+        let encoded = encode_fd2_ticket_with_providers(
+            &primary,
+            provider_tickets,
+            "bench-payload.bin",
+            BENCH_SIZE,
         )
-        .expect("memory ticket");
+        .expect("fd2 ticket");
+        let ticket = ShareTicket::parse(&encoded).expect("fd2 ticket parsing");
 
         Self {
-            _sender: sender,
+            _sender: senders,
             receiver,
             ticket,
         }
@@ -157,7 +175,9 @@ impl MemoryFixture {
 
     async fn shutdown(&self) {
         self.receiver.shutdown().await;
-        self._sender.shutdown().await;
+        for sender in &self._sender {
+            sender.shutdown().await;
+        }
     }
 }
 
@@ -168,7 +188,8 @@ fn transfer_benchmark(c: &mut Criterion) {
 
     let share_warmup = runtime.block_on(run_share_preparation(BENCH_SIZE));
     let receive_warmup = runtime.block_on(run_app_receive_phases(BENCH_SIZE));
-    let memory_warmup = runtime.block_on(run_memory_transport_transfer(payload));
+    let memory_warmup = runtime.block_on(run_memory_transport_transfer(payload, 1));
+    let memory_swarm_warmup = runtime.block_on(run_memory_transport_transfer(payload, 3));
     let directory_warmup = runtime.block_on(run_directory_share_preparation(
         DIRECTORY_FILE_COUNT,
         DIRECTORY_FILE_SIZE,
@@ -194,9 +215,14 @@ fn transfer_benchmark(c: &mut Criterion) {
         receive_warmup.total
     );
     eprintln!(
-        "Memory transport 100MB: {:.2} MB/s in {:.2?}",
+        "Memory queued transport 100MB, 1 provider: {:.2} MB/s in {:.2?}",
         mb_per_second(BENCH_SIZE, memory_warmup),
         memory_warmup
+    );
+    eprintln!(
+        "Memory queued transport 100MB, 3 providers: {:.2} MB/s in {:.2?}",
+        mb_per_second(BENCH_SIZE, memory_swarm_warmup),
+        memory_swarm_warmup
     );
     eprintln!(
         "Directory prep {}x{}KB: {:.2?}",
@@ -245,19 +271,38 @@ fn transfer_benchmark(c: &mut Criterion) {
             total
         });
     });
-    throughput_group.bench_function("memory_transport", |b| {
+    throughput_group.bench_function("memory_transport_queued_1_provider", |b| {
         let payload = payload.to_vec();
         b.to_async(&runtime).iter_custom(move |iters| {
             let payload = payload.clone();
             async move {
                 let mut total = Duration::ZERO;
                 for _ in 0..iters {
-                    total += run_memory_transport_transfer(&payload).await;
+                    total += run_memory_transport_transfer(&payload, 1).await;
                 }
                 total
             }
         });
     });
+    for provider_count in [2_usize, 3] {
+        throughput_group.bench_with_input(
+            BenchmarkId::new("memory_transport_queued_multi_provider", provider_count),
+            &provider_count,
+            |b, &provider_count| {
+                let payload = payload.to_vec();
+                b.to_async(&runtime).iter_custom(move |iters| {
+                    let payload = payload.clone();
+                    async move {
+                        let mut total = Duration::ZERO;
+                        for _ in 0..iters {
+                            total += run_memory_transport_transfer(&payload, provider_count).await;
+                        }
+                        total
+                    }
+                });
+            },
+        );
+    }
     throughput_group.finish();
 
     let mut directory_group = c.benchmark_group("lightning_p2p_directory_prep");
@@ -342,19 +387,19 @@ async fn run_app_receive_phases(size: u64) -> ReceivePhaseMetrics {
     metrics
 }
 
-async fn run_memory_transport_transfer(payload: &[u8]) -> Duration {
-    let fixture = MemoryFixture::new(payload).await;
+async fn run_memory_transport_transfer(payload: &[u8], provider_count: usize) -> Duration {
+    let fixture = MemoryFixture::new(payload, provider_count).await;
     let started = Instant::now();
     fixture
         .receiver
         .client
         .download_with_opts(
-            fixture.ticket.hash(),
+            fixture.ticket.primary().hash(),
             DownloadOptions {
-                format: fixture.ticket.format(),
-                nodes: vec![fixture.ticket.node_addr().clone()],
+                format: fixture.ticket.primary().format(),
+                nodes: fixture.ticket.provider_node_addrs(),
                 tag: SetTagOption::Auto,
-                mode: DownloadMode::Direct,
+                mode: DownloadMode::Queued,
             },
         )
         .await
@@ -367,7 +412,7 @@ async fn run_memory_transport_transfer(payload: &[u8]) -> Duration {
         fixture
             .receiver
             .client
-            .has(fixture.ticket.hash())
+            .has(fixture.ticket.primary().hash())
             .await
             .expect("receiver has blob"),
         "downloaded blob missing from receiver store"

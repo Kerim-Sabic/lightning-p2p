@@ -218,7 +218,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for module boundaries and trans
 
 ## Benchmarks
 
-Lightning P2P is designed for high-throughput direct transfer, but the project does not claim speed leadership without repeatable public benchmark data. Use [docs/benchmark-report-template.md](docs/benchmark-report-template.md) for LAN-direct, WAN-direct, relay-fallback, many-small-file, and large-single-file reports.
+Lightning P2P is designed for high-throughput direct transfer, but the project does not claim speed leadership without repeatable public benchmark data. Start with [docs/BENCHMARKS.md](docs/BENCHMARKS.md) for the public evidence rules, then use [docs/benchmark-report-template.md](docs/benchmark-report-template.md) for LAN-direct, WAN-direct, relay-fallback, many-small-file, and large-single-file reports.
 
 ## Develop
 

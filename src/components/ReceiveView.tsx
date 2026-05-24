@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { extractBlobTicket } from "../lib/format";
+import { appErrorFromCode } from "../lib/appErrors";
 import {
   isDesktopRuntime,
   isMobileRuntime,
@@ -46,6 +47,7 @@ export function ReceiveView() {
   const platformProfile = useTransferStore((state) => state.platformProfile);
   const smartRouting = platformProfile.capabilities.smart_routing;
   const setError = useTransferStore((state) => state.setError);
+  const setAppError = useTransferStore((state) => state.setAppError);
   const startReceive = useTransferStore((state) => state.startReceive);
   const startReceiveNearbyShare = useTransferStore(
     (state) => state.startReceiveNearbyShare,
@@ -138,6 +140,7 @@ export function ReceiveView() {
     }
 
     if (!normalizedTicket) {
+      setAppError(appErrorFromCode("malformed_receive_link"));
       return;
     }
 
@@ -220,7 +223,9 @@ export function ReceiveView() {
             </div>
             {mobileRuntime ? (
               <p className="text-xs leading-6 text-slate-400">
-                Files are saved inside Lightning P2P app storage for this alpha.
+                Single-file receives publish to Pictures, Movies, Music, or
+                Downloads by type. Folder receives stay app-private in this
+                build.
               </p>
             ) : null}
           </div>
@@ -377,8 +382,9 @@ export function ReceiveView() {
               </p>
               {smartRouting ? (
                 <p className="mt-2 text-sm leading-6 text-slate-100/88">
-                  Pictures → Pictures · Video → Movies · Audio → Music · Other
-                  → Downloads. Each lands in a "Lightning P2P" subfolder.
+                  Pictures save to Pictures, video to Movies, audio to Music,
+                  and other files to Downloads. Each lands in a "Lightning P2P"
+                  subfolder.
                 </p>
               ) : (
                 <p className="mt-2 break-all font-mono text-sm leading-6 text-slate-100/88">

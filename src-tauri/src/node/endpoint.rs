@@ -376,7 +376,8 @@ fn map_connection_type(connection_type: &ConnectionType) -> RouteKind {
     match connection_type {
         ConnectionType::Direct(_) => RouteKind::Direct,
         ConnectionType::Relay(_) => RouteKind::Relay,
-        ConnectionType::Mixed(_, _) | ConnectionType::None => RouteKind::Unknown,
+        ConnectionType::Mixed(_, _) => RouteKind::Mixed,
+        ConnectionType::None => RouteKind::Unknown,
     }
 }
 
@@ -427,7 +428,7 @@ mod tests {
         );
         assert_eq!(
             map_connection_type(&ConnectionType::Mixed(direct_addr, relay_url)),
-            RouteKind::Unknown
+            RouteKind::Mixed
         );
     }
 }

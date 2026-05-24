@@ -47,6 +47,7 @@ This is a direct-first peer-to-peer app. It is not a hosted cloud storage servic
 - Content is addressed and verified with BLAKE3 through iroh-blobs.
 - Receive handoff links keep tickets in URL fragments: `/receive#t=<ticket>`.
 - Browser receive pages do not receive the ticket in normal HTTP requests.
+- Browser handoff hides raw ticket text by default; revealing or copying it is a deliberate user action.
 - Local identity keys prefer the OS keychain. If the keychain is unavailable, development, CI, or platform-specific builds can fall back to an app-data key file so the iroh identity remains stable.
 - No telemetry is collected without explicit opt-in.
 
@@ -135,6 +136,8 @@ sideload trust model.
 ## Telemetry Policy
 
 Lightning P2P does not send product telemetry by default. Diagnostics are copied locally by the user from the Settings view and can be pasted into issues manually.
+
+Diagnostic bundles redact known app/download paths and ticket-like strings before copying. They can still include NodeIds, route state, file sizes, content hashes, and timing metadata, so review them before posting publicly.
 
 ## Threat Model
 

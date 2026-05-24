@@ -1,7 +1,7 @@
 //! Transfer event payloads and throttled event emission helpers.
 
-use crate::error::{LightningP2PError, Result};
-use crate::transfer::metrics::{RouteKind, TransferMetrics};
+use crate::error::{AppErrorPayload, LightningP2PError, Result};
+use crate::transfer::metrics::{RouteKind, TransferMetrics, TransferStrategy};
 use crate::transfer::queue::TransferQueue;
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU64, AtomicU8, Ordering};
@@ -127,6 +127,18 @@ pub struct TransferInfo {
     pub download_ms: u64,
     /// Time spent exporting data to disk.
     pub export_ms: u64,
+    /// Number of provider tickets available for this transfer.
+    pub provider_count: u64,
+    /// Providers with direct addresses.
+    pub direct_provider_count: u64,
+    /// Providers with relay URLs.
+    pub relay_provider_count: u64,
+    /// Provider selection strategy.
+    pub strategy: TransferStrategy,
+    /// Time to first payload byte.
+    pub first_byte_ms: u64,
+    /// Effective transfer throughput in megabits per second.
+    pub effective_mbps: u64,
 }
 
 /// Event emitted to the frontend over Tauri IPC.
@@ -155,6 +167,18 @@ pub enum TransferEvent {
         download_ms: u64,
         /// Time spent exporting data to disk.
         export_ms: u64,
+        /// Number of provider tickets available for this transfer.
+        provider_count: u64,
+        /// Providers with direct addresses.
+        direct_provider_count: u64,
+        /// Providers with relay URLs.
+        relay_provider_count: u64,
+        /// Provider selection strategy.
+        strategy: TransferStrategy,
+        /// Time to first payload byte.
+        first_byte_ms: u64,
+        /// Effective transfer throughput in megabits per second.
+        effective_mbps: u64,
     },
     /// Transfer progress update.
     Progress {
@@ -176,6 +200,18 @@ pub enum TransferEvent {
         download_ms: u64,
         /// Time spent exporting data to disk.
         export_ms: u64,
+        /// Number of provider tickets available for this transfer.
+        provider_count: u64,
+        /// Providers with direct addresses.
+        direct_provider_count: u64,
+        /// Providers with relay URLs.
+        relay_provider_count: u64,
+        /// Provider selection strategy.
+        strategy: TransferStrategy,
+        /// Time to first payload byte.
+        first_byte_ms: u64,
+        /// Effective transfer throughput in megabits per second.
+        effective_mbps: u64,
     },
     /// Transfer completed successfully.
     Completed {
@@ -205,6 +241,18 @@ pub enum TransferEvent {
         download_ms: u64,
         /// Time spent exporting data to disk.
         export_ms: u64,
+        /// Number of provider tickets available for this transfer.
+        provider_count: u64,
+        /// Providers with direct addresses.
+        direct_provider_count: u64,
+        /// Providers with relay URLs.
+        relay_provider_count: u64,
+        /// Provider selection strategy.
+        strategy: TransferStrategy,
+        /// Time to first payload byte.
+        first_byte_ms: u64,
+        /// Effective transfer throughput in megabits per second.
+        effective_mbps: u64,
     },
     /// Transfer failed.
     Failed {
@@ -218,6 +266,8 @@ pub enum TransferEvent {
         phase: TransferPhase,
         /// Coarse failure bucket for actionable frontend copy.
         failure_category: Option<FailureCategory>,
+        /// Structured failure payload for actionable recovery UI.
+        error_payload: Option<AppErrorPayload>,
     },
 }
 
@@ -240,6 +290,18 @@ pub struct ProgressUpdate {
     pub download_ms: u64,
     /// Time spent exporting data to disk.
     pub export_ms: u64,
+    /// Number of provider tickets available for this transfer.
+    pub provider_count: u64,
+    /// Providers with direct addresses.
+    pub direct_provider_count: u64,
+    /// Providers with relay URLs.
+    pub relay_provider_count: u64,
+    /// Provider selection strategy.
+    pub strategy: TransferStrategy,
+    /// Time to first payload byte.
+    pub first_byte_ms: u64,
+    /// Effective transfer throughput in megabits per second.
+    pub effective_mbps: u64,
 }
 
 /// Emits transfer events while throttling progress to avoid IPC flooding.
@@ -293,6 +355,12 @@ impl EventReporter {
             connect_ms: metrics.connect_ms,
             download_ms: metrics.download_ms,
             export_ms: metrics.export_ms,
+            provider_count: metrics.provider_count,
+            direct_provider_count: metrics.direct_provider_count,
+            relay_provider_count: metrics.relay_provider_count,
+            strategy: metrics.strategy,
+            first_byte_ms: metrics.first_byte_ms,
+            effective_mbps: metrics.effective_mbps,
         })
     }
 
@@ -312,6 +380,12 @@ impl EventReporter {
             connect_ms: update.connect_ms,
             download_ms: update.download_ms,
             export_ms: update.export_ms,
+            provider_count: update.provider_count,
+            direct_provider_count: update.direct_provider_count,
+            relay_provider_count: update.relay_provider_count,
+            strategy: update.strategy,
+            first_byte_ms: update.first_byte_ms,
+            effective_mbps: update.effective_mbps,
         })
     }
 
@@ -341,6 +415,12 @@ impl EventReporter {
             connect_ms: metrics.connect_ms,
             download_ms: metrics.download_ms,
             export_ms: metrics.export_ms,
+            provider_count: metrics.provider_count,
+            direct_provider_count: metrics.direct_provider_count,
+            relay_provider_count: metrics.relay_provider_count,
+            strategy: metrics.strategy,
+            first_byte_ms: metrics.first_byte_ms,
+            effective_mbps: metrics.effective_mbps,
         })
     }
 
@@ -355,17 +435,35 @@ impl EventReporter {
         route_kind: RouteKind,
         failure_category: Option<FailureCategory>,
     ) -> Result<()> {
+        self.emit_failed_with_payload(error, route_kind, failure_category, None)
+    }
+
+    /// Emits a `Failed` event with an optional structured payload.
+    ///
+    /// # Errors
+    ///
+    /// Returns `LightningP2PError` if the Tauri event cannot be emitted.
+    pub fn emit_failed_with_payload(
+        &self,
+        error: &str,
+        route_kind: RouteKind,
+        failure_category: Option<FailureCategory>,
+        error_payload: Option<AppErrorPayload>,
+    ) -> Result<()> {
         let phase = if failure_category == Some(FailureCategory::Cancelled) {
             TransferPhase::Cancelled
         } else {
             TransferPhase::Failed
         };
+        let error_payload =
+            error_payload.or_else(|| Some(AppErrorPayload::from_legacy_message(error)));
         self.emit(TransferEvent::Failed {
             transfer_id: self.transfer_id.clone(),
             error: error.to_string(),
             route_kind,
             phase,
             failure_category,
+            error_payload,
         })
     }
 
@@ -402,6 +500,12 @@ impl QueueProgressTarget {
                     connect_ms: update.connect_ms,
                     download_ms: update.download_ms,
                     export_ms: update.export_ms,
+                    provider_count: update.provider_count,
+                    direct_provider_count: update.direct_provider_count,
+                    relay_provider_count: update.relay_provider_count,
+                    strategy: update.strategy,
+                    first_byte_ms: update.first_byte_ms,
+                    effective_mbps: update.effective_mbps,
                 },
                 update.phase,
             )
@@ -419,6 +523,12 @@ pub struct ProgressHandle {
     connect_ms: Arc<AtomicU64>,
     download_ms: Arc<AtomicU64>,
     export_ms: Arc<AtomicU64>,
+    provider_count: Arc<AtomicU64>,
+    direct_provider_count: Arc<AtomicU64>,
+    relay_provider_count: Arc<AtomicU64>,
+    strategy: Arc<AtomicU8>,
+    first_byte_ms: Arc<AtomicU64>,
+    effective_mbps: Arc<AtomicU64>,
 }
 
 impl ProgressHandle {
@@ -451,6 +561,12 @@ impl ProgressHandle {
             connect_ms: self.connect_ms.load(Ordering::Relaxed),
             download_ms: self.download_ms.load(Ordering::Relaxed),
             export_ms: self.export_ms.load(Ordering::Relaxed),
+            provider_count: self.provider_count.load(Ordering::Relaxed),
+            direct_provider_count: self.direct_provider_count.load(Ordering::Relaxed),
+            relay_provider_count: self.relay_provider_count.load(Ordering::Relaxed),
+            strategy: TransferStrategy::from_repr(self.strategy.load(Ordering::Relaxed)),
+            first_byte_ms: self.first_byte_ms.load(Ordering::Relaxed),
+            effective_mbps: self.effective_mbps.load(Ordering::Relaxed),
         }
     }
 
@@ -468,6 +584,18 @@ impl ProgressHandle {
         self.download_ms
             .store(metrics.download_ms, Ordering::Relaxed);
         self.export_ms.store(metrics.export_ms, Ordering::Relaxed);
+        self.provider_count
+            .store(metrics.provider_count, Ordering::Relaxed);
+        self.direct_provider_count
+            .store(metrics.direct_provider_count, Ordering::Relaxed);
+        self.relay_provider_count
+            .store(metrics.relay_provider_count, Ordering::Relaxed);
+        self.strategy
+            .store(metrics.strategy.as_repr(), Ordering::Relaxed);
+        self.first_byte_ms
+            .store(metrics.first_byte_ms, Ordering::Relaxed);
+        self.effective_mbps
+            .store(metrics.effective_mbps, Ordering::Relaxed);
     }
 
     /// Updates the current transfer phase.
@@ -494,6 +622,11 @@ impl ProgressHandle {
     /// Updates the export timing metric.
     pub fn set_export_ms(&self, export_ms: u64) {
         self.export_ms.store(export_ms, Ordering::Relaxed);
+    }
+
+    /// Updates the time to first payload byte.
+    pub fn set_first_byte_ms(&self, first_byte_ms: u64) {
+        self.first_byte_ms.store(first_byte_ms, Ordering::Relaxed);
     }
 }
 
@@ -641,6 +774,12 @@ fn sample_progress(
         connect_ms: metrics.connect_ms,
         download_ms: metrics.download_ms,
         export_ms: metrics.export_ms,
+        provider_count: metrics.provider_count,
+        direct_provider_count: metrics.direct_provider_count,
+        relay_provider_count: metrics.relay_provider_count,
+        strategy: metrics.strategy,
+        first_byte_ms: metrics.first_byte_ms,
+        effective_mbps: metrics.effective_mbps,
     }
 }
 
@@ -677,12 +816,34 @@ mod tests {
             connect_ms: 12,
             download_ms: 24,
             export_ms: 0,
+            provider_count: 1,
+            direct_provider_count: 0,
+            relay_provider_count: 0,
+            strategy: TransferStrategy::QueuedSingleProvider,
+            first_byte_ms: 16,
+            effective_mbps: 0,
         };
         let json = serde_json::to_string(&event).expect("progress event should serialize");
         assert!(json.contains("\"type\":\"progress\""));
         assert!(json.contains("\"bytes\":128"));
         assert!(json.contains("\"route_kind\":\"direct\""));
         assert!(json.contains("\"phase\":\"downloading\""));
+    }
+
+    #[test]
+    fn failed_event_serializes_structured_error_payload() {
+        let event = TransferEvent::Failed {
+            transfer_id: "recv-1".into(),
+            error: "Peer not reachable".into(),
+            route_kind: RouteKind::Relay,
+            phase: TransferPhase::Failed,
+            failure_category: Some(FailureCategory::Unreachable),
+            error_payload: Some(AppErrorPayload::sender_offline()),
+        };
+        let json = serde_json::to_string(&event).expect("failed event should serialize");
+        assert!(json.contains("\"type\":\"failed\""));
+        assert!(json.contains("\"error_payload\""));
+        assert!(json.contains("\"code\":\"sender_offline\""));
     }
 
     #[test]
@@ -703,6 +864,12 @@ mod tests {
             connect_ms: 10,
             download_ms: 20,
             export_ms: 30,
+            provider_count: 1,
+            direct_provider_count: 0,
+            relay_provider_count: 1,
+            strategy: TransferStrategy::QueuedSingleProvider,
+            first_byte_ms: 15,
+            effective_mbps: 4,
         });
         assert_eq!(
             handle.metrics_snapshot(),
@@ -711,6 +878,12 @@ mod tests {
                 connect_ms: 10,
                 download_ms: 20,
                 export_ms: 30,
+                provider_count: 1,
+                direct_provider_count: 0,
+                relay_provider_count: 1,
+                strategy: TransferStrategy::QueuedSingleProvider,
+                first_byte_ms: 15,
+                effective_mbps: 4,
             }
         );
         handle.set_phase(TransferPhase::Verifying);
@@ -747,6 +920,12 @@ mod tests {
             connect_ms: 10,
             download_ms: 20,
             export_ms: 30,
+            provider_count: 1,
+            direct_provider_count: 1,
+            relay_provider_count: 0,
+            strategy: TransferStrategy::QueuedSingleProvider,
+            first_byte_ms: 12,
+            effective_mbps: 8,
         };
 
         assert!(should_emit_progress(None, update, false));

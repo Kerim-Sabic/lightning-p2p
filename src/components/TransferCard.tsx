@@ -1,8 +1,10 @@
 import {
   ArrowUpRight,
+  AlertTriangle,
   CheckCircle2,
   ClipboardCheck,
   Copy,
+  ExternalLink,
   StopCircle,
   TimerReset,
 } from "lucide-react";
@@ -50,6 +52,8 @@ function routeLabel(routeKind: TransferEntry["routeKind"]): string {
       return "Direct";
     case "relay":
       return "Relay";
+    case "mixed":
+      return "Mixed";
     case "unknown":
     default:
       return "Unknown";
@@ -62,9 +66,23 @@ function routeTone(routeKind: TransferEntry["routeKind"]): string {
       return "border-emerald-400/20 bg-emerald-500/10 text-emerald-100";
     case "relay":
       return "border-sky-400/20 bg-sky-500/10 text-sky-100";
+    case "mixed":
+      return "border-amber-400/25 bg-amber-500/10 text-amber-100";
     case "unknown":
     default:
       return "border-white/[0.08] bg-white/[0.04] text-slate-300";
+  }
+}
+
+function strategyLabel(strategy: TransferEntry["strategy"]): string {
+  switch (strategy) {
+    case "queued_multi_provider":
+      return "Multi-provider";
+    case "queued_single_provider":
+      return "Queued";
+    case "unknown":
+    default:
+      return "Pending";
   }
 }
 
@@ -111,6 +129,7 @@ export function TransferCard({ transfer, onCancel }: TransferCardProps) {
   const isActive =
     transfer.status === "starting" || transfer.status === "running";
   const StatusIcon = statusIcon(transfer);
+  const errorHint = transfer.appError?.hint ?? failureHelp(transfer);
 
   const handleCancel = (): void => {
     if (!onCancel) {
@@ -215,7 +234,7 @@ export function TransferCard({ transfer, onCancel }: TransferCardProps) {
           </div>
         </div>
 
-        <div className="grid gap-3 text-sm text-slate-300/78 md:grid-cols-3">
+        <div className="grid gap-3 text-sm text-slate-300/78 sm:grid-cols-2 lg:grid-cols-4">
           <div className="stat-card">
             <p className="metric-label">Speed</p>
             <p className="mt-1.5 font-semibold text-white">
@@ -236,22 +255,62 @@ export function TransferCard({ transfer, onCancel }: TransferCardProps) {
               {routeLabel(transfer.routeKind)}
             </p>
           </div>
+          <div className="stat-card">
+            <p className="metric-label">Providers</p>
+            <p className="mt-1.5 font-semibold text-white">
+              {transfer.providerCount > 0 ? transfer.providerCount : "--"}
+            </p>
+          </div>
         </div>
 
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-500">
           <span>Connect {formatDurationMs(transfer.connectMs)}</span>
+          <span>First byte {formatDurationMs(transfer.firstByteMs)}</span>
           <span>Download {formatDurationMs(transfer.downloadMs)}</span>
           <span>Export {formatDurationMs(transfer.exportMs)}</span>
+          <span>Strategy {strategyLabel(transfer.strategy)}</span>
+          <span>
+            Effective{" "}
+            {transfer.effectiveMbps > 0
+              ? `${transfer.effectiveMbps} Mbps`
+              : "--"}
+          </span>
         </div>
 
         {transfer.error ? (
           <div className="rounded-2xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
-            <p>{transfer.error}</p>
-            {failureHelp(transfer) ? (
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold text-white">
+                  {transfer.appError?.title ?? "Transfer failed"}
+                </p>
+                <p className="mt-1">{transfer.error}</p>
+              </div>
+            </div>
+            {errorHint ? (
               <p className="mt-2 text-xs leading-5 text-rose-100/72">
-                {failureHelp(transfer)}
+                {errorHint}
               </p>
             ) : null}
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+              {transfer.appError ? (
+                <span className="rounded-full border border-rose-300/15 bg-rose-300/10 px-2 py-1 font-medium text-rose-50/80">
+                  {transfer.appError.retryable ? "Retry may help" : "Needs new input"}
+                </span>
+              ) : null}
+              {transfer.appError?.helpUrl ? (
+                <a
+                  href={transfer.appError.helpUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 font-semibold text-rose-50 underline decoration-current/30 underline-offset-4"
+                >
+                  Help docs
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              ) : null}
+            </div>
           </div>
         ) : null}
 

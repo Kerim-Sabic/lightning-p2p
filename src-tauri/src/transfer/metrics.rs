@@ -13,6 +13,8 @@ pub enum RouteKind {
     Direct,
     /// Transfer is using a relay path.
     Relay,
+    /// Transfer is using both direct and relay paths.
+    Mixed,
 }
 
 impl RouteKind {
@@ -22,6 +24,7 @@ impl RouteKind {
         match value {
             1 => Self::Direct,
             2 => Self::Relay,
+            3 => Self::Mixed,
             _ => Self::Unknown,
         }
     }
@@ -33,6 +36,42 @@ impl RouteKind {
             Self::Unknown => 0,
             Self::Direct => 1,
             Self::Relay => 2,
+            Self::Mixed => 3,
+        }
+    }
+}
+
+/// Transfer provider selection strategy.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TransferStrategy {
+    /// No strategy is known yet.
+    #[default]
+    Unknown,
+    /// A single provider is used through the iroh-blobs queued downloader.
+    QueuedSingleProvider,
+    /// Multiple providers are available to the iroh-blobs queued downloader.
+    QueuedMultiProvider,
+}
+
+impl TransferStrategy {
+    /// Converts an atomic-friendly integer into a transfer strategy.
+    #[must_use]
+    pub fn from_repr(value: u8) -> Self {
+        match value {
+            1 => Self::QueuedSingleProvider,
+            2 => Self::QueuedMultiProvider,
+            _ => Self::Unknown,
+        }
+    }
+
+    /// Converts the strategy into an atomic-friendly integer.
+    #[must_use]
+    pub const fn as_repr(self) -> u8 {
+        match self {
+            Self::Unknown => 0,
+            Self::QueuedSingleProvider => 1,
+            Self::QueuedMultiProvider => 2,
         }
     }
 }
@@ -48,4 +87,16 @@ pub struct TransferMetrics {
     pub download_ms: u64,
     /// Time spent exporting verified data to disk.
     pub export_ms: u64,
+    /// Number of provider tickets available for this transfer.
+    pub provider_count: u64,
+    /// Providers with direct addresses in their tickets.
+    pub direct_provider_count: u64,
+    /// Providers with relay URLs in their tickets.
+    pub relay_provider_count: u64,
+    /// Provider selection strategy.
+    pub strategy: TransferStrategy,
+    /// Time to first payload byte.
+    pub first_byte_ms: u64,
+    /// Effective transfer throughput in megabits per second, rounded down.
+    pub effective_mbps: u64,
 }

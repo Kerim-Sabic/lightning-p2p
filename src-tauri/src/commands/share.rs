@@ -1,7 +1,9 @@
 //! Commands for sharing files and regenerating tickets.
 
+use crate::commands::{command_error, CommandResult};
 use crate::node::ActiveShare;
 use crate::storage::history;
+use crate::transfer::ticket::encode_fd2_ticket;
 use crate::AppState;
 use iroh_blobs::ticket::BlobTicket;
 use iroh_blobs::{BlobFormat, Hash};
@@ -27,7 +29,7 @@ pub struct SharePathInfo {
     pub is_dir: bool,
 }
 
-/// Adds files to the iroh-blobs store and returns a `BlobTicket` string.
+/// Adds files to the iroh-blobs store and returns a Lightning P2P share ticket.
 ///
 /// # Errors
 ///
@@ -37,12 +39,14 @@ pub async fn create_share(
     window: tauri::Window,
     state: State<'_, AppState>,
     paths: Vec<String>,
-) -> Result<String, String> {
-    let node = state.get_node().await.map_err(String::from)?;
+) -> CommandResult<String> {
+    let node = state.get_node().await.map_err(command_error)?;
     let paths = paths.into_iter().map(PathBuf::from).collect::<Vec<_>>();
     let outcome = crate::transfer::sender::send_files(node.as_ref(), window, paths)
         .await
-        .map_err(String::from)?;
+        .map_err(command_error)?;
+    let ticket = encode_fd2_ticket(&outcome.ticket, &outcome.label, outcome.total_size)
+        .map_err(command_error)?;
     state
         .nearby_shares
         .publish_share(ActiveShare::new(
@@ -52,7 +56,7 @@ pub async fn create_share(
             outcome.total_size,
         ))
         .await;
-    Ok(outcome.ticket.to_string())
+    Ok(ticket)
 }
 
 /// Returns display metadata for local files or directories before sharing.
@@ -61,10 +65,10 @@ pub async fn create_share(
 ///
 /// Returns an error string if any path cannot be read.
 #[tauri::command]
-pub fn describe_share_paths(paths: Vec<String>) -> Result<Vec<SharePathInfo>, String> {
+pub fn describe_share_paths(paths: Vec<String>) -> CommandResult<Vec<SharePathInfo>> {
     paths
         .into_iter()
-        .map(|path| describe_path(PathBuf::from(path)).map_err(String::from))
+        .map(|path| describe_path(PathBuf::from(path)).map_err(command_error))
         .collect()
 }
 
@@ -75,23 +79,25 @@ pub fn describe_share_paths(paths: Vec<String>) -> Result<Vec<SharePathInfo>, St
 /// Returns an error string if the content is unavailable or the ticket cannot
 /// be created.
 #[tauri::command]
-pub async fn get_ticket(state: State<'_, AppState>, hash: String) -> Result<String, String> {
-    let node = state.get_node().await.map_err(String::from)?;
-    let hash = Hash::from_str(&hash).map_err(|err| err.to_string())?;
+pub async fn get_ticket(state: State<'_, AppState>, hash: String) -> CommandResult<String> {
+    let node = state.get_node().await.map_err(command_error)?;
+    let hash = Hash::from_str(&hash).map_err(|err| command_error(err.to_string()))?;
     let exists = node
         .blobs_client()
         .has(hash)
         .await
-        .map_err(|err| err.to_string())?;
+        .map_err(|err| command_error(err.to_string()))?;
     if !exists {
-        return Err("Shared content is no longer available locally".into());
+        return Err(command_error(
+            "Shared content is no longer available locally",
+        ));
     }
 
-    let node_addr = node.ticket_addr().await.map_err(|err| err.to_string())?;
+    let node_addr = node.ticket_addr().await.map_err(command_error)?;
     let record =
-        history::latest_send_by_hash(node.db(), &hash.to_string()).map_err(String::from)?;
-    let ticket =
-        BlobTicket::new(node_addr, hash, BlobFormat::HashSeq).map_err(|err| err.to_string())?;
+        history::latest_send_by_hash(node.db(), &hash.to_string()).map_err(command_error)?;
+    let ticket = BlobTicket::new(node_addr, hash, BlobFormat::HashSeq)
+        .map_err(|err| command_error(err.to_string()))?;
     let label = record
         .as_ref()
         .map_or_else(|| hash.to_string(), |record| record.filename.clone());
@@ -99,13 +105,13 @@ pub async fn get_ticket(state: State<'_, AppState>, hash: String) -> Result<Stri
     state
         .nearby_shares
         .publish_share(ActiveShare::new(
-            label,
+            label.clone(),
             hash,
             BlobFormat::HashSeq,
             total_size,
         ))
         .await;
-    Ok(ticket.to_string())
+    encode_fd2_ticket(&ticket, &label, total_size).map_err(command_error)
 }
 
 /// Renders a ticket string as an SVG QR code.
@@ -114,8 +120,8 @@ pub async fn get_ticket(state: State<'_, AppState>, hash: String) -> Result<Stri
 ///
 /// Returns an error string if the QR code cannot be encoded.
 #[tauri::command]
-pub fn render_ticket_qr(ticket: String) -> Result<String, String> {
-    let code = QrCode::new(ticket.into_bytes()).map_err(|err| err.to_string())?;
+pub fn render_ticket_qr(ticket: String) -> CommandResult<String> {
+    let code = QrCode::new(ticket.into_bytes()).map_err(|err| command_error(err.to_string()))?;
     Ok(code
         .render::<svg::Color<'_>>()
         .min_dimensions(256, 256)

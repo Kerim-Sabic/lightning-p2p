@@ -1705,11 +1705,11 @@ function BenchmarkPreview() {
             </div>
           ))}
           <a
-            href={`${REPO_URL}/blob/main/docs/benchmark-report-template.md`}
+            href={`${REPO_URL}/blob/main/docs/BENCHMARKS.md`}
             className="group rounded-[18px] border border-emerald-300/20 bg-emerald-300/8 p-5 text-emerald-100 transition hover:border-emerald-300/36 hover:bg-emerald-300/12"
           >
             <FileCheck2 className="h-5 w-5" />
-            <p className="mt-4 font-semibold">View benchmark methodology</p>
+            <p className="mt-4 font-semibold">View benchmark evidence rules</p>
             <p className="mt-2 text-sm leading-6 text-emerald-100/72">
               LAN, WAN, relay, small files, and large single-file reports.
             </p>

@@ -2,6 +2,7 @@ import {
   Binary,
   CheckCircle2,
   Copy,
+  Eye,
   File,
   Folder,
   ImageIcon,
@@ -74,6 +75,10 @@ function networkLabel(onlineState: string): string {
   }
 }
 
+function displayReceiveLink(link: string): string {
+  return link.replace(/(#t=).+$/u, "$1[hidden ticket]");
+}
+
 export function SendView() {
   const clearShareSelection = useTransferStore(
     (state) => state.clearShareSelection,
@@ -96,6 +101,7 @@ export function SendView() {
   const [copied, setCopied] = useState<"link" | "ticket" | null>(null);
   const [isDragActive, setIsDragActive] = useState(false);
   const [qrSvg, setQrSvg] = useState<string | null>(null);
+  const [showRawTicket, setShowRawTicket] = useState(false);
 
   const selectionSize = useMemo(
     () => shareSelection.reduce((total, item) => total + item.size, 0),
@@ -170,6 +176,10 @@ export function SendView() {
       active = false;
     };
   }, [receiveHandoffLink]);
+
+  useEffect(() => {
+    setShowRawTicket(false);
+  }, [shareTicket]);
 
   const handleCopyReceiveLink = async (): Promise<void> => {
     if (!receiveHandoffLink) {
@@ -417,7 +427,8 @@ export function SendView() {
                   </p>
                   <p className="meta-copy mt-1">
                     Copy the receive link or scan the QR code on the receiving
-                    device. The raw ticket stays available below.
+                    device. Keep this sender window open until the receiver is
+                    done.
                   </p>
                 </div>
                 <button
@@ -462,29 +473,47 @@ export function SendView() {
                     Recommended receive link
                   </p>
                   <code className="mt-2 block break-all font-mono text-[13px] leading-7 text-emerald-50/90">
-                    {receiveHandoffLink}
+                    {displayReceiveLink(receiveHandoffLink)}
                   </code>
                 </div>
               ) : null}
 
               <div className="overflow-hidden rounded-[20px] border border-white/[0.08] bg-black/25 p-4">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                  <p className="metric-label">Raw ticket</p>
-                  <button
-                    type="button"
-                    onClick={() => void handleCopyRawTicket()}
-                    className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
-                      copied === "ticket"
-                        ? "border-emerald-400/20 bg-emerald-500/10 text-emerald-100"
-                        : "border-white/10 bg-white/[0.04] text-slate-200 hover:bg-white/[0.08]"
-                    }`}
-                  >
-                    {copied === "ticket" ? "Ticket copied" : "Copy raw ticket"}
-                  </button>
+                  <p className="metric-label">Raw ticket fallback</p>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowRawTicket((value) => !value)}
+                      className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-semibold text-slate-200 transition-colors hover:bg-white/[0.08]"
+                    >
+                      <Eye className="h-3.5 w-3.5" />
+                      {showRawTicket ? "Hide" : "Reveal"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleCopyRawTicket()}
+                      className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                        copied === "ticket"
+                          ? "border-emerald-400/20 bg-emerald-500/10 text-emerald-100"
+                          : "border-white/10 bg-white/[0.04] text-slate-200 hover:bg-white/[0.08]"
+                      }`}
+                    >
+                      {copied === "ticket" ? "Ticket copied" : "Copy"}
+                    </button>
+                  </div>
                 </div>
-                <code className="block break-all font-mono text-[13px] leading-7 text-sky-50/88">
-                  {shareTicket}
-                </code>
+                {showRawTicket ? (
+                  <code className="block break-all font-mono text-[13px] leading-7 text-sky-50/88">
+                    {shareTicket}
+                  </code>
+                ) : (
+                  <p className="text-sm leading-6 text-slate-300">
+                    Hidden because anyone with the ticket can receive while
+                    this share is active. Reveal it only for manual paste
+                    fallback.
+                  </p>
+                )}
               </div>
             </div>
 

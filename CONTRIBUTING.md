@@ -80,6 +80,19 @@ The same sequence is available as:
 pnpm check
 ```
 
+On Windows, `src-tauri/tests/transfer_test.rs` is compiled out because the
+manifest-less Cargo test host can load the wrong Common Controls activation
+context before Rust starts. Non-Windows `cargo test` still runs that end-to-end
+iroh transfer harness. Use this faster baseline for local stabilization work,
+but do not treat it as a substitute for the strict gate:
+
+```powershell
+pnpm check:baseline
+```
+
+Windows transfer behavior should also be covered with packaged-app smoke tests
+before release.
+
 If you change transfer performance or transport behavior, also run:
 
 ```powershell

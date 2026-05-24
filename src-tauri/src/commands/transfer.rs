@@ -1,16 +1,18 @@
 //! Commands for receiving files and querying transfer state.
 
+use crate::commands::{command_error, CommandResult};
+use crate::error::AppErrorPayload;
 use crate::storage::history::{self, TransferRecord};
 use crate::transfer::export;
-use crate::transfer::metrics::RouteKind;
+use crate::transfer::metrics::{RouteKind, TransferStrategy};
 use crate::transfer::progress::{TransferDirection, TransferInfo, TransferPhase};
+use crate::transfer::ticket::ShareTicket;
 use crate::AppState;
 use iroh_blobs::ticket::BlobTicket;
-use std::str::FromStr;
 use tauri::State;
 use tokio::sync::watch;
 
-/// Starts downloading shared content from a `BlobTicket` string.
+/// Starts downloading shared content from a legacy or Lightning P2P ticket string.
 ///
 /// # Errors
 ///
@@ -21,10 +23,10 @@ pub async fn start_receive(
     window: tauri::Window,
     state: State<'_, AppState>,
     ticket: String,
-) -> Result<String, String> {
-    let node = state.get_node().await.map_err(String::from)?;
-    let ticket = BlobTicket::from_str(&ticket)
-        .map_err(|_err| "Invalid ticket. Check the share code and try again.".to_string())?;
+) -> CommandResult<String> {
+    let node = state.get_node().await.map_err(command_error)?;
+    let ticket = ShareTicket::parse(&ticket)
+        .map_err(|_err| command_error(AppErrorPayload::invalid_ticket()))?;
     start_receive_ticket(state, window, node, ticket).await
 }
 
@@ -50,14 +52,14 @@ pub async fn start_receive_discovered_share(
     window: tauri::Window,
     state: State<'_, AppState>,
     share_id: String,
-) -> Result<String, String> {
-    let node = state.get_node().await.map_err(String::from)?;
+) -> CommandResult<String> {
+    let node = state.get_node().await.map_err(command_error)?;
     let ticket = state
         .nearby_shares
         .ticket_for_share(&share_id)
         .await
-        .map_err(String::from)?;
-    start_receive_ticket(state, window, node, ticket).await
+        .map_err(command_error)?;
+    start_receive_ticket(state, window, node, ShareTicket::from_blob_ticket(ticket)).await
 }
 
 /// Cancels an in-progress transfer.
@@ -66,14 +68,11 @@ pub async fn start_receive_discovered_share(
 ///
 /// Returns an error string if the transfer cannot be found.
 #[tauri::command]
-pub async fn cancel_transfer(
-    state: State<'_, AppState>,
-    transfer_id: String,
-) -> Result<(), String> {
+pub async fn cancel_transfer(state: State<'_, AppState>, transfer_id: String) -> CommandResult<()> {
     if state.transfers.cancel(&transfer_id).await {
         Ok(())
     } else {
-        Err("Transfer not found".into())
+        Err(command_error("Transfer not found"))
     }
 }
 
@@ -124,21 +123,27 @@ pub(crate) async fn start_receive_from_offer(
     window: tauri::Window,
     node: std::sync::Arc<crate::node::LightningP2PNode>,
     ticket: BlobTicket,
-) -> Result<String, String> {
-    start_receive_ticket(state, window, node, ticket).await
+) -> CommandResult<String> {
+    start_receive_ticket(state, window, node, ShareTicket::from_blob_ticket(ticket)).await
 }
 
 async fn start_receive_ticket(
     state: State<'_, AppState>,
     window: tauri::Window,
     node: std::sync::Arc<crate::node::LightningP2PNode>,
-    ticket: BlobTicket,
-) -> Result<String, String> {
+    ticket: ShareTicket,
+) -> CommandResult<String> {
     let destination = state.settings.snapshot().await.download_dir;
-    export::preflight_destination(&destination).map_err(String::from)?;
+    export::preflight_destination(&destination).map_err(command_error)?;
 
     let transfer_id = state.transfers.next_transfer_id("recv");
     let (cancel_tx, cancel_rx) = watch::channel(false);
+    let topology = ticket.topology();
+    let strategy = if topology.provider_count > 1 {
+        TransferStrategy::QueuedMultiProvider
+    } else {
+        TransferStrategy::QueuedSingleProvider
+    };
 
     state
         .transfers
@@ -146,10 +151,12 @@ async fn start_receive_ticket(
             TransferInfo {
                 transfer_id: transfer_id.clone(),
                 direction: TransferDirection::Receive,
-                name: ticket.hash().to_string(),
-                peer: Some(ticket.node_addr().node_id.to_string()),
+                name: ticket
+                    .label()
+                    .map_or_else(|| ticket.primary().hash().to_string(), str::to_string),
+                peer: Some(ticket.primary().node_addr().node_id.to_string()),
                 bytes: 0,
-                total: 0,
+                total: ticket.size().unwrap_or(0),
                 speed_bps: 0,
                 route_kind: RouteKind::Unknown,
                 phase: TransferPhase::Connecting,
@@ -158,6 +165,12 @@ async fn start_receive_ticket(
                 connect_ms: 0,
                 download_ms: 0,
                 export_ms: 0,
+                provider_count: topology.provider_count,
+                direct_provider_count: topology.direct_provider_count,
+                relay_provider_count: topology.relay_provider_count,
+                strategy,
+                first_byte_ms: 0,
+                effective_mbps: 0,
             },
             Some(cancel_tx),
         )

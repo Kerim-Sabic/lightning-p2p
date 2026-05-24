@@ -2,6 +2,16 @@
 
 These notes summarize the launch-readiness audit and the changes made in this pass.
 
+## Current Implementation Pass
+
+- Added a release-state check that keeps package, Cargo, Tauri, stable release, experimental release, README, website metadata, and roadmap copy aligned.
+- Added [BENCHMARKS.md](BENCHMARKS.md) as the public benchmark evidence index and changed the benchmark matrix helper to use the current package version dynamically.
+- Aligned Android receive copy with current behavior: single-file receives publish to MediaStore buckets where possible, while folder receives remain app-private.
+- Hid raw receive handoff tickets by default and documented that revealing/copying the raw ticket is sensitive.
+- Added diagnostic redaction for ticket-like strings in frontend, Rust, and Android log tails before bundles are copied.
+- Baseline checks after this pass: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm check:release-state`, `cargo fmt --check`, `cargo test --lib`, and `cargo clippy --all-targets -- -D warnings` pass. The same non-integration baseline is available as `pnpm check:baseline`.
+- The full Rust integration harness in `tests/transfer_test.rs` is compiled out on Windows. The manifest-less Cargo test executable imported `TaskDialogIndirect` from `comctl32.dll` before the Rust test harness started and exited with `STATUS_ENTRYPOINT_NOT_FOUND` (`0xc0000139`). Non-Windows `cargo test` still runs the end-to-end iroh transfer harness; Windows transfer coverage should use packaged-app smoke tests until a Cargo test host can embed the same Common Controls v6 activation context as the Tauri app.
+
 ## Fixed In This Pass
 
 - Profile-scoped iroh identities: `LIGHTNING_P2P_PROFILE=alice` and `bob` no longer share the same keychain identity by default.

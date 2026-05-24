@@ -76,7 +76,10 @@ export function formatDurationMs(durationMs: number): string {
 
 export function isProbablyBlobTicket(ticket: string): boolean {
   const value = ticket.trim();
-  return /^blob[a-z0-9]+$/i.test(value) && value.length > 24;
+  return (
+    (/^blob[a-z0-9]+$/i.test(value) && value.length > 24) ||
+    (/^fd2:[A-Za-z0-9_-]+$/.test(value) && value.length > 28)
+  );
 }
 
 function validBlobTicketOrNull(ticket: string | null): string | null {

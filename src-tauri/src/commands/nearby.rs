@@ -1,5 +1,6 @@
 //! Commands for nearby device discovery and the push-style share offer flow.
 
+use crate::commands::{command_error, CommandResult};
 use crate::node::nearby_offer::{emit_offer_resolved, OfferDecision, OfferShareMessage};
 use crate::node::nearby_protocol::{local_device_name, send_offer, WireBlobFormat};
 use crate::node::{ActiveShare, NearbyDevice};
@@ -31,19 +32,19 @@ pub async fn get_nearby_devices(state: State<'_, AppState>) -> Result<Vec<Nearby
 pub async fn clear_peer_cache(
     app_handle: tauri::AppHandle,
     state: State<'_, AppState>,
-) -> Result<(), String> {
-    let node = state.get_node().await.map_err(String::from)?;
-    peers::clear_all(node.db()).map_err(String::from)?;
+) -> CommandResult<()> {
+    let node = state.get_node().await.map_err(command_error)?;
+    peers::clear_all(node.db()).map_err(command_error)?;
 
     if let Some(shares) = state.nearby_shares.clear_discovered_shares().await {
         app_handle
             .emit("discovered-shares-updated", shares)
-            .map_err(|error| error.to_string())?;
+            .map_err(|error| command_error(error.to_string()))?;
     }
     if let Some(devices) = state.nearby_shares.clear_devices().await {
         app_handle
             .emit("nearby-devices-updated", devices)
-            .map_err(|error| error.to_string())?;
+            .map_err(|error| command_error(error.to_string()))?;
     }
 
     Ok(())
@@ -144,14 +145,14 @@ pub async fn respond_to_offer(
     state: State<'_, AppState>,
     offer_id: String,
     accept: bool,
-) -> Result<Option<String>, String> {
+) -> CommandResult<Option<String>> {
     // Snapshot the offer payload before resolving so we still have it after
     // the inbox releases its lock.
     let snapshot = state.offer_inbox.snapshot().await;
     let offer = snapshot
         .into_iter()
         .find(|offer| offer.offer_id == offer_id)
-        .ok_or_else(|| "Offer is no longer pending.".to_string())?;
+        .ok_or_else(|| command_error("Offer is no longer pending."))?;
 
     let decision = if accept {
         OfferDecision::Accepted
@@ -163,19 +164,19 @@ pub async fn respond_to_offer(
         .offer_inbox
         .resolve(&offer_id, decision)
         .await
-        .map_err(|err| err.to_string())?;
+        .map_err(|err| command_error(err.to_string()))?;
 
     if !accept {
         return Ok(None);
     }
 
     let sender_node_id = NodeId::from_str(&offer.sender_node_id)
-        .map_err(|err| format!("Invalid sender node id: {err}"))?;
+        .map_err(|err| command_error(format!("Invalid sender node id: {err}")))?;
     let hash = iroh_blobs::Hash::from_str(&offer.blob_hash)
-        .map_err(|err| format!("Invalid blob hash: {err}"))?;
+        .map_err(|err| command_error(format!("Invalid blob hash: {err}")))?;
     let blob_format: BlobFormat = offer.blob_format.blob_format();
 
-    let node = state.get_node().await.map_err(String::from)?;
+    let node = state.get_node().await.map_err(command_error)?;
     let node_addr = state
         .nearby_shares
         .node_addr_for_device(&sender_node_id)
@@ -183,7 +184,7 @@ pub async fn respond_to_offer(
         .unwrap_or_else(|| NodeAddr::new(sender_node_id));
 
     let ticket = iroh_blobs::ticket::BlobTicket::new(node_addr, hash, blob_format)
-        .map_err(|err| format!("Could not build ticket from offer: {err}"))?;
+        .map_err(|err| command_error(format!("Could not build ticket from offer: {err}")))?;
 
     let transfer_id =
         crate::commands::transfer::start_receive_from_offer(state, window, node, ticket).await?;

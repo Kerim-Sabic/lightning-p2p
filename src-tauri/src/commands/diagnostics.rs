@@ -229,6 +229,8 @@ pub async fn collect_diagnostic_bundle(
 
     report = redact_known_path(report, &state.data_dir, "[app-data]");
     report = redact_known_path(report, &settings.download_dir, "[download-dir]");
+    report = redact_home_path(report);
+    report = redact_for_diagnostics(&report);
 
     Ok(DiagnosticBundle {
         generated_at_unix,
@@ -582,8 +584,12 @@ fn append_diagnostic_line(path: &Path, message: &str) -> std::io::Result<()> {
     Ok(())
 }
 
+pub(crate) fn redact_for_diagnostics(input: &str) -> String {
+    redact_sensitive_text(input)
+}
+
 fn sanitize_frontend_message(message: &str) -> String {
-    let sanitized = message.replace('\0', "");
+    let sanitized = redact_sensitive_text(&message.replace('\0', ""));
     if sanitized.len() <= MAX_FRONTEND_MESSAGE_BYTES {
         return sanitized;
     }
@@ -603,7 +609,7 @@ fn read_recent_log(path: &Path, max_lines: usize) -> String {
         Ok(contents) => {
             let lines = contents.lines().collect::<Vec<_>>();
             let start = lines.len().saturating_sub(max_lines);
-            lines[start..].join("\n")
+            redact_sensitive_text(&lines[start..].join("\n"))
         }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => "[not found]".into(),
         Err(error) => format!("[unreadable: {error}]"),
@@ -617,6 +623,74 @@ fn redact_known_path(report: String, path: &Path, replacement: &str) -> String {
     } else {
         report.replace(path_text.as_ref(), replacement)
     }
+}
+
+fn redact_home_path(report: String) -> String {
+    if let Some(home) = dirs::home_dir() {
+        redact_known_path(report, &home, "[home]")
+    } else {
+        report
+    }
+}
+
+fn redact_sensitive_text(input: &str) -> String {
+    input
+        .split_inclusive(char::is_whitespace)
+        .map(redact_sensitive_segment)
+        .collect()
+}
+
+fn redact_sensitive_segment(segment: &str) -> String {
+    let token = segment
+        .trim_matches(char::is_whitespace)
+        .trim_matches(|character: char| {
+            character.is_ascii_punctuation()
+                && character != ':'
+                && character != '_'
+                && character != '-'
+        });
+    if token.is_empty() || !is_ticket_like(token) {
+        if should_redact_receive_link(token) {
+            return segment.replacen(token, "[redacted-receive-link]", 1);
+        }
+        return segment.to_string();
+    }
+    segment.replacen(token, "[redacted-ticket]", 1)
+}
+
+fn should_redact_receive_link(token: &str) -> bool {
+    let normalized = token.to_ascii_lowercase();
+    if normalized.starts_with("lightning-p2p://receive") {
+        return true;
+    }
+    if normalized.contains("/receive#t=")
+        || normalized.contains("/receive?t=")
+        || normalized.contains("/receive&ticket=")
+        || normalized.contains("?ticket=")
+        || normalized.contains("&ticket=")
+    {
+        return true;
+    }
+    (normalized.contains("?t=") || normalized.contains("&t="))
+        && (normalized.starts_with("http://")
+            || normalized.starts_with("https://")
+            || normalized.contains("fd2:")
+            || normalized.contains("blob"))
+}
+
+fn is_ticket_like(token: &str) -> bool {
+    if let Some(payload) = token.strip_prefix("fd2:") {
+        return payload.len() >= 24
+            && payload.chars().all(|character| {
+                character.is_ascii_alphanumeric() || character == '-' || character == '_'
+            });
+    }
+
+    token.len() > 24
+        && token.starts_with("blob")
+        && token
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric())
 }
 
 fn bool_label(value: bool) -> &'static str {
@@ -646,5 +720,137 @@ mod tests {
         let status = inspect_download_dir(dir.path());
         assert_eq!(status.status, "ready");
         assert!(status.writable);
+    }
+
+    #[test]
+    fn frontend_diagnostics_redact_ticket_like_tokens() {
+        let message = "receive failed for fd2:abcdefghijklmnopqrstuvwxyzABCDEF and blobabc123abc123abc123abc123abc";
+        let sanitized = sanitize_frontend_message(message);
+        assert!(!sanitized.contains("fd2:abcdefghijklmnopqrstuvwxyzABCDEF"));
+        assert!(!sanitized.contains("blobabc123abc123abc123abc123abc"));
+        assert_eq!(sanitized.matches("[redacted-ticket]").count(), 2);
+    }
+
+    #[test]
+    fn receive_links_are_redacted_from_diagnostics() {
+        let message = "open https://lightning-p2p.netlify.app/receive#t=fd2:abcdefghijklmnopqrstuvwxyzABCDEF now";
+        let sanitized = redact_for_diagnostics(message);
+        assert!(!sanitized.contains("fd2:abcdefghijklmnopqrstuvwxyzABCDEF"));
+        assert!(sanitized.contains("[redacted-receive-link]"));
+    }
+
+    #[test]
+    fn deep_receive_links_are_redacted_from_diagnostics() {
+        let message = "deep lightning-p2p://receive?t=blobabc123abc123abc123abc123abc";
+        let sanitized = redact_for_diagnostics(message);
+        assert!(!sanitized.contains("blobabc123abc123abc123abc123abc"));
+        assert!(sanitized.contains("[redacted-receive-link]"));
+    }
+
+    #[test]
+    fn query_ticket_params_are_redacted_from_diagnostics() {
+        let message = concat!(
+            "links ",
+            "https://lightning-p2p.netlify.app/receive?t=fd2:abcdefghijklmnopqrstuvwxyzABCDEF ",
+            "https://lightning-p2p.netlify.app/receive?ticket=blobabc123abc123abc123abc123abc ",
+            "https://example.test/path?ticket=fd2:ZYXWVUTSRQPONMLKJIHGFEDCBA"
+        );
+        let sanitized = redact_for_diagnostics(message);
+
+        assert!(!sanitized.contains("fd2:abcdefghijklmnopqrstuvwxyzABCDEF"));
+        assert!(!sanitized.contains("blobabc123abc123abc123abc123abc"));
+        assert!(!sanitized.contains("fd2:ZYXWVUTSRQPONMLKJIHGFEDCBA"));
+        assert_eq!(sanitized.matches("[redacted-receive-link]").count(), 3);
+    }
+
+    #[test]
+    fn redaction_preserves_non_ticket_words() {
+        let message = "route blob is still warming and fd2:short is not a ticket";
+        assert_eq!(redact_sensitive_text(message), message);
+    }
+
+    #[test]
+    fn known_paths_are_redacted_from_report() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let nested = dir.path().join("Downloads").join("Lightning P2P");
+        let report = format!("Download folder: {}", nested.display());
+        let redacted = redact_known_path(report, dir.path(), "[app-data]");
+        assert!(!redacted.contains(&dir.path().to_string_lossy().to_string()));
+        assert!(redacted.contains("[app-data]"));
+    }
+
+    #[test]
+    fn known_paths_and_tickets_are_redacted_together() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let download_dir = dir.path().join("Downloads");
+        let ticket = "fd2:abcdefghijklmnopqrstuvwxyzABCDEF";
+        let report = format!(
+            "Download folder: {} failed for {ticket}",
+            download_dir.display()
+        );
+        let redacted =
+            redact_for_diagnostics(&redact_known_path(report, &download_dir, "[download-dir]"));
+
+        assert!(!redacted.contains(&download_dir.to_string_lossy().to_string()));
+        assert!(!redacted.contains(ticket));
+        assert!(redacted.contains("[download-dir]"));
+        assert!(redacted.contains("[redacted-ticket]"));
+    }
+
+    #[test]
+    fn windows_style_private_paths_are_redacted() {
+        let private_root = Path::new("C:\\Users\\Kerim");
+        let report = "Path: C:\\Users\\Kerim\\Downloads\\payload.bin".to_string();
+        let redacted = redact_known_path(report, private_root, "[home]");
+        assert!(!redacted.contains("C:\\Users\\Kerim"));
+        assert!(redacted.contains("[home]"));
+    }
+
+    #[test]
+    fn unicode_whitespace_separators_still_split_segments() {
+        let nbsp = '\u{00A0}';
+        let message = format!(
+            "first fd2:abcdefghijklmnopqrstuvwxyzABCDEF{nbsp}second blobabc123abc123abc123abc123abc"
+        );
+        let sanitized = redact_for_diagnostics(&message);
+
+        assert!(!sanitized.contains("fd2:abcdefghijklmnopqrstuvwxyzABCDEF"));
+        assert!(!sanitized.contains("blobabc123abc123abc123abc123abc"));
+        assert_eq!(sanitized.matches("[redacted-ticket]").count(), 2);
+    }
+
+    #[test]
+    fn tickets_surrounded_by_punctuation_are_redacted() {
+        let ticket = "fd2:abcdefghijklmnopqrstuvwxyzABCDEF";
+        let message = format!("see ({ticket}) then {ticket}. and {ticket}! plus {ticket},");
+
+        let sanitized = redact_for_diagnostics(&message);
+
+        assert!(!sanitized.contains(ticket));
+        assert_eq!(sanitized.matches("[redacted-ticket]").count(), 4);
+    }
+
+    #[test]
+    fn mixed_legacy_and_fd2_tickets_in_one_line_both_redact() {
+        let fd2 = "fd2:abcdefghijklmnopqrstuvwxyzABCDEF";
+        let legacy = "blobabc123abc123abc123abc123abc";
+        let message = format!("share emitted {fd2} then {legacy} during retry");
+
+        let sanitized = redact_for_diagnostics(&message);
+
+        assert!(!sanitized.contains(fd2));
+        assert!(!sanitized.contains(legacy));
+        assert_eq!(sanitized.matches("[redacted-ticket]").count(), 2);
+    }
+
+    #[test]
+    fn deep_link_fragment_form_is_redacted_from_diagnostics() {
+        let ticket = "fd2:abcdefghijklmnopqrstuvwxyzABCDEF";
+        let message = format!("share opened lightning-p2p://receive#t={ticket}");
+
+        let sanitized = redact_for_diagnostics(&message);
+
+        assert!(!sanitized.contains(ticket));
+        assert!(sanitized.contains("[redacted-receive-link]"));
     }
 }

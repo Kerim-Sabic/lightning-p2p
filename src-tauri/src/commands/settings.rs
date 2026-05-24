@@ -1,5 +1,6 @@
 //! Commands for persisted application settings and packaged-app actions.
 
+use crate::commands::{command_error, CommandResult};
 use crate::storage::settings::{AppSettings, RelayModeSetting};
 use crate::AppState;
 use serde::Serialize;
@@ -77,11 +78,11 @@ pub async fn get_download_dir(state: State<'_, AppState>) -> Result<String, Stri
 pub async fn set_download_dir(
     state: State<'_, AppState>,
     path: String,
-) -> Result<SettingsPayload, String> {
+) -> CommandResult<SettingsPayload> {
     #[cfg(any(target_os = "android", target_os = "ios"))]
     {
         let _ = (state, path);
-        return Err("Changing the download folder is not available in the mobile alpha. Receives stay in app-private storage.".into());
+        return Err(command_error("Changing the download folder is not available in the mobile alpha. Receives stay in app-private storage."));
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -90,7 +91,7 @@ pub async fn set_download_dir(
         .set_download_dir(path.into())
         .await
         .map(SettingsPayload::from)
-        .map_err(String::from)
+        .map_err(command_error)
 }
 
 /// Updates whether automatic update checks should run on startup.
@@ -136,12 +137,12 @@ pub async fn set_relay_mode(
     app: AppHandle,
     state: State<'_, AppState>,
     relay_mode: RelayModeSetting,
-) -> Result<SettingsPayload, String> {
+) -> CommandResult<SettingsPayload> {
     let settings = state
         .settings
         .set_relay_mode(relay_mode)
         .await
-        .map_err(String::from)?;
+        .map_err(command_error)?;
     Box::pin(restart_node_after_endpoint_setting(
         app,
         &state,
@@ -162,12 +163,12 @@ pub async fn set_custom_relay_url(
     app: AppHandle,
     state: State<'_, AppState>,
     relay_url: Option<String>,
-) -> Result<SettingsPayload, String> {
+) -> CommandResult<SettingsPayload> {
     let settings = state
         .settings
         .set_custom_relay_url(relay_url)
         .await
-        .map_err(String::from)?;
+        .map_err(command_error)?;
     Box::pin(restart_node_after_endpoint_setting(
         app,
         &state,
@@ -188,12 +189,12 @@ pub async fn set_local_discovery_enabled(
     app: AppHandle,
     state: State<'_, AppState>,
     enabled: bool,
-) -> Result<SettingsPayload, String> {
+) -> CommandResult<SettingsPayload> {
     let settings = state
         .settings
         .set_local_discovery_enabled(enabled)
         .await
-        .map_err(String::from)?;
+        .map_err(command_error)?;
     state
         .nearby_shares
         .set_local_discovery_enabled(enabled)
@@ -202,7 +203,7 @@ pub async fn set_local_discovery_enabled(
         let shares = state.nearby_shares.clear_discovered_shares().await;
         if let Some(shares) = shares {
             app.emit("discovered-shares-updated", shares)
-                .map_err(|error| error.to_string())?;
+                .map_err(|error| command_error(error.to_string()))?;
         }
     }
     Box::pin(restart_node_after_endpoint_setting(
@@ -250,7 +251,7 @@ async fn restart_node_after_endpoint_setting(
     state: &State<'_, AppState>,
     settings: AppSettings,
     reason: &'static str,
-) -> Result<(), String> {
+) -> CommandResult<()> {
     state
         .node_supervisor
         .restart_if_idle(
@@ -263,7 +264,7 @@ async fn restart_node_after_endpoint_setting(
         )
         .await
         .map(|_| ())
-        .map_err(String::from)
+        .map_err(command_error)
 }
 
 /// Opens the current download directory in the operating system's file explorer.
@@ -273,24 +274,25 @@ async fn restart_node_after_endpoint_setting(
 /// Returns an error string if the configured download directory cannot be
 /// opened.
 #[tauri::command]
-pub async fn open_download_dir(state: State<'_, AppState>) -> Result<(), String> {
+pub async fn open_download_dir(state: State<'_, AppState>) -> CommandResult<()> {
     #[cfg(target_os = "android")]
     {
         let _ = state;
         // Android routes receives into MediaStore Downloads under a
         // "Lightning P2P" subfolder; jump there in the system file UI.
-        return crate::commands::mobile::android::open_system_folder("Downloads");
+        return crate::commands::mobile::android::open_system_folder("Downloads")
+            .map_err(command_error);
     }
     #[cfg(target_os = "ios")]
     {
         let _ = state;
-        return Err("Opening the download folder is not available in the mobile alpha. Receives stay in app-private storage.".into());
+        return Err(command_error("Opening the download folder is not available in the mobile alpha. Receives stay in app-private storage."));
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
         let download_dir = state.settings.snapshot().await.download_dir;
-        open_path(&download_dir).map_err(String::from)
+        open_path(&download_dir).map_err(command_error)
     }
 }
 

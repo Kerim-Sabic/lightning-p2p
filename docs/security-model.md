@@ -43,6 +43,11 @@ The fragment keeps the raw ticket out of normal HTTP requests to the website hos
 lightning-p2p://receive?t=<ticket>
 ```
 
+The handoff page stores the ticket only in the current browser session as a
+fallback and hides the raw ticket text by default. Users can reveal or copy the
+raw ticket manually when app handoff fails, but screenshots of the page should
+still be treated as sensitive if the raw ticket has been revealed.
+
 ## Relay Fallback
 
 Relay fallback helps devices connect when NAT or firewalls block direct paths. It should not be described as cloud storage. It also should not be described as "never touches a server" because discovery and relay infrastructure can be involved in connectivity.
@@ -100,6 +105,10 @@ Android manifest permissions for BLE (`BLUETOOTH_SCAN` with `neverForLocation`, 
 ## Local Artifacts
 
 Local logs, history, peer cache, blob store, clipboard contents, session storage during handoff, and fallback identity key files can contain sensitive metadata. Treat support bundles and screenshots accordingly.
+
+Diagnostic bundles redact known app/download paths and ticket-like tokens before
+copying. They can still include NodeIds, route state, file sizes, content hashes,
+and timing metadata, so review them before posting publicly.
 
 ## Current Limitations
 

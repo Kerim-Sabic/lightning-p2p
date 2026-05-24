@@ -1,0 +1,166 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-04-28T00:00:00.000Z",
+  "title": "Design System: Lightning P2P",
+  "extensions": {
+    "colorMeta": {
+      "lab-black": {
+        "role": "primary",
+        "displayName": "Lab Black",
+        "canonical": "oklch(13.5% 0.014 256)",
+        "tonalRamp": [
+          "oklch(12% 0.014 256)",
+          "oklch(18% 0.014 256)",
+          "oklch(26% 0.014 256)",
+          "oklch(36% 0.014 256)",
+          "oklch(48% 0.012 256)",
+          "oklch(62% 0.01 256)",
+          "oklch(78% 0.008 256)",
+          "oklch(94% 0.006 256)"
+        ]
+      },
+      "signal-green": {
+        "role": "primary",
+        "displayName": "Signal Green",
+        "canonical": "oklch(82% 0.12 150)",
+        "tonalRamp": [
+          "oklch(18% 0.05 150)",
+          "oklch(28% 0.07 150)",
+          "oklch(38% 0.09 150)",
+          "oklch(50% 0.11 150)",
+          "oklch(62% 0.12 150)",
+          "oklch(74% 0.12 150)",
+          "oklch(86% 0.09 150)",
+          "oklch(94% 0.04 150)"
+        ]
+      },
+      "proof-amber": {
+        "role": "secondary",
+        "displayName": "Proof Amber",
+        "canonical": "oklch(82% 0.12 80)",
+        "tonalRamp": [
+          "oklch(18% 0.05 80)",
+          "oklch(30% 0.07 80)",
+          "oklch(42% 0.09 80)",
+          "oklch(56% 0.11 80)",
+          "oklch(68% 0.12 80)",
+          "oklch(80% 0.12 80)",
+          "oklch(90% 0.07 80)",
+          "oklch(96% 0.03 80)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Hero and first-viewport product position only."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Plainspoken proof, security, and benchmark explanation."
+      }
+    },
+    "shadows": [
+      {
+        "name": "logo-lift",
+        "value": "0 24px 80px rgba(0, 0, 0, 0.46)",
+        "purpose": "Anchor the brand tile in the first viewport."
+      },
+      {
+        "name": "action-lift",
+        "value": "0 16px 36px rgba(0, 0, 0, 0.25)",
+        "purpose": "Support primary actions on dark lab surfaces."
+      }
+    ],
+    "motion": [
+      {
+        "name": "state-fast",
+        "value": "150ms ease-out",
+        "purpose": "Default hover and focus state transition."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "phone",
+        "value": "390px"
+      },
+      {
+        "name": "tablet",
+        "value": "768px"
+      },
+      {
+        "name": "desktop",
+        "value": "1440px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Website Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Download or current-page action on a dark lab surface.",
+      "html": "<button class=\"ds-btn-primary\">Download for Windows</button>",
+      "css": ".ds-btn-primary { background: #f8faf7; color: #111b16; border: 0; border-radius: 9999px; padding: 12px 20px; font: 600 14px/1.2 'Segoe UI Variable Display', Aptos, sans-serif; transition: background-color 150ms ease-out, box-shadow 150ms ease-out; } .ds-btn-primary:hover { background: #dcfce7; box-shadow: 0 16px 36px rgba(0, 0, 0, 0.25); } .ds-btn-primary:focus-visible { outline: 2px solid #7ddf9c; outline-offset: 3px; }"
+    },
+    {
+      "name": "Route Chip",
+      "kind": "chip",
+      "refersTo": "panel-lab",
+      "description": "Text-first route status for Direct, Relay, Mixed, or Unknown.",
+      "html": "<span class=\"ds-route-chip\">Route Direct</span>",
+      "css": ".ds-route-chip { display: inline-flex; min-height: 24px; align-items: center; border: 1px solid rgba(125, 223, 156, 0.25); background: rgba(125, 223, 156, 0.1); color: #d7ffe1; border-radius: 9999px; padding: 4px 8px; font: 700 10px/1.2 'Segoe UI Variable Display', Aptos, sans-serif; text-transform: uppercase; letter-spacing: 0.18em; }"
+    },
+    {
+      "name": "Proof Strip",
+      "kind": "custom",
+      "refersTo": "panel-lab",
+      "description": "Compact lab readout for benchmark and transfer proof.",
+      "html": "<dl class=\"ds-proof-strip\"><div><dt>Route</dt><dd>Direct</dd></div><div><dt>Providers</dt><dd>3</dd></div><div><dt>First byte</dt><dd>118 ms</dd></div></dl>",
+      "css": ".ds-proof-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; overflow: hidden; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; background: rgba(255, 255, 255, 0.08); } .ds-proof-strip div { background: #0e1b15; padding: 14px; } .ds-proof-strip dt { color: rgba(248, 250, 247, 0.58); font: 700 10px/1.2 'Segoe UI Variable Display', Aptos, sans-serif; text-transform: uppercase; letter-spacing: 0.22em; } .ds-proof-strip dd { margin: 6px 0 0; color: #f8faf7; font: 650 20px/1.1 'Segoe UI Variable Display', Aptos, sans-serif; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Speed Lab Bench",
+    "overview": "Lightning P2P should feel like a working bench for measured transfer speed: dark instrumentation, green signal traces, paper-toned proof sections, and amber benchmark warnings where claims need evidence. The system is technical by texture, not by costume.",
+    "keyCharacteristics": [
+      "Dense proof beats broad slogans.",
+      "Dark lab surfaces carry transfer and route content.",
+      "Paper sections slow the page down for security, FAQ, and benchmark explanation.",
+      "Controls use familiar icons and clear labels.",
+      "Mobile widths must feel native and touch-first."
+    ],
+    "rules": [
+      {
+        "name": "The Evidence Color Rule",
+        "body": "Green is for verified or active capability. Amber is for benchmark, caveat, mixed route, or not-yet-proven speed claims.",
+        "section": "colors"
+      },
+      {
+        "name": "The No Purple Rule",
+        "body": "Purple and purple-blue gradients are prohibited for this brand lane.",
+        "section": "colors"
+      },
+      {
+        "name": "The Flat Proof Rule",
+        "body": "Benchmark and comparison evidence should read like rows, strips, and lab notes, not floating sales cards.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do attach speed copy to benchmark method, route, hardware, file size, commit hash, and failure count.",
+      "Do show Direct, Relay, and Mixed as text labels in addition to color.",
+      "Do keep mobile controls at least 44 px tall with scan, paste, and file-picker flows.",
+      "Do use signal green for verified transfer capability and proof amber for caveats.",
+      "Do keep comparison pages honest about LocalSend, PairDrop, WeTransfer, and Magic Wormhole trade-offs."
+    ],
+    "donts": [
+      "Don't use generic SaaS card stacks with vague productivity copy.",
+      "Don't use purple or purple-blue gradient landing pages.",
+      "Don't make absolute fastest claims without published benchmark evidence.",
+      "Don't use cloud-storage marketing language that hides where files go.",
+      "Don't promise mobile web transfer as the fastest path when native Android and iOS are the target.",
+      "Don't use decorative glassmorphism, side-stripe callouts, gradient text, or repeated icon cards that do not add proof."
+    ]
+  }
+}

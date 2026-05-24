@@ -14,9 +14,12 @@
     "dev": "vite",
     "build": "tsc -b && vite build && node scripts/build-web-metadata.mjs",
     "build:windows": "pnpm tauri build --target x86_64-pc-windows-msvc",
-    "check": "pnpm check:frontend && pnpm check:rust",
-    "check:frontend": "pnpm lint && pnpm typecheck && pnpm build",
+    "check": "pnpm check:release-state && pnpm check:frontend && pnpm check:rust",
+    "check:baseline": "pnpm check:release-state && pnpm check:frontend && pnpm check:rust:baseline",
+    "check:frontend": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "check:release-state": "node scripts/check-release-state.mjs",
     "check:rust": "cargo test --manifest-path src-tauri/Cargo.toml && cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings",
+    "check:rust:baseline": "cargo fmt --manifest-path src-tauri/Cargo.toml --check && cargo test --manifest-path src-tauri/Cargo.toml --lib && cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings",
     "android:init": "pnpm tauri android init --ci",
     "android:dev": "pnpm tauri android dev",
     "android:run": "pnpm tauri android run",
@@ -24,6 +27,7 @@
     "android:build:aab": "pnpm tauri android build --aab",
     "android:build:apk": "pnpm tauri android build --apk",
     "preview": "vite preview",
+    "test": "vitest run",
     "lint": "eslint src/",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write \"src/**/*.{ts,tsx}\"",
@@ -55,6 +59,7 @@
     "tailwindcss": "^4.0.0",
     "typescript": "^5.7.0",
     "typescript-eslint": "^8.0.0",
-    "vite": "^6.0.0"
+    "vite": "^6.0.0",
+    "vitest": "^4.1.7"
   }
 }

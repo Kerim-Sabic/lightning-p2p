@@ -1,4 +1,9 @@
 import { create } from "zustand";
+import {
+  messageFromAppError,
+  normalizeAppError,
+  type AppError,
+} from "../lib/appErrors";
 import type {
   ActiveTransfer,
   AppSettings,
@@ -11,6 +16,7 @@ import type {
   SharePathInfo,
   TransferDirection,
   TransferEvent,
+  TransferStrategy,
   FailureCategory,
   PlatformProfile,
   TransferPhase,
@@ -21,6 +27,7 @@ import type {
 import * as tauri from "../lib/tauri";
 import { useNearbyDeviceStore } from "./nearbyDeviceStore";
 import { useNearbyShareStore } from "./nearbyShareStore";
+import { mergeFailedTransferEvent } from "./transferEventMapping";
 
 export type TransferStatus = "starting" | "running" | "completed" | "failed";
 export type UpdatePhase =
@@ -49,11 +56,18 @@ export interface TransferEntry {
   connectMs: number;
   downloadMs: number;
   exportMs: number;
+  providerCount: number;
+  directProviderCount: number;
+  relayProviderCount: number;
+  strategy: TransferStrategy;
+  firstByteMs: number;
+  effectiveMbps: number;
   status: TransferStatus;
   hash: string | null;
   size: number | null;
   timestamp: number | null;
   error: string | null;
+  appError: AppError | null;
 }
 
 export interface UpdateState {
@@ -82,10 +96,12 @@ interface TransferStore {
   shareTicket: string | null;
   isSharing: boolean;
   error: string | null;
+  appError: AppError | null;
   pendingReceiveTicket: string | null;
   setPendingReceiveTicket: (ticket: string | null) => void;
   consumePendingReceiveTicket: () => string | null;
   setError: (message: string | null) => void;
+  setAppError: (error: unknown | null) => void;
   clearError: () => void;
   clearShareSelection: () => void;
   prepareShareSelection: (paths: string[]) => Promise<void>;
@@ -159,18 +175,19 @@ const defaultUpdateState: UpdateState = {
   lastCheckedAt: null,
 };
 
-function toErrorMessage(error: unknown): string {
-  if (typeof error === "string") {
-    return error;
-  }
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return "Unexpected error";
+function errorState(error: unknown): { error: string; appError: AppError } {
+  const appError = normalizeAppError(error);
+  return {
+    error: messageFromAppError(appError),
+    appError,
+  };
 }
 
-function isNodePendingError(message: string): boolean {
-  return message.includes("Node not initialized yet");
+function isNodePendingError(message: string, appError: AppError): boolean {
+  return (
+    appError.code === "node_not_ready" ||
+    message.includes("Node not initialized yet")
+  );
 }
 
 function createTransferEntry(
@@ -194,11 +211,18 @@ function createTransferEntry(
     connectMs: 0,
     downloadMs: 0,
     exportMs: 0,
+    providerCount: 0,
+    directProviderCount: 0,
+    relayProviderCount: 0,
+    strategy: "unknown",
+    firstByteMs: 0,
+    effectiveMbps: 0,
     status: "starting",
     hash: null,
     size: null,
     timestamp: null,
     error: null,
+    appError: null,
   };
 }
 
@@ -225,11 +249,18 @@ function mergeActiveTransfer(
     connectMs: transfer.connect_ms,
     downloadMs: transfer.download_ms,
     exportMs: transfer.export_ms,
+    providerCount: transfer.provider_count,
+    directProviderCount: transfer.direct_provider_count,
+    relayProviderCount: transfer.relay_provider_count,
+    strategy: transfer.strategy,
+    firstByteMs: transfer.first_byte_ms,
+    effectiveMbps: transfer.effective_mbps,
     status: current?.status === "starting" ? "starting" : "running",
     hash: current?.hash ?? null,
     size: current?.size ?? null,
     timestamp: current?.timestamp ?? null,
     error: current?.error ?? null,
+    appError: current?.appError ?? null,
   };
 }
 
@@ -308,8 +339,15 @@ function sameTransferProgress(
     current.connectMs === event.connect_ms &&
     current.downloadMs === event.download_ms &&
     current.exportMs === event.export_ms &&
+    current.providerCount === event.provider_count &&
+    current.directProviderCount === event.direct_provider_count &&
+    current.relayProviderCount === event.relay_provider_count &&
+    current.strategy === event.strategy &&
+    current.firstByteMs === event.first_byte_ms &&
+    current.effectiveMbps === event.effective_mbps &&
     current.status === "running" &&
-    current.error === null
+    current.error === null &&
+    current.appError === null
   );
 }
 
@@ -327,10 +365,17 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
   shareTicket: null,
   isSharing: false,
   error: null,
+  appError: null,
   pendingReceiveTicket: null,
 
-  setError: (message) => set({ error: message }),
-  clearError: () => set({ error: null }),
+  setError: (message) =>
+    set({
+      error: message,
+      appError: message ? normalizeAppError(message) : null,
+    }),
+  setAppError: (error) =>
+    set(error === null ? { error: null, appError: null } : errorState(error)),
+  clearError: () => set({ error: null, appError: null }),
   setPendingReceiveTicket: (ticket) => set({ pendingReceiveTicket: ticket }),
   consumePendingReceiveTicket: () => {
     const current = get().pendingReceiveTicket;
@@ -347,13 +392,13 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
     });
     if (tauri.isDesktopRuntime()) {
       void tauri.clearActiveShare().catch((error: unknown) => {
-        set({ error: toErrorMessage(error) });
+        set(errorState(error));
       });
     }
   },
 
   prepareShareSelection: async (paths) => {
-    set({ error: null, shareTicket: null, isSharing: false });
+    set({ error: null, appError: null, shareTicket: null, isSharing: false });
     try {
       if (tauri.isDesktopRuntime()) {
         await tauri.clearActiveShare();
@@ -361,7 +406,7 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
       const shareSelection = await tauri.describeSharePaths(uniquePaths(paths));
       set({ shareSelection });
     } catch (error) {
-      set({ error: toErrorMessage(error), shareSelection: [] });
+      set({ ...errorState(error), shareSelection: [] });
     }
   },
 
@@ -374,7 +419,7 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
 
       await get().prepareShareSelection(files);
     } catch (error) {
-      set({ error: toErrorMessage(error) });
+      set(errorState(error));
     }
   },
 
@@ -387,7 +432,7 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
 
       await get().prepareShareSelection([folder]);
     } catch (error) {
-      set({ error: toErrorMessage(error) });
+      set(errorState(error));
     }
   },
 
@@ -398,7 +443,7 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
         sameNodeStatus(state.nodeStatus, nodeStatus) ? state : { nodeStatus },
       );
     } catch (error) {
-      set({ error: toErrorMessage(error) });
+      set(errorState(error));
     }
   },
 
@@ -407,7 +452,7 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
       const nodeSupervisorStatus = await tauri.getNodeSupervisorStatus();
       set({ nodeSupervisorStatus });
     } catch (error) {
-      set({ error: toErrorMessage(error) });
+      set(errorState(error));
     }
   },
 
@@ -416,7 +461,7 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
       const bleDiscoveryStatus = await tauri.getBleDiscoveryStatus();
       set({ bleDiscoveryStatus });
     } catch (error) {
-      set({ error: toErrorMessage(error) });
+      set(errorState(error));
     }
   },
 
@@ -425,7 +470,7 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
       const platformProfile = await tauri.getPlatformProfile();
       set({ platformProfile });
     } catch (error) {
-      set({ error: toErrorMessage(error) });
+      set(errorState(error));
     }
   },
 
@@ -458,7 +503,7 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
         };
       });
     } catch (error) {
-      set({ error: toErrorMessage(error) });
+      set(errorState(error));
     }
   },
 
@@ -467,9 +512,10 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
       const settings = await tauri.getAppSettings();
       set(withSettings(settings));
     } catch (error) {
-      const message = toErrorMessage(error);
-      if (!isNodePendingError(message)) {
-        set({ error: message });
+      const appError = normalizeAppError(error);
+      const message = messageFromAppError(appError);
+      if (!isNodePendingError(message, appError)) {
+        set({ error: message, appError });
       }
     }
   },
@@ -488,7 +534,7 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
         return { transfers };
       });
     } catch (error) {
-      set({ error: toErrorMessage(error) });
+      set(errorState(error));
     }
   },
 
@@ -497,9 +543,10 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
       const history = await tauri.getTransferHistory();
       set({ history });
     } catch (error) {
-      const message = toErrorMessage(error);
-      if (!isNodePendingError(message)) {
-        set({ error: message });
+      const appError = normalizeAppError(error);
+      const message = messageFromAppError(appError);
+      if (!isNodePendingError(message, appError)) {
+        set({ error: message, appError });
       }
     }
   },
@@ -509,7 +556,7 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
       await tauri.clearTransferHistory();
       set({ history: [] });
     } catch (error) {
-      set({ error: toErrorMessage(error) });
+      set(errorState(error));
     }
   },
 
@@ -519,7 +566,7 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
       useNearbyShareStore.getState().clearShares();
       useNearbyDeviceStore.getState().clearDevices();
     } catch (error) {
-      set({ error: toErrorMessage(error) });
+      set(errorState(error));
     }
   },
 
@@ -531,6 +578,7 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
 
     set({
       error: null,
+      appError: null,
       isSharing: true,
       shareTicket: null,
     });
@@ -540,14 +588,14 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
       set({ shareTicket });
       await get().refreshHistory();
     } catch (error) {
-      set({ error: toErrorMessage(error) });
+      set(errorState(error));
     } finally {
       set({ isSharing: false });
     }
   },
 
   startReceive: async (ticket) => {
-    set({ error: null });
+    set({ error: null, appError: null });
 
     try {
       if (!get().settings) {
@@ -569,13 +617,13 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
       }));
       return transferId;
     } catch (error) {
-      set({ error: toErrorMessage(error) });
+      set(errorState(error));
       return null;
     }
   },
 
   startReceiveNearbyShare: async (share) => {
-    set({ error: null });
+    set({ error: null, appError: null });
 
     try {
       if (!get().settings) {
@@ -599,20 +647,20 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
       }));
       return transferId;
     } catch (error) {
-      set({ error: toErrorMessage(error) });
+      set(errorState(error));
       return null;
     }
   },
 
   reshare: async (hash) => {
-    set({ error: null });
+    set({ error: null, appError: null });
 
     try {
       const shareTicket = await tauri.getTicket(hash);
       set({ shareTicket });
       return shareTicket;
     } catch (error) {
-      set({ error: toErrorMessage(error) });
+      set(errorState(error));
       return null;
     }
   },
@@ -621,7 +669,7 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
     try {
       await tauri.cancelTransfer(transferId);
     } catch (error) {
-      set({ error: toErrorMessage(error) });
+      set(errorState(error));
     }
   },
 
@@ -637,7 +685,7 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
       const settings = await tauri.setDownloadDir(selected);
       set(withSettings(settings));
     } catch (error) {
-      set({ error: toErrorMessage(error) });
+      set(errorState(error));
     }
   },
 
@@ -645,7 +693,7 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
     try {
       await tauri.openDownloadDir();
     } catch (error) {
-      set({ error: toErrorMessage(error) });
+      set(errorState(error));
     }
   },
 
@@ -654,7 +702,7 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
       const settings = await tauri.setAutoUpdateEnabled(enabled);
       set(withSettings(settings));
     } catch (error) {
-      set({ error: toErrorMessage(error) });
+      set(errorState(error));
     }
   },
 
@@ -665,7 +713,7 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
       await get().refreshNodeSupervisorStatus();
       await get().refreshNodeStatus();
     } catch (error) {
-      set({ error: toErrorMessage(error) });
+      set(errorState(error));
     }
   },
 
@@ -676,7 +724,7 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
       await get().refreshNodeSupervisorStatus();
       await get().refreshNodeStatus();
     } catch (error) {
-      set({ error: toErrorMessage(error) });
+      set(errorState(error));
     }
   },
 
@@ -690,7 +738,7 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
       await get().refreshNodeSupervisorStatus();
       await get().refreshNodeStatus();
     } catch (error) {
-      set({ error: toErrorMessage(error) });
+      set(errorState(error));
     }
   },
 
@@ -700,7 +748,7 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
       set(withSettings(settings));
       await get().refreshBleDiscoveryStatus();
     } catch (error) {
-      set({ error: toErrorMessage(error) });
+      set(errorState(error));
     }
   },
 
@@ -709,7 +757,7 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
       const settings = await tauri.completeFirstRun();
       set(withSettings(settings));
     } catch (error) {
-      set({ error: toErrorMessage(error) });
+      set(errorState(error));
     }
   },
 
@@ -737,13 +785,15 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
         return;
       }
 
+      const appError = normalizeAppError(error);
       set((state) => ({
         updateState: {
           ...state.updateState,
           phase: "error",
-          error: toErrorMessage(error),
+          error: messageFromAppError(appError),
           lastCheckedAt: Date.now(),
         },
+        appError,
       }));
     }
   },
@@ -774,12 +824,14 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
         },
       }));
     } catch (error) {
+      const appError = normalizeAppError(error);
       set((state) => ({
         updateState: {
           ...state.updateState,
           phase: "error",
-          error: toErrorMessage(error),
+          error: messageFromAppError(appError),
         },
+        appError,
       }));
     }
   },
@@ -805,11 +857,18 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
           connectMs: event.connect_ms,
           downloadMs: event.download_ms,
           exportMs: event.export_ms,
+          providerCount: event.provider_count,
+          directProviderCount: event.direct_provider_count,
+          relayProviderCount: event.relay_provider_count,
+          strategy: event.strategy,
+          firstByteMs: event.first_byte_ms,
+          effectiveMbps: event.effective_mbps,
           status: "starting",
           hash: null,
           size: null,
           timestamp: null,
           error: null,
+          appError: null,
         };
         return { transfers };
       } else if (event.type === "progress") {
@@ -843,8 +902,15 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
               connectMs: event.connect_ms,
               downloadMs: event.download_ms,
               exportMs: event.export_ms,
+              providerCount: event.provider_count,
+              directProviderCount: event.direct_provider_count,
+              relayProviderCount: event.relay_provider_count,
+              strategy: event.strategy,
+              firstByteMs: event.first_byte_ms,
+              effectiveMbps: event.effective_mbps,
               status: "running",
               error: null,
+              appError: null,
             },
           },
         };
@@ -873,11 +939,18 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
           connectMs: event.connect_ms,
           downloadMs: event.download_ms,
           exportMs: event.export_ms,
+          providerCount: event.provider_count,
+          directProviderCount: event.direct_provider_count,
+          relayProviderCount: event.relay_provider_count,
+          strategy: event.strategy,
+          firstByteMs: event.first_byte_ms,
+          effectiveMbps: event.effective_mbps,
           status: "completed",
           hash: event.hash,
           size: event.size,
           timestamp: event.timestamp,
           error: null,
+          appError: null,
         };
         return { transfers };
       } else {
@@ -890,14 +963,7 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
             event.transfer_id,
             null,
           );
-        transfers[event.transfer_id] = {
-          ...current,
-          routeKind: event.route_kind,
-          phase: event.phase ?? "failed",
-          failureCategory: event.failure_category ?? "unknown",
-          status: "failed",
-          error: event.error,
-        };
+        transfers[event.transfer_id] = mergeFailedTransferEvent(current, event);
         return { transfers };
       }
     });

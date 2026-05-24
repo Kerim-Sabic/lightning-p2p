@@ -3,6 +3,7 @@ import {
   Clipboard,
   Copy,
   Download,
+  Eye,
   Github,
   Link2,
   ShieldCheck,
@@ -80,6 +81,7 @@ function sourceLabel(source: TicketSource): string {
 export function ReceiveHandoffPage() {
   const handoff = useMemo(handoffTicket, []);
   const [copied, setCopied] = useState(false);
+  const [showRawTicket, setShowRawTicket] = useState(false);
   const deepLink = handoff.ticket
     ? createDeepReceiveLink(handoff.ticket)
     : null;
@@ -224,10 +226,25 @@ export function ReceiveHandoffPage() {
                     <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
                       Raw ticket
                     </p>
-                    <code className="mt-3 block max-h-40 overflow-y-auto break-all font-mono text-[12px] leading-6 text-sky-50/88">
-                      {handoff.ticket}
-                    </code>
+                    {showRawTicket ? (
+                      <code className="mt-3 block max-h-40 overflow-y-auto break-all font-mono text-[12px] leading-6 text-sky-50/88">
+                        {handoff.ticket}
+                      </code>
+                    ) : (
+                      <p className="mt-3 text-sm leading-6 text-slate-300">
+                        Hidden by default because tickets are capability tokens.
+                        Reveal it only if you need the manual paste fallback.
+                      </p>
+                    )}
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowRawTicket((value) => !value)}
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-white/16 bg-white/8 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/14"
+                  >
+                    <Eye className="h-4 w-4" />
+                    {showRawTicket ? "Hide raw ticket" : "Reveal raw ticket"}
+                  </button>
                   <button
                     type="button"
                     onClick={() => void handleCopyTicket()}
