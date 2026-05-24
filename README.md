@@ -2,9 +2,9 @@
 
 # Lightning P2P
 
-**Direct peer-to-peer file transfer for Windows and Android. No cloud upload. No account. No artificial file-size cap.**
+**Send huge files device-to-device. No cloud upload. No account. No size cap.**
 
-Built with **Rust**, **Tauri v2**, **iroh** (QUIC + relay fallback), **iroh-blobs** (BLAKE3-verified streaming), and **React 19**.
+Direct peer-to-peer transfer for Windows and Android, built with **Rust**, **Tauri v2**, **iroh** (QUIC + relay fallback), **iroh-blobs** (BLAKE3-verified streaming), and **React 19**.
 
 [![Apache-2.0 license](https://img.shields.io/badge/license-Apache--2.0-7ce7b2?style=flat-square)](LICENSE)
 [![Windows](https://img.shields.io/badge/Windows-stable_v0.4.6-7ce7b2?style=flat-square)](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest)
@@ -86,6 +86,11 @@ Lightning P2P does not create a hosted retention link or upload your file to a t
 `v0.5.0` exists as an **experimental pre-release** for BLE proximity discovery and NFC tap-to-transfer. BLE and NFC carry discovery/ticket material only; file bytes still use iroh QUIC and iroh-blobs. Use `v0.4.6` unless you intentionally want to test experimental proximity features.
 
 ## Install
+
+> Every release ships SHA256 checksums and a `verify-release.ps1` script.
+> Signed Windows installers use Authenticode (Azure Trusted Signing); the
+> Android APK signer certificate fingerprint is published below. Verification
+> is one command — see the Windows and Android sections.
 
 ### Windows
 
