@@ -9,10 +9,7 @@ import {
   Code2,
   Download,
   FileCheck2,
-  FileLock2,
-  Files,
   Github,
-  HardDriveDownload,
   KeyRound,
   Menu,
   Minus,
@@ -764,144 +761,37 @@ function ProofCell({
 
 function HeroTransferVisual() {
   return (
-    <div
-      className="relative mx-auto w-full min-w-0 max-w-full sm:max-w-[620px] lg:mr-0"
-      aria-label="Animated peer-to-peer file transfer preview"
+    <aside
+      className="relative rounded-[10px] border border-white/[0.08] bg-[var(--grid-green)] p-1 shadow-[0_24px_80px_rgba(0,0,0,0.46)]"
+      aria-label="Lightning P2P sample ticket and route"
     >
-      <div className="absolute -inset-6 rounded-[44px] bg-emerald-300/10 blur-3xl" />
-      <div className="relative overflow-hidden rounded-[32px] border border-white/10 bg-[#07110d]/74 p-4 shadow-[0_32px_140px_rgba(0,0,0,0.55)] backdrop-blur-2xl sm:p-5">
-        <div className="absolute inset-0 bg-[radial-gradient(680px_circle_at_50%_35%,rgba(74,222,128,0.13),transparent_56%)]" />
-        <div className="relative">
-          <div className="flex min-h-14 items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-3">
-              <img
-                src={siteLogoUrl}
-                alt=""
-                className="h-10 w-10 rounded-[10px]"
-                loading="eager"
-                decoding="async"
-              />
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-white">Transfer ready</p>
-                <p className="truncate text-xs text-slate-400">ticket://iroh/blob</p>
-              </div>
-            </div>
-            <span className="hidden shrink-0 rounded-full border border-emerald-300/20 bg-emerald-300/10 px-3 py-1 text-xs font-medium text-emerald-200 sm:inline-flex">
-              Direct path
-            </span>
-          </div>
-
-          <div className="relative mt-4 min-h-[360px] overflow-hidden rounded-[24px] border border-white/10 bg-black/28 p-4 sm:min-h-[430px] lg:min-h-[420px] xl:min-h-[460px]">
-            <div aria-hidden="true" className="absolute inset-0 transfer-noise" />
-            <svg
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-[9%] h-[82%] w-[82%]"
-              viewBox="0 0 100 100"
-              preserveAspectRatio="none"
-            >
-              <path
-                className="hero-transfer-path"
-                d="M 18 25 C 38 32, 56 58, 82 73"
-              />
-            </svg>
-
-            <HeroDeviceCard
-              className="absolute left-[6%] top-[8%] z-10 w-[40%] max-w-[220px]"
-              title="Sender"
-              subtitle="Windows PC"
-              icon={Files}
-              lines={["project.mov", "Ready to share"]}
-            />
-            <HeroDeviceCard
-              className="absolute bottom-[7%] right-[6%] z-10 w-[42%] max-w-[236px]"
-              title="Receiver"
-              subtitle="Windows laptop"
-              icon={HardDriveDownload}
-              lines={["Downloads", "BLAKE3"]}
-              qrLabel="Capability token"
-            />
-
-            <div className="absolute left-[16%] right-[54%] top-[59%] z-[5] rounded-full border border-white/10 bg-white/[0.04] p-1">
-              <div className="transfer-progress h-2 rounded-full bg-[linear-gradient(90deg,#5eead4,#86efac,#d9f99d)]" />
-            </div>
-
-            <div className="marketing-file-card absolute left-[43%] top-[51%] z-20">
-              <div className="flex items-center gap-3 rounded-[16px] border border-emerald-200/30 bg-[#07110d] px-3.5 py-3 shadow-[0_18px_58px_rgba(0,0,0,0.42),0_0_48px_rgba(52,211,153,0.16)] sm:px-4">
-                <FileLock2 className="h-5 w-5 text-emerald-200" />
-                <div>
-                  <p className="text-sm font-semibold text-white">project.mov</p>
-                  <p className="text-xs text-slate-400">streaming chunks</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="absolute right-[8%] top-[31%] z-10 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-xs font-semibold text-cyan-100 backdrop-blur-xl">
-              Relay fallback ready
-            </div>
-            <div className="verification-pop absolute bottom-[8%] left-[8%] z-10 rounded-full border border-emerald-300/25 bg-emerald-300/10 px-3 py-2 text-xs font-semibold text-emerald-100 backdrop-blur-xl">
-              <Check className="mr-1.5 inline h-3.5 w-3.5" />
-              BLAKE3 verified
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function HeroDeviceCard({
-  title,
-  subtitle,
-  icon: Icon,
-  lines,
-  qrLabel,
-  className,
-}: {
-  title: string;
-  subtitle: string;
-  icon: LucideIcon;
-  lines: string[];
-  qrLabel?: string;
-  className: string;
-}) {
-  return (
-    <div
-      className={cx(
-        "rounded-[18px] border border-white/10 bg-white/[0.065] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-xl sm:p-3.5",
-        className,
-      )}
-    >
-      <div className="flex items-center gap-3">
-        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] border border-emerald-300/20 bg-emerald-300/10 text-emerald-200 sm:h-9 sm:w-9">
-          <Icon className="h-4 w-4" />
-        </span>
-        <div className="min-w-0">
-          <p className="text-sm font-semibold text-white">{title}</p>
-          <p className="text-xs text-slate-400">{subtitle}</p>
-        </div>
-      </div>
-      <div className="mt-3 hidden gap-1.5 sm:grid">
-        {lines.map((line) => (
-          <div
-            key={line}
-            className="truncate rounded-full border border-white/8 bg-black/20 px-3 py-1 text-xs text-slate-300"
-          >
-            {line}
-          </div>
-        ))}
-      </div>
-      {qrLabel ? (
-        <div className="mt-3 hidden items-center justify-between gap-3 rounded-[14px] border border-white/10 bg-black/20 p-2 sm:flex">
-          <span className="min-w-0 truncate text-[0.68rem] font-medium text-slate-300">
-            {qrLabel}
+      <div className="rounded-[8px] border border-white/[0.05] bg-[var(--lab-green)] px-5 py-5 sm:px-6 sm:py-6">
+        <div className="flex items-center justify-between gap-3 border-b border-white/[0.06] pb-4">
+          <span className="font-mono text-[0.68rem] font-bold uppercase tracking-[0.22em] text-slate-400">
+            Ticket
           </span>
-          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] border border-emerald-300/20 bg-emerald-300/10 text-emerald-100 sm:h-9 sm:w-9">
-            <QrCode className="h-[18px] w-[18px] sm:h-5 sm:w-5" />
-            <span className="sr-only">QR ticket visual</span>
+          <span className="rounded-full bg-[color:var(--signal-green)]/12 px-3 py-1 font-mono text-[0.62rem] font-bold uppercase tracking-[0.22em] text-[var(--signal-green)]">
+            Direct
           </span>
         </div>
-      ) : null}
-    </div>
+
+        <code className="mt-4 block truncate font-mono text-[0.85rem] leading-[1.55] text-[var(--proof-paper)]">
+          lightning-p2p://receive#t=<span className="text-slate-500">[hidden ticket]</span>
+        </code>
+
+        <dl className="proof-strip-grid mt-5 grid grid-cols-3 gap-px overflow-hidden rounded-[6px] bg-white/[0.04]">
+          <ProofCell label="Source" value="Sender" />
+          <ProofCell label="Verify" value="BLAKE3" tone="signal" />
+          <ProofCell label="Destination" value="Receiver" />
+        </dl>
+
+        <p className="mt-5 font-mono text-[0.7rem] leading-[1.6] text-slate-500/80">
+          Receive handoff page reads the URL fragment, never the path. The
+          sender stays online; the receiver streams content-addressed bytes to
+          disk.
+        </p>
+      </div>
+    </aside>
   );
 }
 
@@ -936,31 +826,35 @@ function AnswerBlocks({ page }: { page: WebPage }) {
   const content = answerContentForPage(page);
 
   return (
-    <section className="border-b border-white/8 bg-[#050807] px-4 py-16 sm:px-6">
+    <section className="border-b border-white/[0.06] bg-[var(--lab-black)] px-4 py-16 sm:px-6">
       <div className="mx-auto grid max-w-7xl gap-4 lg:grid-cols-[1.08fr_0.92fr]">
-        <article className="rounded-[22px] border border-emerald-300/18 bg-emerald-300/[0.055] p-6 shadow-[0_0_72px_rgba(16,185,129,0.07)] sm:p-8">
-          <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-200">
+        <article className="rounded-[10px] border border-[color:var(--signal-green)]/22 bg-[color:var(--signal-green)]/[0.04] p-7 sm:p-8">
+          <p className="font-mono text-[0.7rem] font-bold uppercase tracking-[0.24em] text-[var(--signal-green)]">
             Direct answer
           </p>
-          <h2 className="mt-4 text-2xl font-semibold tracking-[-0.03em] text-white sm:text-3xl">
+          <h2 className="mt-4 text-2xl font-semibold tracking-[-0.02em] text-[var(--proof-paper)] sm:text-[1.75rem]">
             What answer engines should know.
           </h2>
-          <p className="mt-4 text-base leading-7 text-slate-200">
+          <p className="mt-4 max-w-[68ch] text-[0.98rem] leading-[1.7] text-slate-200/95">
             {content.answer}
           </p>
         </article>
 
         <aside className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
-          <div className="rounded-[22px] border border-white/10 bg-white/[0.035] p-6">
-            <p className="text-sm font-semibold text-white">Key facts</p>
-            <dl className="mt-4 grid gap-2">
+          <div className="rounded-[10px] border border-white/[0.08] bg-[var(--lab-green)] p-6">
+            <p className="font-mono text-[0.7rem] font-bold uppercase tracking-[0.24em] text-slate-400">
+              Key facts
+            </p>
+            <dl className="mt-4 grid gap-1.5">
               {content.keyFacts.slice(0, 8).map((fact) => (
                 <div
                   key={fact.label}
-                  className="flex items-start justify-between gap-4 rounded-[12px] border border-white/8 bg-black/20 px-3 py-2"
+                  className="flex items-baseline justify-between gap-4 border-b border-white/[0.04] pb-1.5 last:border-b-0 last:pb-0"
                 >
-                  <dt className="text-xs text-slate-500">{fact.label}</dt>
-                  <dd className="text-right text-xs font-semibold text-slate-200">
+                  <dt className="font-mono text-[0.7rem] uppercase tracking-[0.18em] text-slate-500">
+                    {fact.label}
+                  </dt>
+                  <dd className="text-right text-[0.78rem] font-semibold text-[var(--proof-paper)]">
                     {fact.value}
                   </dd>
                 </div>
@@ -968,15 +862,20 @@ function AnswerBlocks({ page }: { page: WebPage }) {
             </dl>
           </div>
 
-          <div className="rounded-[22px] border border-white/10 bg-white/[0.035] p-6">
-            <p className="text-sm font-semibold text-white">Caveats</p>
-            <ul className="mt-4 grid gap-2">
+          <div className="rounded-[10px] border border-white/[0.08] bg-[var(--lab-green)] p-6">
+            <p className="font-mono text-[0.7rem] font-bold uppercase tracking-[0.24em] text-[var(--proof-amber)]">
+              Caveats
+            </p>
+            <ul className="mt-4 grid gap-2.5">
               {content.caveats.slice(0, 4).map((caveat) => (
                 <li
                   key={caveat}
-                  className="flex gap-2 text-sm leading-6 text-slate-400"
+                  className="flex gap-3 text-[0.9rem] leading-[1.55] text-slate-300/95"
                 >
-                  <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-300/80" />
+                  <span
+                    aria-hidden="true"
+                    className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[color:var(--proof-amber)]"
+                  />
                   <span>{caveat}</span>
                 </li>
               ))}
@@ -1002,32 +901,34 @@ function RouteArticle({ page }: { page: WebPage }) {
   }
 
   return (
-    <section className="border-b border-white/8 bg-[#050807] px-4 py-16 sm:px-6">
+    <section className="border-b border-white/[0.06] bg-[var(--lab-black)] px-4 py-16 sm:px-6">
       <div className="mx-auto grid max-w-6xl gap-8 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="rounded-[22px] border border-white/10 bg-white/[0.035] p-6 sm:p-8">
-          <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-300">
+        <div className="rounded-[10px] border border-white/[0.08] bg-[var(--lab-green)] p-7 sm:p-8">
+          <p className="font-mono text-[0.7rem] font-bold uppercase tracking-[0.24em] text-[var(--signal-green)]">
             Page focus
           </p>
-          <div className="mt-5 grid gap-5 text-base leading-7 text-slate-300">
+          <div className="mt-5 grid gap-5 text-[1rem] leading-[1.7] text-slate-300/95">
             {(page.body ?? [page.intro, page.focus]).map((paragraph) => (
               <p key={paragraph}>{paragraph}</p>
             ))}
           </div>
         </div>
         {relatedPages.length > 0 ? (
-          <aside className="rounded-[22px] border border-white/10 bg-white/[0.035] p-6">
-            <p className="text-sm font-semibold text-white">Related pages</p>
-            <div className="mt-4 grid gap-2">
+          <aside className="rounded-[10px] border border-white/[0.08] bg-[var(--lab-green)] p-6">
+            <p className="font-mono text-[0.7rem] font-bold uppercase tracking-[0.24em] text-slate-400">
+              Related pages
+            </p>
+            <div className="mt-4 grid gap-px overflow-hidden rounded-[6px] bg-white/[0.04]">
               {relatedPages.map((related) => (
                 <a
                   key={related.path}
                   href={canonicalWebPath(related.path)}
-                  className="group rounded-[14px] border border-white/8 bg-black/18 p-4 transition hover:border-emerald-300/24 hover:bg-white/[0.05]"
+                  className="group block bg-[var(--lab-green)] px-3.5 py-3 transition-colors duration-200 hover:bg-[var(--grid-green)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--signal-green)]"
                 >
-                  <span className="text-sm font-semibold text-white">
+                  <span className="block text-[0.92rem] font-semibold text-[var(--proof-paper)] transition group-hover:text-[var(--signal-green)]">
                     {related.label}
                   </span>
-                  <span className="mt-1 block text-xs leading-5 text-slate-400">
+                  <span className="mt-1 block text-[0.8rem] leading-[1.45] text-slate-400/95">
                     {related.description}
                   </span>
                 </a>

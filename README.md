@@ -24,6 +24,26 @@ Direct peer-to-peer transfer for Windows and Android, built with **Rust**, **Tau
 
 </div>
 
+```
+  Lightning P2P · v0.5.0 · 6b82ab9a · windows/x86_64
+  ─────────────────────────────────────────────────────────
+    Route                Direct (loopback)
+    Providers            1
+    Runs                 3 of 3
+    10 MB median         303.78 Mbps
+    100 MB median        742.10 Mbps
+    Failures             0
+    Harness              same-machine-two-profile · iroh-loopback
+  ─────────────────────────────────────────────────────────
+  Same-machine loopback only. Not Windows ↔ Android. Not WAN.
+  See docs/reports/automated-local-benchmarks.md.
+```
+
+The readout above is produced by `pnpm bench:local` and committed under
+`docs/reports/raw/local/`. The automated harness runs in CI on every push.
+Real-device Windows ↔ Android benchmark is pending and is held back from
+any "fastest" or competitor-comparison claim.
+
 ---
 
 ## Demo
