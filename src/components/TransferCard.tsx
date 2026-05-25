@@ -160,9 +160,9 @@ export function TransferCard({
   const [diagnosticsState, setDiagnosticsState] = useState<
     "idle" | "copied" | "error"
   >("idle");
-  const [summaryState, setSummaryState] = useState<
-    "idle" | "copied" | "error"
-  >("idle");
+  const [summaryState, setSummaryState] = useState<"idle" | "copied" | "error">(
+    "idle",
+  );
   const [folderState, setFolderState] = useState<"idle" | "error">("idle");
   const [starCtaDismissed, setStarCtaDismissed] = useState<boolean>(() =>
     readStarCtaDismissed(),
@@ -377,7 +377,9 @@ export function TransferCard({
             <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
               {transfer.appError ? (
                 <span className="rounded-full border border-rose-300/15 bg-rose-300/10 px-2 py-1 font-medium text-rose-50/80">
-                  {transfer.appError.retryable ? "Retry may help" : "Needs new input"}
+                  {transfer.appError.retryable
+                    ? "Retry may help"
+                    : "Needs new input"}
                 </span>
               ) : null}
               {transfer.appError?.helpUrl ? (

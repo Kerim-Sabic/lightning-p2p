@@ -53,7 +53,7 @@ class MainActivity : TauriActivity() {
   }
 
   /**
-   * Parse a Lightning P2P NFC tap. The other phone embeds the iroh receive
+   * Parse a Lightning P2P NFC ticket. The NFC source embeds the iroh receive
    * ticket in an NDEF record with MIME `application/vnd.lightning-p2p.ticket`;
    * we extract the UTF-8 payload and stash it on [ContentUriResolver] for
    * the JS layer to drain on focus.

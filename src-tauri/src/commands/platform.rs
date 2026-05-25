@@ -138,6 +138,8 @@ pub struct PlatformCapabilities {
     pub local_discovery: bool,
     /// Whether Bluetooth proximity discovery is wired in this runtime.
     pub bluetooth_discovery: bool,
+    /// Whether this runtime can receive NFC ticket handoff intents.
+    pub nfc_ticket_handoff: bool,
     /// Whether iroh relay fallback is supported.
     pub relay_fallback: bool,
     /// Whether users can configure a custom relay URL.
@@ -239,8 +241,9 @@ fn capabilities(platform_kind: NativePlatformKind) -> PlatformCapabilities {
     let mobile = platform_kind.is_mobile();
     let desktop = platform_kind.is_desktop();
     let public_storage = desktop;
-    let android = platform_kind == NativePlatformKind::Android;
     let windows = platform_kind == NativePlatformKind::Windows;
+    let android = platform_kind == NativePlatformKind::Android;
+    let bluetooth_discovery = windows || android;
     let local_discovery =
         platform_kind != NativePlatformKind::Ios && platform_kind != NativePlatformKind::Unknown;
 
@@ -251,7 +254,8 @@ fn capabilities(platform_kind: NativePlatformKind) -> PlatformCapabilities {
         receive_files: platform_kind != NativePlatformKind::Unknown,
         scan_receive_qr: mobile,
         local_discovery,
-        bluetooth_discovery: android,
+        bluetooth_discovery,
+        nfc_ticket_handoff: android,
         relay_fallback: platform_kind != NativePlatformKind::Unknown,
         custom_relay: platform_kind != NativePlatformKind::Unknown,
         custom_receive_dir: public_storage,
@@ -385,7 +389,8 @@ mod tests {
         assert!(profile.capabilities.send_folders);
         assert!(profile.capabilities.public_downloads_export);
         assert!(profile.capabilities.web_handoff_receive);
-        assert!(!profile.capabilities.bluetooth_discovery);
+        assert!(profile.capabilities.bluetooth_discovery);
+        assert!(!profile.capabilities.nfc_ticket_handoff);
         assert!(!profile.capabilities.browser_transfer);
     }
 
@@ -399,6 +404,7 @@ mod tests {
         assert!(profile.capabilities.scan_receive_qr);
         assert!(profile.capabilities.local_discovery);
         assert!(profile.capabilities.bluetooth_discovery);
+        assert!(profile.capabilities.nfc_ticket_handoff);
         assert!(profile.capabilities.public_downloads_export);
         assert!(profile.capabilities.smart_routing);
         assert!(!profile.capabilities.send_folders);
@@ -427,6 +433,7 @@ mod tests {
         assert_eq!(profile.runtime_family, RuntimeFamily::Ios);
         assert_eq!(profile.release_support, ReleaseSupport::IosPrepared);
         assert!(!profile.capabilities.local_discovery);
+        assert!(!profile.capabilities.nfc_ticket_handoff);
         assert!(!profile.capabilities.public_downloads_export);
         assert!(profile.guidance.release_notice.contains("not shipped"));
     }

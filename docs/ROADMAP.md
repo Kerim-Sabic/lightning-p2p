@@ -19,8 +19,9 @@ This roadmap is deliberately conservative. Do not publish speed, platform, secur
 
 - Bluetooth LE proximity discovery is experimental.
 - NFC tap-to-transfer is experimental.
+- Android and Windows BLE scan/advertise plumbing is wired, but hardware validation is required.
 - BLE only carries discovery beacons.
-- NFC only carries ticket material.
+- NFC receive handling only carries ticket material.
 - Physical-device validation is required before these features move into a stable release.
 
 ## Next
@@ -28,7 +29,8 @@ This roadmap is deliberately conservative. Do not publish speed, platform, secur
 ### v0.5.1 - Stabilize proximity features
 
 - Validate BLE discovery on Windows-to-Android and Android-to-Android hardware.
-- Validate NFC ticket handoff on two physical Android phones.
+- Add macOS/Linux BLE backends before claiming cross-desktop BLE support.
+- Validate NFC ticket receive on physical Android hardware and add a tested writer/HCE path before claiming phone-to-phone tap.
 - Add clear runtime permission states and diagnostics.
 - Keep manual ticket sharing as the reliable fallback.
 

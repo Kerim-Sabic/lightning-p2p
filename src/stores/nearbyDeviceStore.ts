@@ -36,15 +36,11 @@ export const useNearbyDeviceStore = create<NearbyDeviceStore>((set) => ({
 
   refreshDevices: async () => {
     const devices = await getNearbyDevices();
-    set((state) =>
-      sameDevices(state.devices, devices) ? state : { devices },
-    );
+    set((state) => (sameDevices(state.devices, devices) ? state : { devices }));
   },
 
   applyDevicesUpdated: (devices) => {
-    set((state) =>
-      sameDevices(state.devices, devices) ? state : { devices },
-    );
+    set((state) => (sameDevices(state.devices, devices) ? state : { devices }));
   },
 
   clearDevices: () => set({ devices: [] }),

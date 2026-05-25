@@ -1,4 +1,10 @@
-import { startTransition, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  startTransition,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { DevicesView } from "./components/DevicesView";
 import { FirstRunOverlay } from "./components/FirstRunOverlay";
 import { HistoryView } from "./components/HistoryView";

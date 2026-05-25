@@ -13,6 +13,8 @@
 use crate::commands::{command_error, CommandResult};
 #[cfg(target_os = "android")]
 use crate::error::AppErrorPayload;
+use crate::AppState;
+use tauri::{AppHandle, State};
 
 #[cfg(target_os = "android")]
 pub(crate) mod android {
@@ -336,10 +338,91 @@ pub(crate) mod android {
         let mut pairs = Vec::with_capacity(flat.len() / 2);
         let mut iter = flat.into_iter();
         while let (Some(hex), Some(ts)) = (iter.next(), iter.next()) {
-            let parsed: i64 = ts.parse().unwrap_or(0);
+            let parsed = match ts.parse::<i64>() {
+                Ok(value) => value,
+                Err(_) => 0,
+            };
             pairs.push((hex, parsed));
         }
         Ok(pairs)
+    }
+
+    pub fn ble_permission_state() -> Result<String, String> {
+        call_ble_string_with_context(
+            "permissionState",
+            "(Landroid/content/Context;)Ljava/lang/String;",
+        )
+        .map(|value| value.unwrap_or_else(|| "unknown".into()))
+    }
+
+    pub fn ble_adapter_state() -> Result<String, String> {
+        call_ble_string_with_context(
+            "adapterState",
+            "(Landroid/content/Context;)Ljava/lang/String;",
+        )
+        .map(|value| value.unwrap_or_else(|| "unknown".into()))
+    }
+
+    pub fn ble_is_scanning() -> Result<bool, String> {
+        call_ble_bool_no_context("isScanning", "()Z")
+    }
+
+    pub fn ble_is_advertising() -> Result<bool, String> {
+        call_ble_bool_no_context("isAdvertising", "()Z")
+    }
+
+    pub fn ble_last_error() -> Result<Option<String>, String> {
+        call_ble_string_no_context("lastError", "()Ljava/lang/String;")
+    }
+
+    fn call_ble_string_with_context(
+        method: &str,
+        signature: &str,
+    ) -> Result<Option<String>, String> {
+        let vm = jvm()?;
+        let mut env = vm.attach_current_thread().map_err(|e| e.to_string())?;
+        let context = context_obj(&mut env)?;
+        let class = load_app_class(&mut env, BLE_CLASS_DOTTED)?;
+        let raw = env.call_static_method(class, method, signature, &[JValue::Object(&context)]);
+        let result = match raw {
+            Ok(r) => r,
+            Err(e) => return Err(drain_exception(&mut env, e)),
+        };
+        optional_jstring(&mut env, result.l().map_err(|e| e.to_string())?)
+    }
+
+    fn call_ble_string_no_context(method: &str, signature: &str) -> Result<Option<String>, String> {
+        let vm = jvm()?;
+        let mut env = vm.attach_current_thread().map_err(|e| e.to_string())?;
+        let class = load_app_class(&mut env, BLE_CLASS_DOTTED)?;
+        let raw = env.call_static_method(class, method, signature, &[]);
+        let result = match raw {
+            Ok(r) => r,
+            Err(e) => return Err(drain_exception(&mut env, e)),
+        };
+        optional_jstring(&mut env, result.l().map_err(|e| e.to_string())?)
+    }
+
+    fn call_ble_bool_no_context(method: &str, signature: &str) -> Result<bool, String> {
+        let vm = jvm()?;
+        let mut env = vm.attach_current_thread().map_err(|e| e.to_string())?;
+        let class = load_app_class(&mut env, BLE_CLASS_DOTTED)?;
+        let raw = env.call_static_method(class, method, signature, &[]);
+        let result = match raw {
+            Ok(r) => r,
+            Err(e) => return Err(drain_exception(&mut env, e)),
+        };
+        result.z().map_err(|e| e.to_string())
+    }
+
+    fn optional_jstring(env: &mut JNIEnv<'_>, obj: JObject<'_>) -> Result<Option<String>, String> {
+        if obj.is_null() {
+            return Ok(None);
+        }
+        let jstr: JString<'_> = obj.into();
+        env.get_string(&jstr)
+            .map(|value| Some(value.into()))
+            .map_err(|e| e.to_string())
     }
 
     /// Wall-clock epoch (ms) for a "older than 24h" cutoff used at app boot.
@@ -436,9 +519,14 @@ pub async fn take_pending_shared_ticket() -> Result<Option<String>, String> {
     }
 }
 
-/// Start the experimental Lightning P2P BLE advertise + scan pair on
-/// Android. The local node id short-prefix is broadcast in the BLE
-/// service data so other Lightning P2P phones in range can discover us.
+/// Start the experimental Lightning P2P BLE advertise + scan pair.
+///
+/// Android uses the Kotlin BLE bridge. Windows uses the native `WinRT` BLE
+/// advertisement watcher and publisher when the machine has a compatible
+/// adapter. Other targets return `false`.
+///
+/// The local iroh `NodeId` is broadcast in chunked BLE service data so other
+/// Lightning P2P devices in range can discover us.
 ///
 /// Returns whether the advertise + scan started. Either may legitimately
 /// return false if the BLE adapter is disabled or permissions are denied.
@@ -447,16 +535,48 @@ pub async fn take_pending_shared_ticket() -> Result<Option<String>, String> {
 ///
 /// Returns an error string if the JNI bridge fails.
 #[tauri::command]
-pub async fn start_ble_discovery(node_id_prefix_hex: String) -> Result<bool, String> {
+pub async fn start_ble_discovery(
+    app_handle: AppHandle,
+    state: State<'_, AppState>,
+    node_id_prefix_hex: String,
+) -> Result<bool, String> {
     #[cfg(target_os = "android")]
     {
         let advertising = android::ble_start_advertise(&node_id_prefix_hex)?;
         let scanning = android::ble_start_scan()?;
-        Ok(advertising || scanning)
+        let started = advertising || scanning;
+        if started {
+            let local_node_id = state.node.read().await.as_ref().map(|node| node.node_id());
+            spawn_ble_poll_loop(
+                app_handle,
+                state.nearby_shares.clone(),
+                state.settings.clone(),
+                local_node_id,
+                state.ble_polling_active.clone(),
+                android::ble_drain_discoveries,
+            );
+        }
+        Ok(started)
     }
-    #[cfg(not(target_os = "android"))]
+    #[cfg(windows)]
     {
-        let _ = node_id_prefix_hex;
+        let started = crate::proximity::ble::start(&node_id_prefix_hex)?;
+        if started {
+            let local_node_id = state.node.read().await.as_ref().map(|node| node.node_id());
+            spawn_ble_poll_loop(
+                app_handle,
+                state.nearby_shares.clone(),
+                state.settings.clone(),
+                local_node_id,
+                state.ble_polling_active.clone(),
+                crate::proximity::ble::drain_discoveries,
+            );
+        }
+        Ok(started)
+    }
+    #[cfg(not(any(target_os = "android", windows)))]
+    {
+        let _ = (app_handle, state, node_id_prefix_hex);
         Ok(false)
     }
 }
@@ -467,15 +587,106 @@ pub async fn start_ble_discovery(node_id_prefix_hex: String) -> Result<bool, Str
 ///
 /// Returns an error string if the JNI bridge fails.
 #[tauri::command]
-pub async fn stop_ble_discovery() -> Result<(), String> {
+pub async fn stop_ble_discovery(state: State<'_, AppState>) -> Result<(), String> {
     #[cfg(target_os = "android")]
     {
+        state
+            .ble_polling_active
+            .store(false, std::sync::atomic::Ordering::SeqCst);
         let _ = android::ble_stop_scan();
         android::ble_stop_advertise()?;
         Ok(())
     }
-    #[cfg(not(target_os = "android"))]
+    #[cfg(windows)]
     {
+        state
+            .ble_polling_active
+            .store(false, std::sync::atomic::Ordering::SeqCst);
+        crate::proximity::ble::stop()
+    }
+    #[cfg(not(any(target_os = "android", windows)))]
+    {
+        let _ = state;
         Ok(())
     }
+}
+
+#[cfg(any(target_os = "android", windows))]
+type BleDiscoveryDrain = fn() -> Result<Vec<(String, i64)>, String>;
+
+#[cfg(any(target_os = "android", windows))]
+fn spawn_ble_poll_loop(
+    app_handle: AppHandle,
+    registry: crate::node::NearbyShareRegistry,
+    settings: crate::storage::settings::SettingsState,
+    local_node_id: Option<iroh::NodeId>,
+    active: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    drain_discoveries: BleDiscoveryDrain,
+) {
+    use std::str::FromStr;
+    use std::sync::atomic::Ordering;
+    use std::time::Duration;
+    use tauri::Emitter;
+    use tokio::time::MissedTickBehavior;
+
+    if active.swap(true, Ordering::SeqCst) {
+        return;
+    }
+
+    tauri::async_runtime::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_millis(1500));
+        interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
+
+        loop {
+            interval.tick().await;
+            if !active.load(Ordering::SeqCst)
+                || !settings.snapshot().await.bluetooth_discovery_enabled
+            {
+                break;
+            }
+
+            let drained = tauri::async_runtime::spawn_blocking(drain_discoveries).await;
+            let discoveries = match drained {
+                Ok(Ok(discoveries)) => discoveries,
+                Ok(Err(error)) => {
+                    tracing::warn!(%error, "BLE discovery drain failed");
+                    Vec::new()
+                }
+                Err(error) => {
+                    tracing::warn!(%error, "BLE discovery drain task failed");
+                    Vec::new()
+                }
+            };
+
+            let mut changed = false;
+            for (node_id_hex, _) in discoveries {
+                let Ok(node_id) = iroh::NodeId::from_str(&node_id_hex) else {
+                    tracing::debug!(node_id_hex, "ignoring invalid BLE NodeId");
+                    continue;
+                };
+                if local_node_id
+                    .as_ref()
+                    .is_some_and(|local| *local == node_id)
+                {
+                    continue;
+                }
+                if registry
+                    .register_ble_candidate(node_id, "Bluetooth peer".into(), false)
+                    .await
+                    .is_some()
+                {
+                    changed = true;
+                }
+            }
+
+            if changed {
+                let snapshot = registry.devices_snapshot().await;
+                if let Err(error) = app_handle.emit("nearby-devices-updated", snapshot) {
+                    tracing::warn!(%error, "failed to emit BLE nearby devices");
+                }
+            }
+        }
+
+        active.store(false, Ordering::SeqCst);
+    });
 }

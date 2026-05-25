@@ -10,13 +10,14 @@ pub mod commands;
 pub mod crypto;
 pub mod error;
 pub mod node;
+pub mod proximity;
 pub mod storage;
 pub mod telemetry;
 pub mod transfer;
 
 use error::{LightningP2PError, Result};
 use node::{LightningP2PNode, NearbyShareRegistry, NodeRuntimeStatus, NodeSupervisor, OfferInbox};
-use std::sync::Arc;
+use std::sync::{atomic::AtomicBool, Arc};
 use storage::settings::{resolve_app_data_dir, SettingsState};
 use tauri::Manager;
 use tokio::sync::RwLock;
@@ -40,6 +41,8 @@ pub struct AppState {
     pub nearby_shares: NearbyShareRegistry,
     /// Inbox of inbound push-share offers awaiting a user decision.
     pub offer_inbox: OfferInbox,
+    /// Guards the BLE discovery drain loop so only one poller runs.
+    pub ble_polling_active: Arc<AtomicBool>,
 }
 
 impl AppState {
@@ -59,6 +62,7 @@ impl AppState {
             transfers: TransferQueue::new(),
             nearby_shares: NearbyShareRegistry::new(true),
             offer_inbox: OfferInbox::new(),
+            ble_polling_active: Arc::new(AtomicBool::new(false)),
         }
     }
 

@@ -36,6 +36,8 @@ const summary = {
     successes: s.successes,
     failures: s.failures,
     medianTotalMs: s.median_total_ms,
+    medianDownloadMs: s.median_download_ms,
+    medianExportMs: s.median_export_ms,
     medianEffectiveMbps:
       s.median_effective_mbps === null
         ? null

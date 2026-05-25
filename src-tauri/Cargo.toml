@@ -69,6 +69,12 @@ criterion = { version = "0.5", features = ["async_tokio"] }
 tempfile = "3"
 
 [target.'cfg(windows)'.dependencies]
+windows = { version = "0.62", features = [
+  "Devices_Bluetooth",
+  "Devices_Bluetooth_Advertisement",
+  "Foundation",
+  "Storage_Streams",
+] }
 windows-sys = { version = "0.59", features = [
   "Win32_Foundation",
   "Win32_Storage_FileSystem",

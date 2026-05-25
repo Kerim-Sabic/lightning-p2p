@@ -125,8 +125,7 @@ describe("redactSensitiveText", () => {
 
   it("redacts tickets separated by unicode whitespace", () => {
     const nbsp = " ";
-    const text =
-      `first fd2:abcdefghijklmnopqrstuvwxyzABCDEF${nbsp}second blobabc123abc123abc123abc123abc`;
+    const text = `first fd2:abcdefghijklmnopqrstuvwxyzABCDEF${nbsp}second blobabc123abc123abc123abc123abc`;
 
     const redacted = redactSensitiveText(text);
 

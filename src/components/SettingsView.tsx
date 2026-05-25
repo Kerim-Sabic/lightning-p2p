@@ -178,6 +178,13 @@ function bleStateLabel(active: boolean): string {
   return active ? "Active" : "Inactive";
 }
 
+function statusText(value: string): string {
+  return value
+    .split("_")
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(" ");
+}
+
 const ANDROID_SIGNING_FINGERPRINT =
   "5F:A0:D6:63:46:FF:9C:91:1B:18:D1:2A:5F:77:F1:F0:9B:2D:E2:A7:69:A0:97:68:6C:FC:FA:43:BD:86:29:16";
 
@@ -539,17 +546,18 @@ export function SettingsView() {
                 BLE experimental status
               </p>
               <p className="text-[13px] text-slate-300/72">
-                BLE discovers presence only. All bytes still move over iroh.
+                BLE advertises and scans for Lightning P2P peers. All bytes
+                still move over iroh.
               </p>
             </div>
           </div>
 
-          <div className="mt-4 grid gap-2 md:grid-cols-2">
+          <div className="mt-4 grid gap-2 md:grid-cols-3">
             <div className="stat-card">
               <p className="metric-label">Support</p>
               <p className="mt-1.5 text-sm font-semibold text-white">
                 {bleDiscoveryStatus.supported
-                  ? "Android plumbing"
+                  ? "Native plumbing"
                   : "Unavailable"}
               </p>
             </div>
@@ -557,6 +565,18 @@ export function SettingsView() {
               <p className="metric-label">Setting</p>
               <p className="mt-1.5 text-sm font-semibold text-white">
                 {bleDiscoveryStatus.enabled ? "Enabled" : "Off"}
+              </p>
+            </div>
+            <div className="stat-card">
+              <p className="metric-label">Permission</p>
+              <p className="mt-1.5 text-sm font-semibold text-white">
+                {statusText(bleDiscoveryStatus.permission_state)}
+              </p>
+            </div>
+            <div className="stat-card">
+              <p className="metric-label">Adapter</p>
+              <p className="mt-1.5 text-sm font-semibold text-white">
+                {statusText(bleDiscoveryStatus.adapter_state)}
               </p>
             </div>
             <div className="stat-card">
@@ -699,7 +719,7 @@ export function SettingsView() {
           </div>
         </div>
 
-        <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+        <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-6">
           <div className="stat-card">
             <p className="metric-label">Runtime</p>
             <p className="mt-1.5 text-sm font-semibold text-white">
@@ -721,7 +741,15 @@ export function SettingsView() {
           <div className="stat-card">
             <p className="metric-label">Bluetooth discovery</p>
             <p className="mt-1.5 text-sm font-semibold text-white">
-              {bluetoothDiscoveryAvailable ? "Available" : "Planned"}
+              {bluetoothDiscoveryAvailable ? "Experimental" : "Unavailable"}
+            </p>
+          </div>
+          <div className="stat-card">
+            <p className="metric-label">NFC tickets</p>
+            <p className="mt-1.5 text-sm font-semibold text-white">
+              {platformProfile.capabilities.nfc_ticket_handoff
+                ? "Android receive"
+                : "Unavailable"}
             </p>
           </div>
           <div className="stat-card">
@@ -886,9 +914,9 @@ export function SettingsView() {
                   </span>
                 </div>
                 <p className="text-[13px] leading-6 text-slate-300/72">
-                  Defaults off. BLE will only discover nearby identities; file
-                  transfer stays on iroh QUIC. Hardware peer discovery still
-                  needs proof before any public claim.
+                  Defaults off. Android and Windows scan and advertise proximity
+                  beacons when hardware allows it; file transfer stays on iroh
+                  QUIC.
                 </p>
               </div>
             </div>

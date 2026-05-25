@@ -99,7 +99,10 @@ const DOWNLOAD_TRUST_URL = `${REPO_URL}/blob/main/docs/download-trust.md`;
 const baseKeyFacts: KeyFact[] = [
   { label: "Product", value: "Lightning P2P" },
   { label: "Category", value: "Peer-to-peer file transfer app" },
-  { label: "Platform", value: "Windows stable release, Android 10+ sideload release" },
+  {
+    label: "Platform",
+    value: "Windows stable release, Android 10+ sideload release",
+  },
   { label: "Stable release", value: "v0.4.6" },
   { label: "Experimental release", value: "v0.5.0 BLE/NFC pre-release" },
   { label: "License", value: "Apache-2.0" },
@@ -123,8 +126,7 @@ const baseCaveats = [
 
 function answerContentForPage(page: WebPage): AnswerContent {
   const byPath: Record<string, string> = {
-    "/":
-      "Lightning P2P is a free open-source peer-to-peer file transfer app for Windows and Android. It sends files directly between devices using iroh and QUIC, verifies content with BLAKE3, and does not require cloud upload, accounts, or artificial file-size caps.",
+    "/": "Lightning P2P is a free open-source peer-to-peer file transfer app for Windows and Android. It sends files directly between devices using iroh and QUIC, verifies content with BLAKE3, and does not require cloud upload, accounts, or artificial file-size caps.",
     "/download":
       "Download Lightning P2P from GitHub Releases when you want the stable Windows installer or Android 10+ sideload APK for direct-first P2P file transfer. The recommended Windows asset is the one-click setup; Android users should verify the APK checksum before installing.",
     "/android-p2p-file-transfer":
@@ -394,10 +396,7 @@ function SectionHeading({
 }) {
   return (
     <div
-      className={cx(
-        "max-w-3xl",
-        align === "center" && "mx-auto text-center",
-      )}
+      className={cx("max-w-3xl", align === "center" && "mx-auto text-center")}
     >
       <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-300">
         {eyebrow}
@@ -498,7 +497,10 @@ function Header({ activePath }: { activePath: string }) {
             </MarketingButton>
           </div>
           <div className="hidden lg:block">
-            <MarketingButton href={ANDROID_APK_DOWNLOAD_URL} variant="secondary">
+            <MarketingButton
+              href={ANDROID_APK_DOWNLOAD_URL}
+              variant="secondary"
+            >
               <Download className="h-4 w-4" />
               Android APK
             </MarketingButton>
@@ -578,11 +580,14 @@ function HomeHero() {
         aria-hidden="true"
         className="absolute inset-0 -z-20 bg-[radial-gradient(1200px_circle_at_15%_5%,rgba(125,223,156,0.10),transparent_55%),linear-gradient(180deg,var(--lab-black)_0%,var(--lab-green)_85%,var(--lab-black)_100%)]"
       />
-      <div aria-hidden="true" className="marketing-grid-bg absolute inset-0 -z-10 opacity-60" />
+      <div
+        aria-hidden="true"
+        className="marketing-grid-bg absolute inset-0 -z-10 opacity-60"
+      />
       <div className="mx-auto grid w-full min-w-0 max-w-[1360px] items-center gap-12 lg:grid-cols-[minmax(0,1.18fr)_minmax(420px,0.82fr)] lg:gap-10">
         <div className="w-full min-w-0">
           <p className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.28em] text-[var(--signal-green)]">
-            Lightning P2P · v{benchmarkSummary.appVersion} · {benchmarkSummary.commitHash.slice(0, 8)}
+            Lightning P2P / stable {STABLE_RELEASE_TAG}
           </p>
           <h1 className="mt-6 max-w-[1000px] text-[clamp(3rem,7vw,5.2rem)] font-semibold leading-[0.98] tracking-[-0.035em] text-[var(--proof-paper)]">
             Send huge files
@@ -590,7 +595,9 @@ function HomeHero() {
             device-to-device.
           </h1>
           <p className="mt-7 max-w-[58ch] text-[1.075rem] leading-[1.65] text-slate-300/95 sm:text-[1.15rem]">
-            Direct peer-to-peer transfer for Windows and Android. No cloud upload. No account. No size cap. Built on Rust, Tauri, iroh QUIC, and BLAKE3-verified streaming.
+            Direct peer-to-peer transfer for Windows and Android. No cloud
+            upload. No account. No size cap. Built on Rust, Tauri, iroh QUIC,
+            and BLAKE3-verified streaming.
           </p>
           <div className="mt-9 flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
             <MarketingButton
@@ -622,7 +629,8 @@ function HomeHero() {
             </MarketingButton>
           </div>
           <p className="mt-7 max-w-[60ch] text-[0.78rem] leading-[1.7] text-slate-400/85">
-            Apache-2.0 · Windows stable {STABLE_RELEASE_TAG} · Android 10+ sideload · macOS / Linux / iOS on the roadmap.
+            Apache-2.0 · Windows stable {STABLE_RELEASE_TAG} · Android 10+
+            sideload · macOS / Linux / iOS on the roadmap.
           </p>
         </div>
 
@@ -642,7 +650,10 @@ function PageHero({ page }: { page: WebPage }) {
         aria-hidden="true"
         className="absolute inset-0 -z-20 bg-[radial-gradient(900px_circle_at_18%_8%,rgba(125,223,156,0.08),transparent_55%),linear-gradient(180deg,var(--lab-black)_0%,var(--lab-green)_100%)]"
       />
-      <div aria-hidden="true" className="marketing-grid-bg absolute inset-0 -z-10 opacity-50" />
+      <div
+        aria-hidden="true"
+        className="marketing-grid-bg absolute inset-0 -z-10 opacity-50"
+      />
       <div className="mx-auto grid w-full min-w-0 max-w-[1360px] items-center gap-12 lg:grid-cols-[minmax(0,1.04fr)_minmax(430px,0.76fr)] lg:gap-10">
         <div className="w-full min-w-0 max-w-[820px]">
           <p className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.28em] text-[var(--signal-green)]">
@@ -655,11 +666,18 @@ function PageHero({ page }: { page: WebPage }) {
             {page.intro} {page.focus}
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
-            <MarketingButton href={VELOPACK_DOWNLOAD_URL} ariaLabel="Download Lightning P2P for Windows">
+            <MarketingButton
+              href={VELOPACK_DOWNLOAD_URL}
+              ariaLabel="Download Lightning P2P for Windows"
+            >
               <Download className="h-4 w-4" />
               Download for Windows
             </MarketingButton>
-            <MarketingButton href={ANDROID_APK_DOWNLOAD_URL} variant="secondary" ariaLabel="Download Lightning P2P Android APK">
+            <MarketingButton
+              href={ANDROID_APK_DOWNLOAD_URL}
+              variant="secondary"
+              ariaLabel="Download Lightning P2P Android APK"
+            >
               <Download className="h-4 w-4" />
               Android APK
             </MarketingButton>
@@ -676,8 +694,12 @@ function PageHero({ page }: { page: WebPage }) {
 }
 
 function HeroProofStrip() {
-  const tenMb = benchmarkSummary.scenarios.find((s) => s.scenario === "same_machine_10mb");
-  const hundredMb = benchmarkSummary.scenarios.find((s) => s.scenario === "same_machine_100mb");
+  const tenMb = benchmarkSummary.scenarios.find(
+    (s) => s.scenario === "same_machine_10mb",
+  );
+  const hundredMb = benchmarkSummary.scenarios.find(
+    (s) => s.scenario === "same_machine_100mb",
+  );
 
   return (
     <aside
@@ -697,7 +719,11 @@ function HeroProofStrip() {
         <dl className="proof-strip-grid mt-5 grid grid-cols-3 gap-px overflow-hidden rounded-[6px] bg-white/[0.04]">
           <ProofCell label="Route" value="Direct" tone="signal" />
           <ProofCell label="Providers" value="1" />
-          <ProofCell label="Runs" value={`${tenMb?.runs ?? 3} of ${tenMb?.runs ?? 3}`} tone="signal" />
+          <ProofCell
+            label="Runs"
+            value={`${tenMb?.runs ?? 3} of ${tenMb?.runs ?? 3}`}
+            tone="signal"
+          />
           <ProofCell
             label="10 MB median"
             value={`${tenMb?.medianEffectiveMbps ?? "—"} Mbps`}
@@ -706,7 +732,11 @@ function HeroProofStrip() {
             label="100 MB median"
             value={`${hundredMb?.medianEffectiveMbps ?? "—"} Mbps`}
           />
-          <ProofCell label="Failures" value={`${tenMb?.failures ?? 0}`} tone="signal" />
+          <ProofCell
+            label="Failures"
+            value={`${tenMb?.failures ?? 0}`}
+            tone="signal"
+          />
         </dl>
 
         <div className="mt-5 grid gap-2 border-t border-white/[0.05] pt-4 text-[0.72rem] leading-[1.55] text-slate-400/90">
@@ -715,7 +745,9 @@ function HeroProofStrip() {
             {benchmarkSummary.caveat}
           </p>
           <p className="font-mono text-[0.68rem] text-slate-500">
-            v{benchmarkSummary.appVersion} · {benchmarkSummary.commitHash.slice(0, 8)} · {benchmarkSummary.os}/{benchmarkSummary.arch}
+            v{benchmarkSummary.appVersion} ·{" "}
+            {benchmarkSummary.commitHash.slice(0, 8)} · {benchmarkSummary.os}/
+            {benchmarkSummary.arch}
           </p>
         </div>
 
@@ -776,7 +808,8 @@ function HeroTransferVisual() {
         </div>
 
         <code className="mt-4 block truncate font-mono text-[0.85rem] leading-[1.55] text-[var(--proof-paper)]">
-          lightning-p2p://receive#t=<span className="text-slate-500">[hidden ticket]</span>
+          lightning-p2p://receive#t=
+          <span className="text-slate-500">[hidden ticket]</span>
         </code>
 
         <dl className="proof-strip-grid mt-5 grid grid-cols-3 gap-px overflow-hidden rounded-[6px] bg-white/[0.04]">
@@ -807,10 +840,7 @@ function TrustBadges() {
                 <span className="text-slate-300">{badge.label}</span>
               </span>
               {index < trustBadges.length - 1 ? (
-                <span
-                  aria-hidden="true"
-                  className="text-slate-700"
-                >
+                <span aria-hidden="true" className="text-slate-700">
                   ·
                 </span>
               ) : null}
@@ -960,14 +990,27 @@ function ProblemSection() {
               Cloud bucket in the middle
             </h3>
             <ContrastPath
-              steps={["Your file", "Cloud bucket", "Retention link", "Receiver download"]}
+              steps={[
+                "Your file",
+                "Cloud bucket",
+                "Retention link",
+                "Receiver download",
+              ]}
               tone="muted"
             />
             <ul className="mt-6 grid gap-2 text-[0.92rem] leading-[1.55] text-slate-400">
-              <ContrastBullet>Bytes copied to a third-party server.</ContrastBullet>
-              <ContrastBullet>Account, email, or paid tier required.</ContrastBullet>
-              <ContrastBullet>Retention link can be re-shared or indexed.</ContrastBullet>
-              <ContrastBullet>Size cap, expiry, or upload throttle.</ContrastBullet>
+              <ContrastBullet>
+                Bytes copied to a third-party server.
+              </ContrastBullet>
+              <ContrastBullet>
+                Account, email, or paid tier required.
+              </ContrastBullet>
+              <ContrastBullet>
+                Retention link can be re-shared or indexed.
+              </ContrastBullet>
+              <ContrastBullet>
+                Size cap, expiry, or upload throttle.
+              </ContrastBullet>
             </ul>
           </article>
 
@@ -983,16 +1026,27 @@ function ProblemSection() {
               tone="signal"
             />
             <ul className="mt-6 grid gap-2 text-[0.92rem] leading-[1.55] text-slate-200/90">
-              <ContrastBullet tone="signal">Sender keeps the file. No third-party storage.</ContrastBullet>
-              <ContrastBullet tone="signal">No account, no email, no paid tier.</ContrastBullet>
-              <ContrastBullet tone="signal">Ticket dies when the sender quits. No retention link.</ContrastBullet>
-              <ContrastBullet tone="signal">No artificial size cap. BLAKE3 verifies every chunk.</ContrastBullet>
+              <ContrastBullet tone="signal">
+                Sender keeps the file. No third-party storage.
+              </ContrastBullet>
+              <ContrastBullet tone="signal">
+                No account, no email, no paid tier.
+              </ContrastBullet>
+              <ContrastBullet tone="signal">
+                Ticket dies when the sender quits. No retention link.
+              </ContrastBullet>
+              <ContrastBullet tone="signal">
+                No artificial size cap. BLAKE3 verifies every chunk.
+              </ContrastBullet>
             </ul>
           </article>
         </div>
 
         <p className="mt-10 max-w-[58ch] text-[0.92rem] leading-[1.7] text-slate-400/90">
-          iroh handles direct connectivity across LAN and WAN; if direct fails, it falls back through encrypted relays that pass bytes through but do not store them. The receiver verifies content addressing with BLAKE3 either way.
+          iroh handles direct connectivity across LAN and WAN; if direct fails,
+          it falls back through encrypted relays that pass bytes through but do
+          not store them. The receiver verifies content addressing with BLAKE3
+          either way.
         </p>
       </div>
     </section>
@@ -1055,9 +1109,7 @@ function ContrastBullet({
         className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full"
         style={{
           backgroundColor:
-            tone === "signal"
-              ? "var(--signal-green)"
-              : "rgba(255,255,255,0.4)",
+            tone === "signal" ? "var(--signal-green)" : "rgba(255,255,255,0.4)",
         }}
         aria-hidden="true"
       />
@@ -1080,12 +1132,18 @@ function HowItWorks() {
         />
         <ol className="mt-12 grid gap-px overflow-hidden rounded-[10px] border border-white/[0.08] bg-white/[0.04] md:grid-cols-3">
           {workflowSteps.map((step, index) => (
-            <li key={step.title} className="relative bg-[var(--lab-green)] p-7 sm:p-8">
+            <li
+              key={step.title}
+              className="relative bg-[var(--lab-green)] p-7 sm:p-8"
+            >
               <div className="flex items-baseline justify-between">
                 <span className="font-mono text-[0.7rem] font-bold uppercase tracking-[0.24em] text-[var(--signal-green)]">
                   Step {String(index + 1).padStart(2, "0")}
                 </span>
-                <step.icon className="h-4 w-4 text-slate-500" aria-hidden="true" />
+                <step.icon
+                  className="h-4 w-4 text-slate-500"
+                  aria-hidden="true"
+                />
               </div>
               <h3 className="mt-5 text-[1.2rem] font-semibold leading-[1.35] tracking-[-0.01em] text-[var(--proof-paper)]">
                 {step.title}
@@ -1150,11 +1208,43 @@ interface TracePhase {
 }
 
 const sampleTrace: TracePhase[] = [
-  { label: "connecting", ms: 168, detail: "peer reached, route=direct", tone: "muted" },
-  { label: "downloading", ms: 273, detail: "324 MB streamed", tone: "signal" },
-  { label: "verifying", ms: 4, detail: "BLAKE3 ok on every chunk", tone: "signal" },
-  { label: "saving", ms: 6, detail: "written to disk", tone: "signal" },
-  { label: "done", ms: null, detail: "total 451 ms · 5.74 Gbps loopback", tone: "signal" },
+  {
+    label: "route",
+    ms: null,
+    detail: `${benchmarkSummary.transport}, same-machine direct`,
+    tone: "muted",
+  },
+  {
+    label: "downloading",
+    ms:
+      benchmarkSummary.scenarios.find(
+        (item) => item.scenario === "same_machine_100mb",
+      )?.medianDownloadMs ?? null,
+    detail: "104,857,600 bytes streamed",
+    tone: "signal",
+  },
+  {
+    label: "saving",
+    ms:
+      benchmarkSummary.scenarios.find(
+        (item) => item.scenario === "same_machine_100mb",
+      )?.medianExportMs ?? null,
+    detail: "verified export to disk",
+    tone: "signal",
+  },
+  {
+    label: "done",
+    ms:
+      benchmarkSummary.scenarios.find(
+        (item) => item.scenario === "same_machine_100mb",
+      )?.medianTotalMs ?? null,
+    detail: `${
+      benchmarkSummary.scenarios.find(
+        (item) => item.scenario === "same_machine_100mb",
+      )?.medianEffectiveMbps ?? "n/a"
+    } Mbps effective loopback`,
+    tone: "signal",
+  },
 ];
 
 function NativeAppProof() {
@@ -1164,7 +1254,7 @@ function NativeAppProof() {
         <SectionHeading
           eyebrow="Native app trace"
           title="The website is the handoff. The app does the work."
-          copy="Below is a sample receive trace from the same-machine harness: phase progression, route, BLAKE3 verification, and the saved path. This is what the real app prints. The website never sees your bytes."
+          copy="Below is the committed same-machine harness summarized as a receive trace: route, download, export, and effective throughput. The website never sees your bytes."
         />
 
         <div className="relative overflow-hidden rounded-[10px] border border-white/[0.08] bg-[var(--lab-green)] p-1 shadow-[0_28px_100px_rgba(0,0,0,0.35)]">
@@ -1212,8 +1302,9 @@ function NativeAppProof() {
 
             <p className="mt-4 font-mono text-[0.66rem] leading-[1.55] text-slate-500/80">
               Trace shape only. Numbers come from the automated same-machine
-              harness in <code className="text-slate-400">docs/reports/raw/local/</code> and
-              are loopback, not real-device.
+              harness in{" "}
+              <code className="text-slate-400">docs/reports/raw/local/</code>{" "}
+              and are loopback, not real-device.
             </p>
           </div>
         </div>
@@ -1249,42 +1340,63 @@ const capabilityRows: CapabilityRow[] = [
     label: "Transport",
     headline: "Direct-first iroh QUIC, encrypted at the transport.",
     body: "Peer connects when the network allows it. If NAT or firewalls block direct dialing, iroh falls back through encrypted relays that carry bytes without storing them.",
-    proof: { text: "Architecture & threat model", href: `${REPO_URL}/blob/main/SECURITY.md` },
+    proof: {
+      text: "Architecture & threat model",
+      href: `${REPO_URL}/blob/main/SECURITY.md`,
+    },
   },
   {
     index: "02",
     label: "Verification",
     headline: "BLAKE3 verification on every chunk.",
     body: "Receivers stream content-addressed bytes through iroh-blobs. Hash mismatches surface as a `verification_failed` error code with a structured payload the UI can act on.",
-    proof: { text: "Receiver source", href: `${REPO_URL}/blob/main/src-tauri/src/transfer/receiver.rs` },
+    proof: {
+      text: "Receiver source",
+      href: `${REPO_URL}/blob/main/src-tauri/src/transfer/receiver.rs`,
+    },
   },
   {
     index: "03",
     label: "Release trust",
-    headline: "Signed Windows installers and a published Android signer fingerprint.",
+    headline:
+      "Signed Windows installers and a published Android signer fingerprint.",
     body: "Authenticode signing via Azure Trusted Signing when the signed CI path runs. Every release ships SHA256SUMS and a verify-release.ps1 script. APK signer cert SHA-256 is published in the README and verifiable with apksigner.",
-    proof: { text: "Release evidence catalog", href: `${REPO_URL}/blob/main/docs/release-evidence.md` },
+    proof: {
+      text: "Release evidence catalog",
+      href: `${REPO_URL}/blob/main/docs/release-evidence.md`,
+    },
   },
   {
     index: "04",
     label: "Diagnostics",
-    headline: "Diagnostics redact tickets and home paths before anything leaves the device.",
+    headline:
+      "Diagnostics redact tickets and home paths before anything leaves the device.",
     body: "Bundles strip fd2: tickets, blob…tickets, lightning-p2p://receive deep links, /receive#t= fragments, ?t= and ?ticket= query parameters, and user home paths. Tested on both Rust and TypeScript sides.",
-    proof: { text: "Redaction tests", href: `${REPO_URL}/blob/main/src-tauri/src/commands/diagnostics.rs` },
+    proof: {
+      text: "Redaction tests",
+      href: `${REPO_URL}/blob/main/src-tauri/src/commands/diagnostics.rs`,
+    },
   },
   {
     index: "05",
     label: "Errors",
-    headline: "Structured error model. 17 stable codes, retryable hints, help docs.",
+    headline:
+      "Structured error model. 17 stable codes, retryable hints, help docs.",
     body: "Every failure flows through AppErrorPayload schema v1 with code, category, severity, retryable, docs_slug, redacted_diagnostics. The frontend renders title, hint, retry badge, and help link from one source.",
-    proof: { text: "Error model source", href: `${REPO_URL}/blob/main/src-tauri/src/error.rs` },
+    proof: {
+      text: "Error model source",
+      href: `${REPO_URL}/blob/main/src-tauri/src/error.rs`,
+    },
   },
   {
     index: "06",
     label: "Benchmarks",
     headline: "Automated benchmark harness runs in CI on every push.",
     body: "Same-machine two-profile harness produces raw CSV/JSON evidence. The report is clearly labeled loopback-only. Real-device Windows ↔ Android numbers are still pending and held back from any 'fastest' claim.",
-    proof: { text: "Automated local benchmarks", href: `${REPO_URL}/blob/main/docs/reports/automated-local-benchmarks.md` },
+    proof: {
+      text: "Automated local benchmarks",
+      href: `${REPO_URL}/blob/main/docs/reports/automated-local-benchmarks.md`,
+    },
   },
 ];
 
@@ -1775,7 +1887,10 @@ function DownloadOption({
 }
 
 function ComparisonTable() {
-  const columns: Array<{ key: keyof Omit<ComparisonRow, "tool" | "detail">; label: string }> = [
+  const columns: Array<{
+    key: keyof Omit<ComparisonRow, "tool" | "detail">;
+    label: string;
+  }> = [
     { key: "cloudUpload", label: "Cloud upload" },
     { key: "account", label: "Account" },
     { key: "wan", label: "Works across WAN" },
@@ -1856,8 +1971,7 @@ function ComparisonTable() {
 }
 
 function ComparisonIndicator({ cell }: { cell: ComparisonCell }) {
-  const Icon =
-    cell.label === "Yes" ? Check : cell.label === "No" ? X : Minus;
+  const Icon = cell.label === "Yes" ? Check : cell.label === "No" ? X : Minus;
   return (
     <span
       className={cx(
@@ -2140,7 +2254,11 @@ function Footer() {
             href="/"
             className="inline-flex items-center gap-3 rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-emerald-300"
           >
-            <img src={siteLogoUrl} alt="" className="h-10 w-10 rounded-[10px]" />
+            <img
+              src={siteLogoUrl}
+              alt=""
+              className="h-10 w-10 rounded-[10px]"
+            />
             <span className="font-semibold text-white">Lightning P2P</span>
           </a>
           <p className="mt-4 max-w-sm leading-6">

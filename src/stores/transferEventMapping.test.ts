@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { BackendAppErrorPayload } from "../lib/appErrors";
-import { mergeFailedTransferEvent, type FailedTransferEvent } from "./transferEventMapping";
+import {
+  mergeFailedTransferEvent,
+  type FailedTransferEvent,
+} from "./transferEventMapping";
 
 describe("mergeFailedTransferEvent", () => {
   it("keeps legacy failed events compatible", () => {
@@ -16,7 +19,9 @@ describe("mergeFailedTransferEvent", () => {
     expect(entry.transferId).toBe("rx-legacy");
     expect(entry.status).toBe("failed");
     expect(entry.failureCategory).toBe("unknown");
-    expect(entry.error).toBe("The receive folder does not have enough free disk space for this transfer.");
+    expect(entry.error).toBe(
+      "The receive folder does not have enough free disk space for this transfer.",
+    );
     expect(entry.appError?.source).toBe("legacy_string");
     expect(entry.appError?.code).toBe("disk_full");
   });
@@ -52,6 +57,8 @@ describe("mergeFailedTransferEvent", () => {
     expect(entry.error).toBe(payload.message);
     expect(entry.appError?.source).toBe("structured");
     expect(entry.appError?.code).toBe("sender_offline");
-    expect(entry.appError?.redactedDiagnostics).toBe("phase=connecting route=relay");
+    expect(entry.appError?.redactedDiagnostics).toBe(
+      "phase=connecting route=relay",
+    );
   });
 });

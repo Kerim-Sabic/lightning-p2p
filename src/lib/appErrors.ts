@@ -178,7 +178,8 @@ const DEFAULTS: Record<AppErrorCode, ErrorDefaults> = {
     category: "disk",
     severity: "error",
     title: "Not enough free space",
-    message: "The receive folder does not have enough free disk space for this transfer.",
+    message:
+      "The receive folder does not have enough free disk space for this transfer.",
     hint: "Free space on the destination drive, then retry.",
     retryable: true,
   },
@@ -363,10 +364,16 @@ function appErrorFromLegacyString(
   const normalized = redacted.toLowerCase();
 
   if (normalized.includes("invalid ticket")) {
-    return appErrorFromCode("invalid_ticket", { source, legacyMessage: redacted });
+    return appErrorFromCode("invalid_ticket", {
+      source,
+      legacyMessage: redacted,
+    });
   }
   if (normalized.includes("node not initialized")) {
-    return appErrorFromCode("node_not_ready", { source, legacyMessage: redacted });
+    return appErrorFromCode("node_not_ready", {
+      source,
+      legacyMessage: redacted,
+    });
   }
   if (normalized.includes("nearby share is no longer available")) {
     return appErrorFromCode("nearby_share_unavailable", {
@@ -375,11 +382,23 @@ function appErrorFromLegacyString(
       legacyMessage: redacted,
     });
   }
-  if (normalized.includes("peer not reachable") || normalized.includes("sender offline")) {
-    return appErrorFromCode("sender_offline", { source, legacyMessage: redacted });
+  if (
+    normalized.includes("peer not reachable") ||
+    normalized.includes("sender offline")
+  ) {
+    return appErrorFromCode("sender_offline", {
+      source,
+      legacyMessage: redacted,
+    });
   }
-  if (normalized.includes("transfer interrupted") || normalized.includes("timed out")) {
-    return appErrorFromCode("connection_timeout", { source, legacyMessage: redacted });
+  if (
+    normalized.includes("transfer interrupted") ||
+    normalized.includes("timed out")
+  ) {
+    return appErrorFromCode("connection_timeout", {
+      source,
+      legacyMessage: redacted,
+    });
   }
   if (normalized.includes("relay") && normalized.includes("invalid")) {
     return appErrorFromCode("custom_relay_invalid", {
@@ -388,7 +407,10 @@ function appErrorFromLegacyString(
       legacyMessage: redacted,
     });
   }
-  if (normalized.includes("no peer route") || normalized.includes("relay unavailable")) {
+  if (
+    normalized.includes("no peer route") ||
+    normalized.includes("relay unavailable")
+  ) {
     return appErrorFromCode("relay_unavailable", {
       source,
       message: redacted,
@@ -398,7 +420,10 @@ function appErrorFromLegacyString(
   if (normalized.includes("not enough free disk space")) {
     return appErrorFromCode("disk_full", { source, legacyMessage: redacted });
   }
-  if (normalized.includes("permission denied") || normalized.includes("access denied")) {
+  if (
+    normalized.includes("permission denied") ||
+    normalized.includes("access denied")
+  ) {
     return appErrorFromCode("permission_denied", {
       source,
       message: redacted,
@@ -422,14 +447,20 @@ function appErrorFromLegacyString(
       legacyMessage: redacted,
     });
   }
-  if (normalized.includes("content://") || normalized.includes("system picker")) {
+  if (
+    normalized.includes("content://") ||
+    normalized.includes("system picker")
+  ) {
     return appErrorFromCode("android_content_uri_failed", {
       source,
       message: redacted,
       legacyMessage: redacted,
     });
   }
-  if (normalized.includes("verification") || normalized.includes("hash mismatch")) {
+  if (
+    normalized.includes("verification") ||
+    normalized.includes("hash mismatch")
+  ) {
     return appErrorFromCode("verification_failed", {
       source,
       legacyMessage: redacted,
@@ -547,7 +578,9 @@ function booleanField(
 }
 
 function isAppErrorCode(value: unknown): value is AppErrorCode {
-  return typeof value === "string" && APP_ERROR_CODES.includes(value as AppErrorCode);
+  return (
+    typeof value === "string" && APP_ERROR_CODES.includes(value as AppErrorCode)
+  );
 }
 
 function isAppErrorCategory(value: unknown): value is AppErrorCategory {

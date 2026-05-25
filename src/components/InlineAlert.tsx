@@ -10,7 +10,10 @@ interface InlineAlertProps {
 
 type AlertTone = "info" | "warning" | "error";
 
-function toneForMessage(message: string, appError?: AppError | null): AlertTone {
+function toneForMessage(
+  message: string,
+  appError?: AppError | null,
+): AlertTone {
   if (appError) {
     if (appError.severity === "info") {
       return "info";
@@ -85,7 +88,11 @@ function alertPresentation(tone: AlertTone) {
   }
 }
 
-export function InlineAlert({ appError, message, onDismiss }: InlineAlertProps) {
+export function InlineAlert({
+  appError,
+  message,
+  onDismiss,
+}: InlineAlertProps) {
   return (
     <AnimatePresence initial={false}>
       {message ? (
@@ -126,11 +133,11 @@ function InlineAlertBody({ appError, message, onDismiss }: InlineAlertProps) {
           <Icon className="h-4 w-4" />
         </div>
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-white">
-            {title}
-          </p>
+          <p className="text-sm font-semibold text-white">{title}</p>
           <p className="mt-1 text-sm leading-6">{body}</p>
-          {hint ? <p className="mt-1 text-xs leading-5 opacity-80">{hint}</p> : null}
+          {hint ? (
+            <p className="mt-1 text-xs leading-5 opacity-80">{hint}</p>
+          ) : null}
           {appError?.helpUrl ? (
             <a
               href={appError.helpUrl}

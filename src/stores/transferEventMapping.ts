@@ -1,7 +1,4 @@
-import {
-  messageFromAppError,
-  normalizeAppError,
-} from "../lib/appErrors";
+import { messageFromAppError, normalizeAppError } from "../lib/appErrors";
 import type { TransferEvent } from "../lib/tauri";
 import type { TransferEntry } from "./transferStore";
 
