@@ -7,7 +7,6 @@ import {
   ClipboardCheck,
   CloudOff,
   Code2,
-  DatabaseZap,
   Download,
   FileCheck2,
   FileLock2,
@@ -15,7 +14,6 @@ import {
   Github,
   HardDriveDownload,
   KeyRound,
-  LockKeyhole,
   Menu,
   Minus,
   MonitorDown,
@@ -246,49 +244,6 @@ const workflowSteps = [
     icon: ClipboardCheck,
     title: "Receive directly",
     copy: "The receiver connects and streams verified bytes to disk.",
-  },
-];
-
-const securityCards = [
-  {
-    icon: LockKeyhole,
-    title: "Transport",
-    copy: "QUIC TLS through iroh peer connectivity.",
-  },
-  {
-    icon: FileCheck2,
-    title: "Integrity",
-    copy: "BLAKE3 verified streaming through iroh-blobs.",
-  },
-  {
-    icon: DatabaseZap,
-    title: "Storage",
-    copy: "No server-side file bucket in the transfer path.",
-  },
-  {
-    icon: KeyRound,
-    title: "Tickets",
-    copy: "Capability tokens. Treat them as secrets.",
-  },
-  {
-    icon: Upload,
-    title: "Sender availability",
-    copy: "The sender must stay online until the receiver finishes.",
-  },
-  {
-    icon: RadioTower,
-    title: "Relay fallback",
-    copy: "Connectivity helper, not a cloud file bucket.",
-  },
-  {
-    icon: BadgeCheck,
-    title: "Updates",
-    copy: "Updater metadata signatures when release signing is configured.",
-  },
-  {
-    icon: ShieldCheck,
-    title: "Windows",
-    copy: "Code-signing support is built into the release pipeline.",
   },
 ];
 
@@ -952,17 +907,26 @@ function HeroDeviceCard({
 
 function TrustBadges() {
   return (
-    <section className="border-y border-white/8 bg-[#08110d] px-4 py-6 sm:px-6">
-      <div className="mx-auto grid max-w-7xl grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
-        {trustBadges.map((badge) => (
-          <div
-            key={badge.label}
-            className="group flex items-center gap-2 rounded-[12px] border border-white/8 bg-white/[0.035] px-3 py-3 text-sm text-slate-300 transition hover:-translate-y-0.5 hover:border-emerald-300/24 hover:bg-white/[0.06] hover:text-white"
-          >
-            <badge.icon className="h-4 w-4 shrink-0 text-emerald-300 transition group-hover:drop-shadow-[0_0_10px_rgba(110,231,183,0.6)]" />
-            <span className="truncate">{badge.label}</span>
-          </div>
-        ))}
+    <section className="border-y border-white/[0.06] bg-[var(--lab-black)] px-4 py-5 sm:px-6">
+      <div className="mx-auto max-w-7xl overflow-x-auto">
+        <ul className="flex min-w-max items-center justify-start gap-x-8 font-mono text-[0.72rem] font-semibold uppercase tracking-[0.18em] text-slate-400 lg:justify-center">
+          {trustBadges.map((badge, index) => (
+            <li key={badge.label} className="flex items-center gap-x-8">
+              <span className="flex items-center gap-2 whitespace-nowrap">
+                <badge.icon className="h-3.5 w-3.5 text-[var(--signal-green)]" />
+                <span className="text-slate-300">{badge.label}</span>
+              </span>
+              {index < trustBadges.length - 1 ? (
+                <span
+                  aria-hidden="true"
+                  className="text-slate-700"
+                >
+                  ·
+                </span>
+              ) : null}
+            </li>
+          ))}
+        </ul>
       </div>
     </section>
   );
@@ -1205,42 +1169,40 @@ function HowItWorks() {
   return (
     <section
       id="how-it-works"
-      className="scroll-mt-24 bg-[#07110d] px-4 py-24 sm:px-6"
+      className="scroll-mt-24 bg-[var(--lab-green)] px-4 py-24 sm:px-6"
     >
       <div className="mx-auto max-w-7xl">
         <SectionHeading
-          eyebrow="Product demo"
-          title="Three steps. No cloud round trip."
-          copy="A sender creates a ticket, the receiver opens it, and verified bytes stream to disk."
-          align="center"
+          eyebrow="Three steps"
+          title="Drop. Share. Stream."
+          copy="The sender stages content, the receiver opens a ticket, and iroh-blobs streams BLAKE3-verified bytes to disk."
         />
-        <div className="relative mt-14">
-          <div
-            aria-hidden="true"
-            className="absolute left-[16%] right-[16%] top-12 hidden h-px bg-[linear-gradient(90deg,transparent,rgba(110,231,183,0.72),transparent)] md:block"
-          />
-          <ol className="grid gap-4 md:grid-cols-3">
-            {workflowSteps.map((step, index) => (
-              <li
-                key={step.title}
-                className="group relative rounded-[20px] border border-white/10 bg-[#0b1712] p-6 transition duration-200 hover:-translate-y-1 hover:border-emerald-300/25 hover:bg-[#0f1f18]"
-              >
-                <span className="absolute right-5 top-5 text-5xl font-semibold leading-none text-white/[0.045]">
-                  {index + 1}
+        <ol className="mt-12 grid gap-px overflow-hidden rounded-[10px] border border-white/[0.08] bg-white/[0.04] md:grid-cols-3">
+          {workflowSteps.map((step, index) => (
+            <li key={step.title} className="relative bg-[var(--lab-green)] p-7 sm:p-8">
+              <div className="flex items-baseline justify-between">
+                <span className="font-mono text-[0.7rem] font-bold uppercase tracking-[0.24em] text-[var(--signal-green)]">
+                  Step {String(index + 1).padStart(2, "0")}
                 </span>
-                <span className="relative z-10 grid h-12 w-12 place-items-center rounded-[14px] border border-emerald-300/18 bg-emerald-300/10 text-emerald-200 shadow-[0_0_30px_rgba(16,185,129,0.08)]">
-                  <step.icon className="h-5 w-5" />
+                <step.icon className="h-4 w-4 text-slate-500" aria-hidden="true" />
+              </div>
+              <h3 className="mt-5 text-[1.2rem] font-semibold leading-[1.35] tracking-[-0.01em] text-[var(--proof-paper)]">
+                {step.title}
+              </h3>
+              <p className="mt-2.5 max-w-[38ch] text-[0.93rem] leading-[1.6] text-slate-400/95">
+                {step.copy}
+              </p>
+              {index < workflowSteps.length - 1 ? (
+                <span
+                  aria-hidden="true"
+                  className="absolute -right-2.5 top-1/2 hidden -translate-y-1/2 font-mono text-base text-[var(--signal-green)] md:inline"
+                >
+                  →
                 </span>
-                <h3 className="mt-6 text-xl font-semibold text-white">
-                  {step.title}
-                </h3>
-                <p className="mt-3 text-sm leading-6 text-slate-400">
-                  {step.copy}
-                </p>
-              </li>
-            ))}
-          </ol>
-        </div>
+              ) : null}
+            </li>
+          ))}
+        </ol>
       </div>
     </section>
   );
@@ -1279,66 +1241,95 @@ const proofItems: Array<{ icon: LucideIcon; title: string; copy: string }> = [
   },
 ];
 
+interface TracePhase {
+  label: string;
+  ms: number | null;
+  detail: string;
+  tone: "muted" | "signal";
+}
+
+const sampleTrace: TracePhase[] = [
+  { label: "connecting", ms: 168, detail: "peer reached, route=direct", tone: "muted" },
+  { label: "downloading", ms: 273, detail: "324 MB streamed", tone: "signal" },
+  { label: "verifying", ms: 4, detail: "BLAKE3 ok on every chunk", tone: "signal" },
+  { label: "saving", ms: 6, detail: "written to disk", tone: "signal" },
+  { label: "done", ms: null, detail: "total 451 ms · 5.74 Gbps loopback", tone: "signal" },
+];
+
 function NativeAppProof() {
   return (
-    <section className="bg-[#050807] px-4 py-24 sm:px-6">
-      <div className="mx-auto grid max-w-7xl gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
+    <section className="bg-[var(--lab-black)] px-4 py-24 sm:px-6">
+      <div className="mx-auto grid max-w-7xl gap-12 lg:grid-cols-[0.95fr_1.05fr] lg:items-center">
         <SectionHeading
-          eyebrow="Native app proof"
-          title="The website is the handoff. The app does the transfer."
-          copy="Lightning P2P's real transfer flow lives in the Rust/Tauri desktop app: send staging, receive tickets, nearby discovery, active progress, diagnostics, and history."
+          eyebrow="Native app trace"
+          title="The website is the handoff. The app does the work."
+          copy="Below is a sample receive trace from the same-machine harness: phase progression, route, BLAKE3 verification, and the saved path. This is what the real app prints. The website never sees your bytes."
         />
 
-        <div className="relative overflow-hidden rounded-[28px] border border-white/10 bg-[#0b1712] p-4 shadow-[0_28px_100px_rgba(0,0,0,0.35)]">
-          <div
-            aria-hidden="true"
-            className="absolute inset-0 bg-[radial-gradient(420px_circle_at_18%_10%,rgba(110,231,183,0.13),transparent_50%),radial-gradient(520px_circle_at_88%_90%,rgba(56,189,248,0.1),transparent_54%)]"
-          />
-          <div className="relative rounded-[20px] border border-white/10 bg-black/28 p-4">
-            <div className="flex items-center justify-between border-b border-white/8 pb-4">
-              <div className="flex items-center gap-2">
-                <span className="h-2.5 w-2.5 rounded-full bg-rose-300/80" />
-                <span className="h-2.5 w-2.5 rounded-full bg-amber-300/80" />
-                <span className="h-2.5 w-2.5 rounded-full bg-emerald-300/80" />
-              </div>
-              <span className="rounded-full border border-emerald-300/18 bg-emerald-300/10 px-3 py-1 text-xs font-semibold text-emerald-100">
-                Direct ready
+        <div className="relative overflow-hidden rounded-[10px] border border-white/[0.08] bg-[var(--lab-green)] p-1 shadow-[0_28px_100px_rgba(0,0,0,0.35)]">
+          <div className="rounded-[8px] border border-white/[0.05] bg-[var(--grid-green)] p-5 sm:p-6">
+            <div className="flex items-center justify-between border-b border-white/[0.06] pb-4">
+              <span className="font-mono text-[0.68rem] font-bold uppercase tracking-[0.22em] text-slate-400">
+                receive-trace · sample-video.mov
+              </span>
+              <span className="rounded-full bg-[color:var(--signal-green)]/12 px-3 py-1 font-mono text-[0.62rem] font-bold uppercase tracking-[0.22em] text-[var(--signal-green)]">
+                Direct
               </span>
             </div>
 
-            <div className="mt-4 grid gap-3 md:grid-cols-2">
-              {proofItems.map((item) => (
-                <article
-                  key={item.title}
-                  className="rounded-[16px] border border-white/8 bg-white/[0.04] p-4"
+            <ol className="mt-5 grid gap-y-2 font-mono text-[0.82rem]">
+              {sampleTrace.map((phase) => (
+                <li
+                  key={phase.label}
+                  className="grid grid-cols-[1fr_auto] items-baseline gap-x-5 sm:grid-cols-[112px_72px_minmax(0,1fr)]"
                 >
-                  <span className="grid h-10 w-10 place-items-center rounded-[12px] border border-white/10 bg-white/[0.05] text-emerald-200">
-                    <item.icon className="h-5 w-5" />
+                  <span className="text-slate-500">{phase.label}</span>
+                  <span
+                    className={`tabular-nums text-right ${
+                      phase.tone === "signal"
+                        ? "text-[var(--signal-green)]"
+                        : "text-slate-500"
+                    }`}
+                  >
+                    {phase.ms === null ? "—" : `${phase.ms} ms`}
                   </span>
-                  <h3 className="mt-4 font-semibold text-white">
-                    {item.title}
-                  </h3>
-                  <p className="mt-2 text-sm leading-6 text-slate-400">
-                    {item.copy}
-                  </p>
-                </article>
+                  <span className="col-span-2 text-[var(--proof-paper)] sm:col-span-1">
+                    {phase.detail}
+                  </span>
+                </li>
               ))}
+            </ol>
+
+            <div className="mt-5 rounded-[6px] border border-[color:var(--signal-green)]/16 bg-[color:var(--signal-green)]/[0.06] p-3.5">
+              <p className="font-mono text-[0.65rem] font-bold uppercase tracking-[0.22em] text-[var(--signal-green)]">
+                Saved to
+              </p>
+              <p className="mt-1.5 truncate font-mono text-[0.84rem] text-[var(--proof-paper)]">
+                ~/Downloads/Lightning P2P/sample-video.mov
+              </p>
             </div>
 
-            <div className="mt-4 rounded-[16px] border border-emerald-300/16 bg-emerald-300/[0.07] p-4">
-              <div className="flex items-center justify-between gap-4 text-sm">
-                <span className="font-semibold text-emerald-100">
-                  sample-video.mov
-                </span>
-                <span className="text-slate-300">BLAKE3 verified</span>
-              </div>
-              <div className="mt-3 h-2 overflow-hidden rounded-full bg-black/35">
-                <div className="marketing-progress-fill h-full rounded-full" />
-              </div>
-            </div>
+            <p className="mt-4 font-mono text-[0.66rem] leading-[1.55] text-slate-500/80">
+              Trace shape only. Numbers come from the automated same-machine
+              harness in <code className="text-slate-400">docs/reports/raw/local/</code> and
+              are loopback, not real-device.
+            </p>
           </div>
         </div>
       </div>
+
+      <ul className="mx-auto mt-14 grid max-w-7xl gap-x-10 gap-y-7 sm:grid-cols-2 lg:grid-cols-3">
+        {proofItems.map((item) => (
+          <li key={item.title} className="grid gap-1.5">
+            <p className="font-mono text-[0.66rem] font-bold uppercase tracking-[0.22em] text-[var(--signal-green)]">
+              {item.title}
+            </p>
+            <p className="max-w-[42ch] text-[0.92rem] leading-[1.6] text-slate-400/95">
+              {item.copy}
+            </p>
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }
@@ -1445,46 +1436,131 @@ function CapabilityRowItem({ row }: { row: CapabilityRow }) {
   );
 }
 
+interface SecurityClaim {
+  label: string;
+  body: string;
+}
+
+const securityProtects: SecurityClaim[] = [
+  {
+    label: "Transport",
+    body: "QUIC + TLS through iroh. Bytes are content-addressed and streamed; no third-party storage in the path.",
+  },
+  {
+    label: "Integrity",
+    body: "BLAKE3 verification on every chunk. Hash mismatches surface as a structured verification_failed error.",
+  },
+  {
+    label: "No retention",
+    body: "Sender keeps the file. The ticket expires when the sender quits. There is no hosted retention link.",
+  },
+  {
+    label: "Local diagnostics",
+    body: "Diagnostics are copied locally by the user. Tickets and home paths are redacted before any export.",
+  },
+];
+
+const securityDoesNot: SecurityClaim[] = [
+  {
+    label: "External audit",
+    body: "No external security audit has been published. Trust comes from the code, not from a third-party seal.",
+  },
+  {
+    label: "Anonymity",
+    body: "Relays see connection metadata. Persistent iroh NodeIds remain stable across relaunches.",
+  },
+  {
+    label: "Compromised endpoints",
+    body: "If a receiver's machine is already compromised, BLAKE3-verified bytes can still be misused locally.",
+  },
+  {
+    label: "Sender absence",
+    body: "The sender must stay online until the receiver finishes. There is no fallback hosted copy.",
+  },
+];
+
 function SecurityCards() {
   return (
     <section
       id="security"
-      className="scroll-mt-24 bg-[#07110d] px-4 py-24 sm:px-6"
+      className="scroll-mt-24 bg-[var(--lab-green)] px-4 py-24 sm:px-6"
     >
       <div className="mx-auto max-w-7xl">
-        <div className="grid gap-12 lg:grid-cols-[0.86fr_1.14fr] lg:items-start">
-          <SectionHeading
-            eyebrow="Security model"
-            title="Specific privacy, not vague promises."
-            copy="Lightning P2P avoids cloud file hosting, uses encrypted peer transport, verifies content with BLAKE3, and treats tickets as capability tokens."
+        <SectionHeading
+          eyebrow="Security model"
+          title="Specific guarantees. Specific limits."
+          copy="Privacy claims are scoped to what the engine actually does. Where there is no proof, there is no claim."
+        />
+        <div className="mt-12 grid gap-px overflow-hidden rounded-[10px] border border-white/[0.08] bg-white/[0.04] lg:grid-cols-2">
+          <SecurityColumn
+            badge="Verified"
+            heading="Lightning P2P protects"
+            tone="signal"
+            items={securityProtects}
           />
-          <div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              {securityCards.map((card) => (
-                <article
-                  key={card.title}
-                  className="group rounded-[18px] border border-white/10 bg-white/[0.035] p-5 transition duration-200 hover:-translate-y-1 hover:border-emerald-300/24 hover:bg-white/[0.055]"
-                >
-                  <span className="grid h-10 w-10 place-items-center rounded-[12px] border border-emerald-300/16 bg-emerald-300/10 text-emerald-200">
-                    <card.icon className="h-5 w-5" />
-                  </span>
-                  <h3 className="mt-5 font-semibold text-white">
-                    {card.title}
-                  </h3>
-                  <p className="mt-2 text-sm leading-6 text-slate-400">
-                    {card.copy}
-                  </p>
-                </article>
-              ))}
-            </div>
-            <MarketingButton href="/security" variant="secondary" className="mt-6">
-              Read the security model
-              <ArrowRight className="h-4 w-4" />
-            </MarketingButton>
-          </div>
+          <SecurityColumn
+            badge="Caveat"
+            heading="Lightning P2P does not"
+            tone="amber"
+            items={securityDoesNot}
+          />
+        </div>
+        <div className="mt-8 flex flex-wrap items-center gap-3">
+          <MarketingButton href="/security" variant="secondary">
+            Read the full security model
+            <ArrowRight className="h-4 w-4" />
+          </MarketingButton>
+          <a
+            href={`${REPO_URL}/blob/main/SECURITY.md`}
+            className="font-mono text-[0.78rem] font-semibold text-[var(--signal-green)] transition hover:text-[var(--proof-paper)]"
+          >
+            View SECURITY.md
+          </a>
         </div>
       </div>
     </section>
+  );
+}
+
+function SecurityColumn({
+  badge,
+  heading,
+  tone,
+  items,
+}: {
+  badge: string;
+  heading: string;
+  tone: "signal" | "amber";
+  items: SecurityClaim[];
+}) {
+  const accent =
+    tone === "signal" ? "var(--signal-green)" : "var(--proof-amber)";
+  return (
+    <div className="bg-[var(--lab-green)] p-7 sm:p-9">
+      <div className="flex items-baseline gap-3 border-b border-white/[0.06] pb-5">
+        <span
+          className="font-mono text-[0.7rem] font-bold uppercase tracking-[0.24em]"
+          style={{ color: accent }}
+        >
+          {badge}
+        </span>
+        <h3 className="text-[1.2rem] font-semibold text-[var(--proof-paper)] sm:text-[1.3rem]">
+          {heading}
+        </h3>
+      </div>
+      <dl className="mt-6 grid gap-5">
+        {items.map((item) => (
+          <div key={item.label}>
+            <dt className="font-mono text-[0.68rem] font-bold uppercase tracking-[0.22em] text-slate-400">
+              {item.label}
+            </dt>
+            <dd className="mt-1.5 max-w-[58ch] text-[0.93rem] leading-[1.6] text-slate-300/95">
+              {item.body}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </div>
   );
 }
 
