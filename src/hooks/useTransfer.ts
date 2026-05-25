@@ -11,6 +11,7 @@ import {
   onOfferResolved,
   onTransferProgress,
   recordFrontendDiagnostic,
+  startBleDiscovery,
   type NodeOnlineState,
   type TransferEvent,
 } from "../lib/tauri";
@@ -88,6 +89,18 @@ export function useTransfer(): void {
     const settings = useTransferStore.getState().settings;
     if (settings?.auto_update_enabled && !isMobileRuntime()) {
       await useTransferStore.getState().checkForUpdates(true);
+    }
+    const latest = useTransferStore.getState();
+    if (
+      latest.settings?.bluetooth_discovery_enabled &&
+      latest.platformProfile.capabilities.bluetooth_discovery &&
+      latest.nodeStatus.node_id
+    ) {
+      const started = await startBleDiscovery(latest.nodeStatus.node_id);
+      recordFrontendDiagnostic(
+        `hydrate:ble-autostart:${started ? "ok" : "not-started"}`,
+      );
+      await latest.refreshBleDiscoveryStatus();
     }
   });
 

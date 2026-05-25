@@ -105,7 +105,9 @@ export function WindowChrome({ currentView }: WindowChromeProps) {
           setWindowState((current) => afterSuccess(current));
         }
       } catch (error) {
-        setError(error instanceof Error ? error.message : "Window action failed");
+        setError(
+          error instanceof Error ? error.message : "Window action failed",
+        );
       }
     },
   );
@@ -136,10 +138,13 @@ export function WindowChrome({ currentView }: WindowChromeProps) {
       <div
         data-tauri-drag-region
         onDoubleClick={() =>
-          void runWindowAction(() => toggleDesktopWindowMaximize(), (current) => ({
-            ...current,
-            maximized: !current.maximized,
-          }))
+          void runWindowAction(
+            () => toggleDesktopWindowMaximize(),
+            (current) => ({
+              ...current,
+              maximized: !current.maximized,
+            }),
+          )
         }
         className="mx-4 flex min-w-0 flex-1 items-center justify-center"
       >
@@ -163,10 +168,13 @@ export function WindowChrome({ currentView }: WindowChromeProps) {
           </button>
           <button
             onClick={() =>
-              void runWindowAction(() => toggleDesktopWindowMaximize(), (current) => ({
-                ...current,
-                maximized: !current.maximized,
-              }))
+              void runWindowAction(
+                () => toggleDesktopWindowMaximize(),
+                (current) => ({
+                  ...current,
+                  maximized: !current.maximized,
+                }),
+              )
             }
             className="window-control-button"
             aria-label={

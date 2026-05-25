@@ -21,10 +21,7 @@ import {
 } from "@tauri-apps/plugin-updater";
 import { getCurrentWindow, type DragDropEvent } from "@tauri-apps/api/window";
 import { extractBlobTicket } from "./format";
-import {
-  normalizeAppError,
-  type BackendAppErrorPayload,
-} from "./appErrors";
+import { normalizeAppError, type BackendAppErrorPayload } from "./appErrors";
 import { DEEP_LINK_SCHEME, RECEIVE_PATH, SITE_URL } from "./shareLinks";
 export type {
   AppError,
@@ -218,6 +215,7 @@ export interface PlatformCapabilities {
   scan_receive_qr: boolean;
   local_discovery: boolean;
   bluetooth_discovery: boolean;
+  nfc_ticket_handoff: boolean;
   relay_fallback: boolean;
   custom_relay: boolean;
   custom_receive_dir: boolean;
@@ -468,6 +466,7 @@ export const browserPlatformProfile: PlatformProfile = {
     scan_receive_qr: false,
     local_discovery: false,
     bluetooth_discovery: false,
+    nfc_ticket_handoff: false,
     relay_fallback: false,
     custom_relay: false,
     custom_receive_dir: false,
@@ -977,18 +976,18 @@ export async function drainPendingSharedTicket(): Promise<string | null> {
 }
 
 /**
- * Start the experimental Lightning P2P BLE proximity discovery on Android.
- * Returns whether at least one of advertise / scan started. May return false
- * if the BLE adapter is off or runtime permissions are denied.
+ * Start the experimental Lightning P2P BLE proximity discovery.
+ * Pass the full local iroh NodeId as hex; the native bridge splits it into
+ * small BLE frames. Returns whether advertise or scan started.
  */
-export async function startBleDiscovery(
-  nodeIdPrefixHex: string,
-): Promise<boolean> {
-  if (!isMobileRuntime()) {
+export async function startBleDiscovery(nodeIdHex: string): Promise<boolean> {
+  if (!isNativeRuntime()) {
     return false;
   }
   try {
-    return await invoke<boolean>("start_ble_discovery", { nodeIdPrefixHex });
+    return await invoke<boolean>("start_ble_discovery", {
+      nodeIdPrefixHex: nodeIdHex,
+    });
   } catch (error) {
     console.error("start_ble_discovery failed", error);
     return false;
@@ -997,7 +996,7 @@ export async function startBleDiscovery(
 
 /** Stop Lightning P2P BLE advertise + scan. Idempotent. */
 export async function stopBleDiscovery(): Promise<void> {
-  if (!isMobileRuntime()) {
+  if (!isNativeRuntime()) {
     return;
   }
   try {

@@ -66,7 +66,12 @@ function lastSeenLabel(unix: number): string {
   return `${Math.floor(seconds / 3600)}h ago`;
 }
 
-export function DeviceCard({ device, busy, disabled, onSend }: DeviceCardProps) {
+export function DeviceCard({
+  device,
+  busy,
+  disabled,
+  onSend,
+}: DeviceCardProps) {
   return (
     <article className="glass-subtle flex flex-col gap-4 p-4">
       <div className="flex items-start justify-between gap-4">

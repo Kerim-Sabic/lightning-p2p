@@ -78,7 +78,9 @@ export function NearbyShareCard({
 
       <div className="flex flex-wrap gap-3 text-[12px] text-slate-400">
         <span>Direct addresses {share.direct_address_count}</span>
-        <span className="truncate font-mono text-slate-500">{share.node_id}</span>
+        <span className="truncate font-mono text-slate-500">
+          {share.node_id}
+        </span>
       </div>
     </article>
   );

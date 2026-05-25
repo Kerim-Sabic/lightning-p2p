@@ -1,10 +1,4 @@
-import {
-  ArrowDownToLine,
-  Clock3,
-  Send,
-  Settings2,
-  Wifi,
-} from "lucide-react";
+import { ArrowDownToLine, Clock3, Send, Settings2, Wifi } from "lucide-react";
 import type { View } from "../App";
 import { useNavigationSnapshot } from "../stores/transferSelectors";
 

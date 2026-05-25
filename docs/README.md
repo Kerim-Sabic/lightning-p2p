@@ -28,6 +28,7 @@ This directory keeps project docs that are too detailed for the README.
 ## Mobile
 
 - [android-alpha.md](android-alpha.md) - Android sideload build and testing notes.
+- [proximity.md](proximity.md) - BLE and NFC status, architecture limits, and hardware test plan.
 - [mobile-rfc.md](mobile-rfc.md) - mobile design RFC, now historical/in-progress.
 - [ios-testflight.md](ios-testflight.md) - future iOS TestFlight notes.
 

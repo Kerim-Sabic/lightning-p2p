@@ -376,34 +376,81 @@ async fn build_network_diagnostics(state: &AppState) -> NetworkDiagnostics {
 
 async fn build_ble_status(state: &AppState) -> BleDiscoveryStatus {
     let enabled = state.settings.snapshot().await.bluetooth_discovery_enabled;
-    let supported = cfg!(target_os = "android");
-    let last_error = if supported && enabled {
-        Some(
-            "BLE scanner/advertiser is experimental and currently limited to no-crash status plumbing in this build."
-                .into(),
-        )
-    } else if supported {
-        None
-    } else {
-        Some("BLE discovery is supported only by the Android runtime plan.".into())
-    };
+    let supported = cfg!(any(target_os = "android", windows));
 
+    #[cfg(target_os = "android")]
+    {
+        return BleDiscoveryStatus {
+            supported,
+            enabled,
+            permission_state: ble_permission_state(),
+            adapter_state: ble_adapter_state(),
+            scanning: crate::commands::mobile::android::ble_is_scanning().unwrap_or(false),
+            advertising: crate::commands::mobile::android::ble_is_advertising().unwrap_or(false),
+            last_error: crate::commands::mobile::android::ble_last_error()
+                .ok()
+                .flatten(),
+        };
+    }
+
+    #[cfg(windows)]
+    {
+        BleDiscoveryStatus {
+            supported,
+            enabled,
+            permission_state: ble_permission_state(),
+            adapter_state: ble_adapter_state(),
+            scanning: crate::proximity::ble::is_scanning(),
+            advertising: crate::proximity::ble::is_advertising(),
+            last_error: crate::proximity::ble::last_error(),
+        }
+    }
+
+    #[cfg(not(any(target_os = "android", windows)))]
     BleDiscoveryStatus {
         supported,
         enabled,
-        permission_state: if supported {
-            BlePermissionState::Unknown
-        } else {
-            BlePermissionState::Unsupported
-        },
-        adapter_state: if supported {
-            BleAdapterState::Unknown
-        } else {
-            BleAdapterState::Unsupported
-        },
+        permission_state: BlePermissionState::Unsupported,
+        adapter_state: BleAdapterState::Unsupported,
         scanning: false,
         advertising: false,
-        last_error,
+        last_error: Some(
+            "No BLE backend is compiled for this runtime. Use Wi-Fi discovery, QR, links, or raw tickets."
+                .into(),
+        ),
+    }
+}
+
+#[cfg(any(target_os = "android", windows))]
+fn ble_permission_state() -> BlePermissionState {
+    #[cfg(windows)]
+    let state = crate::proximity::ble::permission_state().to_string();
+    #[cfg(target_os = "android")]
+    let state = crate::commands::mobile::android::ble_permission_state()
+        .unwrap_or_else(|_| "unknown".into());
+
+    match state.as_str() {
+        "granted" => BlePermissionState::Granted,
+        "denied" => BlePermissionState::Denied,
+        "not_requested" => BlePermissionState::NotRequested,
+        "unsupported" => BlePermissionState::Unsupported,
+        _ => BlePermissionState::Unknown,
+    }
+}
+
+#[cfg(any(target_os = "android", windows))]
+fn ble_adapter_state() -> BleAdapterState {
+    #[cfg(windows)]
+    let state = crate::proximity::ble::adapter_state().to_string();
+    #[cfg(target_os = "android")]
+    let state =
+        crate::commands::mobile::android::ble_adapter_state().unwrap_or_else(|_| "unknown".into());
+
+    match state.as_str() {
+        "available" => BleAdapterState::Available,
+        "unavailable" => BleAdapterState::Unavailable,
+        "unsupported" => BleAdapterState::Unsupported,
+        _ => BleAdapterState::Unknown,
     }
 }
 

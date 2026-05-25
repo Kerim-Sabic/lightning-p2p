@@ -29,7 +29,9 @@ export const useIncomingOfferStore = create<IncomingOfferStore>((set) => ({
 
   pushIncoming: (offer) =>
     set((state) => {
-      if (state.queue.some((existing) => existing.offer_id === offer.offer_id)) {
+      if (
+        state.queue.some((existing) => existing.offer_id === offer.offer_id)
+      ) {
         return state;
       }
       return { queue: [...state.queue, offer] };

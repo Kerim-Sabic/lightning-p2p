@@ -444,7 +444,11 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
       const shareSelection = await tauri.describeSharePaths(uniquePaths(paths));
       set({ shareSelection, isPreparingSelection: false });
     } catch (error) {
-      set({ ...errorState(error), shareSelection: [], isPreparingSelection: false });
+      set({
+        ...errorState(error),
+        shareSelection: [],
+        isPreparingSelection: false,
+      });
     }
   },
 
@@ -783,6 +787,21 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
   setBluetoothDiscoveryEnabled: async (enabled) => {
     try {
       const settings = await tauri.setBluetoothDiscoveryEnabled(enabled);
+      if (enabled) {
+        const nodeId = get().nodeStatus.node_id ?? (await tauri.getNodeId());
+        const started = await tauri.startBleDiscovery(nodeId);
+        if (!started) {
+          set({
+            error:
+              "Bluetooth discovery did not start. Check Bluetooth permissions, OS privacy settings, and adapter support.",
+            appError: normalizeAppError(
+              "Bluetooth discovery did not start. Check Bluetooth permissions, OS privacy settings, and adapter support.",
+            ),
+          });
+        }
+      } else {
+        await tauri.stopBleDiscovery();
+      }
       set(withSettings(settings));
       await get().refreshBleDiscoveryStatus();
     } catch (error) {

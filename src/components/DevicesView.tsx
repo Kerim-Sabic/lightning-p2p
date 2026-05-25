@@ -156,8 +156,8 @@ export function DevicesView() {
               </div>
             </div>
             <p className="text-xs leading-6 text-slate-500">
-              Other devices running Lightning P2P on the same trusted network see
-              this name and node id. Pick a device, choose files, the
+              Other devices running Lightning P2P on the same trusted network
+              see this name and node id. Pick a device, choose files, the
               receiver accepts. Offers auto-expire after one minute.
             </p>
           </div>

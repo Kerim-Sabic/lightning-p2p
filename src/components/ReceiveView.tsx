@@ -400,11 +400,7 @@ export function ReceiveView({ onNavigateSend }: ReceiveViewProps = {}) {
             <button
               onClick={() => void handleReceive()}
               disabled={!ticketLooksValid || !nativeRuntime}
-              className={
-                mobileRuntime
-                  ? "mobile-hero-cta"
-                  : "btn-success"
-              }
+              className={mobileRuntime ? "mobile-hero-cta" : "btn-success"}
             >
               <span className="relative inline-flex items-center gap-2">
                 <ArrowDownToLine className="h-4 w-4" />

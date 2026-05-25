@@ -1,10 +1,5 @@
 import { motion } from "framer-motion";
-import {
-  ArrowUpRight,
-  FolderSymlink,
-  Radar,
-  RefreshCw,
-} from "lucide-react";
+import { ArrowUpRight, FolderSymlink, Radar, RefreshCw } from "lucide-react";
 import { formatSpeed } from "../lib/format";
 import { useOverviewSnapshot } from "../stores/transferSelectors";
 

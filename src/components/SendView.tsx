@@ -322,9 +322,7 @@ export function SendView() {
                 }
               >
                 <span className="relative inline-flex items-center gap-2">
-                  <File
-                    className={mobileRuntime ? "h-5 w-5" : "h-4 w-4"}
-                  />
+                  <File className={mobileRuntime ? "h-5 w-5" : "h-4 w-4"} />
                   {mobileRuntime ? "Share files" : "Choose files"}
                 </span>
               </button>
@@ -340,14 +338,14 @@ export function SendView() {
               ) : null}
               {!nativeRuntime ? (
                 <p className="text-xs leading-6 text-slate-500">
-                  File and folder pickers require the native Lightning P2P
-                  app runtime.
+                  File and folder pickers require the native Lightning P2P app
+                  runtime.
                 </p>
               ) : mobileRuntime ? (
                 <p className="text-xs leading-6 text-slate-500">
                   Pick files here, or use any app's Share button and choose
-                  Lightning P2P. Pictures go to Pictures, audio to Music,
-                  video to Movies, other files to Downloads.
+                  Lightning P2P. Pictures go to Pictures, audio to Music, video
+                  to Movies, other files to Downloads.
                 </p>
               ) : null}
             </div>
@@ -534,9 +532,8 @@ export function SendView() {
                   </code>
                 ) : (
                   <p className="text-sm leading-6 text-slate-300">
-                    Hidden because anyone with the ticket can receive while
-                    this share is active. Reveal it only for manual paste
-                    fallback.
+                    Hidden because anyone with the ticket can receive while this
+                    share is active. Reveal it only for manual paste fallback.
                   </p>
                 )}
               </div>
