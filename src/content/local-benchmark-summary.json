@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "generatedAtUnix": 1779634186,
+  "appVersion": "0.5.0",
+  "commitHash": "6b82ab9a0e49",
+  "os": "windows",
+  "arch": "x86_64",
+  "harness": "same-machine-two-profile",
+  "transport": "iroh-loopback",
+  "scenarios": [
+    {
+      "scenario": "same_machine_10mb",
+      "bytes": 10485760,
+      "runs": 3,
+      "successes": 3,
+      "failures": 0,
+      "medianTotalMs": 276,
+      "medianEffectiveMbps": 303.78
+    },
+    {
+      "scenario": "same_machine_100mb",
+      "bytes": 104857600,
+      "runs": 3,
+      "successes": 3,
+      "failures": 0,
+      "medianTotalMs": 1130,
+      "medianEffectiveMbps": 742.1
+    }
+  ],
+  "caveat": "Same-machine loopback only. Not Windows ↔ Android. Not WAN. Not relay. See docs/reports/automated-local-benchmarks.md."
+}

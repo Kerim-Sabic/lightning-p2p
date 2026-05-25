@@ -13,27 +13,24 @@ import {
   FileLock2,
   Files,
   Github,
-  Globe2,
   HardDriveDownload,
   KeyRound,
   LockKeyhole,
   Menu,
   Minus,
   MonitorDown,
-  Network,
   PackageCheck,
   QrCode,
   RadioTower,
   Route,
   ShieldCheck,
-  Sparkles,
-  Terminal,
   Upload,
   X,
   type LucideIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import siteLogoUrl from "../assets/lightning-p2p-site-logo.png";
+import benchmarkSummary from "../content/local-benchmark-summary.json";
 import pages from "../content/web-pages.json";
 import {
   ANDROID_APK_DOWNLOAD_URL,
@@ -234,24 +231,6 @@ const trustBadges: Array<{ icon: LucideIcon; label: string }> = [
   { icon: KeyRound, label: "No sign-up" },
 ];
 
-const problemCards = [
-  {
-    icon: CloudOff,
-    title: "Cloud tools add a middleman",
-    copy: "Private files are uploaded to someone else's storage before the receiver downloads them.",
-  },
-  {
-    icon: RadioTower,
-    title: "LAN-only tools stop at the router",
-    copy: "Nearby sharing feels great until the devices are on different networks.",
-  },
-  {
-    icon: Terminal,
-    title: "CLI tools are not for everyone",
-    copy: "Powerful transfer primitives need a simple Windows workflow for normal users.",
-  },
-];
-
 const workflowSteps = [
   {
     icon: Upload,
@@ -267,83 +246,6 @@ const workflowSteps = [
     icon: ClipboardCheck,
     title: "Receive directly",
     copy: "The receiver connects and streams verified bytes to disk.",
-  },
-];
-
-const featureCards: Array<{
-  icon: LucideIcon;
-  title: string;
-  copy: string;
-  className?: string;
-}> = [
-  {
-    icon: CloudOff,
-    title: "No cloud upload",
-    copy: "Files are not stored in a third-party bucket.",
-    className: "lg:col-span-2",
-  },
-  {
-    icon: KeyRound,
-    title: "No account",
-    copy: "No login, email capture, or paid tier required.",
-  },
-  {
-    icon: Network,
-    title: "Direct-first transfer",
-    copy: "Peers connect directly when the network allows it.",
-    className: "lg:row-span-2",
-  },
-  {
-    icon: Globe2,
-    title: "WAN capable",
-    copy: "Relay-assisted fallback helps when NAT or firewalls block the direct path.",
-  },
-  {
-    icon: FileCheck2,
-    title: "Verified bytes",
-    copy: "BLAKE3 verification checks content integrity during transfer.",
-  },
-  {
-    icon: MonitorDown,
-    title: "Native apps",
-    copy: "Windows installers plus an Android sideload APK.",
-  },
-  {
-    icon: Github,
-    title: "Open source",
-    copy: "Apache-2.0 licensed and auditable.",
-  },
-  {
-    icon: Code2,
-    title: "Built with Rust",
-    copy: "Designed for reliability, performance, and safety.",
-    className: "lg:col-span-2",
-  },
-  {
-    icon: PackageCheck,
-    title: "Installer options",
-    copy: "Velopack, NSIS, MSI, and source build paths.",
-  },
-  {
-    icon: QrCode,
-    title: "QR and link handoff",
-    copy: "Share a normal link, QR code, or raw ticket.",
-  },
-  {
-    icon: RadioTower,
-    title: "Nearby LAN discovery",
-    copy: "Active shares can appear automatically on the same network.",
-  },
-  {
-    icon: ClipboardCheck,
-    title: "Transfer history",
-    copy: "Review completed sends and receives locally.",
-  },
-  {
-    icon: Route,
-    title: "Relay-aware diagnostics",
-    copy: "See whether the current route is direct, relay, or still unknown.",
-    className: "lg:col-span-2",
   },
 ];
 
@@ -708,44 +610,40 @@ function Header({ activePath }: { activePath: string }) {
 }
 
 function Hero({ page, isHome }: { page: WebPage; isHome: boolean }) {
-  const headline = isHome ? "Direct P2P file transfer." : page.heading;
-  const subheadline = isHome
-    ? "Send huge files directly between Windows and Android devices. No cloud upload, no account, no artificial file-size cap. Built with Rust, Tauri, iroh, QUIC, and BLAKE3."
-    : `${page.intro} ${page.focus}`;
+  if (isHome) {
+    return <HomeHero />;
+  }
+  return <PageHero page={page} />;
+}
 
+function HomeHero() {
   return (
     <section
       id="product"
-      className="relative isolate min-h-[100svh] overflow-hidden bg-[#050807] px-4 pb-16 pt-28 sm:px-6 lg:flex lg:items-center lg:pb-14 lg:pt-24"
+      className="relative isolate overflow-hidden bg-[var(--lab-black)] px-4 pb-20 pt-24 sm:px-6 lg:pb-24 lg:pt-28"
     >
       <div
         aria-hidden="true"
-        className="absolute inset-0 -z-20 bg-[radial-gradient(900px_circle_at_18%_12%,rgba(44,255,169,0.18),transparent_44%),radial-gradient(760px_circle_at_78%_18%,rgba(56,189,248,0.12),transparent_44%),linear-gradient(180deg,#050807_0%,#07110d_45%,#050807_100%)]"
+        className="absolute inset-0 -z-20 bg-[radial-gradient(1200px_circle_at_15%_5%,rgba(125,223,156,0.10),transparent_55%),linear-gradient(180deg,var(--lab-black)_0%,var(--lab-green)_85%,var(--lab-black)_100%)]"
       />
-      <div aria-hidden="true" className="marketing-grid-bg absolute inset-0 -z-10" />
-      <div className="mx-auto grid w-full min-w-0 max-w-[1360px] items-center gap-12 lg:grid-cols-[minmax(0,1.04fr)_minmax(430px,0.76fr)] lg:gap-8 xl:grid-cols-[minmax(0,1.04fr)_minmax(520px,0.76fr)] xl:gap-12">
-        <div className="w-full min-w-0 max-w-[calc(100vw-2rem)] overflow-hidden sm:max-w-[820px]">
-          <p className="inline-flex items-center gap-2 rounded-full border border-emerald-200/15 bg-emerald-300/[0.06] px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.24em] text-emerald-200 shadow-[0_0_32px_rgba(16,185,129,0.08)]">
-            <Sparkles className="h-3.5 w-3.5" />
-            {isHome ? "Lightning P2P" : page.eyebrow}
+      <div aria-hidden="true" className="marketing-grid-bg absolute inset-0 -z-10 opacity-60" />
+      <div className="mx-auto grid w-full min-w-0 max-w-[1360px] items-center gap-12 lg:grid-cols-[minmax(0,1.18fr)_minmax(420px,0.82fr)] lg:gap-10">
+        <div className="w-full min-w-0">
+          <p className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.28em] text-[var(--signal-green)]">
+            Lightning P2P · v{benchmarkSummary.appVersion} · {benchmarkSummary.commitHash.slice(0, 8)}
           </p>
-          <h1 className="mt-6 max-w-[820px] text-[clamp(2.75rem,11vw,3.35rem)] font-semibold leading-[0.96] tracking-[-0.05em] text-white sm:text-[clamp(3.35rem,8vw,4rem)] lg:text-[clamp(4rem,5.2vw,4.7rem)]">
-            {isHome ? (
-              <>
-                <span className="block xl:whitespace-nowrap">Direct P2P</span>
-                <span className="block">file transfer.</span>
-              </>
-            ) : (
-              headline
-            )}
+          <h1 className="mt-6 max-w-[1000px] text-[clamp(3rem,7vw,5.2rem)] font-semibold leading-[0.98] tracking-[-0.035em] text-[var(--proof-paper)]">
+            Send huge files
+            <br />
+            device-to-device.
           </h1>
-          <p className="mt-7 max-w-[calc(100vw-2rem)] text-[1.04rem] leading-8 text-slate-300 sm:max-w-[620px] sm:text-xl">
-            {subheadline}
+          <p className="mt-7 max-w-[58ch] text-[1.075rem] leading-[1.65] text-slate-300/95 sm:text-[1.15rem]">
+            Direct peer-to-peer transfer for Windows and Android. No cloud upload. No account. No size cap. Built on Rust, Tauri, iroh QUIC, and BLAKE3-verified streaming.
           </p>
-          <div className="mt-8 flex w-full max-w-[calc(100vw-2rem)] flex-col gap-3 sm:max-w-full sm:flex-row sm:flex-wrap sm:items-center">
+          <div className="mt-9 flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
             <MarketingButton
               href={VELOPACK_DOWNLOAD_URL}
-              className="w-full min-h-12 px-5 sm:w-auto sm:min-w-[188px]"
+              className="min-h-12 px-6 sm:min-w-[200px]"
               ariaLabel="Download Lightning P2P for Windows"
             >
               <Download className="h-4 w-4" />
@@ -754,7 +652,7 @@ function Hero({ page, isHome }: { page: WebPage; isHome: boolean }) {
             <MarketingButton
               href={ANDROID_APK_DOWNLOAD_URL}
               variant="secondary"
-              className="w-full min-h-12 px-5 sm:w-auto sm:min-w-[178px]"
+              className="min-h-12 px-6 sm:min-w-[180px]"
               ariaLabel="Download Lightning P2P Android APK"
             >
               <Download className="h-4 w-4" />
@@ -762,41 +660,150 @@ function Hero({ page, isHome }: { page: WebPage; isHome: boolean }) {
             </MarketingButton>
             <MarketingButton
               href={REPO_URL}
-              variant="secondary"
-              className="w-full min-h-12 px-5 sm:w-auto sm:min-w-[166px]"
-              ariaLabel="Star Lightning P2P on GitHub"
+              variant="ghost"
+              className="min-h-12 px-5"
+              ariaLabel="Open the Lightning P2P repository on GitHub"
             >
               <Github className="h-4 w-4" />
-              Star on GitHub
-            </MarketingButton>
-            <MarketingButton
-              href="#security"
-              variant="ghost"
-              className="w-full min-h-12 px-4 sm:w-auto"
-            >
-              Security model
+              Source on GitHub
               <ArrowRight className="h-4 w-4 transition group-hover:translate-x-0.5" />
             </MarketingButton>
           </div>
-          <ul className="mt-7 flex max-w-[calc(100vw-2rem)] flex-wrap gap-x-4 gap-y-2 text-sm text-slate-400 sm:max-w-[620px]">
-            {[
-              "Apache-2.0 licensed",
-              "No account",
-              "No cloud storage",
-              "Verified transfers",
-              "Windows and Android",
-            ].map((item) => (
-              <li key={item} className="flex items-center gap-2">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
-                {item}
-              </li>
-            ))}
-          </ul>
+          <p className="mt-7 max-w-[60ch] text-[0.78rem] leading-[1.7] text-slate-400/85">
+            Apache-2.0 · Windows stable {STABLE_RELEASE_TAG} · Android 10+ sideload · macOS / Linux / iOS on the roadmap.
+          </p>
         </div>
 
+        <HeroProofStrip />
+      </div>
+    </section>
+  );
+}
+
+function PageHero({ page }: { page: WebPage }) {
+  return (
+    <section
+      id="product"
+      className="relative isolate overflow-hidden bg-[var(--lab-black)] px-4 pb-16 pt-24 sm:px-6 lg:pb-16 lg:pt-24"
+    >
+      <div
+        aria-hidden="true"
+        className="absolute inset-0 -z-20 bg-[radial-gradient(900px_circle_at_18%_8%,rgba(125,223,156,0.08),transparent_55%),linear-gradient(180deg,var(--lab-black)_0%,var(--lab-green)_100%)]"
+      />
+      <div aria-hidden="true" className="marketing-grid-bg absolute inset-0 -z-10 opacity-50" />
+      <div className="mx-auto grid w-full min-w-0 max-w-[1360px] items-center gap-12 lg:grid-cols-[minmax(0,1.04fr)_minmax(430px,0.76fr)] lg:gap-10">
+        <div className="w-full min-w-0 max-w-[820px]">
+          <p className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.28em] text-[var(--signal-green)]">
+            {page.eyebrow}
+          </p>
+          <h1 className="mt-6 text-[clamp(2.5rem,5.5vw,4rem)] font-semibold leading-[1.04] tracking-[-0.03em] text-[var(--proof-paper)]">
+            {page.heading}
+          </h1>
+          <p className="mt-6 max-w-[62ch] text-[1.04rem] leading-[1.7] text-slate-300/95 sm:text-[1.1rem]">
+            {page.intro} {page.focus}
+          </p>
+          <div className="mt-8 flex flex-wrap gap-3">
+            <MarketingButton href={VELOPACK_DOWNLOAD_URL} ariaLabel="Download Lightning P2P for Windows">
+              <Download className="h-4 w-4" />
+              Download for Windows
+            </MarketingButton>
+            <MarketingButton href={ANDROID_APK_DOWNLOAD_URL} variant="secondary" ariaLabel="Download Lightning P2P Android APK">
+              <Download className="h-4 w-4" />
+              Android APK
+            </MarketingButton>
+            <MarketingButton href={REPO_URL} variant="ghost">
+              <Github className="h-4 w-4" />
+              GitHub
+            </MarketingButton>
+          </div>
+        </div>
         <HeroTransferVisual />
       </div>
     </section>
+  );
+}
+
+function HeroProofStrip() {
+  const tenMb = benchmarkSummary.scenarios.find((s) => s.scenario === "same_machine_10mb");
+  const hundredMb = benchmarkSummary.scenarios.find((s) => s.scenario === "same_machine_100mb");
+
+  return (
+    <aside
+      className="proof-strip relative rounded-[10px] border border-white/10 bg-[var(--grid-green)] p-1 shadow-[0_24px_80px_rgba(0,0,0,0.46)]"
+      aria-label="Lightning P2P automated benchmark readout"
+    >
+      <div className="rounded-[8px] border border-white/[0.06] bg-[var(--lab-green)] px-5 py-5 sm:px-6 sm:py-6">
+        <div className="flex items-center justify-between gap-3">
+          <p className="font-mono text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-[var(--signal-green)]">
+            Lab readout
+          </p>
+          <span className="font-mono text-[0.65rem] text-slate-400/90">
+            same-machine · iroh-loopback
+          </span>
+        </div>
+
+        <dl className="proof-strip-grid mt-5 grid grid-cols-3 gap-px overflow-hidden rounded-[6px] bg-white/[0.04]">
+          <ProofCell label="Route" value="Direct" tone="signal" />
+          <ProofCell label="Providers" value="1" />
+          <ProofCell label="Runs" value={`${tenMb?.runs ?? 3} of ${tenMb?.runs ?? 3}`} tone="signal" />
+          <ProofCell
+            label="10 MB median"
+            value={`${tenMb?.medianEffectiveMbps ?? "—"} Mbps`}
+          />
+          <ProofCell
+            label="100 MB median"
+            value={`${hundredMb?.medianEffectiveMbps ?? "—"} Mbps`}
+          />
+          <ProofCell label="Failures" value={`${tenMb?.failures ?? 0}`} tone="signal" />
+        </dl>
+
+        <div className="mt-5 grid gap-2 border-t border-white/[0.05] pt-4 text-[0.72rem] leading-[1.55] text-slate-400/90">
+          <p>
+            <span className="text-[var(--proof-amber)]">Caveat:</span>{" "}
+            {benchmarkSummary.caveat}
+          </p>
+          <p className="font-mono text-[0.68rem] text-slate-500">
+            v{benchmarkSummary.appVersion} · {benchmarkSummary.commitHash.slice(0, 8)} · {benchmarkSummary.os}/{benchmarkSummary.arch}
+          </p>
+        </div>
+
+        <a
+          href={`${REPO_URL}/blob/main/docs/reports/automated-local-benchmarks.md`}
+          className="mt-5 inline-flex items-center gap-1.5 text-[0.78rem] font-semibold text-[var(--signal-green)] transition hover:text-[var(--proof-paper)]"
+        >
+          Read the report
+          <ArrowRight className="h-3.5 w-3.5" />
+        </a>
+      </div>
+    </aside>
+  );
+}
+
+function ProofCell({
+  label,
+  value,
+  tone = "neutral",
+}: {
+  label: string;
+  value: string;
+  tone?: "neutral" | "signal";
+}) {
+  return (
+    <div className="bg-[var(--lab-green)] px-4 py-3">
+      <dt className="font-mono text-[0.62rem] font-bold uppercase tracking-[0.22em] text-slate-500">
+        {label}
+      </dt>
+      <dd
+        className={`mt-1.5 font-semibold tabular-nums ${
+          tone === "signal"
+            ? "text-[var(--signal-green)]"
+            : "text-[var(--proof-paper)]"
+        }`}
+        style={{ fontSize: "clamp(1rem, 1.5vw, 1.25rem)" }}
+      >
+        {value}
+      </dd>
+    </div>
   );
 }
 
@@ -1071,37 +1078,126 @@ function RouteArticle({ page }: { page: WebPage }) {
 
 function ProblemSection() {
   return (
-    <section className="bg-[#050807] px-4 py-24 sm:px-6">
+    <section className="bg-[var(--lab-black)] px-4 py-24 sm:px-6">
       <div className="mx-auto max-w-7xl">
         <SectionHeading
           eyebrow="Why this exists"
-          title="File sharing still feels broken."
-          copy="Cloud tools are convenient, but they put someone else's server in the middle. LAN tools are fast, but often fail outside the same network. Lightning P2P keeps the workflow simple and makes the transfer direct-first."
+          title="Two paths for a file. Pick the one that does not park your bytes in someone else's bucket."
+          copy="Almost every other transfer flow inserts a third party. Lightning P2P removes the middleman without giving up cross-network reach."
         />
-        <div className="mt-12 grid gap-4 md:grid-cols-3">
-          {problemCards.map((card) => (
-            <article
-              key={card.title}
-              className="group rounded-[18px] border border-white/10 bg-white/[0.035] p-6 transition duration-200 hover:-translate-y-1 hover:border-emerald-300/25 hover:bg-white/[0.055]"
-            >
-              <span className="grid h-11 w-11 place-items-center rounded-[12px] border border-white/10 bg-white/[0.05] text-emerald-200 transition group-hover:border-emerald-300/25 group-hover:bg-emerald-300/10">
-                <card.icon className="h-5 w-5" />
-              </span>
-              <h3 className="mt-6 text-xl font-semibold tracking-[-0.01em] text-white">
-                {card.title}
-              </h3>
-              <p className="mt-3 text-sm leading-6 text-slate-400">
-                {card.copy}
-              </p>
-            </article>
-          ))}
+
+        <div className="mt-14 grid gap-4 lg:grid-cols-2">
+          <article className="rounded-[10px] border border-white/[0.08] bg-white/[0.025] p-6 sm:p-8">
+            <p className="font-mono text-[0.68rem] font-bold uppercase tracking-[0.24em] text-slate-400">
+              The usual path
+            </p>
+            <h3 className="mt-4 text-2xl font-semibold text-[var(--proof-paper)] sm:text-[1.6rem]">
+              Cloud bucket in the middle
+            </h3>
+            <ContrastPath
+              steps={["Your file", "Cloud bucket", "Retention link", "Receiver download"]}
+              tone="muted"
+            />
+            <ul className="mt-6 grid gap-2 text-[0.92rem] leading-[1.55] text-slate-400">
+              <ContrastBullet>Bytes copied to a third-party server.</ContrastBullet>
+              <ContrastBullet>Account, email, or paid tier required.</ContrastBullet>
+              <ContrastBullet>Retention link can be re-shared or indexed.</ContrastBullet>
+              <ContrastBullet>Size cap, expiry, or upload throttle.</ContrastBullet>
+            </ul>
+          </article>
+
+          <article className="rounded-[10px] border border-[color:var(--signal-green)]/30 bg-[color:var(--signal-green)]/[0.04] p-6 sm:p-8">
+            <p className="font-mono text-[0.68rem] font-bold uppercase tracking-[0.24em] text-[var(--signal-green)]">
+              Lightning P2P
+            </p>
+            <h3 className="mt-4 text-2xl font-semibold text-[var(--proof-paper)] sm:text-[1.6rem]">
+              Direct path, verified bytes
+            </h3>
+            <ContrastPath
+              steps={["Your file", "Encrypted iroh QUIC", "Receiver disk"]}
+              tone="signal"
+            />
+            <ul className="mt-6 grid gap-2 text-[0.92rem] leading-[1.55] text-slate-200/90">
+              <ContrastBullet tone="signal">Sender keeps the file. No third-party storage.</ContrastBullet>
+              <ContrastBullet tone="signal">No account, no email, no paid tier.</ContrastBullet>
+              <ContrastBullet tone="signal">Ticket dies when the sender quits. No retention link.</ContrastBullet>
+              <ContrastBullet tone="signal">No artificial size cap. BLAKE3 verifies every chunk.</ContrastBullet>
+            </ul>
+          </article>
         </div>
-        <p className="mt-8 max-w-3xl text-xl leading-8 text-slate-200">
-          Lightning P2P keeps the simple workflow, but removes the cloud
-          middleman.
+
+        <p className="mt-10 max-w-[58ch] text-[0.92rem] leading-[1.7] text-slate-400/90">
+          iroh handles direct connectivity across LAN and WAN; if direct fails, it falls back through encrypted relays that pass bytes through but do not store them. The receiver verifies content addressing with BLAKE3 either way.
         </p>
       </div>
     </section>
+  );
+}
+
+function ContrastPath({
+  steps,
+  tone,
+}: {
+  steps: string[];
+  tone: "muted" | "signal";
+}) {
+  const isSignal = tone === "signal";
+  const accent = isSignal ? "var(--signal-green)" : "rgba(232,236,238,0.72)";
+  const ringColor = isSignal
+    ? "rgba(125,223,156,0.35)"
+    : "rgba(255,255,255,0.16)";
+  return (
+    <div className="mt-6 overflow-hidden">
+      <ol className="-mx-1 flex flex-wrap items-center gap-y-2">
+        {steps.map((step, index) => (
+          <li
+            key={step}
+            className="mx-1 flex items-center gap-2 font-mono text-[0.78rem] uppercase tracking-[0.16em]"
+            style={{ color: accent }}
+          >
+            <span
+              className="rounded-full px-2.5 py-1"
+              style={{
+                color: accent,
+                backgroundColor: "rgba(255,255,255,0.025)",
+                boxShadow: `inset 0 0 0 1px ${ringColor}`,
+              }}
+            >
+              {step}
+            </span>
+            {index < steps.length - 1 ? (
+              <span aria-hidden="true" style={{ color: accent }}>
+                →
+              </span>
+            ) : null}
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+function ContrastBullet({
+  children,
+  tone = "muted",
+}: {
+  children: ReactNode;
+  tone?: "muted" | "signal";
+}) {
+  return (
+    <li className="flex gap-3">
+      <span
+        className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full"
+        style={{
+          backgroundColor:
+            tone === "signal"
+              ? "var(--signal-green)"
+              : "rgba(255,255,255,0.4)",
+        }}
+        aria-hidden="true"
+      />
+      <span>{children}</span>
+    </li>
   );
 }
 
@@ -1247,42 +1343,105 @@ function NativeAppProof() {
   );
 }
 
+interface CapabilityRow {
+  index: string;
+  label: string;
+  headline: string;
+  body: string;
+  proof: { text: string; href: string };
+}
+
+const capabilityRows: CapabilityRow[] = [
+  {
+    index: "01",
+    label: "Transport",
+    headline: "Direct-first iroh QUIC, encrypted at the transport.",
+    body: "Peer connects when the network allows it. If NAT or firewalls block direct dialing, iroh falls back through encrypted relays that carry bytes without storing them.",
+    proof: { text: "Architecture & threat model", href: `${REPO_URL}/blob/main/SECURITY.md` },
+  },
+  {
+    index: "02",
+    label: "Verification",
+    headline: "BLAKE3 verification on every chunk.",
+    body: "Receivers stream content-addressed bytes through iroh-blobs. Hash mismatches surface as a `verification_failed` error code with a structured payload the UI can act on.",
+    proof: { text: "Receiver source", href: `${REPO_URL}/blob/main/src-tauri/src/transfer/receiver.rs` },
+  },
+  {
+    index: "03",
+    label: "Release trust",
+    headline: "Signed Windows installers and a published Android signer fingerprint.",
+    body: "Authenticode signing via Azure Trusted Signing when the signed CI path runs. Every release ships SHA256SUMS and a verify-release.ps1 script. APK signer cert SHA-256 is published in the README and verifiable with apksigner.",
+    proof: { text: "Release evidence catalog", href: `${REPO_URL}/blob/main/docs/release-evidence.md` },
+  },
+  {
+    index: "04",
+    label: "Diagnostics",
+    headline: "Diagnostics redact tickets and home paths before anything leaves the device.",
+    body: "Bundles strip fd2: tickets, blob…tickets, lightning-p2p://receive deep links, /receive#t= fragments, ?t= and ?ticket= query parameters, and user home paths. Tested on both Rust and TypeScript sides.",
+    proof: { text: "Redaction tests", href: `${REPO_URL}/blob/main/src-tauri/src/commands/diagnostics.rs` },
+  },
+  {
+    index: "05",
+    label: "Errors",
+    headline: "Structured error model. 17 stable codes, retryable hints, help docs.",
+    body: "Every failure flows through AppErrorPayload schema v1 with code, category, severity, retryable, docs_slug, redacted_diagnostics. The frontend renders title, hint, retry badge, and help link from one source.",
+    proof: { text: "Error model source", href: `${REPO_URL}/blob/main/src-tauri/src/error.rs` },
+  },
+  {
+    index: "06",
+    label: "Benchmarks",
+    headline: "Automated benchmark harness runs in CI on every push.",
+    body: "Same-machine two-profile harness produces raw CSV/JSON evidence. The report is clearly labeled loopback-only. Real-device Windows ↔ Android numbers are still pending and held back from any 'fastest' claim.",
+    proof: { text: "Automated local benchmarks", href: `${REPO_URL}/blob/main/docs/reports/automated-local-benchmarks.md` },
+  },
+];
+
 function FeatureBento() {
   return (
-    <section className="bg-[#050807] px-4 py-24 sm:px-6">
+    <section className="bg-[var(--lab-black)] px-4 py-24 sm:px-6">
       <div className="mx-auto max-w-7xl">
         <SectionHeading
-          eyebrow="What you get"
-          title="A serious file transfer tool without service baggage."
-          copy="The app keeps the user-facing workflow small while the Rust backend handles connectivity, transfer, and verification."
+          eyebrow="Capabilities"
+          title="Six load-bearing capabilities. Each one is cited."
+          copy="The reason this works is not the marketing copy. It is the Rust transfer engine, the verification path, and the signed release pipeline. Click any row to read the code or the doc."
         />
-        <div className="mt-12 grid auto-rows-[minmax(180px,auto)] gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {featureCards.map((card) => (
-            <article
-              key={card.title}
-              className={cx(
-                "group relative overflow-hidden rounded-[20px] border border-white/10 bg-white/[0.035] p-6 transition duration-200 hover:-translate-y-1 hover:border-emerald-300/25 hover:bg-white/[0.055]",
-                card.className,
-              )}
-            >
-              <div
-                aria-hidden="true"
-                className="absolute -right-14 -top-14 h-32 w-32 rounded-full bg-emerald-300/8 blur-3xl transition group-hover:bg-emerald-300/14"
-              />
-              <span className="relative grid h-11 w-11 place-items-center rounded-[12px] border border-white/10 bg-white/[0.05] text-emerald-200">
-                <card.icon className="h-5 w-5" />
-              </span>
-              <h3 className="relative mt-6 text-xl font-semibold tracking-[-0.01em] text-white">
-                {card.title}
-              </h3>
-              <p className="relative mt-3 max-w-sm text-sm leading-6 text-slate-400">
-                {card.copy}
-              </p>
-            </article>
+        <ol className="mt-12 grid gap-px overflow-hidden rounded-[10px] border border-white/[0.08] bg-white/[0.04]">
+          {capabilityRows.map((row) => (
+            <CapabilityRowItem key={row.index} row={row} />
           ))}
-        </div>
+        </ol>
       </div>
     </section>
+  );
+}
+
+function CapabilityRowItem({ row }: { row: CapabilityRow }) {
+  return (
+    <li>
+      <a
+        href={row.proof.href}
+        className="group grid bg-[var(--lab-green)] transition-colors duration-200 hover:bg-[var(--grid-green)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--signal-green)] sm:grid-cols-[96px_minmax(0,160px)_minmax(0,1fr)] sm:items-baseline"
+      >
+        <span className="pt-6 pl-6 font-mono text-[0.7rem] font-bold uppercase tracking-[0.24em] text-slate-500 sm:pt-7 sm:pl-7">
+          {row.index}
+        </span>
+        <span className="px-6 pt-1 font-mono text-[0.7rem] font-bold uppercase tracking-[0.22em] text-[var(--signal-green)] sm:px-0 sm:pr-6 sm:pt-7">
+          {row.label}
+        </span>
+        <div className="px-6 pt-2 pb-7 sm:pr-9 sm:pt-7 sm:pb-8">
+          <h3 className="text-[1.15rem] font-semibold leading-[1.35] tracking-[-0.01em] text-[var(--proof-paper)] sm:text-[1.25rem]">
+            {row.headline}
+          </h3>
+          <p className="mt-2.5 max-w-[72ch] text-[0.92rem] leading-[1.65] text-slate-400/95">
+            {row.body}
+          </p>
+          <span className="mt-4 inline-flex items-center gap-1.5 text-[0.78rem] font-semibold text-[var(--signal-green)] transition group-hover:text-[var(--proof-paper)]">
+            {row.proof.text}
+            <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
+          </span>
+        </div>
+      </a>
+    </li>
   );
 }
 
@@ -1329,11 +1488,70 @@ function SecurityCards() {
   );
 }
 
+interface TrustRow {
+  index: string;
+  label: string;
+  headline: string;
+  href: string;
+}
+
+const trustRows: TrustRow[] = [
+  {
+    index: "01",
+    label: "Signed",
+    headline: "Authenticode on Windows when the signed CI path runs.",
+    href: `${REPO_URL}/blob/main/docs/windows-installer-paths.md`,
+  },
+  {
+    index: "02",
+    label: "Verified",
+    headline: "SHA256SUMS + verify-release.ps1 in every release.",
+    href: `${REPO_URL}/blob/main/scripts/verify-release.ps1`,
+  },
+  {
+    index: "03",
+    label: "Measured",
+    headline: "Automated benchmark harness runs in CI on every push.",
+    href: `${REPO_URL}/blob/main/docs/release-evidence.md`,
+  },
+];
+
+function TrustStrip() {
+  return (
+    <ol className="mt-10 grid gap-px overflow-hidden rounded-[10px] border border-[color:var(--signal-green)]/20 bg-[color:var(--signal-green)]/10 md:grid-cols-3">
+      {trustRows.map((row) => (
+        <li key={row.index} className="bg-[var(--lab-green)]">
+          <a
+            href={row.href}
+            className="group flex h-full items-start gap-4 px-5 py-5 transition-colors duration-200 hover:bg-[var(--grid-green)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--signal-green)] sm:px-6 sm:py-6"
+          >
+            <span className="font-mono text-[0.65rem] font-bold uppercase tracking-[0.24em] text-slate-500 pt-1">
+              {row.index}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="font-mono text-[0.7rem] font-bold uppercase tracking-[0.22em] text-[var(--signal-green)]">
+                {row.label}
+              </p>
+              <p className="mt-2 text-[0.95rem] leading-[1.5] text-[var(--proof-paper)]">
+                {row.headline}
+              </p>
+              <span className="mt-3 inline-flex items-center gap-1 text-[0.74rem] font-semibold text-[var(--signal-green)] transition group-hover:text-[var(--proof-paper)]">
+                Verify
+                <ArrowRight className="h-3 w-3 transition group-hover:translate-x-0.5" />
+              </span>
+            </div>
+          </a>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 function DownloadCards() {
   return (
     <section
       id="download"
-      className="scroll-mt-24 bg-[#050807] px-4 py-24 sm:px-6"
+      className="scroll-mt-24 bg-[var(--lab-black)] px-4 py-24 sm:px-6"
     >
       <div className="mx-auto max-w-7xl">
         <SectionHeading
@@ -1341,6 +1559,8 @@ function DownloadCards() {
           title="Start with the native app."
           copy="Windows and Android are the stable v0.4.6 paths. The v0.5.0 release is available separately for experimental BLE proximity discovery and NFC ticket handoff."
         />
+
+        <TrustStrip />
 
         <div className="mt-12 grid gap-4 lg:grid-cols-[1.15fr_0.85fr_0.85fr]">
           <article className="relative overflow-hidden rounded-[24px] border border-emerald-300/28 bg-emerald-300/[0.06] p-7 shadow-[0_0_80px_rgba(16,185,129,0.08)]">

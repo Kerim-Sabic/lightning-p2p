@@ -11,19 +11,35 @@
 :root {
   color-scheme: dark;
   font-family: var(--font-sans);
-  background-color: oklch(13.5% 0.014 256);
-  --canvas-0: oklch(13.5% 0.014 256);
-  --canvas-1: oklch(15.5% 0.016 256);
-  --surface-0: oklch(16.8% 0.018 256 / 0.96);
-  --surface-1: oklch(18.8% 0.019 256 / 0.98);
-  --surface-2: oklch(20.8% 0.02 256 / 0.98);
-  --surface-3: oklch(23.2% 0.022 256 / 0.98);
-  --surface-hover: oklch(25.4% 0.023 256 / 0.98);
+  /* Speed Lab tokens — green-tinted neutrals per DESIGN.md. Hue 162 keeps the
+   * surface tied to signal-green without becoming chromatic itself. */
+  background-color: oklch(13.5% 0.012 162);
+  --canvas-0: oklch(13.5% 0.012 162);
+  --canvas-1: oklch(15.5% 0.014 162);
+  --surface-0: oklch(16.8% 0.016 162 / 0.96);
+  --surface-1: oklch(18.8% 0.017 162 / 0.98);
+  --surface-2: oklch(20.8% 0.018 162 / 0.98);
+  --surface-3: oklch(23.2% 0.02 162 / 0.98);
+  --surface-hover: oklch(25.4% 0.021 162 / 0.98);
   --border-subtle: rgba(255, 255, 255, 0.06);
   --border-strong: rgba(255, 255, 255, 0.09);
-  --fg-primary: oklch(95% 0.006 256);
-  --fg-secondary: oklch(79% 0.012 256);
-  --fg-muted: oklch(60% 0.012 256);
+  --fg-primary: oklch(95% 0.005 162);
+  --fg-secondary: oklch(79% 0.009 162);
+  --fg-muted: oklch(60% 0.01 162);
+
+  /* DESIGN.md named tokens. Use these in the marketing surface where
+   * brand-voice colors matter; the older neutrals above stay for the
+   * in-app product shell so the token swap doesn't ripple. */
+  --lab-black: #050706;
+  --lab-green: #08120f;
+  --grid-green: #0e1b15;
+  --signal-green: #7ddf9c;
+  --signal-green-strong: oklch(82% 0.16 150);
+  --proof-amber: #f0c76b;
+  --proof-paper: #f8faf7;
+  --security-paper: #f3ead7;
+  --text-ink: #111b16;
+  --border-light: #d8e2d4;
 }
 
 html,
@@ -51,7 +67,7 @@ html[data-runtime="browser"] #root {
 body[data-runtime="browser"] {
   overflow-x: hidden;
   overflow-y: auto;
-  background: #08120f;
+  background: var(--lab-green);
 }
 
 body {
@@ -65,8 +81,8 @@ body {
 }
 
 ::selection {
-  background: oklch(73% 0.14 230 / 0.24);
-  color: oklch(98% 0.004 256);
+  background: oklch(82% 0.16 150 / 0.28);
+  color: oklch(98% 0.004 162);
 }
 
 * {
