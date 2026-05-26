@@ -31,6 +31,14 @@ use tokio::sync::watch;
 /// on a dead peer.
 const MIN_DOWNLOAD_IDLE_TIMEOUT: Duration = Duration::from_secs(10);
 
+/// Maximum number of download attempts (initial + retries) for transient
+/// failures. Non-transient failures (cancelled, disk-full, invalid ticket,
+/// etc.) never retry — see [`is_transient_download_failure`].
+const MAX_DOWNLOAD_ATTEMPTS: u32 = 3;
+
+/// Initial backoff between transient-failure retries. Doubles each attempt.
+const INITIAL_RETRY_BACKOFF: Duration = Duration::from_secs(1);
+
 #[derive(Debug, Clone)]
 struct ReceiveSummary {
     hash: String,
@@ -239,8 +247,18 @@ async fn receive_core(
     profile: TransferProfile,
 ) -> Result<ReceiveSummary> {
     let download_started_at = Instant::now();
-    let download = download_to_store(node, ticket, cancel_rx, progress, profile).await?;
+    let download = download_with_retry(node, ticket, cancel_rx, progress, profile).await?;
     let download_ms = elapsed_ms(download_started_at.elapsed());
+
+    // The download just completed but the user may have flipped the cancel
+    // signal during the brief window between the last `next_event` check and
+    // now. iroh-blobs' `export()` does not take a cancel channel, so once we
+    // start it the export runs to completion regardless. Check here so a
+    // late-cancel doesn't end up as a Completed event with a delivered file.
+    if *cancel_rx.borrow() {
+        return Err(LightningP2PError::Other("Cancelled".into()));
+    }
+
     let tracked_total = progress.map(|p| p.snapshot().1);
     if let Some(progress) = progress {
         progress.set_phase(TransferPhase::Verifying);
@@ -274,6 +292,70 @@ async fn receive_core(
         metrics,
         output_path: export_summary.output_path,
     })
+}
+
+/// Wraps [`download_to_store`] with bounded retries + exponential backoff for
+/// transient failures (`Unreachable`, `Interrupted`). Non-transient failures
+/// (`Cancelled`, `DiskSpace`, `Destination`, `Export`, `InvalidTicket`,
+/// `Unknown`) bubble up on the first attempt. The retry sleep is also
+/// cancel-aware so a user cancel during backoff aborts immediately instead of
+/// waiting out the timer.
+///
+/// iroh-blobs keeps any already-verified chunks in the persistent store, so a
+/// retry resumes from where the previous attempt failed — only the missing
+/// bytes are re-fetched.
+async fn download_with_retry(
+    node: &LightningP2PNode,
+    ticket: &ShareTicket,
+    cancel_rx: &mut watch::Receiver<bool>,
+    progress: Option<&ProgressHandle>,
+    profile: TransferProfile,
+) -> Result<DownloadSummary> {
+    let mut backoff = INITIAL_RETRY_BACKOFF;
+    let mut last_error: Option<LightningP2PError> = None;
+    for attempt in 1..=MAX_DOWNLOAD_ATTEMPTS {
+        match download_to_store(node, ticket, cancel_rx, progress, profile).await {
+            Ok(summary) => return Ok(summary),
+            Err(error) => {
+                let category = categorize_receive_error(&error, TransferPhase::Downloading);
+                if !is_transient_download_failure(category) || attempt == MAX_DOWNLOAD_ATTEMPTS {
+                    return Err(error);
+                }
+                tracing::warn!(
+                    %error,
+                    attempt,
+                    backoff_ms = u64::try_from(backoff.as_millis()).unwrap_or(u64::MAX),
+                    "transient receive failure; retrying after backoff"
+                );
+                if let Some(progress) = progress {
+                    progress.set_phase(TransferPhase::Connecting);
+                }
+                tokio::select! {
+                    () = tokio::time::sleep(backoff) => {}
+                    changed = cancel_rx.changed() => {
+                        if changed.is_ok() && *cancel_rx.borrow() {
+                            return Err(LightningP2PError::Other("Cancelled".into()));
+                        }
+                    }
+                }
+                backoff = backoff.saturating_mul(2);
+                last_error = Some(error);
+            }
+        }
+    }
+    Err(last_error.unwrap_or_else(|| {
+        LightningP2PError::Other("Retry budget exhausted without recording an error".into())
+    }))
+}
+
+/// Returns true for download failure categories that are worth retrying.
+/// Cancellation, disk-space, destination, export, and invalid-ticket failures
+/// are user-visible end states; retrying them would only burn time.
+fn is_transient_download_failure(category: FailureCategory) -> bool {
+    matches!(
+        category,
+        FailureCategory::Unreachable | FailureCategory::Interrupted
+    )
 }
 
 async fn download_to_store(
@@ -706,5 +788,17 @@ mod tests {
     fn effective_mbps_uses_payload_and_download_time() {
         assert_eq!(effective_mbps(125_000_000, 1_000), 1000);
         assert_eq!(effective_mbps(125_000_000, 0), 0);
+    }
+
+    #[test]
+    fn only_unreachable_and_interrupted_are_retried() {
+        assert!(is_transient_download_failure(FailureCategory::Unreachable));
+        assert!(is_transient_download_failure(FailureCategory::Interrupted));
+        assert!(!is_transient_download_failure(FailureCategory::Cancelled));
+        assert!(!is_transient_download_failure(FailureCategory::DiskSpace));
+        assert!(!is_transient_download_failure(FailureCategory::Destination));
+        assert!(!is_transient_download_failure(FailureCategory::Export));
+        assert!(!is_transient_download_failure(FailureCategory::InvalidTicket));
+        assert!(!is_transient_download_failure(FailureCategory::Unknown));
     }
 }

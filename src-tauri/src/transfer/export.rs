@@ -164,20 +164,52 @@ async fn export_blob(
     ticket: &BlobTicket,
     destination: &Path,
 ) -> Result<PathBuf> {
+    // Write to a `.part` sibling first, then rename onto the final name. A
+    // crash mid-write leaves a clearly partial `.part` file in the destination
+    // and never a half-written file at the final name. The `.part` is created
+    // in the same directory as the final file so the rename is intra-filesystem
+    // and remains atomic. `next_available_path` runs against the FINAL name so
+    // we don't collide with an existing user file.
     let output_path = next_available_path(&destination.join(ticket.hash().to_string()));
-    client
-        .export(
-            ticket.hash(),
-            output_path.clone(),
-            ExportFormat::Blob,
-            ExportMode::TryReference,
-        )
-        .await
-        .map_err(|error| blob_error(&error))?
-        .finish()
-        .await
-        .map_err(|error| blob_error(&error))?;
+    let temp_path = part_path_for(&output_path);
+
+    let export_result = async {
+        client
+            .export(
+                ticket.hash(),
+                temp_path.clone(),
+                ExportFormat::Blob,
+                ExportMode::TryReference,
+            )
+            .await
+            .map_err(|error| blob_error(&error))?
+            .finish()
+            .await
+            .map_err(|error| blob_error(&error))
+    }
+    .await;
+
+    if let Err(error) = export_result {
+        let _ = tokio::fs::remove_file(&temp_path).await;
+        return Err(error);
+    }
+
+    if let Err(error) = tokio::fs::rename(&temp_path, &output_path).await {
+        let _ = tokio::fs::remove_file(&temp_path).await;
+        return Err(LightningP2PError::from(error));
+    }
     Ok(output_path)
+}
+
+/// Returns a sibling `.part` path next to `final_path`. Used as the temp name
+/// for atomic-write semantics on single-blob exports.
+fn part_path_for(final_path: &Path) -> PathBuf {
+    let mut name = final_path
+        .file_name()
+        .map(std::ffi::OsStr::to_os_string)
+        .unwrap_or_default();
+    name.push(".part");
+    final_path.with_file_name(name)
 }
 
 async fn export_collection(
@@ -309,5 +341,20 @@ mod tests {
     fn summarize_names_handles_empty_collection() {
         let label = summarize_names([].into_iter());
         assert_eq!(label, "download");
+    }
+
+    #[test]
+    fn part_path_appends_part_suffix_in_same_directory() {
+        let final_path = PathBuf::from("/tmp/downloads/report.pdf");
+        let temp = part_path_for(&final_path);
+        assert_eq!(temp.parent(), final_path.parent());
+        assert_eq!(temp.file_name().unwrap(), "report.pdf.part");
+    }
+
+    #[test]
+    fn part_path_handles_extensionless_names() {
+        let final_path = PathBuf::from("/tmp/downloads/raw_hash_value");
+        let temp = part_path_for(&final_path);
+        assert_eq!(temp.file_name().unwrap(), "raw_hash_value.part");
     }
 }
