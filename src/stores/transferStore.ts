@@ -131,6 +131,7 @@ interface TransferStore {
   setCustomRelayUrl: (relayUrl: string | null) => Promise<void>;
   setLocalDiscoveryEnabled: (enabled: boolean) => Promise<void>;
   setBluetoothDiscoveryEnabled: (enabled: boolean) => Promise<void>;
+  setTransferMode: (mode: tauri.TransferMode) => Promise<void>;
   completeFirstRun: () => Promise<void>;
   checkForUpdates: (silent?: boolean) => Promise<void>;
   installUpdate: () => Promise<void>;
@@ -324,7 +325,8 @@ function sameSettings(left: AppSettings, right: AppSettings): boolean {
     left.relay_mode === right.relay_mode &&
     left.custom_relay_url === right.custom_relay_url &&
     left.local_discovery_enabled === right.local_discovery_enabled &&
-    left.bluetooth_discovery_enabled === right.bluetooth_discovery_enabled
+    left.bluetooth_discovery_enabled === right.bluetooth_discovery_enabled &&
+    left.transfer_mode === right.transfer_mode
   );
 }
 
@@ -804,6 +806,15 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
       }
       set(withSettings(settings));
       await get().refreshBleDiscoveryStatus();
+    } catch (error) {
+      set(errorState(error));
+    }
+  },
+
+  setTransferMode: async (mode) => {
+    try {
+      const settings = await tauri.setTransferMode(mode);
+      set(withSettings(settings));
     } catch (error) {
       set(errorState(error));
     }

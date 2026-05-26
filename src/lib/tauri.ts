@@ -167,6 +167,69 @@ export interface SharePathInfo {
   is_dir: boolean;
 }
 
+export type TransferMode =
+  | "standard"
+  | "fast"
+  | "extreme"
+  | "lan_beast"
+  | "battery_safe";
+
+export const TRANSFER_MODES: TransferMode[] = [
+  "standard",
+  "fast",
+  "extreme",
+  "lan_beast",
+  "battery_safe",
+];
+
+export interface TransferModeDescriptor {
+  /** Wire value sent to the backend. */
+  value: TransferMode;
+  /** Short label shown in pickers and badges. */
+  label: string;
+  /** One-line description used in tooltips and the Settings copy. */
+  description: string;
+  /** True if the mode is only meaningful on Android. */
+  androidOnly?: boolean;
+}
+
+export const TRANSFER_MODE_DESCRIPTORS: Record<
+  TransferMode,
+  TransferModeDescriptor
+> = {
+  standard: {
+    value: "standard",
+    label: "Standard",
+    description:
+      "Safe default. Moderate parallelism and conservative QUIC windows.",
+  },
+  fast: {
+    value: "fast",
+    label: "Fast",
+    description:
+      "Full parallelism, same QUIC windows as Standard. Aimed at typical LAN.",
+  },
+  extreme: {
+    value: "extreme",
+    label: "Extreme",
+    description:
+      "Larger windows, more streams, slower UI emit. Aimed at fast LAN to multi-GbE.",
+  },
+  lan_beast: {
+    value: "lan_beast",
+    label: "LAN Beast",
+    description:
+      "Maximum windows and permissive timeouts. For sustained large transfers on local networks.",
+  },
+  battery_safe: {
+    value: "battery_safe",
+    label: "Battery Safe",
+    description:
+      "Small parallelism and slow UI emit. Reduces RAM and CPU pressure on Android.",
+    androidOnly: true,
+  },
+};
+
 export interface AppSettings {
   download_dir: string;
   auto_update_enabled: boolean;
@@ -175,6 +238,7 @@ export interface AppSettings {
   custom_relay_url: string | null;
   local_discovery_enabled: boolean;
   bluetooth_discovery_enabled: boolean;
+  transfer_mode: TransferMode;
 }
 
 export interface DownloadDirectoryDiagnostics {
@@ -425,6 +489,7 @@ const browserSettings: AppSettings = {
   custom_relay_url: null,
   local_discovery_enabled: true,
   bluetooth_discovery_enabled: false,
+  transfer_mode: "standard",
 };
 
 const browserNetworkDiagnostics: NetworkDiagnostics = {
@@ -837,6 +902,11 @@ export async function setBluetoothDiscoveryEnabled(
 ): Promise<AppSettings> {
   requireNativeRuntime("Changing Bluetooth discovery settings");
   return invoke<AppSettings>("set_bluetooth_discovery_enabled", { enabled });
+}
+
+export async function setTransferMode(mode: TransferMode): Promise<AppSettings> {
+  requireNativeRuntime("Changing transfer mode");
+  return invoke<AppSettings>("set_transfer_mode", { mode });
 }
 
 export async function completeFirstRun(): Promise<AppSettings> {
