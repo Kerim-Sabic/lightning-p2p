@@ -2,6 +2,13 @@
 
 This roadmap is deliberately conservative. Do not publish speed, platform, security, or interop claims until the release and validation evidence exists.
 
+> **v0.5.1 → v0.7 detail**: see [`ROADMAP_v0.5_to_v0.7.md`](ROADMAP_v0.5_to_v0.7.md)
+> for the per-feature breakdown of everything the v0.5.1 audit-pass deferred
+> (explicit resume UI, LAN/WAN bench validation, web receiver, multi-device
+> fan-out, Magic Folder, Universal Clipboard, Offline Hotspot, NFC write,
+> desktop BLE for mac/Linux, Android MediaStore overwrite verification, peak
+> Mbps + CPU/RAM bench instrumentation, B1/B6 flamegraph-gated perf work).
+
 ## Stable
 
 ### v0.4.6 - Current stable release
