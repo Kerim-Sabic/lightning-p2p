@@ -4,6 +4,7 @@ use crate::error::{LightningP2PError, Result};
 use crate::node::LightningP2PNode;
 use crate::storage::history::{self, TransferRecord};
 use crate::transfer::metrics::{RouteKind, TransferMetrics, TransferStrategy};
+use crate::transfer::mode::TransferProfile;
 use crate::transfer::progress::{
     EventReporter, FailureCategory, ProgressHandle, ProgressSampler, TransferDirection,
     TransferPhase,
@@ -23,6 +24,9 @@ use std::path::{Path, PathBuf};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use tauri::Window;
 
+/// Hard upper bound on import parallelism. The per-transfer
+/// [`TransferProfile`] picks a value within this range; env-var override is
+/// still honored as the final escape hatch for bench sweeps.
 const MAX_IMPORT_PARALLELISM: usize = 128;
 
 struct SharePlan {
@@ -65,6 +69,7 @@ pub async fn send_files(
     node: &LightningP2PNode,
     window: Window,
     paths: Vec<PathBuf>,
+    profile: TransferProfile,
 ) -> Result<ShareOutcome> {
     let started_at = Instant::now();
     let plan = build_share_plan(paths)?;
@@ -80,10 +85,10 @@ pub async fn send_files(
         TransferMetrics::default(),
         TransferPhase::Preparing,
     )?;
-    let sampler = ProgressSampler::spawn(reporter.clone(), None);
+    let sampler = ProgressSampler::spawn_with_interval(reporter.clone(), None, profile.progress_interval);
     let progress = sampler.handle();
 
-    let result = create_share_with_plan(node, plan, Some(progress.clone())).await;
+    let result = create_share_with_plan(node, plan, Some(progress.clone()), profile).await;
     match result {
         Ok(outcome) => {
             let metrics = TransferMetrics {
@@ -122,21 +127,26 @@ pub async fn send_files(
 
 /// Adds files or directories to the local blob store without emitting UI events.
 ///
+/// Uses the platform-default [`TransferProfile`]. Production code paths should
+/// call [`send_files`] which threads the user-selected profile through.
+///
 /// # Errors
 ///
 /// Returns `LightningP2PError` if the paths are invalid, the add operation fails,
 /// or the ticket cannot be generated.
 pub async fn create_share(node: &LightningP2PNode, paths: Vec<PathBuf>) -> Result<ShareOutcome> {
     let plan = build_share_plan(paths)?;
-    create_share_with_plan(node, plan, None).await
+    let profile = crate::transfer::TransferMode::platform_default().profile();
+    create_share_with_plan(node, plan, None, profile).await
 }
 
 async fn create_share_with_plan(
     node: &LightningP2PNode,
     plan: SharePlan,
     progress: Option<ProgressHandle>,
+    profile: TransferProfile,
 ) -> Result<ShareOutcome> {
-    let imported = import_sources(node.blobs_client().clone(), &plan, progress).await?;
+    let imported = import_sources(node.blobs_client().clone(), &plan, progress, profile).await?;
     let hash = persist_collection(node.blobs_client(), imported).await?;
     let ticket = build_ticket(node, hash).await?;
     tracing::info!(
@@ -253,6 +263,7 @@ async fn import_sources(
     client: MemClient,
     plan: &SharePlan,
     progress: Option<ProgressHandle>,
+    profile: TransferProfile,
 ) -> Result<Vec<ImportedSource>> {
     let tasks = plan
         .sources
@@ -262,7 +273,8 @@ async fn import_sources(
         .map(|(index, source)| {
             import_task(&client, source, index, plan.total_size, progress.clone())
         });
-    let mut pending = stream::iter(tasks).buffer_unordered(import_parallelism(plan.sources.len()));
+    let mut pending =
+        stream::iter(tasks).buffer_unordered(import_parallelism(plan.sources.len(), profile));
     let mut imported = Vec::with_capacity(plan.sources.len());
 
     while let Some(item) = pending.next().await {
@@ -284,20 +296,22 @@ fn import_task(
     async move { import_source(client, source, index, total_size, progress).await }
 }
 
-fn import_parallelism(source_count: usize) -> usize {
+fn import_parallelism(source_count: usize, profile: TransferProfile) -> usize {
     // Import is I/O-bound (disk read + hashing handled by iroh-blobs in async tasks),
     // so CPU count is a poor proxy — NVMe can comfortably absorb many in-flight imports.
-    // Scale directly with the batch size, capped at MAX. The cap is overridable via the
-    // `LIGHTNING_P2P_IMPORT_PARALLELISM` env var for tuning sweeps.
-    compute_import_parallelism(source_count, env_import_parallelism_cap())
+    // Resolution order:
+    //   1. `LIGHTNING_P2P_IMPORT_PARALLELISM` env var (bench tuning escape hatch)
+    //   2. the active TransferProfile's `import_parallelism`
+    //   3. hard floor of 1, hard ceiling of MAX_IMPORT_PARALLELISM
+    let cap = env_import_parallelism_cap().unwrap_or(profile.import_parallelism);
+    compute_import_parallelism(source_count, cap.min(MAX_IMPORT_PARALLELISM))
 }
 
-fn env_import_parallelism_cap() -> usize {
+fn env_import_parallelism_cap() -> Option<usize> {
     std::env::var("LIGHTNING_P2P_IMPORT_PARALLELISM")
         .ok()
         .and_then(|raw| raw.parse::<usize>().ok())
         .filter(|&n| n > 0)
-        .unwrap_or(MAX_IMPORT_PARALLELISM)
 }
 
 fn compute_import_parallelism(source_count: usize, cap: usize) -> usize {

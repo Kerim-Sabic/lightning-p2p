@@ -4,9 +4,12 @@ mod destination;
 pub(crate) mod export;
 pub mod metrics;
 pub mod mime;
+pub mod mode;
 
 pub mod progress;
 pub mod queue;
 pub mod receiver;
 pub mod sender;
 pub mod ticket;
+
+pub use mode::{TransferMode, TransferProfile};

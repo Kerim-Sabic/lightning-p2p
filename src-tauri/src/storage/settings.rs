@@ -1,6 +1,7 @@
 //! Persistent application settings for packaged and development builds.
 
 use crate::error::{LightningP2PError, Result};
+use crate::transfer::TransferMode;
 use iroh::RelayUrl;
 use serde::{Deserialize, Serialize};
 use std::io::Write;
@@ -49,6 +50,10 @@ pub struct AppSettings {
     /// Whether Bluetooth proximity discovery is allowed once the native bridge is available.
     #[serde(default = "default_bluetooth_discovery_enabled")]
     pub bluetooth_discovery_enabled: bool,
+    /// Session transfer mode. Determines QUIC transport tuning, import
+    /// parallelism, idle timeouts, and progress emit cadence.
+    #[serde(default = "default_transfer_mode")]
+    pub transfer_mode: TransferMode,
 }
 
 impl AppSettings {
@@ -61,6 +66,7 @@ impl AppSettings {
             custom_relay_url: None,
             local_discovery_enabled: default_local_discovery_enabled(),
             bluetooth_discovery_enabled: default_bluetooth_discovery_enabled(),
+            transfer_mode: default_transfer_mode(),
         }
     }
 
@@ -216,6 +222,21 @@ impl SettingsState {
     pub async fn set_bluetooth_discovery_enabled(&self, enabled: bool) -> Result<AppSettings> {
         self.update_settings(|settings| {
             settings.bluetooth_discovery_enabled = enabled;
+            Ok(())
+        })
+        .await
+    }
+
+    /// Updates the session transfer mode. The caller is responsible for
+    /// triggering a node restart (via the Supervisor) so the new QUIC
+    /// transport config takes effect for subsequent transfers.
+    ///
+    /// # Errors
+    ///
+    /// Returns `LightningP2PError` if the updated settings cannot be written.
+    pub async fn set_transfer_mode(&self, mode: TransferMode) -> Result<AppSettings> {
+        self.update_settings(|settings| {
+            settings.transfer_mode = mode;
             Ok(())
         })
         .await
@@ -418,6 +439,10 @@ fn default_bluetooth_discovery_enabled() -> bool {
     false
 }
 
+fn default_transfer_mode() -> TransferMode {
+    TransferMode::platform_default()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -590,6 +615,46 @@ mod tests {
         let reloaded = SettingsState::load_or_create(dir.path()).expect("settings reload");
         let snapshot = reloaded.snapshot().await;
         assert!(snapshot.bluetooth_discovery_enabled);
+    }
+
+    #[tokio::test]
+    async fn transfer_mode_defaults_to_platform_default_and_persists() {
+        let (state, dir) = temp_settings_state();
+        assert_eq!(
+            state.snapshot().await.transfer_mode,
+            TransferMode::platform_default()
+        );
+
+        state
+            .set_transfer_mode(TransferMode::Extreme)
+            .await
+            .expect("transfer mode should persist");
+
+        let reloaded = SettingsState::load_or_create(dir.path()).expect("settings reload");
+        let snapshot = reloaded.snapshot().await;
+        assert_eq!(snapshot.transfer_mode, TransferMode::Extreme);
+    }
+
+    #[tokio::test]
+    async fn missing_transfer_mode_field_uses_platform_default() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let settings_path = dir.path().join(SETTINGS_FILE_NAME);
+        // settings.json that predates the transfer_mode field
+        std::fs::write(
+            &settings_path,
+            r#"{
+                "download_dir": "C:/tmp",
+                "auto_update_enabled": false,
+                "first_run_complete": true,
+                "relay_mode": "public",
+                "custom_relay_url": null
+            }"#,
+        )
+        .expect("write legacy settings");
+
+        let state = SettingsState::load_or_create(dir.path()).expect("settings load");
+        let snapshot = state.snapshot().await;
+        assert_eq!(snapshot.transfer_mode, TransferMode::platform_default());
     }
 
     #[test]

@@ -77,8 +77,9 @@ pub async fn offer_share_to_peer(
     let target_node_id =
         NodeId::from_str(&node_id).map_err(|err| format!("Invalid target node id: {err}"))?;
 
+    let profile = state.settings.snapshot().await.transfer_mode.profile();
     let path_bufs = paths.into_iter().map(PathBuf::from).collect::<Vec<_>>();
-    let outcome = crate::transfer::sender::send_files(node.as_ref(), window, path_bufs)
+    let outcome = crate::transfer::sender::send_files(node.as_ref(), window, path_bufs, profile)
         .await
         .map_err(String::from)?;
 

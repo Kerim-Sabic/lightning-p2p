@@ -2,6 +2,7 @@
 
 use crate::commands::{command_error, CommandResult};
 use crate::storage::settings::{AppSettings, RelayModeSetting};
+use crate::transfer::TransferMode;
 use crate::AppState;
 use serde::Serialize;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -26,6 +27,8 @@ pub struct SettingsPayload {
     pub local_discovery_enabled: bool,
     /// Whether Bluetooth proximity discovery is enabled once supported by this build.
     pub bluetooth_discovery_enabled: bool,
+    /// Session transfer mode (Standard, Fast, Extreme, `LanBeast`, `BatterySafe`).
+    pub transfer_mode: TransferMode,
 }
 
 impl From<AppSettings> for SettingsPayload {
@@ -38,6 +41,7 @@ impl From<AppSettings> for SettingsPayload {
             custom_relay_url: settings.custom_relay_url,
             local_discovery_enabled: settings.local_discovery_enabled,
             bluetooth_discovery_enabled: settings.bluetooth_discovery_enabled,
+            transfer_mode: settings.transfer_mode,
         }
     }
 }
@@ -211,6 +215,34 @@ pub async fn set_local_discovery_enabled(
         &state,
         settings.clone(),
         "local_discovery_changed",
+    ))
+    .await?;
+    Ok(SettingsPayload::from(settings))
+}
+
+/// Updates the session transfer mode and triggers a node restart so the new
+/// QUIC transport config takes effect. The restart is deferred if any
+/// transfer is in flight (see `node_supervisor::restart_if_idle`).
+///
+/// # Errors
+///
+/// Returns an error string if persistence or the deferred restart fails.
+#[tauri::command]
+pub async fn set_transfer_mode(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    mode: TransferMode,
+) -> CommandResult<SettingsPayload> {
+    let settings = state
+        .settings
+        .set_transfer_mode(mode)
+        .await
+        .map_err(command_error)?;
+    Box::pin(restart_node_after_endpoint_setting(
+        app,
+        &state,
+        settings.clone(),
+        "transfer_mode_changed",
     ))
     .await?;
     Ok(SettingsPayload::from(settings))

@@ -249,6 +249,7 @@ impl NodeSupervisor {
         offer_inbox: OfferInbox,
     ) -> Result<LightningP2PNode> {
         let relay_url = settings.resolved_custom_relay_url()?;
+        let profile = settings.transfer_mode.profile();
         let nearby_protocol = Arc::new(NearbyShareProtocol::new(
             nearby_shares,
             offer_inbox,
@@ -259,6 +260,7 @@ impl NodeSupervisor {
             settings.download_dir,
             relay_url,
             Some(nearby_protocol),
+            profile,
         );
         tokio::time::timeout(NODE_START_TIMEOUT, start)
             .await

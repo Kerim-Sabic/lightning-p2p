@@ -6,6 +6,7 @@ use crate::storage::history::{self, TransferRecord};
 use crate::storage::peers::{self, PeerRecord};
 use crate::transfer::export;
 use crate::transfer::metrics::{RouteKind, TransferMetrics, TransferStrategy};
+use crate::transfer::mode::TransferProfile;
 use crate::transfer::progress::{
     EventReporter, FailureCategory, ProgressHandle, ProgressSampler, QueueProgressTarget,
     TransferDirection, TransferPhase,
@@ -25,7 +26,10 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::Window;
 use tokio::sync::watch;
 
-const DOWNLOAD_IDLE_TIMEOUT: Duration = Duration::from_secs(60);
+/// Floor on the receiver idle timeout. The per-transfer [`TransferProfile`]
+/// chooses a value at least this large so we never get stuck waiting forever
+/// on a dead peer.
+const MIN_DOWNLOAD_IDLE_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Debug, Clone)]
 struct ReceiveSummary {
@@ -82,15 +86,41 @@ pub struct ReceiveOutcome {
 ///
 /// Returns `LightningP2PError` if the download fails, the ticket is cancelled, or
 /// the exported files cannot be written.
+/// In-flight receive coordination: queue handle, UI window, transfer id, and
+/// the cancel-signal receiver. Bundled so [`receive_blob`] stays under the
+/// clippy too-many-arguments threshold.
+pub struct ReceiveContext {
+    /// Shared in-memory queue this transfer participates in.
+    pub queue: TransferQueue,
+    /// Tauri window used to emit progress events.
+    pub window: Window,
+    /// Stable identifier of this transfer.
+    pub transfer_id: String,
+    /// Cancel signal — flip the watched bool to abort.
+    pub cancel_rx: watch::Receiver<bool>,
+}
+
+/// Downloads the content addressed by a ticket using the supplied profile and
+/// exports it to disk. Progress events are emitted through Tauri and mirrored
+/// into the in-memory transfer queue.
+///
+/// # Errors
+///
+/// Returns `LightningP2PError` if the download fails, the ticket is cancelled,
+/// or the exported files cannot be written.
 pub async fn receive_blob(
     node: &LightningP2PNode,
-    queue: TransferQueue,
-    window: Window,
-    transfer_id: String,
+    ctx: ReceiveContext,
     ticket: ShareTicket,
     destination: PathBuf,
-    mut cancel_rx: watch::Receiver<bool>,
+    profile: TransferProfile,
 ) -> Result<()> {
+    let ReceiveContext {
+        queue,
+        window,
+        transfer_id,
+        mut cancel_rx,
+    } = ctx;
     let peer = ticket.primary().node_addr().node_id.to_string();
     let initial_metrics = metrics_for_ticket(&ticket);
     let reporter = EventReporter::new(
@@ -104,14 +134,23 @@ pub async fn receive_blob(
     );
     reporter.emit_started(0, initial_metrics, TransferPhase::Connecting)?;
 
-    let sampler = ProgressSampler::spawn(
+    let sampler = ProgressSampler::spawn_with_interval(
         reporter.clone(),
         Some(QueueProgressTarget::new(queue.clone(), transfer_id.clone())),
+        profile.progress_interval,
     );
     let progress = sampler.handle();
     progress.set_metrics(initial_metrics);
     progress.set_phase(TransferPhase::Connecting);
-    let result = receive_core(node, &ticket, destination, &mut cancel_rx, Some(&progress)).await;
+    let result = receive_core(
+        node,
+        &ticket,
+        destination,
+        &mut cancel_rx,
+        Some(&progress),
+        profile,
+    )
+    .await;
 
     match result {
         Ok(summary) => {
@@ -156,6 +195,9 @@ pub async fn receive_blob(
 
 /// Downloads the content addressed by a ticket without any UI side effects.
 ///
+/// Uses the platform-default [`TransferProfile`]. Production code paths should
+/// call [`receive_blob`] which threads the user-selected profile through.
+///
 /// # Errors
 ///
 /// Returns `LightningP2PError` if the download or final export fails.
@@ -165,7 +207,16 @@ pub async fn receive_ticket(
     destination: PathBuf,
 ) -> Result<ReceiveOutcome> {
     let (_cancel_tx, mut cancel_rx) = watch::channel(false);
-    let summary = receive_core(node, &ticket, destination, &mut cancel_rx, None).await?;
+    let profile = crate::transfer::TransferMode::platform_default().profile();
+    let summary = receive_core(
+        node,
+        &ticket,
+        destination,
+        &mut cancel_rx,
+        None,
+        profile,
+    )
+    .await?;
     Ok(ReceiveOutcome {
         hash: summary.hash,
         label: summary.label,
@@ -185,9 +236,10 @@ async fn receive_core(
     destination: PathBuf,
     cancel_rx: &mut watch::Receiver<bool>,
     progress: Option<&ProgressHandle>,
+    profile: TransferProfile,
 ) -> Result<ReceiveSummary> {
     let download_started_at = Instant::now();
-    let download = download_to_store(node, ticket, cancel_rx, progress).await?;
+    let download = download_to_store(node, ticket, cancel_rx, progress, profile).await?;
     let download_ms = elapsed_ms(download_started_at.elapsed());
     let tracked_total = progress.map(|p| p.snapshot().1);
     if let Some(progress) = progress {
@@ -229,14 +281,16 @@ async fn download_to_store(
     ticket: &ShareTicket,
     cancel_rx: &mut watch::Receiver<bool>,
     progress: Option<&ProgressHandle>,
+    profile: TransferProfile,
 ) -> Result<DownloadSummary> {
     let mut stream = start_download(node, ticket).await?;
     let mut state = TransferState::new(ticket.primary().hash());
     let mut lifecycle = DownloadLifecycle::default();
     let started_at = Instant::now();
+    let idle_timeout = profile.idle_timeout.max(MIN_DOWNLOAD_IDLE_TIMEOUT);
 
     loop {
-        let event = next_event(&mut stream, cancel_rx, lifecycle.contacted_peer).await?;
+        let event = next_event(&mut stream, cancel_rx, lifecycle.contacted_peer, idle_timeout).await?;
         let Some(event) = event else {
             return stream_end_error();
         };
@@ -281,6 +335,7 @@ async fn next_event(
     stream: &mut ClientDownloadProgress,
     cancel_rx: &mut watch::Receiver<bool>,
     contacted_peer: bool,
+    idle_timeout: Duration,
 ) -> Result<Option<DownloadProgress>> {
     loop {
         tokio::select! {
@@ -289,7 +344,7 @@ async fn next_event(
                     return Err(LightningP2PError::Other("Cancelled".into()));
                 }
             }
-            item = tokio::time::timeout(DOWNLOAD_IDLE_TIMEOUT, stream.next()) => {
+            item = tokio::time::timeout(idle_timeout, stream.next()) => {
                 return match item {
                     Ok(Some(event)) => event.map(Some).map_err(|error| blob_error(&error)),
                     Ok(None) => Ok(None),
