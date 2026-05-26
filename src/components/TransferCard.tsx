@@ -374,6 +374,13 @@ export function TransferCard({
                 {errorHint}
               </p>
             ) : null}
+            {transfer.direction === "receive" &&
+            (transfer.appError?.retryable ?? true) ? (
+              <p className="mt-2 text-[11px] leading-5 text-rose-100/60">
+                Tip: paste the ticket again to resume. Verified chunks
+                already on disk are skipped automatically.
+              </p>
+            ) : null}
             <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
               {transfer.appError ? (
                 <span className="rounded-full border border-rose-300/15 bg-rose-300/10 px-2 py-1 font-medium text-rose-50/80">

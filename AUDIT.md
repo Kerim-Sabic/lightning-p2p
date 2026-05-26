@@ -280,7 +280,7 @@ Each item is `present` / `partial` / `absent` with file:line evidence and behavi
 | Duplicate / out-of-order bytes | **present** | iroh-blobs BLAKE3 verification end-to-end. |  |
 | Receiver idle-timeout | **present** | [`receiver.rs:28`](src-tauri/src/transfer/receiver.rs#L28) `DOWNLOAD_IDLE_TIMEOUT=60s` |  |
 | Retry / exponential backoff on transient errors | **absent** | [`receiver.rs:227-260`](src-tauri/src/transfer/receiver.rs#L227-L260) | `download_to_store` returns on first error. No reconnect. |
-| Resume across app restart | **absent at app layer** | iroh-blobs store *is* persistent ([`endpoint.rs:328`](src-tauri/src/node/endpoint.rs#L328) `BlobStore::load`), but `receive_blob` creates a fresh download every call. No "Resume" button, no chunk manifest. | Fix: persist `TransferRecord` with `partial` status; on app launch, scan store and offer resume. |
+| Resume across app restart | **implicit present, explicit UI absent** | iroh-blobs store *is* persistent ([`endpoint.rs:328`](src-tauri/src/node/endpoint.rs#L328) `BlobStore::load`). When a user re-pastes the ticket for a failed transfer, iroh-blobs queries the store and re-fetches only the missing chunks — implicit resume already works. What's missing is the **explicit UI**: a "Resume failed transfer" list driven by a status-aware history schema. v0.5.1 surfaces the implicit behavior with a UI tip on the failure card ([`TransferCard.tsx`](src/components/TransferCard.tsx)); explicit-resume UI lands in v0.6 with the history schema migration. |
 | Drop-recovery (network blip mid-transfer) | **partial** | iroh QUIC keeps the stream open up to keepalive, but if the connection drops the receiver sees `Abort` and errors out (see B-above). Combined with **no retry** the user has to manually re-paste the ticket. |  |
 | Cancel cleanup of partial files | **partial** | Single-blob export leaves partial bytes; collection staging dir cleanup at [`export.rs:209`](src-tauri/src/transfer/export.rs#L209) only runs on `Err`, not on `cancel_rx` mid-export. | Verify and harden in Phase 4. |
 
@@ -399,7 +399,9 @@ Mission text references §2–§7. Each item marked **present** / **partial** / 
    collapsed (we ship 3 modes, not 5, if 5 can't be told apart).
 5. **Reliability hardening** for the items marked `absent`/`partial` in §4 — at minimum:
    atomic-rename for single-blob export, retry w/ exponential backoff for transient download
-   errors, app-layer resume across restarts.
+   errors, cancel race during verify phase, and a UI tip surfacing iroh-blobs' implicit
+   resume-from-store behavior. Explicit resume UI (status-aware history list + one-click
+   resume button) is **deferred to v0.6** because it requires a history schema migration.
 6. **Bench tool extension**: add `1gb`, `many_small` scenarios; extend report schema with peak
    MB/s, RSS, bottleneck estimate.
 7. **Refreshed `src/content/local-benchmark-summary.json`** with the v0.5.1 numbers (5-run).
