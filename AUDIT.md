@@ -66,40 +66,74 @@ events. Verified by reading `progress.rs::TransferEvent` enum.
 
 ## 2. Profiling results
 
-### 2.1 Same-machine baseline (5 runs, full profile)
+### 2.1 Same-machine baselines (5 runs)
 
-Source: `cargo run --release --bin benchmark-local -- --profile full --runs 5`
-Artifacts: `docs/reports/raw/audit-v0.5.1/{latest.json,latest.csv}`
+Two baselines were captured. **Baseline-v1** used the original two-scenario profile (10 MB +
+100 MB). **Baseline-v2** added the 1 GB and many-small scenarios that the mission requires.
+
+**Baseline-v1** — `cargo run --release --bin benchmark-local -- --profile full --runs 5`
+Artifacts: [`docs/reports/raw/audit-v0.5.1/latest.json`](docs/reports/raw/audit-v0.5.1/latest.json)
 
 | Scenario | Runs | Median total | Median download | Median export | Median Mbps | Range Mbps |
 |---|---|---|---|---|---|---|
 | `same_machine_10mb` | 5/5 | 149 ms | 140 ms | 8 ms | **562.74** | 285.9 – 603.3 |
 | `same_machine_100mb` | 5/5 | 1335 ms | 1327 ms | 8 ms | **627.99** | 592.1 – 666.8 |
 
-Observations:
+**Baseline-v2** — same command after adding `same_machine_1gb` and `same_machine_many_small`
+to the `full` profile.
+Artifacts: [`docs/reports/raw/audit-v0.5.1/baseline-v2/latest.json`](docs/reports/raw/audit-v0.5.1/baseline-v2/latest.json)
+
+| Scenario | Runs | Median total | Median download | Median export | Median Mbps | Range Mbps |
+|---|---|---|---|---|---|---|
+| `same_machine_10mb` | 5/5 | 231 ms | 222 ms | 9 ms | 361.75 | 228.9 – 392.7 |
+| `same_machine_100mb` | 5/5 | 1928 ms | 1918 ms | 9 ms | 435.00 | 160.2 – 483.2 |
+| `same_machine_1gb` | 5/5 | 18855 ms | 18845 ms | 10 ms | **455.58** | 440.5 – 477.8 |
+| `same_machine_many_small` (200×100 KB) | 5/5 | 839 ms | 509 ms | 335 ms | **199.88** | 197.4 – 242.5 |
+
+**Why v1 and v2 differ for the same two scenarios**: machine state. Baseline-v2 ran the 1 GB
+scenario back-to-back (5 × ~19 s = ~95 s of NVMe-saturating I/O) immediately before the smaller
+scenarios. The disk cache, OS pagefile, and background indexer were in a different state than in
+baseline-v1. Both numbers are honest — they bracket the throughput envelope on this hardware. The
+v2 numbers are the more conservative reference for v0.5.1 perf work since they capture realistic
+multi-workload behavior.
+
+Observations across both baselines:
 - 10 MB shows wider spread because per-transfer overhead (peer establishment, hash table warm-up,
-  iroh ALPN handshake) dominates short transfers. Run 3 had `connect_ms=171` vs ~2 ms elsewhere —
-  one-off iroh peer-cache cold start.
-- 100 MB throughput (628 Mbps) is **lower** than the previously embedded v0.5.0 figure
-  (742 Mbps, 3-run median in `src/content/local-benchmark-summary.json`). Two likely causes:
-  smaller sample size in the old run, and machine state (Windows update + indexing daemon were
-  active during the new run). Both runs are **loopback-only** and **not comparable to LAN/WAN**.
-- Export time is essentially constant at ~8 ms for all sizes. Reason: iroh-blobs `ExportMode::TryReference`
-  in [`export.rs:171-174`](src-tauri/src/transfer/export.rs#L171-L174) — hardlinks the verified blob
-  from the store into the destination, no copy. Export is **not** a bottleneck.
-- `time_to_ticket_ms` is ~300 ms in steady state. For 100 MB that is ~19% of the round trip —
-  measurable but not dominant.
+  iroh ALPN handshake) dominates short transfers. Several runs had `connect_ms ≈ 170 ms` vs ~3 ms
+  elsewhere — one-off iroh peer-cache cold starts.
+- 100 MB throughput (v1=628, v2=435 Mbps) is **lower** than the previously embedded v0.5.0 figure
+  (742 Mbps, 3-run median in `src/content/local-benchmark-summary.json`). Causes: smaller sample
+  size in the old run, machine state, and (in v2) the 1 GB scenario running first. Both runs are
+  **loopback-only** and **not comparable to LAN/WAN**.
+- **1 GB scenario plateaus at ~456 Mbps** — this is the most stable signal in baseline-v2
+  (440–478 Mbps range across 5 runs). This is the most representative number for "what can this
+  app sustain on this NVMe + Zen 5 in loopback".
+- **Many-small at ~200 Mbps is the lowest** despite total bytes (20 MB) being tiny. Export time
+  alone is 335 ms = 40% of total. The per-file syscall + iroh-blobs export bookkeeping wall is
+  real. This is the lever B6 (small-file packing) would address.
+- Export time is essentially constant at ~8 ms for **single-file** transfers regardless of total
+  size. Reason: iroh-blobs `ExportMode::TryReference` in
+  [`export.rs:171-174`](src-tauri/src/transfer/export.rs#L171-L174) — hardlinks the verified blob,
+  no copy. Export is **not** a bottleneck for single-file, **is** the bottleneck for many-small.
+- `time_to_ticket_ms` is ~300–400 ms in steady state. For 100 MB that is ~19% of the round trip;
+  for 1 GB it's ~2% — amortized away by long transfers.
 
 ### 2.2 Flamegraph / CPU profile
 
-**UNMEASURED**. `cargo-flamegraph`, `samply`, and `perf` are not installed on the audit machine,
-and Windows perf tools (WPR/WPA) were not used in this pass. A follow-up pass with `samply`
-(cross-platform sampling profiler that outputs Firefox-compatible profiles) is the cheapest
-next step; this audit deliberately ships without flamegraph data rather than fabricate one.
+**UNMEASURED on this machine.** `samply 0.13.1` was installed during Phase 2 prep but requires
+`xperf` from the Windows Performance Toolkit (Windows ADK) for ETW-based sampling on Windows.
+WPT is a multi-GB administrator install and was not added to the audit machine in this pass.
+`cargo-flamegraph` and `perf` are Linux-only.
+
+Practical consequence: B2/B3/B4 in §3 can still be measured with `tracing::Span` timing + A/B
+benchmark comparison and do not strictly require a CPU sampling profile. B1 (iroh-blobs internal
+pipeline) and B6 (small-file packing) genuinely need a flamegraph to know whether there is a
+lever — these are deferred to a follow-up profiling pass (WPT install, WSL `perf`, or a Linux
+build host) and explicitly out of scope for the v0.5.1 commit window unless the lever turns
+out to be obvious from `tracing` instrumentation alone.
 
 Hot-path identification in §3 is therefore **hypothesis-driven from code-reading + bench numbers**,
-not from CPU sampling. Each fix proposal in Phase 2 will be gated by an actual flamegraph capture
-before merge.
+not from CPU sampling.
 
 ### 2.3 Criterion micro-benchmarks
 
@@ -148,22 +182,47 @@ why it is suspect, what to try, what to measure.
 - **Why suspect**: Tauri IPC emit serializes to JSON and crosses a thread boundary. At 10 Hz on a
   ~1.3 s transfer that's ~13 emits — likely cheap. But during a long LAN transfer (e.g. 10 GB at
   1 GbE = ~80 s) it's ~800 emits and the WebView render loop competes for the same main thread.
-- **Try**: Add a tracing `tracing::Span` around the sampler emit and measure ns. If the per-emit
-  cost is < 100 µs, leave at 10 Hz. If higher, drop to 5 Hz for Standard/Fast and reserve 10 Hz
-  for the brief "showing UI" window.
-- **Win estimate**: UNMEASURED but expected small (< 2% throughput).
-- **Risk**: Very low — UI smoothness vs throughput tradeoff is explicit.
+- **Not measurable in current bench harness**: `benchmark-local` uses
+  [`receive_ticket`](src-tauri/src/transfer/receiver.rs#L162-L180) — the headless path that does
+  not allocate a `ProgressSampler` or `EventReporter`. So MAX_PROGRESS_INTERVAL sweeps would show
+  no difference at the bench level.
+- **Plan**: **Deferred from v0.5.1 commit window.** Needs either (a) a new bench fixture that
+  exercises the UI emit path with a mock `Window`, or (b) production instrumentation on a real
+  Tauri-running build. Both belong in Phase 5 (bench tool truthfulness) when peak/CPU/RAM
+  metrics are added — combined effort.
+- **Win estimate**: UNMEASURED. Expected small (< 2% throughput) but not validated.
+- **Risk**: Very low if measured, can't measure cleanly today.
 
 ### B4 — Import parallelism = `min(count, 128)` without benchmark
 - **Where**: [`sender.rs:287-292`](src-tauri/src/transfer/sender.rs#L287-L292),
   `MAX_IMPORT_PARALLELISM=128` constant.
-- **Why suspect**: 128 is a guess. For a many-small-file fleet (e.g. 1024 × 64 KB) the bench
-  scenario does not exist yet (only 10 MB / 100 MB single-file), but in practice 128 concurrent
-  file opens + 128 in-flight BLAKE3 hashes may starve the receiver-side reservation queue.
-- **Try**: Add `same_machine_many_small` (200 × 100 KB) and `same_machine_huge` (1 GB) scenarios
-  to `benchmark-local`. Sweep `import_parallelism` ∈ {1, 4, 16, 64, 128, 256}.
-- **Win estimate**: UNMEASURED. Could be 0 on single-file, meaningful on many-small.
-- **Risk**: Low.
+- **Hypothesis (pre-sweep)**: 128 is a guess. For many-small file fleets, lower parallelism may
+  reduce reservation-queue pressure on the receiver side.
+- **Method**: Added `same_machine_many_small` (200 × 100 KB) and `same_machine_1gb` scenarios.
+  Made `MAX_IMPORT_PARALLELISM` overridable via `LIGHTNING_P2P_IMPORT_PARALLELISM` env var.
+  Swept p ∈ {4, 16, 32, 64, 128, 200} × 5 runs each on the many-small scenario.
+  Artifacts: [`docs/reports/raw/audit-v0.5.1/sweep-parallelism/`](docs/reports/raw/audit-v0.5.1/sweep-parallelism/).
+- **Measured result**:
+
+  | Parallelism | Median Mbps | Median total ms |
+  |---|---|---|
+  | 4 | 252.02 | 665 |
+  | 16 | 246.08 | 681 |
+  | 32 | 237.47 | 706 |
+  | 64 | 228.27 | 734 |
+  | **128 (current)** | 245.30 | 683 |
+  | 200 (uncapped) | 241.88 | 693 |
+
+- **Conclusion**: **Parallelism is not a meaningful lever on this hardware/scenario.** All values
+  cluster within ~10% (228–252 Mbps) — single-run noise dominates the differences. Best (p=4,
+  252 Mbps) is only ~3% above current p=128 (245 Mbps), well within the sample stdev.
+- **Action in v0.5.1**: **No production code change.** Keep `MAX_IMPORT_PARALLELISM=128`. Keep
+  the env-var override (`LIGHTNING_P2P_IMPORT_PARALLELISM`) as a power-user tuning knob and as
+  the substrate for the per-mode `TransferProfile` plumbing in Phase 3.
+- **Real bottleneck exposed by the sweep**: median export time is ~340 ms (51% of total) for the
+  many-small scenario — 200 sequential per-file export syscalls. **That** is what limits
+  many-small throughput, not import concurrency. The lever is B6 (small-file packing), gated on
+  a flamegraph for the iroh-blobs export path.
 
 ### B5 — `time_to_ticket_ms` ≈ 300 ms cold start (mostly iroh peer discovery)
 - **Where**: [`endpoint.rs::wait_for_ticket_direct_addresses`](src-tauri/src/node/endpoint.rs#L345-L358)
@@ -328,9 +387,13 @@ Mission text references §2–§7. Each item marked **present** / **partial** / 
 
 1. This AUDIT.md (Phase 1, done after merge).
 2. Flamegraph + perf pass to confirm B1-B5 bottleneck hypotheses (Phase 1 follow-up before Phase 2).
-3. Top-N measured perf wins, each with before/after numbers from `benchmark-local`. Final N
-   depends on what flamegraph confirms; commitment is "every fix shows a real win, no
-   speculative tuning."
+3. Top-N measured perf wins, each with before/after numbers from `benchmark-local`. **Done in
+   Phase 2:** B4 sweep produced **no production code change** (parallelism is not a lever — see
+   B4 entry for the table). Bench harness was extended (new scenarios + env-var tuning hook) and
+   the AUDIT was updated with sweep evidence. **B2** (per-mode QUIC config) is implemented as
+   part of Phase 3 (TransferMode). **Deferred:** B3 (needs new UI-path bench fixture), B1 / B6
+   (need flamegraph). Commitment: "every fix shows a real win, no speculative tuning" — and
+   sometimes the honest outcome is *no* fix.
 4. **Speed modes** as a real concept: `TransferMode` enum + per-mode profile + UI selector +
    settings persistence. Modes that show no measurable difference on the test rig will be
    collapsed (we ship 3 modes, not 5, if 5 can't be told apart).

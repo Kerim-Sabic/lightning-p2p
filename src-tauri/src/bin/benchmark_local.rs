@@ -41,21 +41,37 @@ type BenchResult<T> = Result<T, Box<dyn Error + Send + Sync>>;
 struct Scenario {
     name: &'static str,
     bytes: u64,
+    /// Number of files to generate. `1` produces a single payload; `>1` splits
+    /// `bytes` evenly across files for the "many small" cases.
+    file_count: u32,
 }
 
 const SMOKE_SCENARIOS: &[Scenario] = &[Scenario {
     name: "same_machine_10mb",
     bytes: 10 * 1024 * 1024,
+    file_count: 1,
 }];
 
 const FULL_SCENARIOS: &[Scenario] = &[
     Scenario {
         name: "same_machine_10mb",
         bytes: 10 * 1024 * 1024,
+        file_count: 1,
     },
     Scenario {
         name: "same_machine_100mb",
         bytes: 100 * 1024 * 1024,
+        file_count: 1,
+    },
+    Scenario {
+        name: "same_machine_1gb",
+        bytes: 1024 * 1024 * 1024,
+        file_count: 1,
+    },
+    Scenario {
+        name: "same_machine_many_small",
+        bytes: 20 * 1024 * 1024,
+        file_count: 200,
     },
 ];
 
@@ -107,6 +123,10 @@ struct CliArgs {
     runs: u32,
     profile: String,
     output_dir: PathBuf,
+    /// Optional comma-separated allowlist of scenario names. When present, only
+    /// scenarios whose `name` matches are executed. Useful for tuning sweeps
+    /// that should avoid re-running 1 GB just to retest many-small.
+    scenarios: Option<Vec<String>>,
 }
 
 fn main() {
@@ -135,6 +155,7 @@ fn parse_args() -> Result<CliArgs, String> {
     let mut runs: u32 = 3;
     let mut profile = String::from("smoke");
     let mut output_dir = PathBuf::from("docs/reports/raw/local");
+    let mut scenarios: Option<Vec<String>> = None;
 
     let mut iter = env::args().skip(1);
     while let Some(arg) = iter.next() {
@@ -161,6 +182,18 @@ fn parse_args() -> Result<CliArgs, String> {
                 let value = iter.next().ok_or("--output-dir requires a value")?;
                 output_dir = PathBuf::from(value);
             }
+            "--scenarios" => {
+                let value = iter.next().ok_or("--scenarios requires a value")?;
+                let parsed: Vec<String> = value
+                    .split(',')
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect();
+                if parsed.is_empty() {
+                    return Err("--scenarios requires at least one name".into());
+                }
+                scenarios = Some(parsed);
+            }
             "--help" | "-h" => {
                 print_usage();
                 std::process::exit(0);
@@ -173,11 +206,15 @@ fn parse_args() -> Result<CliArgs, String> {
         runs,
         profile,
         output_dir,
+        scenarios,
     })
 }
 
 fn print_usage() {
-    eprintln!("usage: benchmark-local [--runs N] [--profile smoke|full] [--output-dir <path>]");
+    eprintln!(
+        "usage: benchmark-local [--runs N] [--profile smoke|full] [--output-dir <path>] \
+         [--scenarios name[,name...]]"
+    );
     eprintln!();
     eprintln!("Defaults:");
     eprintln!("  --runs 3");
@@ -186,15 +223,37 @@ fn print_usage() {
     eprintln!();
     eprintln!("Profiles:");
     eprintln!("  smoke   one scenario (10 MB), CI-friendly");
-    eprintln!("  full    adds 100 MB scenario; minutes of wall time");
+    eprintln!(
+        "  full    10 MB + 100 MB + 1 GB + many-small (200 x 100 KB); several minutes wall time"
+    );
+    eprintln!();
+    eprintln!("Scenarios (selectable via --scenarios):");
+    eprintln!("  same_machine_10mb, same_machine_100mb, same_machine_1gb,");
+    eprintln!("  same_machine_many_small");
+    eprintln!();
+    eprintln!("Environment tuning hooks:");
+    eprintln!("  LIGHTNING_P2P_IMPORT_PARALLELISM=N    cap concurrent file imports for sweep tests");
 }
 
 async fn run_all(args: CliArgs) -> i32 {
-    let scenarios = if args.profile == "full" {
+    let base_scenarios = if args.profile == "full" {
         FULL_SCENARIOS
     } else {
         SMOKE_SCENARIOS
     };
+
+    let scenarios: Vec<&Scenario> = match &args.scenarios {
+        None => base_scenarios.iter().collect(),
+        Some(allowlist) => base_scenarios
+            .iter()
+            .filter(|s| allowlist.iter().any(|name| name == s.name))
+            .collect(),
+    };
+
+    if scenarios.is_empty() {
+        eprintln!("benchmark-local: no scenarios matched the filter");
+        return 2;
+    }
 
     eprintln!(
         "benchmark-local: profile={} scenarios={} runs_per_scenario={}",
@@ -206,7 +265,7 @@ async fn run_all(args: CliArgs) -> i32 {
     let mut runs = Vec::with_capacity(scenarios.len() * args.runs as usize);
     let mut any_failure = false;
 
-    for scenario in scenarios {
+    for scenario in &scenarios {
         eprintln!(
             "scenario={} bytes={} runs={}",
             scenario.name, scenario.bytes, args.runs
@@ -229,7 +288,7 @@ async fn run_all(args: CliArgs) -> i32 {
         }
     }
 
-    let summary = build_summary(scenarios, &runs);
+    let summary = build_summary(&scenarios, &runs);
     let report = BenchmarkReport {
         schema_version: REPORT_SCHEMA_VERSION,
         generated_at_unix: unix_now(),
@@ -313,8 +372,7 @@ async fn execute_scenario(scenario: &Scenario) -> BenchResult<ScenarioMetrics> {
     fs::create_dir_all(&source_dir)?;
     fs::create_dir_all(&receive_dir)?;
 
-    let source_file = source_dir.join("payload.bin");
-    create_pattern_file(&source_file, scenario.bytes)?;
+    let source_paths = create_scenario_payload(&source_dir, scenario)?;
 
     let sender_node = LightningP2PNode::start_with_dirs(
         root.path().join("sender-data"),
@@ -328,7 +386,7 @@ async fn execute_scenario(scenario: &Scenario) -> BenchResult<ScenarioMetrics> {
     .await?;
 
     let ticket_started = Instant::now();
-    let share = sender::create_share(&sender_node, vec![source_file]).await?;
+    let share = sender::create_share(&sender_node, source_paths).await?;
     let parsed = ShareTicket::parse(&share.ticket.to_string())?;
     let time_to_ticket = ticket_started.elapsed();
 
@@ -349,7 +407,7 @@ async fn execute_scenario(scenario: &Scenario) -> BenchResult<ScenarioMetrics> {
     })
 }
 
-fn build_summary(scenarios: &[Scenario], runs: &[RunResult]) -> Vec<ScenarioSummary> {
+fn build_summary(scenarios: &[&Scenario], runs: &[RunResult]) -> Vec<ScenarioSummary> {
     scenarios
         .iter()
         .map(|scenario| {
@@ -516,6 +574,26 @@ fn commit_hash() -> String {
         .and_then(|out| String::from_utf8(out.stdout).ok())
         .map(|s| s.trim().to_string())
         .unwrap_or_else(|| "unknown".to_string())
+}
+
+fn create_scenario_payload(source_dir: &Path, scenario: &Scenario) -> BenchResult<Vec<PathBuf>> {
+    if scenario.file_count <= 1 {
+        let source_file = source_dir.join("payload.bin");
+        create_pattern_file(&source_file, scenario.bytes)?;
+        return Ok(vec![source_file]);
+    }
+
+    let per_file = scenario.bytes / u64::from(scenario.file_count);
+    if per_file == 0 {
+        return Err("scenario file_count exceeds total bytes".into());
+    }
+    let mut paths = Vec::with_capacity(scenario.file_count as usize);
+    for index in 0..scenario.file_count {
+        let path = source_dir.join(format!("payload-{index:04}.bin"));
+        create_pattern_file(&path, per_file)?;
+        paths.push(path);
+    }
+    Ok(paths)
 }
 
 fn create_pattern_file(path: &Path, size: u64) -> BenchResult<()> {

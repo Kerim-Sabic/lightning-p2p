@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "generated_at_unix": 1779827316,
+  "app_version": "0.5.0",
+  "commit_hash": "4ce81140fdc2",
+  "os": "windows",
+  "arch": "x86_64",
+  "harness": "same-machine-two-profile",
+  "transport": "iroh-loopback",
+  "caveats": [
+    "Same-machine loopback only. Does not measure WAN, relay, NAT, or Wi-Fi.",
+    "Single-process two-profile harness. Not equivalent to two separate devices.",
+    "Throughput is bounded by local IO, CPU, and tokio scheduling, not network.",
+    "Do not publish 'fastest' or comparison claims from this report."
+  ],
+  "summary": [
+    {
+      "scenario": "same_machine_many_small",
+      "bytes": 20971520,
+      "runs": 5,
+      "successes": 5,
+      "failures": 0,
+      "median_total_ms": 681,
+      "median_download_ms": 339,
+      "median_export_ms": 352,
+      "median_effective_mbps": 246.08037309510914
+    }
+  ],
+  "runs": [
+    {
+      "scenario": "same_machine_many_small",
+      "run": 1,
+      "bytes": 20971520,
+      "time_to_ticket_ms": 291,
+      "connect_ms": 3,
+      "download_ms": 348,
+      "export_ms": 320,
+      "total_ms": 668,
+      "effective_mbps": 250.88750105239203,
+      "route_kind": "direct",
+      "success": true,
+      "error": null
+    },
+    {
+      "scenario": "same_machine_many_small",
+      "run": 2,
+      "bytes": 20971520,
+      "time_to_ticket_ms": 310,
+      "connect_ms": 3,
+      "download_ms": 302,
+      "export_ms": 340,
+      "total_ms": 642,
+      "effective_mbps": 261.11805085829957,
+      "route_kind": "direct",
+      "success": true,
+      "error": null
+    },
+    {
+      "scenario": "same_machine_many_small",
+      "run": 3,
+      "bytes": 20971520,
+      "time_to_ticket_ms": 308,
+      "connect_ms": 3,
+      "download_ms": 327,
+      "export_ms": 354,
+      "total_ms": 681,
+      "effective_mbps": 246.08037309510914,
+      "route_kind": "direct",
+      "success": true,
+      "error": null
+    },
+    {
+      "scenario": "same_machine_many_small",
+      "run": 4,
+      "bytes": 20971520,
+      "time_to_ticket_ms": 321,
+      "connect_ms": 3,
+      "download_ms": 345,
+      "export_ms": 358,
+      "total_ms": 704,
+      "effective_mbps": 238.05627573931721,
+      "route_kind": "direct",
+      "success": true,
+      "error": null
+    },
+    {
+      "scenario": "same_machine_many_small",
+      "run": 5,
+      "bytes": 20971520,
+      "time_to_ticket_ms": 307,
+      "connect_ms": 3,
+      "download_ms": 339,
+      "export_ms": 352,
+      "total_ms": 691,
+      "effective_mbps": 242.57957800343254,
+      "route_kind": "direct",
+      "success": true,
+      "error": null
+    }
+  ]
+}

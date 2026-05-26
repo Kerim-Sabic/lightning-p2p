@@ -287,8 +287,21 @@ fn import_task(
 fn import_parallelism(source_count: usize) -> usize {
     // Import is I/O-bound (disk read + hashing handled by iroh-blobs in async tasks),
     // so CPU count is a poor proxy — NVMe can comfortably absorb many in-flight imports.
-    // Scale directly with the batch size, capped at MAX.
-    source_count.clamp(1, MAX_IMPORT_PARALLELISM)
+    // Scale directly with the batch size, capped at MAX. The cap is overridable via the
+    // `LIGHTNING_P2P_IMPORT_PARALLELISM` env var for tuning sweeps.
+    compute_import_parallelism(source_count, env_import_parallelism_cap())
+}
+
+fn env_import_parallelism_cap() -> usize {
+    std::env::var("LIGHTNING_P2P_IMPORT_PARALLELISM")
+        .ok()
+        .and_then(|raw| raw.parse::<usize>().ok())
+        .filter(|&n| n > 0)
+        .unwrap_or(MAX_IMPORT_PARALLELISM)
+}
+
+fn compute_import_parallelism(source_count: usize, cap: usize) -> usize {
+    source_count.clamp(1, cap.max(1))
 }
 
 async fn import_source(
@@ -449,7 +462,17 @@ mod tests {
 
     #[test]
     fn parallelism_is_bounded() {
-        assert_eq!(import_parallelism(1), 1);
-        assert!(import_parallelism(256) <= MAX_IMPORT_PARALLELISM);
+        assert_eq!(compute_import_parallelism(1, MAX_IMPORT_PARALLELISM), 1);
+        assert_eq!(
+            compute_import_parallelism(256, MAX_IMPORT_PARALLELISM),
+            MAX_IMPORT_PARALLELISM
+        );
+    }
+
+    #[test]
+    fn parallelism_respects_cap_override() {
+        assert_eq!(compute_import_parallelism(256, 4), 4);
+        assert_eq!(compute_import_parallelism(1, 4), 1);
+        assert_eq!(compute_import_parallelism(10, 0), 1);
     }
 }

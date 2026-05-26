@@ -1,0 +1,6 @@
+app_version,commit_hash,os,arch,scenario,run,bytes,time_to_ticket_ms,connect_ms,download_ms,export_ms,total_ms,effective_mbps,route_kind,success,error
+0.5.0,4ce81140fdc2,windows,x86_64,same_machine_many_small,1,20971520,306,173,508,319,828,202.4802,direct,true,
+0.5.0,4ce81140fdc2,windows,x86_64,same_machine_many_small,2,20971520,306,179,536,359,895,187.2783,direct,true,
+0.5.0,4ce81140fdc2,windows,x86_64,same_machine_many_small,3,20971520,309,3,379,355,734,228.2743,direct,true,
+0.5.0,4ce81140fdc2,windows,x86_64,same_machine_many_small,4,20971520,316,3,376,345,721,232.5204,direct,true,
+0.5.0,4ce81140fdc2,windows,x86_64,same_machine_many_small,5,20971520,306,3,361,364,726,230.8076,direct,true,
