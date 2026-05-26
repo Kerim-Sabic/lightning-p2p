@@ -118,6 +118,35 @@ Observations across both baselines:
 - `time_to_ticket_ms` is ~300–400 ms in steady state. For 100 MB that is ~19% of the round trip;
   for 1 GB it's ~2% — amortized away by long transfers.
 
+### 2.1.1 Mode comparison on the 100 MB scenario
+
+Run after Phase 5 added the `--mode` CLI flag to `benchmark-local`. Each mode
+ran 5x on `same_machine_100mb`. Artifacts:
+[`docs/reports/raw/audit-v0.5.1/mode-sweep/`](docs/reports/raw/audit-v0.5.1/mode-sweep/).
+
+| Mode | Median Mbps | Range Mbps | Bottleneck (5/5 runs) |
+|---|---|---|---|
+| Standard | 675.29 | 652 – 716 | download |
+| Fast | 688.24 | 596 – 781 | download |
+| Extreme | 647.29 | 577 – 698 | download |
+| LanBeast | **709.55** | 615 – 762 | download |
+| BatterySafe | 626.36 | 600 – 694 | download |
+
+The full spread across all five modes is ~83 Mbps (626 → 709), about 13% of
+the lowest value. Within-mode run-to-run variance (e.g. Fast spans 596 → 781 =
+31% spread on 5 runs) is **larger** than the between-mode differences. The
+honest reading: on same-machine loopback, **no mode is measurably faster than
+any other**. The hierarchy is mostly resource-shape, not throughput.
+
+This empirically confirms the AUDIT.md §3 B2 hypothesis and the §6 honest-
+scope statement: per-mode QUIC tuning needs a real network (LAN with non-zero
+RTT, multi-GbE links, or WAN) to surface. Loopback is window-saturation-free.
+
+The bottleneck heuristic (added in Phase 5) tagged every run as "download" —
+expected for single-file scenarios where download_ms is >99% of total. The
+many-small scenario in [`docs/reports/raw/audit-v0.5.1/baseline-v2`](docs/reports/raw/audit-v0.5.1/baseline-v2/)
+correspondingly tags as "export" or "balanced" depending on the run.
+
 ### 2.2 Flamegraph / CPU profile
 
 **UNMEASURED on this machine.** `samply 0.13.1` was installed during Phase 2 prep but requires
@@ -164,17 +193,21 @@ why it is suspect, what to try, what to measure.
 - **Risk**: Low — tuning, not surgery.
 
 ### B2 — Single global QUIC transport config; no per-mode tuning
-- **Where**: [`endpoint.rs:317-326`](src-tauri/src/node/endpoint.rs#L317-L326),
-  [`tuned_transport_config`](src-tauri/src/node/endpoint.rs#L317).
-- **Why suspect**: Current values (256 MB connection window, 64 MB stream window, 1024 streams,
-  5 s keepalive) were chosen once and never benchmarked across scenarios. On loopback they may be
-  oversized (memory pressure on the receive side), on multi-GbE LAN they may be undersized
-  (BDP-limited). One config cannot be optimal for both Standard, LanBeast, and BatterySafe.
-- **Try**: Phase 3 introduces `TransferMode` with per-mode `TransportConfig`. Sweep
-  send/recv windows ∈ {64 MB, 256 MB, 1 GB} and stream window ∈ {16 MB, 64 MB, 256 MB} on the
-  loopback bench; pick the best per scenario.
-- **Win estimate**: UNMEASURED. Loopback may not move at all; LAN sweep is where this pays off.
-- **Risk**: Medium — wider windows consume memory; need to gate by available RAM.
+- **Where**: previously [`endpoint.rs:317-326`](src-tauri/src/node/endpoint.rs#L317-L326),
+  now [`transfer/mode.rs`](src-tauri/src/transfer/mode.rs) →
+  [`endpoint.rs::tuned_transport_config(profile)`](src-tauri/src/node/endpoint.rs).
+- **Resolved (partially)**: Phase 3 introduced `TransferMode` with per-mode `TransportConfig`
+  (Standard, Fast, Extreme, LanBeast, BatterySafe). Windows + stream caps + keepalive vary
+  per mode; the active mode is persisted in `AppSettings` and the supervisor restarts the node
+  on change. UI selector lives in Settings.
+- **Loopback evidence (Phase 5 mode sweep)**: see §2.1.1 above. All five modes cluster within
+  ~13% on `same_machine_100mb`; the spread is smaller than within-mode 5-run variance. **No
+  mode is measurably faster than another on loopback.** This is the audit-honest outcome
+  predicted in §3.
+- **Open**: LAN/WAN validation (1/2.5/10 GbE, non-zero RTT, real BDP) is required to know
+  whether the Extreme/LanBeast windows actually unlock throughput. **Deferred to v0.6**.
+- **Risk**: Wider windows consume more RAM at scale; the BatterySafe profile already gives a
+  smaller-footprint option for low-RAM mobile devices.
 
 ### B3 — Progress event emission cost at 10 Hz (100 ms interval)
 - **Where**: [`progress.rs:14`](src-tauri/src/transfer/progress.rs#L14),

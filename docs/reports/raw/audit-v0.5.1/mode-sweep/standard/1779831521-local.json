@@ -1,0 +1,109 @@
+{
+  "schema_version": 2,
+  "generated_at_unix": 1779831521,
+  "app_version": "0.5.0",
+  "commit_hash": "88295e0208cf",
+  "os": "windows",
+  "arch": "x86_64",
+  "mode": "standard",
+  "hardware_notes": "AMD Zen 5 (Family 25 Model 97 ~4.5GHz), Windows 11 Build 26200, NVMe boot",
+  "harness": "same-machine-two-profile",
+  "transport": "iroh-loopback",
+  "caveats": [
+    "Same-machine loopback only. Does not measure WAN, relay, NAT, or Wi-Fi.",
+    "Single-process two-profile harness. Not equivalent to two separate devices.",
+    "Throughput is bounded by local IO, CPU, and tokio scheduling, not network.",
+    "Bottleneck estimate is a heuristic from timing ratios, not a flamegraph.",
+    "Do not publish 'fastest' or comparison claims from this report."
+  ],
+  "summary": [
+    {
+      "scenario": "same_machine_100mb",
+      "bytes": 104857600,
+      "runs": 5,
+      "successes": 5,
+      "failures": 0,
+      "median_total_ms": 1242,
+      "median_download_ms": 1234,
+      "median_export_ms": 7,
+      "median_effective_mbps": 675.2899156930897
+    }
+  ],
+  "runs": [
+    {
+      "scenario": "same_machine_100mb",
+      "run": 1,
+      "bytes": 104857600,
+      "time_to_ticket_ms": 407,
+      "connect_ms": 172,
+      "download_ms": 1278,
+      "export_ms": 7,
+      "total_ms": 1285,
+      "effective_mbps": 652.3316015034268,
+      "route_kind": "direct",
+      "bottleneck_estimate": "download",
+      "success": true,
+      "error": null
+    },
+    {
+      "scenario": "same_machine_100mb",
+      "run": 2,
+      "bytes": 104857600,
+      "time_to_ticket_ms": 315,
+      "connect_ms": 2,
+      "download_ms": 1162,
+      "export_ms": 8,
+      "total_ms": 1171,
+      "effective_mbps": 716.2635542711334,
+      "route_kind": "direct",
+      "bottleneck_estimate": "download",
+      "success": true,
+      "error": null
+    },
+    {
+      "scenario": "same_machine_100mb",
+      "run": 3,
+      "bytes": 104857600,
+      "time_to_ticket_ms": 308,
+      "connect_ms": 2,
+      "download_ms": 1234,
+      "export_ms": 8,
+      "total_ms": 1242,
+      "effective_mbps": 675.2899156930897,
+      "route_kind": "direct",
+      "bottleneck_estimate": "download",
+      "success": true,
+      "error": null
+    },
+    {
+      "scenario": "same_machine_100mb",
+      "run": 4,
+      "bytes": 104857600,
+      "time_to_ticket_ms": 308,
+      "connect_ms": 3,
+      "download_ms": 1209,
+      "export_ms": 7,
+      "total_ms": 1216,
+      "effective_mbps": 689.4035554635834,
+      "route_kind": "direct",
+      "bottleneck_estimate": "download",
+      "success": true,
+      "error": null
+    },
+    {
+      "scenario": "same_machine_100mb",
+      "run": 5,
+      "bytes": 104857600,
+      "time_to_ticket_ms": 296,
+      "connect_ms": 2,
+      "download_ms": 1248,
+      "export_ms": 7,
+      "total_ms": 1256,
+      "effective_mbps": 667.823198263913,
+      "route_kind": "direct",
+      "bottleneck_estimate": "download",
+      "success": true,
+      "error": null
+    }
+  ]
+}

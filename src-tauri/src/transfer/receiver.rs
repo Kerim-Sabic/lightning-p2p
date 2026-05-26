@@ -77,6 +77,8 @@ pub struct ReceiveOutcome {
     pub route_kind: RouteKind,
     /// Time to first successful peer contact.
     pub connect_ms: u64,
+    /// Time from receive start to the first verified byte landing in the store.
+    pub first_byte_ms: u64,
     /// Time spent downloading data into the local blob store.
     pub download_ms: u64,
     /// Time spent exporting verified data to disk.
@@ -232,6 +234,7 @@ pub async fn receive_ticket(
         peer: summary.peer,
         route_kind: summary.metrics.route_kind,
         connect_ms: summary.metrics.connect_ms,
+        first_byte_ms: summary.metrics.first_byte_ms,
         download_ms: summary.metrics.download_ms,
         export_ms: summary.metrics.export_ms,
         output_path: summary.output_path,

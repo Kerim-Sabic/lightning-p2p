@@ -22,7 +22,7 @@
 
 use lightning_p2p_lib::node::LightningP2PNode;
 use lightning_p2p_lib::transfer::ticket::ShareTicket;
-use lightning_p2p_lib::transfer::{receiver, sender};
+use lightning_p2p_lib::transfer::{receiver, sender, TransferMode};
 use serde::Serialize;
 use std::env;
 use std::error::Error;
@@ -33,7 +33,10 @@ use std::process::Command;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 const CHUNK_BYTES: usize = 1024 * 1024;
-const REPORT_SCHEMA_VERSION: u32 = 1;
+/// Schema v2 adds `mode`, `hardware_notes`, and per-run `bottleneck_estimate`
+/// alongside the v1 fields. Consumers that read v1 should treat new fields as
+/// optional.
+const REPORT_SCHEMA_VERSION: u32 = 2;
 
 type BenchResult<T> = Result<T, Box<dyn Error + Send + Sync>>;
 
@@ -87,6 +90,7 @@ struct RunResult {
     total_ms: u128,
     effective_mbps: f64,
     route_kind: String,
+    bottleneck_estimate: &'static str,
     success: bool,
     error: Option<String>,
 }
@@ -112,6 +116,11 @@ struct BenchmarkReport {
     commit_hash: String,
     os: &'static str,
     arch: &'static str,
+    /// Wire-format name of the TransferMode used for both peers in this run.
+    mode: &'static str,
+    /// Free-form hardware/network notes supplied by the operator via
+    /// `--hardware-notes`. Empty string when unset.
+    hardware_notes: String,
     harness: &'static str,
     transport: &'static str,
     caveats: Vec<&'static str>,
@@ -127,6 +136,11 @@ struct CliArgs {
     /// scenarios whose `name` matches are executed. Useful for tuning sweeps
     /// that should avoid re-running 1 GB just to retest many-small.
     scenarios: Option<Vec<String>>,
+    /// Transfer mode used for both sender and receiver in this bench run.
+    /// Defaults to Standard so the figures match user-default behavior.
+    mode: TransferMode,
+    /// Free-form hardware/network description that appears in the report.
+    hardware_notes: String,
 }
 
 fn main() {
@@ -156,6 +170,8 @@ fn parse_args() -> Result<CliArgs, String> {
     let mut profile = String::from("smoke");
     let mut output_dir = PathBuf::from("docs/reports/raw/local");
     let mut scenarios: Option<Vec<String>> = None;
+    let mut mode = TransferMode::Standard;
+    let mut hardware_notes = String::new();
 
     let mut iter = env::args().skip(1);
     while let Some(arg) = iter.next() {
@@ -194,6 +210,19 @@ fn parse_args() -> Result<CliArgs, String> {
                 }
                 scenarios = Some(parsed);
             }
+            "--mode" => {
+                let value = iter.next().ok_or("--mode requires a value")?;
+                mode = TransferMode::from_wire(&value).ok_or_else(|| {
+                    format!(
+                        "--mode must be one of standard|fast|extreme|lan_beast|battery_safe, got '{value}'"
+                    )
+                })?;
+            }
+            "--hardware-notes" => {
+                hardware_notes = iter
+                    .next()
+                    .ok_or("--hardware-notes requires a value")?;
+            }
             "--help" | "-h" => {
                 print_usage();
                 std::process::exit(0);
@@ -207,19 +236,22 @@ fn parse_args() -> Result<CliArgs, String> {
         profile,
         output_dir,
         scenarios,
+        mode,
+        hardware_notes,
     })
 }
 
 fn print_usage() {
     eprintln!(
         "usage: benchmark-local [--runs N] [--profile smoke|full] [--output-dir <path>] \
-         [--scenarios name[,name...]]"
+         [--scenarios name[,name...]] [--mode <m>] [--hardware-notes <text>]"
     );
     eprintln!();
     eprintln!("Defaults:");
     eprintln!("  --runs 3");
     eprintln!("  --profile smoke    (10 MB only; ~30 s wall time)");
     eprintln!("  --output-dir docs/reports/raw/local");
+    eprintln!("  --mode standard");
     eprintln!();
     eprintln!("Profiles:");
     eprintln!("  smoke   one scenario (10 MB), CI-friendly");
@@ -230,6 +262,9 @@ fn print_usage() {
     eprintln!("Scenarios (selectable via --scenarios):");
     eprintln!("  same_machine_10mb, same_machine_100mb, same_machine_1gb,");
     eprintln!("  same_machine_many_small");
+    eprintln!();
+    eprintln!("Modes (selectable via --mode):");
+    eprintln!("  standard, fast, extreme, lan_beast, battery_safe");
     eprintln!();
     eprintln!("Environment tuning hooks:");
     eprintln!("  LIGHTNING_P2P_IMPORT_PARALLELISM=N    cap concurrent file imports for sweep tests");
@@ -256,10 +291,11 @@ async fn run_all(args: CliArgs) -> i32 {
     }
 
     eprintln!(
-        "benchmark-local: profile={} scenarios={} runs_per_scenario={}",
+        "benchmark-local: profile={} scenarios={} runs_per_scenario={} mode={}",
         args.profile,
         scenarios.len(),
-        args.runs
+        args.runs,
+        args.mode.as_str()
     );
 
     let mut runs = Vec::with_capacity(scenarios.len() * args.runs as usize);
@@ -271,17 +307,18 @@ async fn run_all(args: CliArgs) -> i32 {
             scenario.name, scenario.bytes, args.runs
         );
         for run_index in 1..=args.runs {
-            let result = run_one(scenario, run_index).await;
+            let result = run_one(scenario, run_index, args.mode).await;
             if !result.success {
                 any_failure = true;
             }
             eprintln!(
-                "  run={} total_ms={} download_ms={} export_ms={} effective_mbps={:.2} success={}",
+                "  run={} total_ms={} download_ms={} export_ms={} effective_mbps={:.2} bottleneck={} success={}",
                 result.run,
                 result.total_ms,
                 result.download_ms,
                 result.export_ms,
                 result.effective_mbps,
+                result.bottleneck_estimate,
                 result.success
             );
             runs.push(result);
@@ -296,12 +333,15 @@ async fn run_all(args: CliArgs) -> i32 {
         commit_hash: commit_hash(),
         os: env::consts::OS,
         arch: env::consts::ARCH,
+        mode: args.mode.as_str(),
+        hardware_notes: args.hardware_notes,
         harness: "same-machine-two-profile",
         transport: "iroh-loopback",
         caveats: vec![
             "Same-machine loopback only. Does not measure WAN, relay, NAT, or Wi-Fi.",
             "Single-process two-profile harness. Not equivalent to two separate devices.",
             "Throughput is bounded by local IO, CPU, and tokio scheduling, not network.",
+            "Bottleneck estimate is a heuristic from timing ratios, not a flamegraph.",
             "Do not publish 'fastest' or comparison claims from this report.",
         ],
         summary,
@@ -323,8 +363,8 @@ async fn run_all(args: CliArgs) -> i32 {
     }
 }
 
-async fn run_one(scenario: &Scenario, run: u32) -> RunResult {
-    match execute_scenario(scenario).await {
+async fn run_one(scenario: &Scenario, run: u32, mode: TransferMode) -> RunResult {
+    match execute_scenario(scenario, mode).await {
         Ok(metrics) => RunResult {
             scenario: scenario.name,
             run,
@@ -336,6 +376,11 @@ async fn run_one(scenario: &Scenario, run: u32) -> RunResult {
             total_ms: metrics.total.as_millis(),
             effective_mbps: mbps(scenario.bytes, metrics.total),
             route_kind: metrics.route_kind,
+            bottleneck_estimate: estimate_bottleneck(
+                metrics.download_ms,
+                metrics.export_ms,
+                metrics.first_byte_ms,
+            ),
             success: true,
             error: None,
         },
@@ -350,9 +395,36 @@ async fn run_one(scenario: &Scenario, run: u32) -> RunResult {
             total_ms: 0,
             effective_mbps: 0.0,
             route_kind: "unknown".to_string(),
+            bottleneck_estimate: "unknown",
             success: false,
             error: Some(redact_error(&error.to_string())),
         },
+    }
+}
+
+/// Coarse heuristic that maps the timing breakdown of a single run to a
+/// human-readable bottleneck tag. Denominator is `download_ms + export_ms`
+/// (`first_byte_ms` overlaps with download time and is measured against the
+/// same denominator). Gates are tuned so the categories cover roughly:
+///   - "first_byte"   first-byte latency >= 30% of total → peer setup dominates
+///   - "export"       export_ms >= 30% of total          → per-file disk syscalls dominate
+///   - "download"     download_ms > 75% of total         → transport/storage pipeline dominates
+///   - "balanced"     none of the above passes its gate
+///     (typical zone: download 50-75%, export < 30%, first_byte < 30%)
+fn estimate_bottleneck(download_ms: u64, export_ms: u64, first_byte_ms: u64) -> &'static str {
+    let total = download_ms.saturating_add(export_ms).max(1);
+    let first_byte_pct = first_byte_ms.saturating_mul(100) / total;
+    let export_pct = export_ms.saturating_mul(100) / total;
+    let download_pct = download_ms.saturating_mul(100) / total;
+
+    if first_byte_pct >= 30 {
+        "first_byte"
+    } else if export_pct >= 30 {
+        "export"
+    } else if download_pct > 75 {
+        "download"
+    } else {
+        "balanced"
     }
 }
 
@@ -361,11 +433,15 @@ struct ScenarioMetrics {
     connect_ms: u64,
     download_ms: u64,
     export_ms: u64,
+    first_byte_ms: u64,
     total: Duration,
     route_kind: String,
 }
 
-async fn execute_scenario(scenario: &Scenario) -> BenchResult<ScenarioMetrics> {
+async fn execute_scenario(
+    scenario: &Scenario,
+    mode: TransferMode,
+) -> BenchResult<ScenarioMetrics> {
     let root = TempRoot::new("lightning-p2p-bench")?;
     let source_dir = root.path().join("source");
     let receive_dir = root.path().join("received");
@@ -373,15 +449,22 @@ async fn execute_scenario(scenario: &Scenario) -> BenchResult<ScenarioMetrics> {
     fs::create_dir_all(&receive_dir)?;
 
     let source_paths = create_scenario_payload(&source_dir, scenario)?;
+    let profile = mode.profile();
 
-    let sender_node = LightningP2PNode::start_with_dirs(
+    let sender_node = LightningP2PNode::start_with_dirs_and_relay(
         root.path().join("sender-data"),
         root.path().join("sender-downloads"),
+        None,
+        None,
+        profile,
     )
     .await?;
-    let receiver_node = LightningP2PNode::start_with_dirs(
+    let receiver_node = LightningP2PNode::start_with_dirs_and_relay(
         root.path().join("receiver-data"),
         root.path().join("receiver-downloads"),
+        None,
+        None,
+        profile,
     )
     .await?;
 
@@ -402,6 +485,7 @@ async fn execute_scenario(scenario: &Scenario) -> BenchResult<ScenarioMetrics> {
         connect_ms: outcome.connect_ms,
         download_ms: outcome.download_ms,
         export_ms: outcome.export_ms,
+        first_byte_ms: outcome.first_byte_ms,
         total,
         route_kind: format!("{:?}", outcome.route_kind).to_lowercase(),
     })
@@ -466,16 +550,17 @@ fn write_csv(path: &Path, report: &BenchmarkReport) -> BenchResult<()> {
     let mut writer = BufWriter::new(file);
     writeln!(
         writer,
-        "app_version,commit_hash,os,arch,scenario,run,bytes,time_to_ticket_ms,connect_ms,download_ms,export_ms,total_ms,effective_mbps,route_kind,success,error"
+        "app_version,commit_hash,os,arch,mode,scenario,run,bytes,time_to_ticket_ms,connect_ms,download_ms,export_ms,total_ms,effective_mbps,route_kind,bottleneck_estimate,success,error,hardware_notes"
     )?;
     for run in &report.runs {
         writeln!(
             writer,
-            "{},{},{},{},{},{},{},{},{},{},{},{},{:.4},{},{},{}",
+            "{},{},{},{},{},{},{},{},{},{},{},{},{},{:.4},{},{},{},{},{}",
             csv_escape(&report.app_version),
             csv_escape(&report.commit_hash),
             csv_escape(report.os),
             csv_escape(report.arch),
+            csv_escape(report.mode),
             csv_escape(run.scenario),
             run.run,
             run.bytes,
@@ -486,8 +571,10 @@ fn write_csv(path: &Path, report: &BenchmarkReport) -> BenchResult<()> {
             run.total_ms,
             run.effective_mbps,
             csv_escape(&run.route_kind),
+            csv_escape(run.bottleneck_estimate),
             run.success,
             csv_escape(run.error.as_deref().unwrap_or("")),
+            csv_escape(&report.hardware_notes),
         )?;
     }
     writer.flush()?;
@@ -640,5 +727,40 @@ impl TempRoot {
 impl Drop for TempRoot {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::estimate_bottleneck;
+
+    #[test]
+    fn first_byte_wins_when_warmup_dominates() {
+        // 60% first_byte → wins regardless of download/export split.
+        assert_eq!(estimate_bottleneck(60, 40, 60), "first_byte");
+    }
+
+    #[test]
+    fn export_wins_for_many_small_workloads() {
+        // many-small bench: download ~ 50%, export ~ 50%, first byte negligible.
+        assert_eq!(estimate_bottleneck(500, 500, 5), "export");
+    }
+
+    #[test]
+    fn download_wins_for_large_single_file() {
+        // 100 MB: export hardlink ~ 8 ms vs ~ 2000 ms download → download > 75%.
+        assert_eq!(estimate_bottleneck(2000, 8, 5), "download");
+    }
+
+    #[test]
+    fn balanced_when_no_axis_dominates() {
+        // download 60ms (66%), export 25ms (28%), first_byte 15ms (16%):
+        // no gate is crossed → balanced.
+        assert_eq!(estimate_bottleneck(60, 25, 15), "balanced");
+    }
+
+    #[test]
+    fn all_zero_input_falls_through_to_balanced() {
+        assert_eq!(estimate_bottleneck(0, 0, 0), "balanced");
     }
 }
