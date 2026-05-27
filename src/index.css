@@ -1111,6 +1111,72 @@ body.app-hydrated .static-seo-fallback {
   transform-style: preserve-3d;
 }
 
+@keyframes caret-blink {
+  0%, 50%   { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+@keyframes beam-sweep {
+  0%   { transform: translate3d(-100%, 0, 0); }
+  100% { transform: translate3d(100%, 0, 0); }
+}
+
+@keyframes packet-cycle {
+  0%   { transform: scaleX(0.04); opacity: 0.6; }
+  10%  { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { transform: scaleX(1);    opacity: 0.6; }
+}
+
+.typing-caret {
+  display: inline-block;
+  width: 0.55ch;
+  height: 1em;
+  margin-left: 1px;
+  vertical-align: -0.12em;
+  background: currentColor;
+  animation: caret-blink 1.05s steps(1) infinite;
+}
+
+.section-beam {
+  position: relative;
+}
+
+.section-beam::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    oklch(82% 0.16 150 / 0.55) 38%,
+    oklch(82% 0.16 150 / 0.85) 50%,
+    oklch(82% 0.16 150 / 0.55) 62%,
+    transparent
+  );
+  background-size: 60% 100%;
+  background-repeat: no-repeat;
+  background-position: -60% 0;
+  filter: drop-shadow(0 0 8px oklch(82% 0.16 150 / 0.4));
+  animation: section-beam-flow 9s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes section-beam-flow {
+  0%   { background-position: -60% 0; opacity: 0; }
+  20%  { opacity: 1; }
+  80%  { opacity: 1; }
+  100% { background-position: 160% 0; opacity: 0; }
+}
+
+.packet-cycle {
+  transform-origin: left center;
+  animation: packet-cycle 3.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .aurora-layer,
   .marquee-track,
@@ -1119,8 +1185,14 @@ body.app-hydrated .static-seo-fallback {
   .spotlight-sweep,
   .node-breathe,
   .glitch-jitter,
-  .neon-edge {
+  .neon-edge,
+  .typing-caret,
+  .section-beam::before,
+  .packet-cycle {
     animation: none !important;
+  }
+  .section-beam::before {
+    opacity: 0 !important;
   }
   .char-rise {
     animation: none !important;
@@ -1129,6 +1201,9 @@ body.app-hydrated .static-seo-fallback {
   }
   .tilt-card {
     transform: none !important;
+  }
+  .packet-cycle {
+    transform: scaleX(1) !important;
   }
 }
 

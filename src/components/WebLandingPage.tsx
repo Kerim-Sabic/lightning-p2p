@@ -439,6 +439,46 @@ function MarqueeRow({ items, slow }: { items: Array<{ icon: LucideIcon; label: s
   );
 }
 
+// Looping typewriter — cycles through a list of strings letter-by-letter.
+function TypewriterLoop({ phrases, className, pause = 1600, charDelay = 36 }: { phrases: string[]; className?: string; pause?: number; charDelay?: number }) {
+  const reduce = useReducedMotion();
+  const [phraseIndex, setPhraseIndex] = useState(0);
+  const [shown, setShown] = useState(reduce ? phrases[0] ?? "" : "");
+  const [phase, setPhase] = useState<"type" | "hold" | "erase">("type");
+
+  useEffect(() => {
+    if (reduce) return;
+    const current = phrases[phraseIndex] ?? "";
+    let id: number;
+    if (phase === "type") {
+      if (shown.length < current.length) {
+        id = window.setTimeout(() => setShown(current.slice(0, shown.length + 1)), charDelay);
+      } else {
+        id = window.setTimeout(() => setPhase("hold"), pause);
+      }
+    } else if (phase === "hold") {
+      id = window.setTimeout(() => setPhase("erase"), pause);
+    } else {
+      if (shown.length > 0) {
+        id = window.setTimeout(() => setShown(shown.slice(0, -1)), Math.max(16, charDelay / 2));
+      } else {
+        id = window.setTimeout(() => {
+          setPhase("type");
+          setPhraseIndex((i) => (i + 1) % phrases.length);
+        }, 240);
+      }
+    }
+    return () => window.clearTimeout(id);
+  }, [phrases, phraseIndex, shown, phase, reduce, charDelay, pause]);
+
+  return (
+    <span className={className}>
+      <span aria-live="polite">{shown}</span>
+      {!reduce && <span aria-hidden className="typing-caret" />}
+    </span>
+  );
+}
+
 // Marketing button with shine sweep on hover.
 function CTA({ href, children, variant = "primary", className, ariaLabel, target }: { href: string; children: ReactNode; variant?: ButtonVariant; className?: string; ariaLabel?: string; target?: string }) {
   return (
@@ -653,6 +693,19 @@ function Hero({ page }: { page: WebPage }) {
               </li>
             ))}
           </ul>
+          <div className="hero-rise hero-rise--stagger-4 mt-2 inline-flex w-fit max-w-full items-center gap-3 overflow-hidden rounded-lg border border-white/8 bg-[var(--lab-black)]/76 px-3.5 py-2 backdrop-blur">
+            <span aria-hidden className="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-[var(--signal-green)]">$ lightning-p2p</span>
+            <span className="font-mono truncate text-[12.5px] tabular text-white/82">
+              <TypewriterLoop
+                phrases={[
+                  "create-share ./build-artifacts/  → fd2:eyJ2IjoyLCJoYXNoIjoi…",
+                  "route: direct · first-byte 7ms · 100 MB / 1.2s",
+                  "BLAKE3 verified · 200/200 chunks · no cloud upload",
+                  "mode: standard · streams 1024 · win 256MB",
+                ]}
+              />
+            </span>
+          </div>
         </motion.div>
         <div className="relative">
           <CursorGlow className="rounded-[28px]">
@@ -824,7 +877,7 @@ function HeroProofStrip() {
 
 function HowItWorks() {
   return (
-    <section className="relative mx-auto max-w-[1280px] px-6 py-20 sm:px-10 lg:py-28">
+    <section className="section-beam relative mx-auto max-w-[1280px] px-6 py-20 sm:px-10 lg:py-28">
       <Reveal>
         <p className="text-[12px] font-bold uppercase tracking-[0.28em] text-[var(--signal-green)]">Mechanism</p>
         <h2 className="font-display mt-3 max-w-[20ch] text-balance text-[clamp(2.2rem,4.6vw,3.6rem)] font-extrabold leading-[1.02] tracking-[-0.022em] text-white">
@@ -863,7 +916,7 @@ function SpeedModesShowcase() {
   const maxStreams = Math.max(...speedModes.map((m) => m.streams));
   const accent = active.tone === "signal" ? "var(--signal-green)" : active.tone === "amber" ? "var(--proof-amber)" : "rgba(255,255,255,0.5)";
   return (
-    <section className="relative mx-auto max-w-[1320px] px-6 py-24 sm:px-10 lg:py-32">
+    <section className="section-beam relative mx-auto max-w-[1320px] px-6 py-24 sm:px-10 lg:py-32">
       <Reveal>
         <p className="text-[12px] font-bold uppercase tracking-[0.28em] text-[var(--signal-green)]">New in v0.5.1</p>
         <h2 className="font-display mt-3 max-w-[20ch] text-balance text-[clamp(2.4rem,5vw,4rem)] font-extrabold leading-[1.0] tracking-[-0.024em] text-white">
@@ -984,7 +1037,7 @@ function BenchEvidence() {
     ] as Array<{ label: string; data: BenchScenario | undefined }>
   ).filter((s): s is BenchRow => Boolean(s.data));
   return (
-    <section className="relative mx-auto max-w-[1280px] px-6 py-20 sm:px-10 lg:py-28">
+    <section className="section-beam relative mx-auto max-w-[1280px] px-6 py-20 sm:px-10 lg:py-28">
       <div className="grid gap-10 lg:grid-cols-[0.95fr_1.05fr]">
         <Reveal>
           <p className="text-[12px] font-bold uppercase tracking-[0.28em] text-[var(--signal-green)]">Evidence</p>
@@ -1056,7 +1109,7 @@ function SecurityModel() {
     { icon: Eye,           title: "Diagnostics are redacted",            body: "Support bundles are gathered locally and redacted before you copy them. The frontend never auto-posts transfer secrets." },
   ];
   return (
-    <section className="relative isolate overflow-hidden bg-[var(--security-paper)] text-[var(--text-ink)]">
+    <section className="section-beam relative isolate overflow-hidden bg-[var(--security-paper)] text-[var(--text-ink)]">
       <div className="absolute inset-0 opacity-[0.25]" style={{
         backgroundImage: "repeating-linear-gradient(90deg, transparent 0, transparent 78px, rgba(0,0,0,0.04) 78px, rgba(0,0,0,0.04) 79px)",
       }} />
@@ -1098,7 +1151,7 @@ function SecurityModel() {
 
 function CapabilityRows() {
   return (
-    <section className="relative mx-auto max-w-[1280px] px-6 py-20 sm:px-10 lg:py-28">
+    <section className="section-beam relative mx-auto max-w-[1280px] px-6 py-20 sm:px-10 lg:py-28">
       <Reveal>
         <p className="text-[12px] font-bold uppercase tracking-[0.28em] text-[var(--signal-green)]">Engineering</p>
         <h2 className="font-display mt-3 max-w-[26ch] text-balance text-[clamp(2.2rem,4.6vw,3.6rem)] font-extrabold leading-[1.02] tracking-[-0.022em] text-white">
@@ -1138,7 +1191,7 @@ function Comparison() {
     { key: "verifiedContent", label: "Verified content" },
   ];
   return (
-    <section className="relative isolate overflow-hidden bg-[var(--proof-paper)] text-[var(--text-ink)]">
+    <section className="section-beam relative isolate overflow-hidden bg-[var(--proof-paper)] text-[var(--text-ink)]">
       <div className="mx-auto max-w-[1280px] px-6 py-20 sm:px-10 lg:py-28">
         <Reveal>
           <p className="text-[12px] font-bold uppercase tracking-[0.28em] text-[var(--signal-ink)]">Comparison</p>
@@ -1190,7 +1243,7 @@ function Comparison() {
 
 function DownloadSection() {
   return (
-    <section id="download" className="relative mx-auto max-w-[1280px] px-6 py-20 sm:px-10 lg:py-28">
+    <section id="download" className="section-beam relative mx-auto max-w-[1280px] px-6 py-20 sm:px-10 lg:py-28">
       <Reveal>
         <p className="text-[12px] font-bold uppercase tracking-[0.28em] text-[var(--signal-green)]">Install</p>
         <h2 className="font-display mt-3 max-w-[20ch] text-balance text-[clamp(2.2rem,4.6vw,3.6rem)] font-extrabold leading-[1.02] tracking-[-0.022em] text-white">
@@ -1251,7 +1304,7 @@ function AnswerBlocks({ page }: { page: WebPage }) {
   const faqs = page.faqs?.length ? page.faqs : defaultFaqs;
   const [openIdx, setOpenIdx] = useState<number | null>(0);
   return (
-    <section className="relative isolate overflow-hidden bg-[var(--proof-paper)] text-[var(--text-ink)]">
+    <section className="section-beam relative isolate overflow-hidden bg-[var(--proof-paper)] text-[var(--text-ink)]">
       <div className="mx-auto max-w-[1280px] px-6 py-20 sm:px-10 lg:py-28">
         <Reveal>
           <p className="text-[12px] font-bold uppercase tracking-[0.28em] text-[var(--signal-ink)]">Q + A</p>
