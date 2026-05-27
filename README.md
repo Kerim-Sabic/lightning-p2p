@@ -86,9 +86,10 @@ Published Android signer certificate SHA-256:
 5F:A0:D6:63:46:FF:9C:91:1B:18:D1:2A:5F:77:F1:F0:9B:2D:E2:A7:69:A0:97:68:6C:FC:FA:43:BD:86:29:16
 ```
 
-Experimental release: [v0.5.0](https://github.com/Kerim-Sabic/lightning-p2p/releases/tag/v0.5.0)
-adds BLE/NFC proximity plumbing for testing. Use stable v0.4.6 unless you are
-explicitly testing proximity features.
+Experimental release: [v0.5.1](https://github.com/Kerim-Sabic/lightning-p2p/releases/tag/v0.5.1)
+adds speed modes, reliability hardening, and the same experimental BLE/NFC
+proximity plumbing from v0.5.0. Use stable v0.4.6 unless you are explicitly
+testing the experimental tier.
 
 ## How It Works
 
@@ -119,8 +120,9 @@ fragment, so ordinary HTTP requests to the website do not include it.
 | QR/link/raw-ticket handoff | Stable |
 | Nearby Wi-Fi/LAN discovery | Stable |
 | iroh relay fallback | Stable |
-| BLE proximity discovery | Experimental Android + Windows v0.5.0 |
-| NFC ticket receive | Experimental Android v0.5.0 |
+| Speed modes (5 profiles) | Experimental in v0.5.1 |
+| BLE proximity discovery | Experimental Android + Windows since v0.5.0; carried into v0.5.1 |
+| NFC ticket receive | Experimental Android since v0.5.0; carried into v0.5.1 |
 | macOS/Linux BLE | Not shipped |
 
 BLE and NFC never carry file bytes. See [docs/proximity.md](docs/proximity.md)

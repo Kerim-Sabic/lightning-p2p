@@ -104,7 +104,7 @@ const baseKeyFacts: KeyFact[] = [
     value: "Windows stable release, Android 10+ sideload release",
   },
   { label: "Stable release", value: "v0.4.6" },
-  { label: "Experimental release", value: "v0.5.0 BLE/NFC pre-release" },
+  { label: "Experimental release", value: "v0.5.1 speed modes + reliability (carries v0.5.0 BLE/NFC)" },
   { label: "License", value: "Apache-2.0" },
   { label: "Account required", value: "No" },
   { label: "Cloud upload", value: "No" },
@@ -1646,7 +1646,7 @@ function DownloadCards() {
         <SectionHeading
           eyebrow="Download"
           title="Start with the native app."
-          copy="Windows and Android are the stable v0.4.6 paths. The v0.5.0 release is available separately for experimental BLE proximity discovery and NFC ticket handoff."
+          copy="Windows and Android are the stable v0.4.6 paths. The v0.5.1 release is available separately for experimental speed modes, reliability hardening, and the BLE proximity discovery + NFC ticket handoff carried from v0.5.0."
         />
 
         <TrustStrip />
@@ -1754,7 +1754,7 @@ function DownloadCards() {
             className="inline-flex items-center gap-2 underline-offset-4 transition hover:text-white hover:underline"
           >
             <RadioTower className="h-4 w-4" />
-            v0.5.0 experimental BLE/NFC release
+            v0.5.1 experimental release (speed modes + reliability + BLE/NFC from v0.5.0)
           </a>
         </div>
 
@@ -1816,9 +1816,10 @@ function AndroidInstallGuide() {
           </h3>
           <p className="mt-3 text-sm leading-6 text-slate-300">
             The APK is distributed through GitHub Releases. The website button
-            downloads the stable v0.4.6 APK. The v0.5.0 release is separate
-            because BLE proximity discovery and NFC ticket handoff are still
-            experimental.
+            downloads the stable v0.4.6 APK. The v0.5.1 release is separate
+            because speed modes, BLE proximity discovery, and NFC ticket
+            handoff are still experimental (BLE + NFC were introduced in
+            v0.5.0 and carry into v0.5.1).
           </p>
         </div>
         <div className="flex flex-col gap-3 sm:flex-row lg:flex-col">
