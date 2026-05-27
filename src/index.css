@@ -985,6 +985,153 @@ body.app-hydrated .static-seo-fallback {
   20%      { transform: translateY(-2px); }
 }
 
+/* ── Crazy mode: maximalist cinematic motion vocabulary ────────────────── */
+
+@keyframes aurora-pulse {
+  0%, 100% { opacity: 0.45; transform: translate3d(0, 0, 0) scale(1); }
+  50%      { opacity: 0.85; transform: translate3d(0, -12px, 0) scale(1.08); }
+}
+
+@keyframes marquee-x {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(-50%, 0, 0); }
+}
+
+@keyframes marquee-x-slow {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(-50%, 0, 0); }
+}
+
+@keyframes ticker-flash {
+  0%, 100% { color: var(--signal-green); }
+  50%      { color: oklch(96% 0.05 150); }
+}
+
+@keyframes char-rise {
+  from { opacity: 0; transform: translate3d(0, 1.1em, 0) rotateX(-65deg); }
+  to   { opacity: 1; transform: translate3d(0, 0, 0)    rotateX(0); }
+}
+
+@keyframes neon-edge {
+  0%, 100% { box-shadow: 0 0 0 1px oklch(82% 0.16 150 / 0.18), 0 0 24px oklch(82% 0.16 150 / 0.18); }
+  50%      { box-shadow: 0 0 0 1px oklch(82% 0.16 150 / 0.42), 0 0 64px oklch(82% 0.16 150 / 0.38); }
+}
+
+@keyframes spotlight-sweep {
+  0%   { background-position: -120% 50%; }
+  60%  { background-position: 220% 50%; }
+  100% { background-position: 220% 50%; }
+}
+
+@keyframes route-rotate-bg {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+@keyframes drift-up {
+  0%   { transform: translate3d(0, 8px, 0);  opacity: 0; }
+  20%  { opacity: 0.9; }
+  100% { transform: translate3d(0, -60vh, 0); opacity: 0; }
+}
+
+@keyframes section-divider-sweep {
+  0%   { transform: translate3d(-100%, 0, 0); }
+  100% { transform: translate3d(100%, 0, 0); }
+}
+
+@keyframes node-breathe {
+  0%, 100% { transform: scale(1); filter: brightness(1); }
+  50%      { transform: scale(1.04); filter: brightness(1.18); }
+}
+
+@keyframes glitch-jitter {
+  0%, 90%, 100% { transform: translate(0, 0); }
+  92%           { transform: translate(0.5px, -0.5px); }
+  94%           { transform: translate(-0.5px, 0.5px); }
+  96%           { transform: translate(0.3px, 0); }
+}
+
+.aurora-layer {
+  position: absolute;
+  inset: -10%;
+  pointer-events: none;
+  filter: blur(72px);
+  opacity: 0.45;
+  mix-blend-mode: screen;
+  animation: aurora-pulse 12s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.marquee-track {
+  display: inline-flex;
+  align-items: center;
+  gap: 3rem;
+  white-space: nowrap;
+  will-change: transform;
+  animation: marquee-x 28s linear infinite;
+}
+
+.marquee-track--slow { animation-duration: 48s; }
+
+.marquee-track:hover { animation-play-state: paused; }
+
+.ticker-flash { animation: ticker-flash 2.4s ease-in-out infinite; }
+
+.char-rise {
+  display: inline-block;
+  opacity: 0;
+  transform-origin: 50% 100%;
+  animation: char-rise 720ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.neon-edge { animation: neon-edge 4s ease-in-out infinite; }
+
+.spotlight-sweep {
+  background: linear-gradient(
+    100deg,
+    transparent 35%,
+    oklch(82% 0.16 150 / 0.18) 50%,
+    transparent 65%
+  );
+  background-size: 220% 100%;
+  background-repeat: no-repeat;
+  animation: spotlight-sweep 4.6s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.node-breathe { animation: node-breathe 3.4s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+
+.glitch-jitter { animation: glitch-jitter 6s ease-in-out infinite; }
+
+.tilt-perspective {
+  transform-style: preserve-3d;
+  perspective: 1400px;
+}
+
+.tilt-card {
+  transition: transform 600ms cubic-bezier(0.22, 1, 0.36, 1);
+  transform-style: preserve-3d;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aurora-layer,
+  .marquee-track,
+  .marquee-track--slow,
+  .ticker-flash,
+  .spotlight-sweep,
+  .node-breathe,
+  .glitch-jitter,
+  .neon-edge {
+    animation: none !important;
+  }
+  .char-rise {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .tilt-card {
+    transform: none !important;
+  }
+}
+
 /* Utility classes for the cinematic vocabulary. Compose with Tailwind. */
 
 .font-display {

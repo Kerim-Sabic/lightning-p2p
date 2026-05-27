@@ -28,6 +28,8 @@ import {
 import {
   AnimatePresence,
   motion,
+  useMotionTemplate,
+  useMotionValue,
   useReducedMotion,
   useScroll,
   useSpring,
@@ -303,6 +305,140 @@ function CountUp({ value, duration = 1400, suffix = "", decimals = 0, className 
   return <span ref={ref} className={cx("tabular", className)}>{display.toFixed(decimals)}{suffix}</span>;
 }
 
+// ── Crazy-mode helpers: word reveal, cursor glow, tilt card, marquee ───────
+
+function WordReveal({ text, className, delay = 0, stagger = 22 }: { text: string; className?: string; delay?: number; stagger?: number }) {
+  const reduce = useReducedMotion();
+  if (reduce) return <span className={className}>{text}</span>;
+  let counter = 0;
+  return (
+    <span className={className} aria-label={text}>
+      {text.split(" ").map((word, wi) => (
+        <span key={wi} className="inline-block whitespace-nowrap" aria-hidden>
+          {word.split("").map((char, ci) => {
+            const i = counter++;
+            return (
+              <span
+                key={ci}
+                className="char-rise inline-block"
+                style={{ animationDelay: `${delay + i * stagger}ms` }}
+              >
+                {char}
+              </span>
+            );
+          })}
+          {wi < text.split(" ").length - 1 && <span aria-hidden>{" "}</span>}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+function CursorGlow({ children, className, color = "oklch(82% 0.16 150 / 0.22)", radius = 420 }: { children: ReactNode; className?: string; color?: string; radius?: number }) {
+  const reduce = useReducedMotion();
+  const ref = useRef<HTMLDivElement>(null);
+  const x = useMotionValue(0);
+  const y = useMotionValue(0);
+  const sx = useSpring(x, { stiffness: 120, damping: 18, mass: 0.4 });
+  const sy = useSpring(y, { stiffness: 120, damping: 18, mass: 0.4 });
+  const bg = useMotionTemplate`radial-gradient(${radius}px circle at ${sx}px ${sy}px, ${color}, transparent 60%)`;
+  return (
+    <div
+      ref={ref}
+      className={cx("relative", className)}
+      onPointerMove={(e) => {
+        if (reduce || !ref.current) return;
+        const r = ref.current.getBoundingClientRect();
+        x.set(e.clientX - r.left);
+        y.set(e.clientY - r.top);
+      }}
+    >
+      {!reduce && <motion.div aria-hidden style={{ background: bg }} className="pointer-events-none absolute inset-0 rounded-[inherit] opacity-90 mix-blend-screen" />}
+      {children}
+    </div>
+  );
+}
+
+function TiltCard({ children, className, max = 7, scale = 1.012 }: { children: ReactNode; className?: string; max?: number; scale?: number }) {
+  const reduce = useReducedMotion();
+  const ref = useRef<HTMLDivElement>(null);
+  const rx = useMotionValue(0);
+  const ry = useMotionValue(0);
+  const srx = useSpring(rx, { stiffness: 180, damping: 22 });
+  const sry = useSpring(ry, { stiffness: 180, damping: 22 });
+  const transform = useMotionTemplate`perspective(1400px) rotateX(${srx}deg) rotateY(${sry}deg) scale(${reduce ? 1 : scale})`;
+  return (
+    <motion.div
+      ref={ref}
+      className={cx("tilt-card will-change-transform", className)}
+      style={reduce ? undefined : { transform }}
+      onPointerMove={(e) => {
+        if (reduce || !ref.current) return;
+        const r = ref.current.getBoundingClientRect();
+        const px = ((e.clientX - r.left) / r.width - 0.5) * 2;
+        const py = ((e.clientY - r.top) / r.height - 0.5) * 2;
+        ry.set(px * max);
+        rx.set(-py * max);
+      }}
+      onPointerLeave={() => {
+        rx.set(0);
+        ry.set(0);
+      }}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
+function MagneticWrap({ children, strength = 0.32, className }: { children: ReactNode; strength?: number; className?: string }) {
+  const reduce = useReducedMotion();
+  const ref = useRef<HTMLDivElement>(null);
+  const x = useMotionValue(0);
+  const y = useMotionValue(0);
+  const sx = useSpring(x, { stiffness: 260, damping: 22 });
+  const sy = useSpring(y, { stiffness: 260, damping: 22 });
+  if (reduce) return <span className={className}>{children}</span>;
+  return (
+    <motion.span
+      ref={ref}
+      className={cx("inline-block", className)}
+      style={{ x: sx, y: sy }}
+      onPointerMove={(e) => {
+        if (!ref.current) return;
+        const r = ref.current.getBoundingClientRect();
+        const dx = (e.clientX - (r.left + r.width / 2)) * strength;
+        const dy = (e.clientY - (r.top + r.height / 2)) * strength;
+        x.set(dx);
+        y.set(dy);
+      }}
+      onPointerLeave={() => {
+        x.set(0);
+        y.set(0);
+      }}
+    >
+      {children}
+    </motion.span>
+  );
+}
+
+function MarqueeRow({ items, slow }: { items: Array<{ icon: LucideIcon; label: string }>; slow?: boolean }) {
+  const doubled = [...items, ...items];
+  return (
+    <div className="relative overflow-hidden">
+      <div className={cx("marquee-track", slow && "marquee-track--slow")}>
+        {doubled.map((item, i) => (
+          <span key={i} className="inline-flex items-center gap-2.5 text-[12px] font-medium uppercase tracking-[0.18em] text-white/56">
+            <item.icon className="h-3.5 w-3.5 text-[var(--signal-green)]" /> {item.label}
+            <span aria-hidden className="text-white/22">◆</span>
+          </span>
+        ))}
+      </div>
+      <span aria-hidden className="pointer-events-none absolute inset-y-0 left-0 w-32 bg-gradient-to-r from-[var(--lab-black)] to-transparent" />
+      <span aria-hidden className="pointer-events-none absolute inset-y-0 right-0 w-32 bg-gradient-to-l from-[var(--lab-black)] to-transparent" />
+    </div>
+  );
+}
+
 // Marketing button with shine sweep on hover.
 function CTA({ href, children, variant = "primary", className, ariaLabel, target }: { href: string; children: ReactNode; variant?: ButtonVariant; className?: string; ariaLabel?: string; target?: string }) {
   return (
@@ -332,34 +468,47 @@ function CTA({ href, children, variant = "primary", className, ariaLabel, target
 
 function SiteAtmosphere() {
   const reduce = useReducedMotion();
+  const { scrollY } = useScroll();
+  const auroraY = useTransform(scrollY, [0, 1400], [0, 200]);
+  const gridY = useTransform(scrollY, [0, 1400], [0, -120]);
   return (
     <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
-      <div className="absolute inset-0 cinematic-grid" />
+      <motion.div style={reduce ? undefined : { y: gridY }} className="absolute inset-0 cinematic-grid" />
       {!reduce && (
         <>
+          {/* Two large drifting orbs */}
           <div
             className="cinematic-orb"
             style={{
-              top: "-12%",
-              left: "8%",
-              width: 520,
-              height: 520,
-              background: "radial-gradient(circle at center, oklch(82% 0.16 150 / 0.42), transparent 62%)",
+              top: "-12%", left: "8%", width: 520, height: 520,
+              background: "radial-gradient(circle at center, oklch(82% 0.16 150 / 0.46), transparent 62%)",
               animationDuration: "44s",
             }}
           />
           <div
             className="cinematic-orb"
             style={{
-              bottom: "-18%",
-              right: "-6%",
-              width: 620,
-              height: 620,
-              background: "radial-gradient(circle at center, oklch(81% 0.13 83 / 0.32), transparent 64%)",
+              bottom: "-18%", right: "-6%", width: 620, height: 620,
+              background: "radial-gradient(circle at center, oklch(81% 0.13 83 / 0.36), transparent 64%)",
               animationDuration: "62s",
               animationDirection: "reverse",
             }}
           />
+          {/* Aurora layers — pulse independently, drift with scroll */}
+          <motion.div
+            style={{ y: auroraY }}
+            className="aurora-layer"
+            data-layer="signal"
+          >
+            <div className="absolute left-[18%] top-[8%] h-[420px] w-[820px] rounded-full" style={{ background: "radial-gradient(ellipse at center, oklch(82% 0.18 150 / 0.42), transparent 60%)" }} />
+          </motion.div>
+          <motion.div
+            style={{ y: auroraY }}
+            className="aurora-layer"
+            data-layer="amber"
+          >
+            <div className="absolute right-[8%] top-[42%] h-[360px] w-[620px] rounded-full" style={{ background: "radial-gradient(ellipse at center, oklch(81% 0.14 83 / 0.32), transparent 62%)", animationDelay: "-4s" }} />
+          </motion.div>
         </>
       )}
       <div className="lab-scan-line" />
@@ -484,16 +633,18 @@ function Hero({ page }: { page: WebPage }) {
             </span>
             <span className="hidden text-[10px] text-white/40 sm:inline">commit {benchmarkSummary.commitHash.slice(0, 8)}</span>
           </div>
-          <h1 className="font-display hero-rise hero-rise--stagger-1 text-balance text-[clamp(3rem,7.6vw,6.2rem)] font-extrabold leading-[0.92] tracking-[-0.028em] text-white">
-            Direct files. <br className="hidden sm:block" /><span className="text-[var(--signal-green)]">Verified bytes.</span><br className="hidden sm:block" /> <span className="text-white/82">No cloud account.</span>
+          <h1 className="font-display text-balance text-[clamp(3rem,7.6vw,6.2rem)] font-extrabold leading-[0.92] tracking-[-0.028em] text-white">
+            <span className="block"><WordReveal text="Direct files." delay={120} /></span>
+            <span className="block text-[var(--signal-green)]"><WordReveal text="Verified bytes." delay={520} /></span>
+            <span className="block text-white/82"><WordReveal text="No cloud account." delay={1020} /></span>
           </h1>
           <p className="hero-rise hero-rise--stagger-2 max-w-[56ch] text-pretty text-[17px] leading-[1.6] text-[color:var(--soft-copy)] sm:text-[18px]">
             {page.intro} Built in Rust on <strong className="font-semibold text-white">iroh QUIC</strong> and <strong className="font-semibold text-white">iroh-blobs</strong>. BLAKE3 verifies every chunk. The sender stays online; the receiver streams to disk. No upload to a cloud bucket, no account, no artificial size cap.
           </p>
           <div className="hero-rise hero-rise--stagger-3 flex flex-wrap items-center gap-3">
-            <CTA href="/download" variant="primary"><Download className="h-3.5 w-3.5" /> Download for Windows</CTA>
-            <CTA href={ANDROID_APK_DOWNLOAD_URL} variant="secondary"><Smartphone className="h-3.5 w-3.5" /> Android APK</CTA>
-            <CTA href={REPO_URL} variant="ghost"><Github className="h-3.5 w-3.5" /> Source <ExternalLink className="h-3 w-3" /></CTA>
+            <MagneticWrap><CTA href="/download" variant="primary"><Download className="h-3.5 w-3.5" /> Download for Windows</CTA></MagneticWrap>
+            <MagneticWrap><CTA href={ANDROID_APK_DOWNLOAD_URL} variant="secondary"><Smartphone className="h-3.5 w-3.5" /> Android APK</CTA></MagneticWrap>
+            <MagneticWrap strength={0.18}><CTA href={REPO_URL} variant="ghost"><Github className="h-3.5 w-3.5" /> Source <ExternalLink className="h-3 w-3" /></CTA></MagneticWrap>
           </div>
           <ul className="hero-rise hero-rise--stagger-4 mt-1 flex flex-wrap items-center gap-x-2 gap-y-2 text-[11px]">
             {trustBadges.slice(0, 6).map(({ icon: Icon, label }) => (
@@ -504,11 +655,24 @@ function Hero({ page }: { page: WebPage }) {
           </ul>
         </motion.div>
         <div className="relative">
-          <HeroInstrument />
+          <CursorGlow className="rounded-[28px]">
+            <TiltCard max={5}>
+              <HeroInstrument />
+            </TiltCard>
+          </CursorGlow>
         </div>
       </div>
       <HeroProofStrip />
+      <MarqueeStrip />
     </section>
+  );
+}
+
+function MarqueeStrip() {
+  return (
+    <div className="mt-12 border-y border-white/[0.06] bg-[var(--lab-black)]/86 py-5">
+      <MarqueeRow items={trustBadges} />
+    </div>
   );
 }
 
@@ -751,7 +915,7 @@ function SpeedModesShowcase() {
           </ul>
         </div>
         {/* Live profile viz */}
-        <div className="relative overflow-hidden bg-gradient-to-br from-[var(--lab-black)]/96 via-[var(--lab-green)]/80 to-[var(--lab-black)]/92 p-6 sm:p-8">
+        <TiltCard className="relative overflow-hidden bg-gradient-to-br from-[var(--lab-black)]/96 via-[var(--lab-green)]/80 to-[var(--lab-black)]/92 p-6 sm:p-8" max={4} scale={1.005}>
           <div aria-hidden className="absolute inset-0 cinematic-grid opacity-60" />
           <div className="lab-scan-line" />
           <div className="relative">
@@ -779,7 +943,7 @@ function SpeedModesShowcase() {
               <a href={AUDIT_URL} className="underline decoration-[var(--proof-amber)]/40 underline-offset-2 hover:text-[var(--proof-amber)]">Read the audit →</a>
             </p>
           </div>
-        </div>
+        </TiltCard>
       </div>
     </section>
   );
@@ -1150,6 +1314,39 @@ function AnswerBlocks({ page }: { page: WebPage }) {
 
 // ── Footer ──────────────────────────────────────────────────────────────────
 
+function FooterTicker() {
+  const tenMb = benchmarkTenMb;
+  const hundredMb = benchmarkHundredMb;
+  const oneGb = benchmarkOneGb;
+  const items = [
+    { l: "100 MB", v: hundredMb ? `${hundredMb.medianEffectiveMbps.toFixed(0)} Mbps` : "—", n: "median · loopback" },
+    { l: "1 GB",   v: oneGb     ? `${(oneGb.medianTotalMs / 1000).toFixed(1)} s`         : "—", n: "median total" },
+    { l: "10 MB",  v: tenMb     ? `${tenMb.medianEffectiveMbps.toFixed(0)} Mbps`         : "—", n: "median · loopback" },
+    { l: "verify", v: "BLAKE3", n: "iroh-blobs" },
+    { l: "transport", v: "iroh QUIC", n: "TLS 1.3" },
+    { l: "license", v: "Apache-2.0", n: "open source" },
+    { l: "commit",  v: benchmarkSummary.commitHash.slice(0, 8), n: `v${benchmarkSummary.appVersion}` },
+    { l: "cloud",   v: "—", n: "no upload step" },
+  ];
+  const doubled = [...items, ...items];
+  return (
+    <div className="relative overflow-hidden">
+      <div className="marquee-track marquee-track--slow">
+        {doubled.map((it, i) => (
+          <span key={i} className="inline-flex items-center gap-3 font-mono text-[11px]">
+            <span className="uppercase tracking-[0.22em] text-white/40">{it.l}</span>
+            <span className="font-bold tabular text-[var(--signal-green)] ticker-flash">{it.v}</span>
+            <span className="text-white/40">{it.n}</span>
+            <span aria-hidden className="signal-dot !h-1 !w-1" />
+          </span>
+        ))}
+      </div>
+      <span aria-hidden className="pointer-events-none absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-[var(--lab-black)] to-transparent" />
+      <span aria-hidden className="pointer-events-none absolute inset-y-0 right-0 w-24 bg-gradient-to-l from-[var(--lab-black)] to-transparent" />
+    </div>
+  );
+}
+
 function SiteFooter() {
   const cols: Array<{ label: string; links: Array<{ label: string; href: string }> }> = [
     { label: "Product",   links: [{ label: "Download",   href: "/download" }, { label: "Security model", href: "/security" }, { label: "Benchmarks", href: "/benchmarks" }, { label: "Source on GitHub", href: REPO_URL }] },
@@ -1161,9 +1358,13 @@ function SiteFooter() {
     <footer className="relative isolate overflow-hidden border-t border-white/[0.06] bg-[var(--lab-black)] text-white">
       <div className="absolute inset-0 cinematic-grid opacity-50" />
       <div aria-hidden className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[color:var(--signal-green)]/60 to-transparent" />
+      {/* Live ticker tape — always-moving footer metrics */}
+      <div className="relative border-b border-white/[0.06] bg-[var(--lab-black)]/86 py-3">
+        <FooterTicker />
+      </div>
       {/* Giant brand wordmark — visual closing punctuation */}
       <div aria-hidden className="relative mx-auto max-w-[1320px] overflow-hidden px-6 pt-20 sm:px-10 lg:pt-28">
-        <p className="font-display select-none text-[clamp(3.6rem,15vw,12rem)] font-extrabold leading-[0.84] tracking-[-0.04em] text-white/[0.08]">
+        <p className="font-display glitch-jitter select-none text-[clamp(3.6rem,15vw,12rem)] font-extrabold leading-[0.84] tracking-[-0.04em] text-white/[0.09]">
           LIGHTNING/P2P
         </p>
         <p className="font-mono mt-3 text-[10px] font-bold uppercase tracking-[0.32em] text-[var(--signal-green)]/72">
