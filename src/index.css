@@ -1,9 +1,9 @@
-@import "tailwindcss";
-
 /* Cabinet Grotesk from Fontshare (ITF). Free for commercial use. Variable cut
  * carries the four weights we actually compose with (regular, medium, bold,
- * extrabold). font-display: swap so the system stack paints first. */
+ * extrabold). font-display: swap so the system stack paints first.
+ * Must precede @import "tailwindcss" so PostCSS keeps the rule at the top. */
 @import url("https://api.fontshare.com/v2/css?f[]=cabinet-grotesk@400,500,700,800&display=swap");
+@import "tailwindcss";
 
 @theme {
   --font-sans:

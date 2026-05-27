@@ -476,28 +476,32 @@ function Hero({ page }: { page: WebPage }) {
   const reduce = useReducedMotion();
   return (
     <section className="relative isolate overflow-hidden">
-      <div className="mx-auto grid max-w-[1280px] gap-12 px-6 pb-20 pt-12 sm:px-10 sm:pt-16 lg:grid-cols-[1.05fr_0.95fr] lg:gap-10 lg:pb-32 lg:pt-20">
-        <motion.div style={reduce ? undefined : { y: heroY }} className="relative z-10 flex max-w-[640px] flex-col gap-7">
-          <div className="hero-rise inline-flex items-center gap-2 self-start rounded-full border border-[color:var(--signal-green)]/22 bg-[color:var(--signal-green)]/10 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--signal-green)]">
-            <span className="signal-dot !h-1.5 !w-1.5" /> v0.5.1 ─ speed modes shipped
+      <div className="mx-auto grid max-w-[1320px] gap-10 px-6 pb-16 pt-12 sm:px-10 sm:pt-16 lg:grid-cols-[1.04fr_0.96fr] lg:gap-12 lg:pb-24 lg:pt-24 xl:gap-16">
+        <motion.div style={reduce ? undefined : { y: heroY }} className="relative z-10 flex max-w-[720px] flex-col gap-7">
+          <div className="hero-rise flex flex-wrap items-center gap-3 text-[11px] font-semibold uppercase tracking-[0.22em]">
+            <span className="inline-flex items-center gap-2 rounded-full border border-[color:var(--signal-green)]/22 bg-[color:var(--signal-green)]/10 px-3 py-1.5 text-[var(--signal-green)]">
+              <span className="signal-dot !h-1.5 !w-1.5" /> v{benchmarkSummary.appVersion} · the elegant brook
+            </span>
+            <span className="hidden text-[10px] text-white/40 sm:inline">commit {benchmarkSummary.commitHash.slice(0, 8)}</span>
           </div>
-          <h1 className="font-display hero-rise hero-rise--stagger-1 text-balance text-[clamp(2.6rem,6.4vw,5.4rem)] font-extrabold leading-[0.94] tracking-[-0.025em] text-white">
-            Direct files. <span className="text-[var(--signal-green)]">Verified bytes.</span>{" "}
-            <span className="block text-white/86">No cloud account.</span>
+          <h1 className="font-display hero-rise hero-rise--stagger-1 text-balance text-[clamp(3rem,7.6vw,6.2rem)] font-extrabold leading-[0.92] tracking-[-0.028em] text-white">
+            Direct files. <br className="hidden sm:block" /><span className="text-[var(--signal-green)]">Verified bytes.</span><br className="hidden sm:block" /> <span className="text-white/82">No cloud account.</span>
           </h1>
-          <p className="hero-rise hero-rise--stagger-2 max-w-[58ch] text-pretty text-[17px] leading-[1.6] text-[color:var(--soft-copy)]">
-            {page.intro} Built in Rust on iroh QUIC and iroh-blobs. BLAKE3 verifies every chunk. The sender stays online; the receiver streams to disk. No upload to a cloud bucket, no account, no artificial size cap.
+          <p className="hero-rise hero-rise--stagger-2 max-w-[56ch] text-pretty text-[17px] leading-[1.6] text-[color:var(--soft-copy)] sm:text-[18px]">
+            {page.intro} Built in Rust on <strong className="font-semibold text-white">iroh QUIC</strong> and <strong className="font-semibold text-white">iroh-blobs</strong>. BLAKE3 verifies every chunk. The sender stays online; the receiver streams to disk. No upload to a cloud bucket, no account, no artificial size cap.
           </p>
           <div className="hero-rise hero-rise--stagger-3 flex flex-wrap items-center gap-3">
             <CTA href="/download" variant="primary"><Download className="h-3.5 w-3.5" /> Download for Windows</CTA>
             <CTA href={ANDROID_APK_DOWNLOAD_URL} variant="secondary"><Smartphone className="h-3.5 w-3.5" /> Android APK</CTA>
-            <CTA href={REPO_URL} variant="ghost"><Github className="h-3.5 w-3.5" /> Source on GitHub <ExternalLink className="h-3 w-3" /></CTA>
+            <CTA href={REPO_URL} variant="ghost"><Github className="h-3.5 w-3.5" /> Source <ExternalLink className="h-3 w-3" /></CTA>
           </div>
-          <div className="hero-rise hero-rise--stagger-4 mt-3 flex flex-wrap gap-x-6 gap-y-2 text-[12px] text-[color:var(--muted-copy)]">
-            <span className="inline-flex items-center gap-1.5"><Check className="h-3.5 w-3.5 text-[var(--signal-green)]" /> No telemetry by default</span>
-            <span className="inline-flex items-center gap-1.5"><Check className="h-3.5 w-3.5 text-[var(--signal-green)]" /> Apache-2.0 open source</span>
-            <span className="inline-flex items-center gap-1.5"><Check className="h-3.5 w-3.5 text-[var(--signal-green)]" /> Released v{benchmarkSummary.appVersion}</span>
-          </div>
+          <ul className="hero-rise hero-rise--stagger-4 mt-1 flex flex-wrap items-center gap-x-2 gap-y-2 text-[11px]">
+            {trustBadges.slice(0, 6).map(({ icon: Icon, label }) => (
+              <li key={label} className="inline-flex items-center gap-1.5 rounded-full border border-white/8 bg-white/[0.03] px-2.5 py-1 text-white/72">
+                <Icon className="h-3 w-3 text-[var(--signal-green)]" /> {label}
+              </li>
+            ))}
+          </ul>
         </motion.div>
         <div className="relative">
           <HeroInstrument />
@@ -508,76 +512,117 @@ function Hero({ page }: { page: WebPage }) {
   );
 }
 
-// SVG diagram: sender → ticket → relay/direct → receiver, with always-moving
-// packet trails and a signal-green pulse on the verification node.
+// Cinematic instrument: dual-route SVG with packet trails, breathing nodes,
+// live throughput sparkline, BLAKE3 verification badge.
 function HeroInstrument() {
   return (
-    <div className="relative aspect-[5/4] w-full max-w-[640px] overflow-hidden rounded-[24px] border border-white/8 bg-[var(--lab-black)]/72 p-6 shadow-[0_40px_120px_rgba(0,0,0,0.45)]">
-      <div className="absolute inset-0 cinematic-grid opacity-90" />
+    <div className="relative aspect-[4/5] w-full max-w-[560px] overflow-hidden rounded-[28px] border border-white/8 bg-gradient-to-br from-[var(--lab-black)]/96 via-[var(--lab-black)]/82 to-[var(--lab-green)]/72 p-6 shadow-[0_50px_160px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.04)] sm:aspect-[5/6]">
+      <div className="absolute inset-0 cinematic-grid opacity-95" />
       <div className="lab-scan-line" />
-      {/* Topology */}
-      <svg viewBox="0 0 500 400" className="absolute inset-0 h-full w-full" aria-hidden>
-        <defs>
-          <linearGradient id="route-direct" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="oklch(82% 0.16 150 / 0)" />
-            <stop offset="50%" stopColor="oklch(82% 0.16 150 / 0.85)" />
-            <stop offset="100%" stopColor="oklch(82% 0.16 150 / 0)" />
-          </linearGradient>
-        </defs>
-        {/* Direct route */}
-        <path d="M 90 200 Q 250 70 410 200" className="route-trace" />
-        {/* Relay route (amber, slower) */}
-        <path d="M 90 200 Q 250 330 410 200" className="route-trace route-trace--relay" style={{ animationDelay: "0.4s" }} />
-      </svg>
-      {/* Nodes */}
-      <div className="absolute left-[8%] top-1/2 -translate-y-1/2">
-        <div className="flex flex-col items-center gap-2">
-          <div className="relative grid h-16 w-16 place-items-center rounded-2xl border border-white/12 bg-white/[0.04] backdrop-blur">
-            <MonitorDown className="h-7 w-7 text-white" />
-            <span className="signal-dot absolute -right-1 -top-1" />
+      {/* Top instrument bar — live readouts */}
+      <div className="relative z-10 flex items-baseline justify-between gap-3 border-b border-white/8 pb-3">
+        <div className="flex items-center gap-2">
+          <span aria-hidden className="signal-dot !h-2 !w-2" />
+          <span className="font-mono text-[10px] font-bold uppercase tracking-[0.26em] text-[var(--signal-green)]">live · session</span>
+        </div>
+        <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-white/40">tick {benchmarkSummary.commitHash.slice(0, 6)}</span>
+      </div>
+      {/* Topology canvas */}
+      <div className="relative mt-4 aspect-[5/4]">
+        <svg viewBox="0 0 500 360" className="absolute inset-0 h-full w-full" aria-hidden>
+          <defs>
+            <linearGradient id="route-direct" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="oklch(82% 0.16 150 / 0)" />
+              <stop offset="50%" stopColor="oklch(82% 0.16 150 / 0.95)" />
+              <stop offset="100%" stopColor="oklch(82% 0.16 150 / 0)" />
+            </linearGradient>
+            <linearGradient id="route-relay" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="oklch(81% 0.13 83 / 0)" />
+              <stop offset="50%" stopColor="oklch(81% 0.13 83 / 0.85)" />
+              <stop offset="100%" stopColor="oklch(81% 0.13 83 / 0)" />
+            </linearGradient>
+            <radialGradient id="node-pulse" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stopColor="oklch(82% 0.16 150 / 0.85)" />
+              <stop offset="100%" stopColor="oklch(82% 0.16 150 / 0)" />
+            </radialGradient>
+          </defs>
+          {/* Pulse halos */}
+          <circle cx="80" cy="180" r="42" fill="url(#node-pulse)" opacity="0.5" />
+          <circle cx="420" cy="180" r="42" fill="url(#node-pulse)" opacity="0.7" />
+          {/* Direct route (signal-green, primary) */}
+          <path d="M 90 180 Q 250 60 410 180" stroke="url(#route-direct)" strokeWidth="2.2" fill="none" strokeLinecap="round" filter="drop-shadow(0 0 10px oklch(82% 0.16 150 / 0.55))" />
+          <path d="M 90 180 Q 250 60 410 180" className="route-trace" />
+          {/* Relay route (amber, secondary) */}
+          <path d="M 90 180 Q 250 320 410 180" stroke="url(#route-relay)" strokeWidth="1.6" fill="none" strokeLinecap="round" filter="drop-shadow(0 0 8px oklch(81% 0.13 83 / 0.42))" />
+          <path d="M 90 180 Q 250 320 410 180" className="route-trace route-trace--relay" style={{ animationDelay: "0.6s" }} />
+          {/* Sparkline along the bottom */}
+          <polyline
+            points="40,335 80,318 120,305 160,322 200,295 240,278 280,300 320,282 360,260 400,272 440,250 460,260"
+            fill="none"
+            stroke="oklch(82% 0.16 150 / 0.6)"
+            strokeWidth="1.1"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            filter="drop-shadow(0 0 4px oklch(82% 0.16 150 / 0.6))"
+          />
+        </svg>
+        {/* Nodes */}
+        <div className="absolute left-[2%] top-1/2 -translate-y-1/2">
+          <div className="flex flex-col items-center gap-2">
+            <div className="relative grid h-16 w-16 place-items-center rounded-2xl border border-white/14 bg-white/[0.05] backdrop-blur-sm">
+              <MonitorDown className="h-7 w-7 text-white" />
+              <span className="signal-dot absolute -right-1 -top-1" />
+            </div>
+            <span className="font-mono text-[9px] font-bold uppercase tracking-[0.26em] text-white/56">sender</span>
           </div>
-          <span className="text-[10px] font-bold uppercase tracking-[0.22em] text-[var(--signal-green)]">Sender</span>
-          <span className="text-[11px] text-white/64">Files on disk</span>
         </div>
-      </div>
-      <div className="absolute right-[8%] top-1/2 -translate-y-1/2">
-        <div className="flex flex-col items-center gap-2">
-          <div className="relative grid h-16 w-16 place-items-center rounded-2xl border border-[color:var(--signal-green)]/40 bg-[color:var(--signal-green)]/14 backdrop-blur">
-            <FileCheck2 className="h-7 w-7 text-[var(--signal-green)]" />
-            <span className="signal-dot absolute -right-1 -top-1" />
+        <div className="absolute right-[2%] top-1/2 -translate-y-1/2">
+          <div className="flex flex-col items-center gap-2">
+            <div className="relative grid h-16 w-16 place-items-center rounded-2xl border border-[color:var(--signal-green)]/40 bg-[color:var(--signal-green)]/14 shadow-[0_0_32px_rgba(125,223,156,0.32)]">
+              <FileCheck2 className="h-7 w-7 text-[var(--signal-green)]" />
+              <span className="signal-dot absolute -right-1 -top-1" />
+            </div>
+            <span className="font-mono text-[9px] font-bold uppercase tracking-[0.26em] text-[var(--signal-green)]">verified</span>
           </div>
-          <span className="text-[10px] font-bold uppercase tracking-[0.22em] text-[var(--signal-green)]">Receiver</span>
-          <span className="text-[11px] text-white/64">BLAKE3 verified</span>
+        </div>
+        {/* Hub */}
+        <div className="absolute left-1/2 top-[16%] -translate-x-1/2">
+          <div className="grid h-11 w-11 place-items-center rounded-xl border border-white/16 bg-[var(--lab-black)]/92 shadow-[0_8px_24px_rgba(0,0,0,0.4)]">
+            <Route className="h-4 w-4 text-[var(--signal-green)]" />
+          </div>
+          <p className="mt-1 text-center font-mono text-[8.5px] font-bold uppercase tracking-[0.24em] text-[var(--signal-green)]/80">direct</p>
+        </div>
+        <div className="absolute left-1/2 bottom-[24%] -translate-x-1/2">
+          <div className="grid h-9 w-9 place-items-center rounded-xl border border-white/12 bg-[var(--lab-black)]/82">
+            <RadioTower className="h-3.5 w-3.5 text-[var(--proof-amber)]/82" />
+          </div>
+          <p className="mt-1 text-center font-mono text-[8.5px] font-bold uppercase tracking-[0.24em] text-[var(--proof-amber)]/70">relay</p>
+        </div>
+        {/* Packet trails on direct path */}
+        <div className="absolute left-[14%] top-[24%] right-[14%] h-[2px] overflow-hidden opacity-95">
+          <div className="packet-trail" />
+          <div className="packet-trail packet-trail--lag-1" />
+          <div className="packet-trail packet-trail--lag-2" />
+          <div className="packet-trail packet-trail--lag-3" />
         </div>
       </div>
-      {/* Hub */}
-      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-        <div className="grid h-14 w-14 place-items-center rounded-xl border border-white/16 bg-[var(--lab-black)]/90">
-          <RadioTower className="h-6 w-6 text-white/80" />
-        </div>
-      </div>
-      {/* Packet trails on direct path */}
-      <div className="absolute left-[12%] top-[36%] right-[12%] h-[2px] overflow-hidden">
-        <div className="packet-trail" />
-        <div className="packet-trail packet-trail--lag-1" />
-        <div className="packet-trail packet-trail--lag-2" />
-      </div>
-      {/* Readout overlay */}
-      <div className="absolute bottom-4 left-4 right-4 grid grid-cols-3 gap-2 rounded-xl border border-white/8 bg-[var(--lab-black)]/68 p-3 backdrop-blur">
-        <Readout label="Route" value="Direct" tone="signal" />
-        <Readout label="Verify" value="BLAKE3" tone="signal" />
-        <Readout label="Cloud" value="None" tone="muted" />
+      {/* Bottom instrument: live readouts */}
+      <div className="relative z-10 mt-3 grid grid-cols-4 gap-px overflow-hidden rounded-xl border border-white/8 bg-white/[0.03]">
+        <ReadoutCell label="route" value="direct" tone="signal" />
+        <ReadoutCell label="verify" value="blake3" tone="signal" />
+        <ReadoutCell label="encrypt" value="quic tls 1.3" tone="muted" />
+        <ReadoutCell label="cloud" value="—" tone="muted" />
       </div>
     </div>
   );
 }
 
-function Readout({ label, value, tone }: { label: string; value: string; tone: StatusTone }) {
+function ReadoutCell({ label, value, tone }: { label: string; value: string; tone: StatusTone }) {
   const color = tone === "signal" ? "text-[var(--signal-green)]" : tone === "amber" ? "text-[var(--proof-amber)]" : "text-white/72";
   return (
-    <div>
-      <p className="text-[9px] font-bold uppercase tracking-[0.26em] text-white/40">{label}</p>
-      <p className={cx("mt-1 text-[12px] font-semibold tabular", color)}>{value}</p>
+    <div className="bg-[var(--lab-black)]/76 px-2.5 py-2">
+      <p className="font-mono text-[8px] font-bold uppercase tracking-[0.22em] text-white/36">{label}</p>
+      <p className={cx("mt-1 font-mono text-[10px] font-semibold tabular leading-tight", color)}>{value}</p>
     </div>
   );
 }
@@ -608,24 +653,6 @@ function HeroProofStrip() {
         </p>
       </Reveal>
     </div>
-  );
-}
-
-// ── Trust ribbon ────────────────────────────────────────────────────────────
-
-function TrustRibbon() {
-  return (
-    <section className="mx-auto max-w-[1280px] px-6 py-12 sm:px-10">
-      <Reveal>
-        <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-3 sm:gap-x-5">
-          {trustBadges.map(({ icon: Icon, label }) => (
-            <span key={label} className="inline-flex items-center gap-2 rounded-full border border-white/8 bg-white/[0.03] px-3.5 py-1.5 text-[12px] font-medium text-white/82 transition hover:border-[color:var(--signal-green)]/40 hover:text-white">
-              <Icon className="h-3.5 w-3.5 text-[var(--signal-green)]" /> {label}
-            </span>
-          ))}
-        </div>
-      </Reveal>
-    </section>
   );
 }
 
@@ -668,68 +695,112 @@ function HowItWorks() {
 function SpeedModesShowcase() {
   const [hoverKey, setHoverKey] = useState<string>("fast");
   const active = (speedModes.find((m) => m.key === hoverKey) ?? speedModes[0]) as ModeRow;
+  const maxWindow = Math.max(...speedModes.map((m) => m.windowMb));
+  const maxStreams = Math.max(...speedModes.map((m) => m.streams));
+  const accent = active.tone === "signal" ? "var(--signal-green)" : active.tone === "amber" ? "var(--proof-amber)" : "rgba(255,255,255,0.5)";
   return (
-    <section className="relative mx-auto max-w-[1280px] px-6 py-20 sm:px-10 lg:py-28">
-      <div className="grid gap-10 lg:grid-cols-[1fr_1.2fr]">
-        <Reveal>
-          <p className="text-[12px] font-bold uppercase tracking-[0.28em] text-[var(--signal-green)]">New in v0.5.1</p>
-          <h2 className="font-display mt-3 text-balance text-[clamp(2.2rem,4.6vw,3.6rem)] font-extrabold leading-[1.02] tracking-[-0.022em] text-white">
-            Five speed modes.<br /><span className="text-white/64">All bench-honest.</span>
-          </h2>
-          <p className="mt-6 max-w-[44ch] text-[15px] leading-7 text-[color:var(--soft-copy)]">
-            Each mode swaps a complete transport profile: QUIC send/recv windows, stream caps, keepalive, import concurrency, idle timeouts, and UI emit cadence. The active mode persists and the node restarts when you change it.
-          </p>
-          <p className="mt-4 max-w-[44ch] text-[12px] leading-6 text-[var(--proof-amber)]/82">
-            Honest: on same-machine loopback all five modes cluster within ~13% (626 – 710 Mbps). The hierarchy encodes design intent; LAN/WAN throughput delta lands with v0.6 validation.{" "}
-            <a href={AUDIT_URL} className="underline decoration-[var(--proof-amber)]/40 underline-offset-2 hover:text-[var(--proof-amber)]">Read the audit →</a>
-          </p>
-        </Reveal>
-        <div className="grid gap-2">
-          {speedModes.map((mode, i) => {
-            const isActive = mode.key === hoverKey;
-            const toneAccent = mode.tone === "signal" ? "var(--signal-green)" : mode.tone === "amber" ? "var(--proof-amber)" : "rgba(255,255,255,0.4)";
-            return (
-              <Reveal key={mode.key} delay={i * 0.05}>
-                <button
-                  type="button"
-                  onMouseEnter={() => setHoverKey(mode.key)}
-                  onFocus={() => setHoverKey(mode.key)}
-                  className={cx(
-                    "group relative w-full overflow-hidden rounded-2xl border bg-[var(--lab-black)]/72 p-5 text-left transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
-                    isActive ? "border-white/22 bg-[var(--lab-black)]/90 scale-[1.005]" : "border-white/8 hover:border-white/16",
-                  )}
-                  style={{ "--mode-accent": toneAccent } as CSSProperties}
-                >
-                  <span aria-hidden className="absolute inset-y-0 left-0 w-1 transition-all duration-500" style={{ background: `linear-gradient(180deg, transparent, var(--mode-accent), transparent)`, opacity: isActive ? 1 : 0.32 }} />
-                  <div className="flex flex-wrap items-baseline justify-between gap-3 pl-3">
-                    <div>
-                      <h3 className="font-display text-[18px] font-bold tracking-[-0.012em] text-white">{mode.name}</h3>
+    <section className="relative mx-auto max-w-[1320px] px-6 py-24 sm:px-10 lg:py-32">
+      <Reveal>
+        <p className="text-[12px] font-bold uppercase tracking-[0.28em] text-[var(--signal-green)]">New in v0.5.1</p>
+        <h2 className="font-display mt-3 max-w-[20ch] text-balance text-[clamp(2.4rem,5vw,4rem)] font-extrabold leading-[1.0] tracking-[-0.024em] text-white">
+          Five speed modes. <span className="text-white/56">Five real configs.</span>
+        </h2>
+        <p className="mt-5 max-w-[60ch] text-[15.5px] leading-7 text-[color:var(--soft-copy)]">
+          Each mode swaps a complete transport profile: QUIC send/recv windows, stream caps, keepalive, import concurrency, idle timeouts, and UI emit cadence. The active mode persists; the node restarts when you change it.
+        </p>
+      </Reveal>
+      <div className="mt-12 grid gap-px overflow-hidden rounded-3xl border border-white/8 bg-white/[0.04] lg:grid-cols-[0.95fr_1.05fr]">
+        {/* Mode list */}
+        <div className="bg-[var(--lab-black)]/86">
+          <ul role="tablist" aria-label="Transfer modes" className="divide-y divide-white/[0.06]">
+            {speedModes.map((mode) => {
+              const isActive = mode.key === hoverKey;
+              const tone = mode.tone === "signal" ? "var(--signal-green)" : mode.tone === "amber" ? "var(--proof-amber)" : "rgba(255,255,255,0.5)";
+              return (
+                <li key={mode.key} role="presentation">
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={isActive}
+                    onMouseEnter={() => setHoverKey(mode.key)}
+                    onFocus={() => setHoverKey(mode.key)}
+                    onClick={() => setHoverKey(mode.key)}
+                    className={cx(
+                      "group relative flex w-full items-baseline justify-between gap-4 px-6 py-5 text-left transition-colors duration-300",
+                      isActive ? "bg-white/[0.045]" : "hover:bg-white/[0.025]",
+                    )}
+                  >
+                    {isActive && (
+                      <motion.span
+                        layoutId="speed-mode-accent"
+                        aria-hidden
+                        className="absolute inset-y-0 left-0 w-[3px]"
+                        style={{ background: tone, boxShadow: `0 0 16px ${tone}` }}
+                        transition={{ type: "spring", stiffness: 360, damping: 32 }}
+                      />
+                    )}
+                    <div className="min-w-0">
+                      <p className={cx("font-display text-[19px] font-bold tracking-[-0.012em] transition", isActive ? "text-white" : "text-white/72 group-hover:text-white")}>{mode.name}</p>
                       <p className="mt-1 text-[12.5px] leading-5 text-[color:var(--soft-copy)]">{mode.tagline}</p>
                     </div>
-                    <span className="font-mono text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: toneAccent }}>{mode.key}</span>
-                  </div>
-                  <div className="mt-4 grid grid-cols-4 gap-1 pl-3 font-mono text-[10px] text-white/56">
-                    <ModeStat label="parallel" value={`${mode.parallelism}`} />
-                    <ModeStat label="emit" value={`${mode.emitMs}ms`} />
-                    <ModeStat label="win" value={`${mode.windowMb}MB`} />
-                    <ModeStat label="streams" value={`${mode.streams}`} />
-                  </div>
-                </button>
-              </Reveal>
-            );
-          })}
-          <div aria-live="polite" className="sr-only">Active mode: {active.name}</div>
+                    <span className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] tabular" style={{ color: tone }}>{mode.parallelism} ╱ {mode.windowMb}MB</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+        {/* Live profile viz */}
+        <div className="relative overflow-hidden bg-gradient-to-br from-[var(--lab-black)]/96 via-[var(--lab-green)]/80 to-[var(--lab-black)]/92 p-6 sm:p-8">
+          <div aria-hidden className="absolute inset-0 cinematic-grid opacity-60" />
+          <div className="lab-scan-line" />
+          <div className="relative">
+            <div className="flex items-baseline justify-between gap-3 border-b border-white/8 pb-3">
+              <div>
+                <p className="font-mono text-[10px] font-bold uppercase tracking-[0.26em]" style={{ color: accent }}>profile readout</p>
+                <h3 className="font-display mt-1.5 text-[26px] font-extrabold tracking-[-0.018em] text-white">{active.name}</h3>
+              </div>
+              <span aria-live="polite" className="font-mono text-[10px] uppercase tracking-[0.22em] text-white/40">{active.key}</span>
+            </div>
+            <div className="mt-6 space-y-5">
+              <ProfileBar label="Conn / Recv window"  units="MB"  value={active.windowMb}  max={maxWindow}  tone={accent} />
+              <ProfileBar label="Stream window"        units="MB"  value={active.streamMb}  max={Math.max(...speedModes.map((m) => m.streamMb))} tone={accent} />
+              <ProfileBar label="Max concurrent streams" units=""  value={active.streams}   max={maxStreams} tone={accent} />
+              <ProfileBar label="Import parallelism"   units=""    value={active.parallelism} max={Math.max(...speedModes.map((m) => m.parallelism))} tone={accent} />
+            </div>
+            <div className="mt-6 grid grid-cols-3 gap-px overflow-hidden rounded-xl border border-white/8 bg-white/[0.03]">
+              <ReadoutCell label="emit" value={`${active.emitMs} ms`} tone={active.tone} />
+              <ReadoutCell label="streams" value={`${active.streams}`} tone={active.tone} />
+              <ReadoutCell label="conn win" value={`${active.windowMb} MB`} tone={active.tone} />
+            </div>
+            <p className="mt-6 text-[11.5px] leading-6 text-[var(--proof-amber)]/80">
+              <strong className="font-mono uppercase tracking-[0.18em] text-[var(--proof-amber)]">Honest:</strong>{" "}
+              on loopback all five modes cluster within ~13% (626 – 710 Mbps). Hierarchy encodes design intent. LAN/WAN throughput-delta validation lands in v0.6.{" "}
+              <a href={AUDIT_URL} className="underline decoration-[var(--proof-amber)]/40 underline-offset-2 hover:text-[var(--proof-amber)]">Read the audit →</a>
+            </p>
+          </div>
         </div>
       </div>
     </section>
   );
 }
 
-function ModeStat({ label, value }: { label: string; value: string }) {
+function ProfileBar({ label, units, value, max, tone }: { label: string; units: string; value: number; max: number; tone: string }) {
+  const pct = Math.max(0.06, Math.min(1, value / max));
   return (
     <div>
-      <p className="text-[9px] uppercase tracking-[0.22em] text-white/36">{label}</p>
-      <p className="mt-1 text-[12px] font-semibold tabular text-white">{value}</p>
+      <div className="flex items-baseline justify-between gap-3">
+        <p className="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-white/56">{label}</p>
+        <p className="font-mono text-[13px] font-semibold tabular text-white">{value}{units ? <span className="text-white/56"> {units}</span> : null}</p>
+      </div>
+      <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/[0.06]">
+        <motion.div
+          className="h-full rounded-full"
+          style={{ background: `linear-gradient(90deg, ${tone}66, ${tone})`, transformOrigin: "left center", boxShadow: `0 0 12px ${tone}40` }}
+          animate={{ scaleX: pct }}
+          transition={{ type: "spring", stiffness: 240, damping: 26, mass: 0.5 }}
+        />
+      </div>
     </div>
   );
 }
@@ -1089,7 +1160,17 @@ function SiteFooter() {
   return (
     <footer className="relative isolate overflow-hidden border-t border-white/[0.06] bg-[var(--lab-black)] text-white">
       <div className="absolute inset-0 cinematic-grid opacity-50" />
-      <div className="relative mx-auto max-w-[1280px] px-6 py-16 sm:px-10">
+      <div aria-hidden className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[color:var(--signal-green)]/60 to-transparent" />
+      {/* Giant brand wordmark — visual closing punctuation */}
+      <div aria-hidden className="relative mx-auto max-w-[1320px] overflow-hidden px-6 pt-20 sm:px-10 lg:pt-28">
+        <p className="font-display select-none text-[clamp(3.6rem,15vw,12rem)] font-extrabold leading-[0.84] tracking-[-0.04em] text-white/[0.08]">
+          LIGHTNING/P2P
+        </p>
+        <p className="font-mono mt-3 text-[10px] font-bold uppercase tracking-[0.32em] text-[var(--signal-green)]/72">
+          ◆ direct files / verified bytes / no cloud account ◆
+        </p>
+      </div>
+      <div className="relative mx-auto max-w-[1320px] px-6 py-16 sm:px-10">
         <div className="grid gap-10 md:grid-cols-[1.2fr_repeat(4,minmax(0,1fr))]">
           <div>
             <a href="/" className="inline-flex items-center gap-3" aria-label="Lightning P2P home">
@@ -1159,7 +1240,6 @@ export function WebLandingPage() {
       <Header activePath={page.path} />
       <main>
         <Hero page={page} />
-        <TrustRibbon />
         <HowItWorks />
         <SpeedModesShowcase />
         <BenchEvidence />
