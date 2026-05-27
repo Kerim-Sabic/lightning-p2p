@@ -9,6 +9,8 @@ use crate::crypto::load_or_create_secret_key;
 use crate::error::{LightningP2PError, Result};
 use crate::storage::db::StorageDb;
 use crate::transfer::metrics::RouteKind;
+use crate::transfer::mode::TransferProfile;
+use crate::transfer::TransferMode;
 use iroh::endpoint::ConnectionType;
 use iroh::endpoint::TransportConfig;
 use iroh::protocol::Router;
@@ -27,9 +29,6 @@ use std::sync::Arc;
 use std::time::Duration;
 
 const RELAY_WAIT_TIMEOUT: Duration = Duration::from_secs(6);
-const MAX_CONCURRENT_STREAMS: u32 = 1024;
-const CONNECTION_WINDOW_BYTES: u32 = 268_435_456; // 256 MB
-const STREAM_WINDOW_BYTES: u32 = 67_108_864; // 64 MB
 const DB_FILE_NAME: &str = "lightning-p2p.db";
 const DEPRECATED_DB_FILE_NAME: &str = "fastdrop.db";
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
@@ -54,19 +53,31 @@ impl LightningP2PNode {
     /// Used by integration tests and benches that need isolated in-process
     /// nodes without a full Tauri runtime. No nearby protocol is registered in
     /// this variant since it requires a `tauri::AppHandle` for event emission.
+    /// Uses the platform-default [`TransferProfile`] for QUIC transport tuning.
     ///
     /// # Errors
     ///
     /// Returns `LightningP2PError` if endpoint binding, storage creation, or
     /// protocol startup fails.
     pub async fn start_with_dirs(data_dir: PathBuf, download_dir: PathBuf) -> Result<Self> {
-        Self::start_with_dirs_and_relay(data_dir, download_dir, None, None).await
+        Self::start_with_dirs_and_relay(
+            data_dir,
+            download_dir,
+            None,
+            None,
+            TransferMode::platform_default().profile(),
+        )
+        .await
     }
 
     /// Starts the iroh node with an optional custom relay URL.
     ///
     /// When `nearby_protocol` is `Some`, the nearby ALPN is registered on the
     /// router so peers can probe identity, list shares, and push offers.
+    ///
+    /// The provided [`TransferProfile`] supplies the QUIC transport tuning
+    /// (windows, stream caps, keepalive) baked at endpoint bind time. Changing
+    /// the mode after startup requires a node restart via the Supervisor.
     ///
     /// # Errors
     ///
@@ -77,13 +88,14 @@ impl LightningP2PNode {
         download_dir: PathBuf,
         relay_url: Option<RelayUrl>,
         nearby_protocol: Option<Arc<NearbyShareProtocol>>,
+        profile: TransferProfile,
     ) -> Result<Self> {
         std::fs::create_dir_all(&data_dir)?;
         std::fs::create_dir_all(&download_dir)?;
 
         probe_mdns_socket();
 
-        let endpoint = bind_endpoint(relay_url, &data_dir).await?;
+        let endpoint = bind_endpoint(relay_url, &data_dir, profile).await?;
         tracing::info!(
             node_id = %endpoint.node_id(),
             local_network_discovery = local_network_discovery_label(),
@@ -226,7 +238,11 @@ impl LightningP2PNode {
     }
 }
 
-async fn bind_endpoint(relay_url: Option<RelayUrl>, data_dir: &Path) -> Result<Endpoint> {
+async fn bind_endpoint(
+    relay_url: Option<RelayUrl>,
+    data_dir: &Path,
+    profile: TransferProfile,
+) -> Result<Endpoint> {
     let relay_mode = relay_url
         .map(RelayMap::from_url)
         .map_or(RelayMode::Default, RelayMode::Custom);
@@ -244,7 +260,7 @@ async fn bind_endpoint(relay_url: Option<RelayUrl>, data_dir: &Path) -> Result<E
 
     builder
         .relay_mode(relay_mode)
-        .transport_config(tuned_transport_config())
+        .transport_config(tuned_transport_config(profile))
         .bind()
         .await
         .map_err(LightningP2PError::Network)
@@ -314,14 +330,14 @@ fn probe_mdns_socket() {
     tracing::debug!("mDNS socket probe skipped on mobile");
 }
 
-fn tuned_transport_config() -> TransportConfig {
+fn tuned_transport_config(profile: TransferProfile) -> TransportConfig {
     let mut config = TransportConfig::default();
-    config.keep_alive_interval(Some(Duration::from_secs(5)));
-    config.max_concurrent_bidi_streams(MAX_CONCURRENT_STREAMS.into());
-    config.max_concurrent_uni_streams(MAX_CONCURRENT_STREAMS.into());
-    config.send_window(u64::from(CONNECTION_WINDOW_BYTES));
-    config.receive_window(CONNECTION_WINDOW_BYTES.into());
-    config.stream_receive_window(STREAM_WINDOW_BYTES.into());
+    config.keep_alive_interval(Some(profile.keep_alive_interval));
+    config.max_concurrent_bidi_streams(profile.max_concurrent_streams.into());
+    config.max_concurrent_uni_streams(profile.max_concurrent_streams.into());
+    config.send_window(profile.quic_send_window_bytes);
+    config.receive_window(profile.quic_recv_window_bytes.into());
+    config.stream_receive_window(profile.quic_stream_recv_window_bytes.into());
     config
 }
 
@@ -407,11 +423,16 @@ mod tests {
     }
 
     #[test]
-    fn transport_config_uses_high_bandwidth_windows() {
-        let _config = tuned_transport_config();
-        assert_eq!(MAX_CONCURRENT_STREAMS, 1024);
-        assert_eq!(CONNECTION_WINDOW_BYTES, 268_435_456);
-        assert_eq!(STREAM_WINDOW_BYTES, 67_108_864);
+    fn transport_config_for_standard_uses_high_bandwidth_windows() {
+        // Sanity-check that Standard mode keeps the historical pre-v0.5.1 tuning
+        // so existing deployments observe no behavior change after upgrade.
+        let standard = TransferMode::Standard.profile();
+        assert_eq!(standard.quic_recv_window_bytes, 268_435_456); // 256 MB
+        assert_eq!(standard.quic_stream_recv_window_bytes, 67_108_864); // 64 MB
+        assert_eq!(standard.max_concurrent_streams, 1024);
+
+        // tuned_transport_config builds with these values without panicking.
+        let _config = tuned_transport_config(standard);
     }
 
     #[test]

@@ -30,6 +30,7 @@ function buildTransfer(overrides: Partial<TransferEntry> = {}): TransferEntry {
     timestamp: 1_716_000_000,
     error: null,
     appError: null,
+    retryTicket: "fd2:secret-retry-ticket",
     ...overrides,
   };
 }
@@ -56,6 +57,7 @@ describe("summarizeTransfer", () => {
     expect(summary).not.toContain(transfer.peer as string);
     expect(summary).not.toContain(transfer.hash as string);
     expect(summary).not.toContain(transfer.outputPath as string);
+    expect(summary).not.toContain(transfer.retryTicket as string);
   });
 
   it("omits effective_mbps when not measured", () => {

@@ -55,7 +55,7 @@ const baseKeyFacts = [
   ["Category", "peer-to-peer file transfer app"],
   ["Platform", "Windows stable release, Android 10+ sideload release"],
   ["Stable release", "v0.4.6"],
-  ["Experimental release", "v0.5.0 BLE/NFC pre-release"],
+  ["Experimental release", "v0.5.1 speed modes + reliability (carries v0.5.0 BLE/NFC)"],
   ["License", "Apache-2.0"],
   ["Account required", "no"],
   ["Cloud upload", "no"],

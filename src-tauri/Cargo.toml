@@ -1,8 +1,9 @@
 [package]
 name = "lightning-p2p"
-version = "0.5.0"
+version = "0.5.1"
 edition = "2021"
 rust-version = "1.81"
+default-run = "lightning-p2p"
 description = "Lightning P2P - direct peer-to-peer file sharing for Windows and Android"
 license = "Apache-2.0"
 

@@ -8,6 +8,7 @@ import {
   Download,
   Fingerprint,
   FolderCog,
+  Gauge,
   Globe,
   HardDriveDownload,
   LoaderCircle,
@@ -24,6 +25,8 @@ import {
   collectDiagnosticBundle,
   isDesktopRuntime,
   isMobileRuntime,
+  TRANSFER_MODE_DESCRIPTORS,
+  TRANSFER_MODES,
   type NodeStatus,
   type PlatformProfile,
   type RelayMode,
@@ -215,6 +218,7 @@ export function SettingsView() {
   const setBluetoothDiscoveryEnabled = useTransferStore(
     (state) => state.setBluetoothDiscoveryEnabled,
   );
+  const setTransferMode = useTransferStore((state) => state.setTransferMode);
   const clearPeerCache = useTransferStore((state) => state.clearPeerCache);
   const checkForUpdates = useTransferStore((state) => state.checkForUpdates);
   const installUpdate = useTransferStore((state) => state.installUpdate);
@@ -782,6 +786,65 @@ export function SettingsView() {
             </p>
           </div>
         </div>
+      </section>
+
+      <section className="glass-panel p-6">
+        <div className="flex items-center gap-3">
+          <div className="glass-icon">
+            <Gauge className="h-5 w-5 text-sky-200" />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-white">Transfer mode</p>
+            <p className="text-[13px] text-slate-300/72">
+              Picks the QUIC transport tuning, import concurrency, idle
+              timeouts, and UI emit cadence used for every transfer in this
+              session. Changing the mode restarts the node when no transfer is
+              in flight.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          {TRANSFER_MODES.map((value) => {
+            const descriptor = TRANSFER_MODE_DESCRIPTORS[value];
+            const active = (settings?.transfer_mode ?? "standard") === value;
+            return (
+              <button
+                key={value}
+                onClick={() => void setTransferMode(value)}
+                disabled={!nativeRuntime}
+                title={descriptor.description}
+                className={`relative isolate overflow-hidden rounded-2xl border px-4 py-2 text-sm transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] disabled:cursor-not-allowed disabled:opacity-50 ${
+                  active
+                    ? "border-sky-300/30 text-sky-100"
+                    : "border-white/10 bg-white/[0.04] text-slate-300 hover:border-white/16 hover:text-white"
+                }`}
+              >
+                {active && (
+                  <motion.span
+                    aria-hidden
+                    layoutId="active-transfer-mode"
+                    className="absolute inset-0 -z-10 rounded-2xl bg-sky-500/14"
+                    transition={{ type: "spring", stiffness: 340, damping: 30, mass: 0.6 }}
+                  />
+                )}
+                <span className="relative z-10">{descriptor.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        <p className="mt-3 text-[12px] leading-6 text-slate-400">
+          {TRANSFER_MODE_DESCRIPTORS[
+            settings?.transfer_mode ?? "standard"
+          ].description}
+        </p>
+        <p className="mt-2 text-[11px] leading-6 text-slate-500">
+          Honest scope: on same-machine loopback the throughput delta between
+          Standard, Fast, Extreme, and LAN Beast is within sample noise. The
+          modes encode design intent (windows, streams, parallelism, idle
+          timeouts); end-to-end LAN/WAN validation lands in v0.6.
+        </p>
       </section>
 
       <section className="glass-panel p-6">

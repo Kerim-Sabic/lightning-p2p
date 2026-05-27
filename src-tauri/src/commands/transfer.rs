@@ -133,7 +133,9 @@ async fn start_receive_ticket(
     node: std::sync::Arc<crate::node::LightningP2PNode>,
     ticket: ShareTicket,
 ) -> CommandResult<String> {
-    let destination = state.settings.snapshot().await.download_dir;
+    let settings = state.settings.snapshot().await;
+    let destination = settings.download_dir.clone();
+    let profile = settings.transfer_mode.profile();
     export::preflight_destination(&destination).map_err(command_error)?;
 
     let transfer_id = state.transfers.next_transfer_id("recv");
@@ -180,15 +182,20 @@ async fn start_receive_ticket(
     let window_clone = window.clone();
     let transfer_id_for_task = transfer_id.clone();
 
+    let ctx = crate::transfer::receiver::ReceiveContext {
+        queue,
+        window: window_clone,
+        transfer_id: transfer_id_for_task.clone(),
+        cancel_rx,
+    };
+
     tauri::async_runtime::spawn(async move {
         if let Err(err) = crate::transfer::receiver::receive_blob(
             node.as_ref(),
-            queue,
-            window_clone,
-            transfer_id_for_task.clone(),
+            ctx,
             ticket,
             destination,
-            cancel_rx,
+            profile,
         )
         .await
         {

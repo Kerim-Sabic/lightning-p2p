@@ -4,6 +4,7 @@ import {
   mergeFailedTransferEvent,
   type FailedTransferEvent,
 } from "./transferEventMapping";
+import type { TransferEntry } from "./transferStore";
 
 describe("mergeFailedTransferEvent", () => {
   it("keeps legacy failed events compatible", () => {
@@ -60,5 +61,50 @@ describe("mergeFailedTransferEvent", () => {
     expect(entry.appError?.redactedDiagnostics).toBe(
       "phase=connecting route=relay",
     );
+  });
+
+  it("preserves in-memory retry tickets on failed receives", () => {
+    const current: TransferEntry = {
+      transferId: "rx-retry",
+      direction: "receive",
+      name: "Preparing download",
+      peer: null,
+      bytes: 128,
+      total: 256,
+      speedBps: 0,
+      routeKind: "unknown",
+      phase: "downloading",
+      failureCategory: null,
+      outputPath: null,
+      connectMs: 10,
+      downloadMs: 20,
+      exportMs: 0,
+      providerCount: 1,
+      directProviderCount: 1,
+      relayProviderCount: 0,
+      strategy: "queued_single_provider",
+      firstByteMs: 12,
+      effectiveMbps: 0,
+      status: "running",
+      hash: null,
+      size: null,
+      timestamp: null,
+      error: null,
+      appError: null,
+      retryTicket: "fd2:secret-ticket",
+    };
+    const event: FailedTransferEvent = {
+      type: "failed",
+      transfer_id: "rx-retry",
+      error: "Peer not reachable",
+      route_kind: "direct",
+      phase: "failed",
+      failure_category: "interrupted",
+    };
+
+    const entry = mergeFailedTransferEvent(current, event);
+
+    expect(entry.retryTicket).toBe("fd2:secret-ticket");
+    expect(entry.status).toBe("failed");
   });
 });

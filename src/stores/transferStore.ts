@@ -68,6 +68,7 @@ export interface TransferEntry {
   timestamp: number | null;
   error: string | null;
   appError: AppError | null;
+  retryTicket: string | null;
 }
 
 export interface UpdateState {
@@ -131,6 +132,7 @@ interface TransferStore {
   setCustomRelayUrl: (relayUrl: string | null) => Promise<void>;
   setLocalDiscoveryEnabled: (enabled: boolean) => Promise<void>;
   setBluetoothDiscoveryEnabled: (enabled: boolean) => Promise<void>;
+  setTransferMode: (mode: tauri.TransferMode) => Promise<void>;
   completeFirstRun: () => Promise<void>;
   checkForUpdates: (silent?: boolean) => Promise<void>;
   installUpdate: () => Promise<void>;
@@ -197,6 +199,7 @@ function createTransferEntry(
   direction: TransferDirection,
   name: string,
   peer: string | null,
+  retryTicket: string | null = null,
 ): TransferEntry {
   return {
     transferId,
@@ -225,6 +228,7 @@ function createTransferEntry(
     timestamp: null,
     error: null,
     appError: null,
+    retryTicket,
   };
 }
 
@@ -263,6 +267,7 @@ function mergeActiveTransfer(
     timestamp: current?.timestamp ?? null,
     error: current?.error ?? null,
     appError: current?.appError ?? null,
+    retryTicket: current?.retryTicket ?? null,
   };
 }
 
@@ -324,7 +329,8 @@ function sameSettings(left: AppSettings, right: AppSettings): boolean {
     left.relay_mode === right.relay_mode &&
     left.custom_relay_url === right.custom_relay_url &&
     left.local_discovery_enabled === right.local_discovery_enabled &&
-    left.bluetooth_discovery_enabled === right.bluetooth_discovery_enabled
+    left.bluetooth_discovery_enabled === right.bluetooth_discovery_enabled &&
+    left.transfer_mode === right.transfer_mode
   );
 }
 
@@ -654,6 +660,7 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
               "receive",
               "Preparing download",
               null,
+              ticket,
             ),
         },
       }));
@@ -809,6 +816,15 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
     }
   },
 
+  setTransferMode: async (mode) => {
+    try {
+      const settings = await tauri.setTransferMode(mode);
+      set(withSettings(settings));
+    } catch (error) {
+      set(errorState(error));
+    }
+  },
+
   completeFirstRun: async () => {
     try {
       const settings = await tauri.completeFirstRun();
@@ -926,6 +942,7 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
           timestamp: null,
           error: null,
           appError: null,
+          retryTicket: state.transfers[event.transfer_id]?.retryTicket ?? null,
         };
         return { transfers };
       } else if (event.type === "progress") {

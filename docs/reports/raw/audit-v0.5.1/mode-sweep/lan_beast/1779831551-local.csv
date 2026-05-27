@@ -1,0 +1,6 @@
+app_version,commit_hash,os,arch,mode,scenario,run,bytes,time_to_ticket_ms,connect_ms,download_ms,export_ms,total_ms,effective_mbps,route_kind,bottleneck_estimate,success,error,hardware_notes
+0.5.0,88295e0208cf,windows,x86_64,lan_beast,same_machine_100mb,1,104857600,311,3,1093,8,1101,761.5814,direct,download,true,,"AMD Zen 5 (Family 25 Model 97 ~4.5GHz), Windows 11 Build 26200, NVMe boot"
+0.5.0,88295e0208cf,windows,x86_64,lan_beast,same_machine_100mb,2,104857600,301,3,1107,7,1115,752.3383,direct,download,true,,"AMD Zen 5 (Family 25 Model 97 ~4.5GHz), Windows 11 Build 26200, NVMe boot"
+0.5.0,88295e0208cf,windows,x86_64,lan_beast,same_machine_100mb,3,104857600,313,3,1174,8,1182,709.5507,direct,download,true,,"AMD Zen 5 (Family 25 Model 97 ~4.5GHz), Windows 11 Build 26200, NVMe boot"
+0.5.0,88295e0208cf,windows,x86_64,lan_beast,same_machine_100mb,4,104857600,313,172,1356,8,1365,614.5392,direct,download,true,,"AMD Zen 5 (Family 25 Model 97 ~4.5GHz), Windows 11 Build 26200, NVMe boot"
+0.5.0,88295e0208cf,windows,x86_64,lan_beast,same_machine_100mb,5,104857600,310,4,1245,7,1253,669.4199,direct,download,true,,"AMD Zen 5 (Family 25 Model 97 ~4.5GHz), Windows 11 Build 26200, NVMe boot"

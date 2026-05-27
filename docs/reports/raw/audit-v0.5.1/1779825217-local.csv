@@ -1,0 +1,11 @@
+app_version,commit_hash,os,arch,scenario,run,bytes,time_to_ticket_ms,connect_ms,download_ms,export_ms,total_ms,effective_mbps,route_kind,success,error
+0.5.0,82ccd43bb5af,windows,x86_64,same_machine_10mb,1,10485760,509,2,152,9,161,519.9668,direct,true,
+0.5.0,82ccd43bb5af,windows,x86_64,same_machine_10mb,2,10485760,309,2,132,7,140,596.9987,direct,true,
+0.5.0,82ccd43bb5af,windows,x86_64,same_machine_10mb,3,10485760,301,171,285,8,293,285.9014,direct,true,
+0.5.0,82ccd43bb5af,windows,x86_64,same_machine_10mb,4,10485760,292,2,127,11,139,603.2683,direct,true,
+0.5.0,82ccd43bb5af,windows,x86_64,same_machine_10mb,5,10485760,309,3,140,8,149,562.7434,direct,true,
+0.5.0,82ccd43bb5af,windows,x86_64,same_machine_100mb,1,104857600,311,2,1300,8,1308,640.9715,direct,true,
+0.5.0,82ccd43bb5af,windows,x86_64,same_machine_100mb,2,104857600,309,2,1250,7,1258,666.7553,direct,true,
+0.5.0,82ccd43bb5af,windows,x86_64,same_machine_100mb,3,104857600,313,3,1408,8,1416,592.1131,direct,true,
+0.5.0,82ccd43bb5af,windows,x86_64,same_machine_100mb,4,104857600,306,3,1327,8,1335,627.9963,direct,true,
+0.5.0,82ccd43bb5af,windows,x86_64,same_machine_100mb,5,104857600,310,3,1385,9,1395,601.1737,direct,true,

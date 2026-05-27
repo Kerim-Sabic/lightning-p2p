@@ -41,8 +41,9 @@ pub async fn create_share(
     paths: Vec<String>,
 ) -> CommandResult<String> {
     let node = state.get_node().await.map_err(command_error)?;
+    let profile = state.settings.snapshot().await.transfer_mode.profile();
     let paths = paths.into_iter().map(PathBuf::from).collect::<Vec<_>>();
-    let outcome = crate::transfer::sender::send_files(node.as_ref(), window, paths)
+    let outcome = crate::transfer::sender::send_files(node.as_ref(), window, paths, profile)
         .await
         .map_err(command_error)?;
     let ticket = encode_fd2_ticket(&outcome.ticket, &outcome.label, outcome.total_size)

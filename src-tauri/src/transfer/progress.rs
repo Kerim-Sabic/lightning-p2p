@@ -639,14 +639,29 @@ pub struct ProgressSampler {
 }
 
 impl ProgressSampler {
-    /// Spawns a progress sampler for the provided transfer reporter.
+    /// Spawns a progress sampler at the default cadence (`MAX_PROGRESS_INTERVAL`).
     #[must_use]
     pub fn spawn(reporter: EventReporter, queue_target: Option<QueueProgressTarget>) -> Self {
+        Self::spawn_with_interval(reporter, queue_target, MAX_PROGRESS_INTERVAL)
+    }
+
+    /// Spawns a progress sampler with an explicit cadence. The per-transfer
+    /// `TransferProfile` uses this so each mode (Standard, `BatterySafe`, ...)
+    /// can throttle UI emit at its own rate without rebuilding the sampler API.
+    /// Intervals below the global floor (`MAX_PROGRESS_INTERVAL`) are clamped
+    /// up; we never emit faster than 10 Hz.
+    #[must_use]
+    pub fn spawn_with_interval(
+        reporter: EventReporter,
+        queue_target: Option<QueueProgressTarget>,
+        interval: Duration,
+    ) -> Self {
+        let interval = interval.max(MAX_PROGRESS_INTERVAL);
         let handle = ProgressHandle::default();
         let sampler_handle = handle.clone();
         let (stop_tx, stop_rx) = oneshot::channel();
         let task = tauri::async_runtime::spawn(async move {
-            run_progress_sampler(reporter, sampler_handle, queue_target, stop_rx).await
+            run_progress_sampler(reporter, sampler_handle, queue_target, interval, stop_rx).await
         });
         Self {
             handle,
@@ -685,9 +700,10 @@ async fn run_progress_sampler(
     reporter: EventReporter,
     handle: ProgressHandle,
     queue_target: Option<QueueProgressTarget>,
+    sample_interval: Duration,
     mut stop_rx: oneshot::Receiver<()>,
 ) -> Result<()> {
-    let mut interval = tokio::time::interval(MAX_PROGRESS_INTERVAL);
+    let mut interval = tokio::time::interval(sample_interval);
     interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
     let mut last_bytes = 0;
     let mut last_sample_at = Instant::now();

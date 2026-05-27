@@ -216,6 +216,7 @@ pub fn run() {
             commands::settings::set_custom_relay_url,
             commands::settings::set_local_discovery_enabled,
             commands::settings::set_bluetooth_discovery_enabled,
+            commands::settings::set_transfer_mode,
             commands::settings::open_download_dir,
             commands::mobile::resolve_content_uris,
             commands::mobile::take_pending_shared_files,

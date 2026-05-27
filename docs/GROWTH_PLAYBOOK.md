@@ -13,6 +13,46 @@ The sharp position is:
 Use this instead of broad claims like "secure", "private", or "fastest" unless
 the page immediately explains the exact mechanism and evidence.
 
+## 2026 Research Baseline
+
+- GitHub's own docs frame the README as the first visitor explanation: what the
+  project does, why it is useful, how to start, where to get help, and who
+  maintains it. Keep the first screen download-and-proof focused.
+- GitHub topics help discovery by purpose, subject, community, and language.
+  Use all 20 slots deliberately: platform, transfer category, alternatives, and
+  stack terms only.
+- GitHub Releases can carry release notes, binary assets, and a release
+  Discussion. Every public launch should point to one release page with
+  checksums, signing status, and benchmark caveats.
+- GitHub Discussions are the right place for Q&A, Android beta feedback,
+  benchmark submissions, and roadmap debate that is not yet scoped into an
+  issue.
+- Google says AI Overviews and AI Mode do not need special AI-only files,
+  special markup, or separate schema. The same fundamentals still matter:
+  crawlable pages, useful text, internal links, page experience, images where
+  helpful, and structured data that matches visible content.
+- Structured data should be accurate and complete rather than overstuffed. Use
+  JSON-LD for SoftwareApplication, FAQPage, HowTo, BreadcrumbList, WebSite, and
+  SoftwareSourceCode only where the visible page supports it.
+
+Sources:
+
+- GitHub README docs: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-readmes
+- GitHub topics docs: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/classifying-your-repository-with-topics
+- GitHub releases docs: https://docs.github.com/en/repositories/releasing-projects-on-github/managing-releases-in-a-repository
+- GitHub Discussions docs: https://docs.github.com/en/discussions
+- Google AI features docs: https://developers.google.com/search/docs/appearance/ai-features
+- Google structured data docs: https://developers.google.com/search/docs/appearance/structured-data/intro-structured-data
+
+## No Unrelated SEO Stuffing
+
+Do not add unrelated outbound promotion to the Lightning P2P website, README, or
+LLM files for the sake of boosting another domain. A medtech site such as
+horalix.com should earn AEO/SEO visibility from its own evidence pages, named
+authors, clinical disclaimers, schema, and trustworthy third-party coverage.
+If Lightning P2P links to Horalix later, it should be because there is a real
+maintainer, sponsor, case-study, or company context visible to users.
+
 ## First-Week Launch Targets
 
 - GitHub release post: stable `v0.4.6`, download links, checksums, Android signer
@@ -38,6 +78,22 @@ more credible to new visitors:
 3. winget packaging bootstrap
 
 Avoid pinning internal chores that do not improve first-visitor trust.
+
+## Star Growth Loop
+
+The best star loop is tied to product success, not generic begging:
+
+1. Sender shares a normal receive link.
+2. Receiver lands on the handoff page and installs the native app if needed.
+3. Transfer completes.
+4. The app offers a dismissible GitHub star CTA only after value is delivered.
+5. The README turns new stargazers into testers with download, proof, caveats,
+   good-first areas, and benchmark submission links.
+
+This loop is already partially implemented through receive handoff pages,
+route-specific SEO pages, release artifacts, and the post-transfer star CTA.
+Next work: real demo video, real-device benchmark report, discussion launch
+thread, and pinned issues that a new contributor can finish quickly.
 
 ## Evidence Ladder
 

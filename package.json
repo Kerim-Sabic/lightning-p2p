@@ -1,7 +1,7 @@
 {
   "name": "lightning-p2p",
   "private": true,
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Open-source peer-to-peer file transfer for Windows and Android with iroh, QUIC, and BLAKE3 verification.",
   "license": "Apache-2.0",
   "packageManager": "pnpm@10.33.0",
