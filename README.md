@@ -2,260 +2,326 @@
 
 # Lightning P2P
 
-**Send huge files device-to-device. No cloud upload. No account. No size cap.**
+**Direct files. Verified bytes. No cloud account.**
 
-Native Windows and Android file transfer built with **Rust**, **Tauri v2**,
-**iroh QUIC**, **iroh-blobs**, and **BLAKE3-verified streaming**.
+A free, open-source peer-to-peer file transfer app for **Windows + Android** —
+built on **Rust**, **Tauri 2**, **iroh QUIC**, **iroh-blobs**, and **BLAKE3**.
 
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-7ddf9c?style=flat-square)](LICENSE)
-[![Windows stable](https://img.shields.io/badge/Windows-stable_v0.4.6-7ddf9c?style=flat-square)](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest)
-[![Android sideload](https://img.shields.io/badge/Android-sideload_v0.4.6-7ddf9c?style=flat-square)](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest)
-[![Rust](https://img.shields.io/badge/Rust-transfer_engine-f0c76b?style=flat-square)](https://www.rust-lang.org/)
-[![Tauri v2](https://img.shields.io/badge/Tauri-v2-7ddf9c?style=flat-square)](https://tauri.app/)
-[![iroh](https://img.shields.io/badge/iroh-QUIC_%2B_relay-7ddf9c?style=flat-square)](https://iroh.computer/)
+[![Windows stable](https://img.shields.io/badge/Windows-stable_v0.4.6-7ddf9c?style=flat-square)](https://github.com/Kerim-Sabic/lightning-p2p/releases/tag/v0.4.6)
+[![Android sideload](https://img.shields.io/badge/Android-sideload_v0.4.6-7ddf9c?style=flat-square)](https://github.com/Kerim-Sabic/lightning-p2p/releases/tag/v0.4.6)
+[![Experimental](https://img.shields.io/badge/Experimental-v0.5.1_speed_modes-f0c76b?style=flat-square)](https://github.com/Kerim-Sabic/lightning-p2p/releases/tag/v0.5.1)
+[![Rust](https://img.shields.io/badge/Rust-1.81+-f0c76b?style=flat-square)](https://www.rust-lang.org/)
+[![Tauri 2](https://img.shields.io/badge/Tauri-2-7ddf9c?style=flat-square)](https://tauri.app/)
+[![iroh QUIC](https://img.shields.io/badge/iroh-QUIC_+_relay-7ddf9c?style=flat-square)](https://iroh.computer/)
+[![BLAKE3](https://img.shields.io/badge/integrity-BLAKE3-7ddf9c?style=flat-square)](https://github.com/BLAKE3-team/BLAKE3)
+[![No cloud](https://img.shields.io/badge/cloud_upload-none-7ddf9c?style=flat-square)](#security-model)
 
-[Download](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest)
-| [Website](https://lightning-p2p.netlify.app/)
-| [Security](SECURITY.md)
-| [Privacy](PRIVACY.md)
-| [Benchmarks](docs/BENCHMARKS.md)
-| [Contribute](CONTRIBUTING.md)
+[**Download**](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest)
+· [Website](https://lightning-p2p.netlify.app/)
+· [AUDIT.md](AUDIT.md)
+· [Speed modes](#speed-modes-v051)
+· [Security](#security-model)
+· [Benchmarks](#benchmarks)
+· [Roadmap](docs/ROADMAP_v0.5_to_v0.7.md)
+· [Changelog](CHANGELOG.md)
 
 </div>
 
 ---
 
-## Why It Exists
+## What it is
 
-Most large-file workflows still ask you to upload the file somewhere first.
-Lightning P2P keeps the sender in control: the receiver opens a ticket, iroh
-finds a direct or relay-assisted route, and iroh-blobs streams verified bytes
-to disk.
+Most large-file workflows still ask you to upload first. Lightning P2P doesn't.
+The sender keeps the file on the device, generates a capability ticket
+(NodeId + content hash), and the receiver pulls bytes directly through
+iroh QUIC. Direct path when the network allows; relay-assisted when it
+doesn't. **BLAKE3 verifies every chunk** as it lands on disk.
 
-Best fit today:
+| Best fit | Not for |
+| --- | --- |
+| Moving large builds, databases, media between Windows machines | Browser-only transfer (the web is handoff, not the engine) |
+| Windows ↔ Android sideload testing | macOS / Linux production (planned, not shipped) |
+| Sharing without cloud accounts, upload caps, or hosted retention | AirDrop protocol compatibility |
+| Open-source workflows that need inspectable artifacts + checksums | Phone-to-phone NFC writing (NFC receive only) |
+| Honest benchmark methodology with committed evidence | "Fastest in the world" marketing claims |
 
-- moving large files between Windows machines
-- Windows-to-Android and Android-to-Windows sideload testing
-- sharing without accounts, cloud buckets, upload caps, or hosted retention links
-- open-source workflows that need inspectable release artifacts and checksums
-- benchmarkable transfer experiments with honest methodology
-
-Not shipped yet:
-
-- production macOS, Linux, or iOS packages
-- browser-only file transfer
-- AirDrop protocol compatibility
-- macOS/Linux BLE discovery
-- phone-to-phone NFC writing
-- third-party security audit
-
-## Demo
-
-<img src="./public/demo-lightning-p2p.gif" alt="Lightning P2P sender creates a receive link and QR code; the receiver opens the ticket and the file streams peer-to-peer" width="900" />
+---
 
 ## Install
 
-Latest stable public release: **v0.4.6**.
+Latest **stable** release: **v0.4.6**. Latest **experimental**: **v0.5.1**
+(speed modes + reliability hardening; carries the v0.5.0 BLE/NFC plumbing).
 
-| Platform | Asset | Notes |
-| --- | --- | --- |
-| Windows | [`LightningP2P-win-Setup.exe`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P-win-Setup.exe) | Recommended one-click installer |
-| Windows | [`LightningP2PSetup.exe`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2PSetup.exe) | Classic NSIS installer |
-| Windows | [`LightningP2P.msi`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P.msi) | MSI for managed installs |
-| Android | [`LightningP2P-android-latest.apk`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P-android-latest.apk) | Android 10+ sideload APK |
+| Platform | Asset | Channel | Notes |
+| --- | --- | --- | --- |
+| Windows | [`LightningP2P-win-Setup.exe`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P-win-Setup.exe) | Stable | One-click Velopack installer (recommended) |
+| Windows | [`LightningP2PSetup.exe`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2PSetup.exe) | Stable | Classic NSIS installer |
+| Windows | [`LightningP2P.msi`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P.msi) | Stable | MSI for policy-managed installs |
+| Android | [`LightningP2P-android-latest.apk`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P-android-latest.apk) | Stable | Android 10+ sideload (signed) |
+| All | [Release v0.5.1](https://github.com/Kerim-Sabic/lightning-p2p/releases/tag/v0.5.1) | Experimental | Speed modes, retry/backoff, cancel-race fix |
 
-Verify Windows artifacts:
+### Verify before you install
 
 ```powershell
+# Windows
 powershell -ExecutionPolicy Bypass -File .\scripts\verify-release.ps1 `
   -Installer .\LightningP2P-win-Setup.exe `
   -Checksums .\SHA256SUMS.txt
-```
 
-Verify Android artifacts:
-
-```powershell
+# Android
 (Get-FileHash .\LightningP2P-android-latest.apk -Algorithm SHA256).Hash
 Get-Content .\SHA256SUMS-android.txt | Select-String "LightningP2P-android-latest.apk"
 apksigner verify --print-certs --verbose .\LightningP2P-android-latest.apk
 ```
 
-Published Android signer certificate SHA-256:
+Android signer certificate SHA-256:
 
 ```text
 5F:A0:D6:63:46:FF:9C:91:1B:18:D1:2A:5F:77:F1:F0:9B:2D:E2:A7:69:A0:97:68:6C:FC:FA:43:BD:86:29:16
 ```
 
-Experimental release: [v0.5.1](https://github.com/Kerim-Sabic/lightning-p2p/releases/tag/v0.5.1)
-adds speed modes, reliability hardening, and the same experimental BLE/NFC
-proximity plumbing from v0.5.0. Use stable v0.4.6 unless you are explicitly
-testing the experimental tier.
+Full trust guide: [`docs/download-trust.md`](docs/download-trust.md).
 
-## How It Works
+---
+
+## How it works
 
 ```text
-Sender app                  ticket / QR / link                  Receiver app
-files -> iroh-blobs store -> BlobTicket with NodeId + hash -> iroh-blobs fetch
-        \________ encrypted iroh QUIC direct or relay-assisted route ________/
+Sender (native app)                                  Receiver (native app)
+┌─────────────────┐                                  ┌─────────────────┐
+│ files on disk   │                                  │ destination dir │
+│       ↓         │                                  │       ↑         │
+│ iroh-blobs add  │ ──► BlobTicket (NodeId+hash) ──► │ iroh-blobs get  │
+│                 │                                  │                 │
+│ keeps content   │ ◄── encrypted iroh QUIC ──────►  │ BLAKE3 verify   │
+│ until receiver  │      direct, then relay if NAT   │ stream to disk  │
+│ finishes        │                                  │                 │
+└─────────────────┘                                  └─────────────────┘
 ```
 
-1. Sender chooses files, folders, or an Android share-sheet item.
-2. Rust imports content into the local iroh-blobs store.
-3. Lightning P2P creates a receive ticket with NodeId, hash, and blob format.
-4. Receiver opens a QR code, HTTPS handoff link, deep link, or raw ticket.
-5. iroh tries direct QUIC connectivity and falls back through relay when needed.
-6. iroh-blobs streams BLAKE3-verified bytes to the selected output location.
+1. Sender picks files / folders / an Android share-sheet item.
+2. The Rust engine imports content into the local iroh-blobs store.
+3. A receive ticket is generated (NodeId + content hash + format).
+4. Receiver opens a QR, HTTPS handoff link, deep link, or pastes the raw ticket.
+5. iroh dials direct QUIC; falls back to relay-assisted route when needed.
+6. iroh-blobs streams BLAKE3-verified bytes to the destination.
 
-Receive handoff links use `/receive#t=<ticket>`. The ticket is in the URL
-fragment, so ordinary HTTP requests to the website do not include it.
+Receive handoff URLs use `/receive#t=<ticket>`. The ticket lives in the URL
+fragment, so it **never reaches the website server**.
 
-## What Works Today
+---
+
+## Speed modes (v0.5.1)
+
+v0.5.1 introduces five session-level transfer modes. Each swaps a full
+transport profile: QUIC send/recv/stream windows, max streams, keepalive,
+import concurrency, idle timeout, and UI emit cadence.
+
+| Mode | Parallelism | Emit ms | Conn window | Stream window | Streams | Idle timeout |
+|---|---:|---:|---:|---:|---:|---:|
+| **Battery Safe** (Android default) | 8   | 250 | 64 MB   | 16 MB  | 256  | 30 s |
+| **Standard** (desktop default)     | 64  | 100 | 256 MB  | 64 MB  | 1024 | 60 s |
+| **Fast**                           | 128 | 100 | 256 MB  | 64 MB  | 1024 | 60 s |
+| **Extreme**                        | 128 | 200 | 512 MB  | 128 MB | 2048 | 90 s |
+| **LAN Beast**                      | 128 | 200 | 1024 MB | 256 MB | 4096 | 120 s |
+
+Change the mode in Settings → the node restarts (deferred if a transfer is
+in flight). The active mode persists across launches.
+
+> **Honest scope.** On same-machine loopback all five modes cluster within
+> ~13% (626 – 710 Mbps median). The hierarchy encodes design intent; LAN/WAN
+> throughput-delta validation lands in v0.6. The receipts:
+> [`AUDIT.md` §2.1.1](AUDIT.md) + [`docs/reports/raw/audit-v0.5.1/mode-sweep/`](docs/reports/raw/audit-v0.5.1/mode-sweep/).
+
+---
+
+## What works today
 
 | Area | Status |
 | --- | --- |
-| Windows send/receive | Stable public release |
-| Android send/receive | Stable sideload release |
-| Android system share target | Stable in v0.4.6 |
-| Android MediaStore routing | Stable in v0.4.6 |
-| QR/link/raw-ticket handoff | Stable |
-| Nearby Wi-Fi/LAN discovery | Stable |
-| iroh relay fallback | Stable |
-| Speed modes (5 profiles) | Experimental in v0.5.1 |
-| BLE proximity discovery | Experimental Android + Windows since v0.5.0; carried into v0.5.1 |
-| NFC ticket receive | Experimental Android since v0.5.0; carried into v0.5.1 |
-| macOS/Linux BLE | Not shipped |
+| Windows send + receive (Tauri 2 desktop app) | **Stable** |
+| Android send + receive (sideload APK) | **Stable** |
+| Android system share-target | **Stable** in v0.4.6 |
+| Android MediaStore routing (Pictures / Movies / Music / Downloads) | **Stable** in v0.4.6 |
+| QR + handoff link + raw ticket | **Stable** |
+| Nearby Wi-Fi / LAN discovery (mDNS) | **Stable** |
+| iroh relay fallback when direct path is blocked | **Stable** |
+| Atomic single-blob writes (`.part` + rename) | **Stable** in v0.5.1 |
+| Retry + exponential backoff on transient receive errors | **Stable** in v0.5.1 |
+| Speed modes (5 profiles) | **Experimental** in v0.5.1 |
+| Implicit resume across restarts (re-paste ticket) | **Stable** (iroh-blobs persistent store) |
+| Explicit resume UI for failed transfers | Planned for v0.6 |
+| BLE proximity discovery (Android + Windows) | **Experimental** since v0.5.0 |
+| NFC ticket receive (Android) | **Experimental** since v0.5.0 |
+| Phone-to-phone NFC write, macOS/Linux BLE | Not shipped |
+| macOS / Linux / iOS desktop builds | Not shipped |
 
-BLE and NFC never carry file bytes. See [docs/proximity.md](docs/proximity.md)
-for exact behavior and the hardware test plan.
+BLE and NFC **never carry file bytes** — they only carry discovery beacons
+and ticket material. Bytes always travel through iroh QUIC. Full proximity
+behavior + hardware test plan: [`docs/proximity.md`](docs/proximity.md).
 
-## Security Model
+---
 
-Lightning P2P avoids cloud file hosting, but receive tickets are capability
-tokens. Anyone with a valid ticket can request the referenced content while the
-sender is online and the content remains available.
+## Security model
 
-- Transport: encrypted iroh QUIC.
-- Integrity: BLAKE3 verification through iroh-blobs.
-- Storage: sender keeps the file until the receiver pulls it.
-- Relay fallback: connectivity help, not a hosted retention bucket.
-- Telemetry: no product telemetry by default.
-- Sender requirement: keep the sender online until receive completes.
+Lightning P2P avoids cloud file hosting, but receive tickets are
+**capability tokens**. Anyone with a valid ticket can request the content
+while the sender is online — treat tickets like secrets.
 
-Read [SECURITY.md](SECURITY.md), [docs/security-model.md](docs/security-model.md),
-and [docs/download-trust.md](docs/download-trust.md) before using the app on
+- **Transport**: every byte encrypted by iroh's QUIC stack. TLS 1.3 keys
+  are derived per-session.
+- **Integrity**: BLAKE3 verifies as the receiver streams to disk. A bad
+  byte surfaces as a structured error, never silent corruption.
+- **Storage**: the sender keeps the file on its disk until the receiver
+  finishes. There is no upload step to a hosted bucket.
+- **Relay**: connectivity help (a hop when NAT blocks the direct path),
+  not a hosted retention store. Relay still sees encrypted QUIC frames,
+  not plaintext.
+- **Diagnostics**: bundles are gathered locally, redacted, and copied
+  by the user. The frontend never auto-posts transfer secrets.
+- **Telemetry**: no product telemetry by default. The native app does
+  not phone home.
+- **Sender requirement**: keep the sender online until the receive
+  finishes. Closing the app cancels in-flight transfers.
+
+Read [`SECURITY.md`](SECURITY.md), [`docs/security-model.md`](docs/security-model.md),
+and [`docs/download-trust.md`](docs/download-trust.md) before using the app on
 sensitive machines.
+
+---
 
 ## Benchmarks
 
-The repo includes an automated same-machine loopback harness. It is useful for
-regression detection, not marketing speed claims.
+The bench tool lives at
+[`src-tauri/src/bin/benchmark_local.rs`](src-tauri/src/bin/benchmark_local.rs).
+It generates payloads at runtime (xorshift PRNG), spins up two
+`LightningP2PNode` instances in temp dirs, and runs the real
+`sender::create_share` + `receiver::receive_ticket` paths.
 
-Current committed harness summary:
+**Current committed reference** — same-machine loopback, 5 runs each, AMD
+Zen 5 on Windows 11 Build 26200, NVMe boot, schema v2:
 
-| Scenario | Runs | Failures | Median total | Median effective |
-| --- | ---: | ---: | ---: | ---: |
-| 10 MB loopback | 3 | 0 | 276 ms | 303.78 Mbps |
-| 100 MB loopback | 3 | 0 | 1,130 ms | 742.10 Mbps |
+| Scenario | Runs | Failures | Median total | Median export | Median effective |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `same_machine_10mb`        | 5 | 0 |   147 ms |  7 ms |  **569.89 Mbps** |
+| `same_machine_100mb`       | 5 | 0 | 1,356 ms |  7 ms |  **618.45 Mbps** |
+| `same_machine_1gb`         | 5 | 0 | 13,565 ms | 8 ms |  **633.21 Mbps** |
+| `same_machine_many_small`  | 5 | 0 |   512 ms | 274 ms | **327.05 Mbps** (200 × 100 KB) |
 
-Scope: same-machine loopback on one Windows dev machine. It is not WAN, relay,
-Wi-Fi, NAT traversal, or Windows <-> Android. Do not use these numbers for
-speed leadership claims.
+**Caveat.** Same-machine loopback only. Not WAN. Not Windows ↔ Android. Not
+Wi-Fi. Not relay. Don't quote these for "fastest" claims. The full audit and
+mode-comparison evidence live in [`AUDIT.md`](AUDIT.md) and the raw JSON +
+CSV reports are at [`docs/reports/raw/`](docs/reports/raw/).
 
-Reproduce:
+Reproduce locally:
 
 ```powershell
-pnpm bench:local
-pnpm bench:local:full
+pnpm bench:local           # smoke profile, 10 MB only, ~30s
+pnpm bench:local:full      # full profile (10 MB / 100 MB / 1 GB / many-small)
+
+# Or directly, with mode + hardware notes:
+.\src-tauri\target\release\benchmark-local.exe `
+  --profile full --runs 5 --mode standard `
+  --hardware-notes "AMD Zen 5, Win 11 26200, NVMe" `
+  --output-dir docs/reports/raw/local
 ```
 
-Evidence and methodology:
+Methodology + benchmark-report template:
+[`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) ·
+[`docs/benchmark-report-template.md`](docs/benchmark-report-template.md).
 
-- [docs/reports/automated-local-benchmarks.md](docs/reports/automated-local-benchmarks.md)
-- [docs/BENCHMARKS.md](docs/BENCHMARKS.md)
-- [docs/benchmark-report-template.md](docs/benchmark-report-template.md)
+---
 
 ## Architecture
 
 ```text
-src/                  React + TypeScript presentation layer
-src-tauri/            Rust backend, Tauri IPC, iroh transfer engine
-src-tauri/src/node/   endpoint, relay, discovery, nearby protocol
-src-tauri/src/transfer/
-                      send, receive, export, progress, MIME routing
-src-tauri/src/storage/
-                      settings, history, peer cache
-src-tauri/gen/android/
-                      Android activity, share-sheet, BLE/NFC glue
-docs/                 architecture, trust, release, launch, benchmark docs
-scripts/              release verification, benchmark, packaging helpers
+src/                                React + TypeScript presentation layer
+src/components/WebLandingPage.tsx   Marketing surface (cinematic, dark, signal-green)
+src/components/ReceiveHandoffPage.tsx  /receive#t=<ticket> page
+
+src-tauri/                          Rust backend, Tauri 2 IPC, iroh engine
+src-tauri/src/node/                 endpoint, relay, discovery, nearby ALPN
+src-tauri/src/transfer/             send, receive, export, progress, mode profiles
+src-tauri/src/storage/              settings, history, peer cache (sled)
+src-tauri/src/proximity/ble.rs      Windows WinRT BLE (Android equivalent under gen/)
+src-tauri/src/bin/benchmark_local.rs   the bench tool
+
+docs/                               architecture, trust, release, proximity, audit
+scripts/                            release verification, benchmark, packaging
+AUDIT.md                            v0.5.1 architecture + bench audit (root level)
 ```
 
-Architecture rules:
+**Architecture rules** (enforced by code review, not advisory):
 
-1. Networking goes through iroh.
-2. Blob transfer goes through iroh-blobs.
-3. Frontend and backend communicate through Tauri IPC only.
-4. React is presentation; Rust owns transfer logic and persistence.
-5. Public claims must attach to source, release artifacts, or benchmark evidence.
+1. Networking goes through iroh. No raw sockets, no WebRTC, no HTTP file transfer.
+2. Blob transfer goes through iroh-blobs. No custom chunking or hashing.
+3. Frontend ↔ backend communicate through Tauri IPC only. No embedded HTTP.
+4. React is presentational. Rust owns transfer logic + persistence.
+5. Public claims attach to source, release artifacts, or benchmark evidence.
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Deeper reading: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+---
 
 ## Develop
 
-Prerequisites: Node 22+, pnpm 10, Rust 1.81+, platform toolchains for Tauri.
+Prereqs: **Node 22+**, **pnpm 10**, **Rust 1.81+**, platform Tauri toolchains.
 
 ```powershell
 pnpm install
-pnpm tauri dev
+pnpm tauri dev               # native desktop app
+pnpm dev                     # web (marketing site only)
+pnpm android:dev             # Android device/emulator (Tauri-Android)
 ```
 
-Run the full local gate before a PR:
+Local gate before a PR (mirrors what CI runs):
 
 ```powershell
-pnpm check
+pnpm check                   # release-state + lint + typecheck + test + build + cargo
 ```
 
-Expanded checks:
+Two profiles, two windows (test sender ↔ receiver on one machine):
 
 ```powershell
-pnpm lint
-pnpm typecheck
-pnpm test
-pnpm build
-cargo test --manifest-path src-tauri/Cargo.toml
-cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+$env:LIGHTNING_P2P_PROFILE = "alice"; pnpm tauri dev
+$env:LIGHTNING_P2P_PROFILE = "bob";   pnpm tauri dev
 ```
 
-Run two local desktop profiles:
+Environment overrides documented in [`.env.example`](.env.example).
+Bench-time import-parallelism override:
+`$env:LIGHTNING_P2P_IMPORT_PARALLELISM = 16` (any positive int).
 
-```powershell
-$env:LIGHTNING_P2P_PROFILE = "alice"
-pnpm tauri dev
-
-$env:LIGHTNING_P2P_PROFILE = "bob"
-pnpm tauri dev
-```
-
-Optional local overrides are documented in [.env.example](.env.example).
+---
 
 ## Contributing
 
 Good first areas:
 
-- Windows and Android device testing
-- benchmark reports with real hardware
-- accessibility and keyboard navigation
-- diagnostics and user-facing error messages
-- macOS and Linux packaging spikes
-- proximity feature validation with physical BLE/NFC hardware
-- docs, screenshots, and release verification
+- **Device testing** on real Windows + Android hardware (LAN, WAN, relay)
+- **Benchmark reports** on different hardware (CPU, NIC, NVMe class)
+- **Accessibility + keyboard nav** across the app shell
+- **Diagnostics + error copy** that helps users self-recover
+- **macOS / Linux packaging spikes** (Tauri builders exist; CI is greenfield)
+- **Proximity validation** with physical BLE + NFC hardware
+- **Docs + screenshots + release verification**
 
-Start with [CONTRIBUTING.md](CONTRIBUTING.md), [docs/README.md](docs/README.md),
-and [docs/ROADMAP.md](docs/ROADMAP.md).
+Start with [`CONTRIBUTING.md`](CONTRIBUTING.md), [`docs/README.md`](docs/README.md),
+and [`docs/ROADMAP_v0.5_to_v0.7.md`](docs/ROADMAP_v0.5_to_v0.7.md).
 
-## License
+---
 
-Apache-2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
+## License + citation
 
-If you cite Lightning P2P in research, posts, or benchmarks, use
-[CITATION.cff](CITATION.cff).
+[Apache-2.0](LICENSE) · [NOTICE](NOTICE).
+
+Citing Lightning P2P in research, posts, or benchmarks?
+Use [`CITATION.cff`](CITATION.cff).
+
+---
+
+<div align="center">
+
+Built by **[Horalix](https://horalix.com)** · Powered by **[iroh](https://iroh.computer/)** + **[iroh-blobs](https://www.iroh.computer/proto/iroh-blobs)** + **[Tauri](https://tauri.app/)**
+
+</div>

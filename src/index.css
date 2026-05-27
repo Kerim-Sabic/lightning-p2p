@@ -1,9 +1,17 @@
 @import "tailwindcss";
 
+/* Cabinet Grotesk from Fontshare (ITF). Free for commercial use. Variable cut
+ * carries the four weights we actually compose with (regular, medium, bold,
+ * extrabold). font-display: swap so the system stack paints first. */
+@import url("https://api.fontshare.com/v2/css?f[]=cabinet-grotesk@400,500,700,800&display=swap");
+
 @theme {
   --font-sans:
     "Segoe UI Variable Display", "Aptos", "SF Pro Display", "Inter Variable",
     "Segoe UI", sans-serif;
+  --font-display:
+    "Cabinet Grotesk", "Segoe UI Variable Display", "Aptos", "SF Pro Display",
+    "Inter Variable", "Segoe UI", sans-serif;
   --font-mono:
     "JetBrains Mono", "Cascadia Code", "SFMono-Regular", "Consolas", monospace;
 }
@@ -875,5 +883,267 @@ body.app-hydrated .static-seo-fallback {
 
   [data-tauri-drag-region] {
     cursor: default;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * Cinematic instrument motion vocabulary — v0.5.1 redesign.
+ *
+ * These keyframes drive the "always-moving" lab-bench aesthetic on brand
+ * surfaces. All are bounded to a single visual ingredient (signal pulse,
+ * route trace, count-up readout, scan line, ambient grid drift). Reduced-
+ * motion strips them via the existing global rule below.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+@keyframes signal-pulse {
+  0%, 100% {
+    box-shadow:
+      0 0 0 0 oklch(82% 0.16 150 / 0.55),
+      0 0 0 0 oklch(82% 0.16 150 / 0.0);
+  }
+  50% {
+    box-shadow:
+      0 0 0 6px oklch(82% 0.16 150 / 0.08),
+      0 0 24px 4px oklch(82% 0.16 150 / 0.32);
+  }
+}
+
+@keyframes signal-pulse-amber {
+  0%, 100% {
+    box-shadow:
+      0 0 0 0 oklch(81% 0.13 83 / 0.55),
+      0 0 0 0 oklch(81% 0.13 83 / 0.0);
+  }
+  50% {
+    box-shadow:
+      0 0 0 6px oklch(81% 0.13 83 / 0.08),
+      0 0 24px 4px oklch(81% 0.13 83 / 0.32);
+  }
+}
+
+@keyframes route-trace-draw {
+  from { stroke-dashoffset: 360; }
+  to   { stroke-dashoffset: 0; }
+}
+
+@keyframes route-trace-flow {
+  to { stroke-dashoffset: -36; }
+}
+
+@keyframes ambient-grid-drift {
+  0%   { background-position: 0px 0px, 0px 0px; }
+  100% { background-position: 96px 96px, 0px 0px; }
+}
+
+@keyframes lab-scan {
+  0%   { transform: translateY(-110%); opacity: 0; }
+  10%  { opacity: 0.6; }
+  50%  { opacity: 0.9; }
+  90%  { opacity: 0.6; }
+  100% { transform: translateY(110%); opacity: 0; }
+}
+
+@keyframes telemetry-blip {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50%      { opacity: 1;   transform: scale(1.08); }
+}
+
+@keyframes hero-rise {
+  from { opacity: 0; transform: translateY(28px) scale(0.985); filter: blur(8px); }
+  to   { opacity: 1; transform: translateY(0)    scale(1);     filter: blur(0); }
+}
+
+@keyframes section-rise {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes meter-fill {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(var(--meter-target, 1)); }
+}
+
+@keyframes glow-orbit {
+  from { transform: rotate(0deg) translate3d(48px, 0, 0) rotate(0deg); }
+  to   { transform: rotate(360deg) translate3d(48px, 0, 0) rotate(-360deg); }
+}
+
+@keyframes cinematic-ambient-rotate {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+@keyframes packet-dash {
+  from { transform: translateX(-20%); opacity: 0; }
+  20%  { opacity: 0.9; }
+  80%  { opacity: 0.9; }
+  to   { transform: translateX(120%); opacity: 0; }
+}
+
+@keyframes ticker-pop {
+  0%, 100% { transform: translateY(0); }
+  20%      { transform: translateY(-2px); }
+}
+
+/* Utility classes for the cinematic vocabulary. Compose with Tailwind. */
+
+.font-display {
+  font-family: var(--font-display);
+  font-feature-settings: "ss01", "ss02";
+  letter-spacing: -0.018em;
+}
+
+.signal-dot {
+  position: relative;
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background: var(--signal-green);
+  animation: signal-pulse 2.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.signal-dot--amber {
+  background: var(--proof-amber);
+  animation-name: signal-pulse-amber;
+}
+
+.signal-dot--paused {
+  animation-play-state: paused;
+}
+
+.cinematic-grid {
+  background-image:
+    linear-gradient(rgba(125, 223, 156, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(125, 223, 156, 0.06) 1px, transparent 1px);
+  background-size: 96px 96px;
+  mask-image: radial-gradient(ellipse at 50% 0%, black, transparent 78%);
+  animation: ambient-grid-drift 28s linear infinite;
+}
+
+.cinematic-orb {
+  position: absolute;
+  pointer-events: none;
+  border-radius: 9999px;
+  filter: blur(48px);
+  opacity: 0.65;
+  mix-blend-mode: screen;
+  animation: cinematic-ambient-rotate 48s linear infinite;
+  transform-origin: center;
+}
+
+.lab-scan-line {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.lab-scan-line::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    oklch(82% 0.16 150 / 0.7),
+    transparent
+  );
+  filter: drop-shadow(0 0 6px oklch(82% 0.16 150 / 0.55));
+  animation: lab-scan 7.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.route-trace {
+  fill: none;
+  stroke: var(--signal-green);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-dasharray: 6 12;
+  filter: drop-shadow(0 0 8px oklch(82% 0.16 150 / 0.45));
+  animation:
+    route-trace-draw 1400ms cubic-bezier(0.22, 1, 0.36, 1) both,
+    route-trace-flow 2.4s linear 1400ms infinite;
+}
+
+.route-trace--relay {
+  stroke: var(--proof-amber);
+  filter: drop-shadow(0 0 8px oklch(81% 0.13 83 / 0.42));
+}
+
+.packet-trail {
+  position: absolute;
+  width: 22%;
+  height: 2px;
+  border-radius: 9999px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    oklch(82% 0.16 150 / 0.95),
+    transparent
+  );
+  filter: drop-shadow(0 0 10px oklch(82% 0.16 150 / 0.6));
+  animation: packet-dash 3.4s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
+.packet-trail--lag-1 { animation-delay: 0.8s; }
+.packet-trail--lag-2 { animation-delay: 1.6s; }
+.packet-trail--lag-3 { animation-delay: 2.4s; }
+
+.hero-rise {
+  animation: hero-rise 900ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.hero-rise--stagger-1 { animation-delay: 120ms; }
+.hero-rise--stagger-2 { animation-delay: 240ms; }
+.hero-rise--stagger-3 { animation-delay: 360ms; }
+.hero-rise--stagger-4 { animation-delay: 480ms; }
+
+.section-rise {
+  animation: section-rise 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.meter-fill {
+  transform-origin: left center;
+  animation: meter-fill 1400ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.telemetry-blip {
+  animation: telemetry-blip 1.8s ease-in-out infinite;
+}
+
+.text-balance { text-wrap: balance; }
+.text-pretty  { text-wrap: pretty; }
+.tabular { font-variant-numeric: tabular-nums; }
+
+/* Tighten reduced-motion to also silence the new vocabulary. The earlier
+ * global rule strips animations and transitions to ~0ms which already covers
+ * the keyframes above, but we also need to disable the cinematic background
+ * orbs and packet trails by hiding them entirely (otherwise they freeze in a
+ * mid-animation pose). */
+@media (prefers-reduced-motion: reduce) {
+  .cinematic-grid,
+  .cinematic-orb,
+  .lab-scan-line::after,
+  .packet-trail,
+  .signal-dot,
+  .telemetry-blip {
+    animation: none !important;
+    opacity: 0 !important;
+  }
+
+  .route-trace {
+    animation: none !important;
+    stroke-dasharray: 0 !important;
+    stroke-dashoffset: 0 !important;
+  }
+
+  .hero-rise,
+  .section-rise,
+  .meter-fill {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
   }
 }

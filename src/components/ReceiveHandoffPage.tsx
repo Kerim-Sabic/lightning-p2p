@@ -1,19 +1,23 @@
 import {
   ArrowRight,
-  Clipboard,
+  ClipboardCheck,
   Copy,
   Download,
   Eye,
+  EyeOff,
+  FileCheck2,
   Github,
   Link2,
   ShieldCheck,
+  Smartphone,
 } from "lucide-react";
+import { motion, useReducedMotion } from "framer-motion";
 import { useEffect, useMemo, useState } from "react";
 import siteLogoUrl from "../assets/lightning-p2p-site-logo.png";
 import {
   ANDROID_APK_DOWNLOAD_URL,
-  REPO_URL,
   RELEASE_URL,
+  REPO_URL,
   VELOPACK_DOWNLOAD_URL,
   createDeepReceiveLink,
   ticketFromReceiveFragment,
@@ -21,280 +25,237 @@ import {
 import { writeClipboardText } from "../lib/tauri";
 
 const PENDING_TICKET_STORAGE_KEY = "lightning-p2p.pendingReceiveTicket";
+const AUTO_OPEN_DELAY_MS = 700;
 
 type TicketSource = "fragment" | "storage" | "missing";
-
 interface HandoffTicket {
   ticket: string | null;
   source: TicketSource;
 }
 
 function readStoredTicket(): string | null {
-  try {
-    return sessionStorage.getItem(PENDING_TICKET_STORAGE_KEY);
-  } catch {
-    return null;
-  }
+  try { return sessionStorage.getItem(PENDING_TICKET_STORAGE_KEY); } catch { return null; }
 }
-
 function storeTicket(ticket: string): void {
-  try {
-    sessionStorage.setItem(PENDING_TICKET_STORAGE_KEY, ticket);
-  } catch {
-    // Private browsing modes can reject storage; the fragment still has the ticket.
-  }
+  try { sessionStorage.setItem(PENDING_TICKET_STORAGE_KEY, ticket); } catch { /* private browsing */ }
 }
-
 function handoffTicket(): HandoffTicket {
   const fragmentTicket = ticketFromReceiveFragment(window.location.hash);
-  if (fragmentTicket) {
-    storeTicket(fragmentTicket);
-    return {
-      ticket: fragmentTicket,
-      source: "fragment",
-    };
-  }
-
+  if (fragmentTicket) { storeTicket(fragmentTicket); return { ticket: fragmentTicket, source: "fragment" }; }
   const storedTicket = readStoredTicket();
-  return storedTicket
-    ? {
-        ticket: storedTicket,
-        source: "storage",
-      }
-    : {
-        ticket: null,
-        source: "missing",
-      };
+  return storedTicket ? { ticket: storedTicket, source: "storage" } : { ticket: null, source: "missing" };
 }
-
 function sourceLabel(source: TicketSource): string {
   switch (source) {
-    case "fragment":
-      return "Ticket found in the private URL fragment";
-    case "storage":
-      return "Ticket restored from this browser session";
-    case "missing":
-      return "Waiting for a receive ticket";
+    case "fragment": return "Ticket pulled from the URL fragment — never sent to the website server.";
+    case "storage":  return "Ticket restored from this browser session.";
+    case "missing":  return "Waiting for a receive ticket.";
   }
+}
+function ticketDigest(ticket: string): string {
+  if (ticket.length <= 16) return ticket;
+  return `${ticket.slice(0, 8)}…${ticket.slice(-8)}`;
 }
 
 export function ReceiveHandoffPage() {
   const handoff = useMemo(handoffTicket, []);
+  const reduce = useReducedMotion();
   const [copied, setCopied] = useState(false);
   const [showRawTicket, setShowRawTicket] = useState(false);
-  const deepLink = handoff.ticket
-    ? createDeepReceiveLink(handoff.ticket)
-    : null;
+  const [autoOpenedAt, setAutoOpenedAt] = useState<number | null>(null);
+  const deepLink = handoff.ticket ? createDeepReceiveLink(handoff.ticket) : null;
 
   useEffect(() => {
-    if (!deepLink) {
-      return;
-    }
-
+    if (!deepLink) return;
     const timer = window.setTimeout(() => {
+      setAutoOpenedAt(Date.now());
       window.location.href = deepLink;
-    }, 450);
-
-    return () => {
-      window.clearTimeout(timer);
-    };
+    }, AUTO_OPEN_DELAY_MS);
+    return () => window.clearTimeout(timer);
   }, [deepLink]);
 
-  const handleOpenApp = (): void => {
-    if (!deepLink) {
-      return;
-    }
-
-    window.location.href = deepLink;
-  };
-
-  const handleCopyTicket = async (): Promise<void> => {
-    if (!handoff.ticket) {
-      return;
-    }
-
+  const handleOpenApp = () => { if (deepLink) window.location.href = deepLink; };
+  const handleCopyTicket = async () => {
+    if (!handoff.ticket) return;
     try {
       await writeClipboardText(handoff.ticket);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1800);
-    } catch {
-      setCopied(false);
-    }
+    } catch { setCopied(false); }
   };
 
   return (
-    <div className="min-h-screen bg-[#050706] text-white">
-      <header className="border-b border-white/10 bg-[#050706]/84 px-4 py-4 backdrop-blur-2xl sm:px-6">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4">
-          <a href="/" className="flex min-w-0 items-center gap-3">
-            <img
-              src={siteLogoUrl}
-              alt=""
-              className="h-9 w-9 shrink-0 rounded-[8px]"
-            />
-            <span className="truncate text-sm font-semibold tracking-[0.02em]">
-              Lightning P2P
-            </span>
+    <div className="relative min-h-screen bg-[var(--lab-black)] text-white">
+      {/* Atmosphere */}
+      <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
+        <div className="absolute inset-0 cinematic-grid" />
+        {!reduce && (
+          <>
+            <div className="cinematic-orb" style={{ top: "-10%", left: "12%", width: 480, height: 480,
+              background: "radial-gradient(circle at center, oklch(82% 0.16 150 / 0.40), transparent 62%)",
+              animationDuration: "44s" }} />
+            <div className="cinematic-orb" style={{ bottom: "-22%", right: "-4%", width: 580, height: 580,
+              background: "radial-gradient(circle at center, oklch(81% 0.13 83 / 0.28), transparent 64%)",
+              animationDuration: "62s", animationDirection: "reverse" }} />
+          </>
+        )}
+        <div className="lab-scan-line" />
+      </div>
+
+      <header className="border-b border-white/[0.06] px-6 py-3.5">
+        <div className="mx-auto flex max-w-[1100px] items-center justify-between gap-4">
+          <a href="/" className="group flex min-w-0 items-center gap-3" aria-label="Lightning P2P home">
+            <img src={siteLogoUrl} alt="" className="h-9 w-9 shrink-0 rounded-lg ring-1 ring-white/10 transition group-hover:ring-[color:var(--signal-green)]/50" />
+            <span className="font-display truncate text-[15px] font-bold tracking-[-0.018em]">Lightning P2P</span>
+            <span aria-hidden className="signal-dot mt-[2px]" />
           </a>
-          <a
-            href={REPO_URL}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-slate-200 transition-colors hover:bg-white/8 hover:text-white"
-            aria-label="Open Lightning P2P on GitHub"
-          >
+          <a href={REPO_URL} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/8 text-white/72 transition hover:bg-white/5 hover:text-white" aria-label="GitHub">
             <Github className="h-4 w-4" />
           </a>
         </div>
       </header>
 
       <main>
-        <section className="relative overflow-hidden px-4 py-20 sm:px-6">
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-0 bg-center bg-no-repeat opacity-24 [background-image:url('/web-hero.png')] [background-size:cover]"
-          />
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(5,7,6,0.98)_0%,rgba(5,7,6,0.86)_52%,rgba(5,7,6,0.96)_100%)]"
-          />
-          <div className="relative mx-auto grid max-w-6xl gap-10 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-center">
-            <div>
-              <p className="inline-flex items-center gap-2 rounded-full border border-white/16 bg-white/8 px-3 py-1 text-xs font-semibold uppercase tracking-[0.28em] text-emerald-100 backdrop-blur-xl">
-                <Link2 className="h-3 w-3" />
-                Receive handoff
-              </p>
-              <h1 className="mt-6 max-w-3xl text-5xl font-semibold leading-[0.98] tracking-tight text-white sm:text-6xl">
-                Open this transfer in Lightning P2P.
+        <section className="relative px-6 py-16 sm:py-24">
+          <div className="mx-auto grid max-w-[1100px] gap-12 lg:grid-cols-[1fr_400px] lg:gap-14">
+            <div className="relative">
+              <div className="hero-rise inline-flex items-center gap-2 rounded-full border border-[color:var(--signal-green)]/22 bg-[color:var(--signal-green)]/10 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--signal-green)]">
+                <Link2 className="h-3 w-3" /> Receive handoff
+              </div>
+              <h1 className="font-display hero-rise hero-rise--stagger-1 mt-6 max-w-[16ch] text-balance text-[clamp(2.4rem,5.6vw,4.6rem)] font-extrabold leading-[0.96] tracking-[-0.024em] text-white">
+                Open this transfer in <span className="text-[var(--signal-green)]">Lightning P2P</span>.
               </h1>
-              <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-200">
-                This page keeps the receive ticket in the URL fragment so it is
-                not sent to the website server. If the desktop app is installed,
-                the transfer should open there automatically.
+              <p className="hero-rise hero-rise--stagger-2 mt-6 max-w-[56ch] text-pretty text-[16.5px] leading-[1.65] text-[color:var(--soft-copy)]">
+                The ticket stays in the URL fragment, which means it never reaches the website server. If the native app is installed, the transfer should open there in about a second.
               </p>
-              <div className="mt-9 flex flex-wrap gap-3">
+              <div className="hero-rise hero-rise--stagger-3 mt-9 flex flex-wrap items-center gap-3">
                 <button
                   type="button"
                   onClick={handleOpenApp}
                   disabled={!deepLink}
-                  className="inline-flex items-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-black/25 transition-colors hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="group relative inline-flex min-h-12 items-center gap-2 overflow-hidden rounded-full bg-[var(--signal-green)] px-6 py-3.5 text-[14px] font-semibold text-[var(--text-ink)] shadow-[0_18px_46px_rgba(125,223,156,0.20)] transition hover:shadow-[0_26px_72px_rgba(125,223,156,0.32)] hover:brightness-[1.04] disabled:cursor-not-allowed disabled:opacity-50"
+                  aria-label="Open transfer in the native Lightning P2P app"
                 >
-                  <ArrowRight className="h-4 w-4" />
-                  Open desktop app
+                  <span aria-hidden className="pointer-events-none absolute inset-y-0 left-0 w-12 -translate-x-16 skew-x-[-18deg] bg-white/30 opacity-0 transition duration-700 group-hover:translate-x-[24rem] group-hover:opacity-100" />
+                  <span className="relative z-10 inline-flex items-center gap-2"><ArrowRight className="h-4 w-4" /> Open desktop app</span>
                 </button>
-                <a
-                  href={VELOPACK_DOWNLOAD_URL}
-                  className="inline-flex items-center gap-2 rounded-full border border-white/16 bg-white/8 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/14"
-                >
-                  <Download className="h-4 w-4" />
-                  Install for Windows
+                <a href={VELOPACK_DOWNLOAD_URL} className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/[0.04] px-5 py-3 text-[13.5px] font-semibold text-white transition hover:border-[color:var(--signal-green)]/40 hover:bg-white/[0.07]">
+                  <Download className="h-3.5 w-3.5" /> Install for Windows
                 </a>
-                <a
-                  href={ANDROID_APK_DOWNLOAD_URL}
-                  className="inline-flex items-center gap-2 rounded-full border border-white/16 bg-white/8 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/14"
-                >
-                  <Download className="h-4 w-4" />
-                  Install Android APK
+                <a href={ANDROID_APK_DOWNLOAD_URL} className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/[0.04] px-5 py-3 text-[13.5px] font-semibold text-white transition hover:border-[color:var(--signal-green)]/40 hover:bg-white/[0.07]">
+                  <Smartphone className="h-3.5 w-3.5" /> Android APK
                 </a>
-                <a
-                  href={RELEASE_URL}
-                  className="inline-flex items-center gap-2 rounded-full px-5 py-3 text-sm font-semibold text-slate-300 transition-colors hover:text-white"
-                >
+                <a href={RELEASE_URL} className="inline-flex items-center gap-2 px-2 py-2 text-[13px] font-semibold text-[color:var(--soft-copy)] transition hover:text-white">
                   Release artifacts
                 </a>
               </div>
-            </div>
-
-            <aside className="rounded-[8px] border border-white/10 bg-white/[0.045] p-6 backdrop-blur-xl">
-              <div className="flex items-start gap-3">
-                <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[8px] bg-emerald-300/12 text-emerald-200 ring-1 ring-inset ring-emerald-300/20">
-                  <ShieldCheck className="h-5 w-5" />
-                </span>
-                <div>
-                  <p className="text-sm font-semibold text-white">
-                    {sourceLabel(handoff.source)}
-                  </p>
-                  <p className="mt-2 text-sm leading-6 text-slate-300">
-                    {handoff.ticket
-                      ? "Keep this tab open if you still need to install the app."
-                      : "Ask the sender for a fresh Lightning P2P receive link."}
-                  </p>
-                </div>
+              <div className="hero-rise hero-rise--stagger-4 mt-8 flex flex-wrap gap-x-6 gap-y-2 text-[12px] text-[color:var(--muted-copy)]">
+                <span className="inline-flex items-center gap-1.5"><FileCheck2 className="h-3.5 w-3.5 text-[var(--signal-green)]" /> BLAKE3 verified at receive</span>
+                <span className="inline-flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5 text-[var(--signal-green)]" /> Capability token, never a server upload</span>
               </div>
 
-              {handoff.ticket ? (
-                <div className="mt-5 space-y-3">
-                  <div className="rounded-[8px] border border-white/[0.08] bg-black/30 p-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
-                      Raw ticket
+              {deepLink && (
+                <motion.p
+                  className="mt-8 inline-flex items-center gap-2 rounded-full border border-white/8 bg-white/[0.03] px-3 py-1.5 text-[11.5px] font-medium text-white/72"
+                  initial={reduce ? false : { opacity: 0 }}
+                  animate={reduce ? undefined : { opacity: 1 }}
+                  transition={{ delay: 0.6, duration: 0.4 }}
+                >
+                  <span aria-hidden className="signal-dot !h-1.5 !w-1.5" />
+                  {autoOpenedAt ? "Asked the OS to launch the app." : `Auto-launching the app in ~${Math.round(AUTO_OPEN_DELAY_MS / 100) * 100}ms…`}
+                </motion.p>
+              )}
+            </div>
+
+            <aside className="relative overflow-hidden rounded-3xl border border-white/8 bg-[var(--lab-black)]/82 p-7 shadow-[0_40px_120px_rgba(0,0,0,0.45)]">
+              <div className="absolute inset-0 cinematic-grid opacity-60" />
+              <div className="lab-scan-line" />
+              <div className="relative">
+                <div className="flex items-start gap-3">
+                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-[color:var(--signal-green)]/30 bg-[color:var(--signal-green)]/12">
+                    <ShieldCheck className="h-5 w-5 text-[var(--signal-green)]" />
+                  </span>
+                  <div>
+                    <p className="text-[13px] font-semibold text-white">{sourceLabel(handoff.source)}</p>
+                    <p className="mt-2 text-[12.5px] leading-6 text-[color:var(--soft-copy)]">
+                      {handoff.ticket ? "Keep this tab open if you still need to install the app." : "Ask the sender for a fresh Lightning P2P receive link."}
                     </p>
-                    {showRawTicket ? (
-                      <code className="mt-3 block max-h-40 overflow-y-auto break-all font-mono text-[12px] leading-6 text-sky-50/88">
-                        {handoff.ticket}
-                      </code>
-                    ) : (
-                      <p className="mt-3 text-sm leading-6 text-slate-300">
-                        Hidden by default because tickets are capability tokens.
-                        Reveal it only if you need the manual paste fallback.
-                      </p>
-                    )}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowRawTicket((value) => !value)}
-                    className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-white/16 bg-white/8 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/14"
-                  >
-                    <Eye className="h-4 w-4" />
-                    {showRawTicket ? "Hide raw ticket" : "Reveal raw ticket"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleCopyTicket()}
-                    className={`inline-flex w-full items-center justify-center gap-2 rounded-full border px-5 py-3 text-sm font-semibold transition-colors ${
-                      copied
-                        ? "border-emerald-300/30 bg-emerald-300/12 text-emerald-100"
-                        : "border-white/16 bg-white/8 text-white hover:bg-white/14"
-                    }`}
-                  >
-                    {copied ? (
-                      <Clipboard className="h-4 w-4" />
-                    ) : (
-                      <Copy className="h-4 w-4" />
-                    )}
-                    {copied ? "Ticket copied" : "Copy raw ticket"}
-                  </button>
                 </div>
-              ) : null}
+
+                {handoff.ticket && (
+                  <div className="mt-6 space-y-3">
+                    <div className="rounded-xl border border-white/8 bg-black/30 p-4">
+                      <div className="flex items-baseline justify-between gap-3">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.26em] text-white/40">Raw ticket</p>
+                        <p className="font-mono text-[10px] font-semibold tracking-[0.04em] text-[var(--signal-green)]">{ticketDigest(handoff.ticket)}</p>
+                      </div>
+                      {showRawTicket ? (
+                        <code className="mt-3 block max-h-40 overflow-y-auto break-all font-mono text-[11.5px] leading-6 text-white/82">{handoff.ticket}</code>
+                      ) : (
+                        <p className="mt-3 text-[12.5px] leading-6 text-[color:var(--soft-copy)]">
+                          Hidden by default. Tickets are capability tokens; only reveal when you need a manual paste fallback.
+                        </p>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowRawTicket((v) => !v)}
+                        className="inline-flex items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2.5 text-[12.5px] font-semibold text-white transition hover:bg-white/[0.08]"
+                      >
+                        {showRawTicket ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                        {showRawTicket ? "Hide" : "Reveal"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleCopyTicket()}
+                        className={`inline-flex items-center justify-center gap-2 rounded-full border px-4 py-2.5 text-[12.5px] font-semibold transition ${
+                          copied ? "border-[color:var(--signal-green)]/40 bg-[color:var(--signal-green)]/14 text-[var(--signal-green)]" : "border-white/10 bg-white/[0.04] text-white hover:bg-white/[0.08]"
+                        }`}
+                      >
+                        {copied ? <ClipboardCheck className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                        {copied ? "Copied" : "Copy"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </aside>
           </div>
         </section>
-        <section className="border-t border-white/10 px-4 py-12 sm:px-6">
-          <div className="mx-auto grid max-w-6xl gap-4 lg:grid-cols-[1fr_0.82fr]">
-            <article className="rounded-[18px] border border-white/10 bg-white/[0.04] p-6">
-              <p className="text-xs font-semibold uppercase tracking-[0.26em] text-emerald-200">
-                Direct answer
-              </p>
-              <h2 className="mt-4 text-2xl font-semibold tracking-[-0.03em]">
-                Receive handoff keeps the ticket in your browser.
-              </h2>
-              <p className="mt-4 text-sm leading-7 text-slate-300">
-                Lightning P2P receive links use `/receive#t=&lt;ticket&gt;`, so
-                the ticket stays in the URL fragment instead of being sent to
-                the website server. The browser page opens the native app; the
-                desktop app performs the transfer.
+
+        <section className="border-t border-white/[0.06] px-6 py-12">
+          <div className="mx-auto grid max-w-[1100px] gap-4 lg:grid-cols-[1.05fr_0.95fr]">
+            <article className="rounded-2xl border border-white/8 bg-white/[0.03] p-6">
+              <p className="text-[11px] font-bold uppercase tracking-[0.26em] text-[var(--signal-green)]">How the handoff works</p>
+              <h2 className="font-display mt-3 text-[22px] font-bold tracking-[-0.012em] text-white">Receive links keep the ticket out of server logs.</h2>
+              <p className="mt-3 text-[13.5px] leading-7 text-[color:var(--soft-copy)]">
+                Lightning P2P receive URLs are <code className="font-mono text-[12px] text-white/82">/receive#t=&lt;ticket&gt;</code>. Browsers don't send the fragment in HTTP requests, so the ticket never reaches a web server. The page opens the native app via the <code className="font-mono text-[12px] text-white/82">lightning-p2p://</code> scheme; the app does the actual transfer.
               </p>
             </article>
-            <aside className="rounded-[18px] border border-white/10 bg-white/[0.04] p-6">
-              <p className="text-sm font-semibold text-white">Key facts</p>
-              <ul className="mt-4 grid gap-2 text-sm leading-6 text-slate-300">
-                <li>Ticket location: URL fragment</li>
-                <li>Native app link: `lightning-p2p://receive`</li>
-                <li>Transfer engine: Rust/Tauri app</li>
-                <li>Sender requirement: sender stays online</li>
-                <li>Ticket model: capability token</li>
-              </ul>
+            <aside className="rounded-2xl border border-white/8 bg-white/[0.03] p-6">
+              <p className="text-[11px] font-bold uppercase tracking-[0.26em] text-[var(--proof-amber)]">Key facts</p>
+              <dl className="mt-3 grid gap-2 text-[13px]">
+                <Fact label="Ticket location"   value="URL fragment" />
+                <Fact label="Deep link scheme"  value="lightning-p2p://receive" />
+                <Fact label="Transfer engine"   value="Rust + Tauri (iroh QUIC)" />
+                <Fact label="Sender requirement" value="Sender stays online" />
+                <Fact label="Ticket model"      value="Capability token" />
+              </dl>
             </aside>
           </div>
         </section>
       </main>
+    </div>
+  );
+}
+
+function Fact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3 border-b border-white/[0.06] pb-1.5 last:border-0">
+      <dt className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/40">{label}</dt>
+      <dd className="text-right text-white/82">{value}</dd>
     </div>
   );
 }

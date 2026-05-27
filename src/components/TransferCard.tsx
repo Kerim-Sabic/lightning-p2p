@@ -268,10 +268,13 @@ export function TransferCard({
                 {transfer.direction}
               </span>
               <span
-                className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] ${routeTone(
+                className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] ${routeTone(
                   transfer.routeKind,
                 )}`}
               >
+                {isActive && (
+                  <span aria-hidden className="signal-dot !h-1.5 !w-1.5" />
+                )}
                 Route {routeLabel(transfer.routeKind)}
               </span>
               <StatusIcon className="h-3.5 w-3.5 text-slate-400" />
@@ -325,13 +328,21 @@ export function TransferCard({
               {hasTotal ? ` / ${formatBytes(transfer.total)}` : ""}
             </span>
           </div>
-          <div className="h-2 overflow-hidden rounded-full bg-white/[0.06]">
+          <div className="relative h-2 overflow-hidden rounded-full bg-white/[0.06]">
             <div
-              className="h-full rounded-full bg-[linear-gradient(90deg,rgba(56,189,248,0.95),rgba(16,185,129,0.9))]"
+              className="h-full rounded-full bg-[linear-gradient(90deg,rgba(56,189,248,0.95),rgba(16,185,129,0.9))] transition-[width] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]"
               style={{
                 width: hasTotal ? `${percent}%` : "24%",
               }}
             />
+            {isActive && (
+              <span
+                aria-hidden
+                className="pointer-events-none absolute inset-0 overflow-hidden rounded-full"
+              >
+                <span className="absolute inset-y-0 left-0 w-1/3 -translate-x-full skew-x-[-18deg] bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.32),transparent)] [animation:shimmer_1.6s_ease-in-out_infinite]" />
+              </span>
+            )}
           </div>
         </div>
 

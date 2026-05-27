@@ -814,11 +814,21 @@ export function SettingsView() {
                 onClick={() => void setTransferMode(value)}
                 disabled={!nativeRuntime}
                 title={descriptor.description}
-                className={`rounded-2xl border px-4 py-2 text-sm transition-all disabled:cursor-not-allowed disabled:opacity-50 ${relayModeButtonClass(
-                  active,
-                )}`}
+                className={`relative isolate overflow-hidden rounded-2xl border px-4 py-2 text-sm transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] disabled:cursor-not-allowed disabled:opacity-50 ${
+                  active
+                    ? "border-sky-300/30 text-sky-100"
+                    : "border-white/10 bg-white/[0.04] text-slate-300 hover:border-white/16 hover:text-white"
+                }`}
               >
-                {descriptor.label}
+                {active && (
+                  <motion.span
+                    aria-hidden
+                    layoutId="active-transfer-mode"
+                    className="absolute inset-0 -z-10 rounded-2xl bg-sky-500/14"
+                    transition={{ type: "spring", stiffness: 340, damping: 30, mass: 0.6 }}
+                  />
+                )}
+                <span className="relative z-10">{descriptor.label}</span>
               </button>
             );
           })}
