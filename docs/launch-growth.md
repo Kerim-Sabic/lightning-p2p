@@ -15,7 +15,7 @@ Use this after a release has a benchmark report attached. Do not publish fastest
 
 - **Show HN:** Free, open-source Windows P2P file transfer built with Rust, Tauri, iroh, and verified streaming.
 - **r/rust:** Rust desktop app using iroh and iroh-blobs for encrypted direct-first file transfer, with benchmark methodology before speed claims.
-- **r/opensource:** MIT licensed file transfer app with no account, no cloud upload, signed Windows releases, and native mobile beta roadmap.
+- **r/opensource:** Apache-2.0 licensed file transfer app with no account, no cloud upload, signed Windows release pipeline, Android sideload release, and native mobile beta roadmap.
 - **AlternativeTo:** Position against LocalSend, PairDrop, WeTransfer, and Magic Wormhole with honest platform trade-offs.
 - **Product Hunt:** Lead with no account, no cloud upload, verified bytes, direct-first transfer, and published benchmark methodology.
 
@@ -28,7 +28,7 @@ Approved before real-device benchmarks:
 - No account and no cloud file bucket.
 - QUIC transport through iroh.
 - BLAKE3 verified content through iroh-blobs.
-- Windows public release, Android alpha foundation, iOS prepared.
+- Windows public release and Android 10+ sideload release.
 - Designed for high-throughput direct transfer.
 - Automated same-machine benchmark harness available (`pnpm bench:local`;
   CI uploads CSV/JSON on every push). See

@@ -68,6 +68,7 @@ export interface TransferEntry {
   timestamp: number | null;
   error: string | null;
   appError: AppError | null;
+  retryTicket: string | null;
 }
 
 export interface UpdateState {
@@ -198,6 +199,7 @@ function createTransferEntry(
   direction: TransferDirection,
   name: string,
   peer: string | null,
+  retryTicket: string | null = null,
 ): TransferEntry {
   return {
     transferId,
@@ -226,6 +228,7 @@ function createTransferEntry(
     timestamp: null,
     error: null,
     appError: null,
+    retryTicket,
   };
 }
 
@@ -264,6 +267,7 @@ function mergeActiveTransfer(
     timestamp: current?.timestamp ?? null,
     error: current?.error ?? null,
     appError: current?.appError ?? null,
+    retryTicket: current?.retryTicket ?? null,
   };
 }
 
@@ -656,6 +660,7 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
               "receive",
               "Preparing download",
               null,
+              ticket,
             ),
         },
       }));
@@ -937,6 +942,7 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
           timestamp: null,
           error: null,
           appError: null,
+          retryTicket: state.transfers[event.transfer_id]?.retryTicket ?? null,
         };
         return { transfers };
       } else if (event.type === "progress") {

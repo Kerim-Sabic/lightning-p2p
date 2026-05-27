@@ -12,6 +12,20 @@ On-page SEO is in code (see `scripts/build-web-metadata.mjs` and `src/content/we
 - [ ] Run Google Rich Results Test for `/`, `/download`, `/receive`, `/how-to-send-large-files`, `/best-p2p-file-transfer`, `/large-file-transfer`, `/secure-p2p-file-transfer`, and `/open-source-file-transfer`.
 - [ ] Validate that `/receive#t=example` does not send the ticket in HTTP requests; only `/receive` should appear in server logs.
 
+### AI answer surfaces
+
+- [ ] Keep important claims visible in plain text, not only inside animation,
+      canvas, image text, or JSON-LD.
+- [ ] Confirm JSON-LD matches visible page copy. Do not add schema for claims
+      that users cannot read on the page.
+- [ ] Keep `/llms.txt` and `/llms-full.txt` factual, but do not treat them as a
+      replacement for normal crawlable pages. Google says AI Overviews and AI
+      Mode use the same SEO fundamentals and do not require special AI-only
+      files or markup.
+- [ ] Avoid unrelated outbound SEO placement. Do not add links or copy about
+      unrelated domains, including medtech sites such as `horalix.com`, unless a
+      real user-visible relationship exists.
+
 ### Directories and listings
 
 - [ ] [AlternativeTo](https://alternativeto.net) - list Lightning P2P under WeTransfer, Magic Wormhole, LocalSend, AirDrop alternatives.

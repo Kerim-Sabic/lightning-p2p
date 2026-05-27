@@ -157,6 +157,7 @@ export function TransferCard({
   onSendAnother,
 }: TransferCardProps) {
   const openDownloadDir = useTransferStore((state) => state.openDownloadDir);
+  const startReceive = useTransferStore((state) => state.startReceive);
   const [diagnosticsState, setDiagnosticsState] = useState<
     "idle" | "copied" | "error"
   >("idle");
@@ -164,6 +165,9 @@ export function TransferCard({
     "idle",
   );
   const [folderState, setFolderState] = useState<"idle" | "error">("idle");
+  const [retryState, setRetryState] = useState<"idle" | "started" | "error">(
+    "idle",
+  );
   const [starCtaDismissed, setStarCtaDismissed] = useState<boolean>(() =>
     readStarCtaDismissed(),
   );
@@ -176,6 +180,11 @@ export function TransferCard({
     transfer.status === "starting" || transfer.status === "running";
   const StatusIcon = statusIcon(transfer);
   const errorHint = transfer.appError?.hint ?? failureHelp(transfer);
+  const canRetryReceive =
+    transfer.status === "failed" &&
+    transfer.direction === "receive" &&
+    Boolean(transfer.retryTicket) &&
+    (transfer.appError?.retryable ?? true);
 
   const handleCancel = (): void => {
     if (!onCancel) {
@@ -221,6 +230,17 @@ export function TransferCard({
       setFolderState("error");
       window.setTimeout(() => setFolderState("idle"), 2200);
     }
+  };
+
+  const handleRetryReceive = async (): Promise<void> => {
+    if (!transfer.retryTicket) {
+      return;
+    }
+
+    setRetryState("idle");
+    const transferId = await startReceive(transfer.retryTicket);
+    setRetryState(transferId ? "started" : "error");
+    window.setTimeout(() => setRetryState("idle"), 2200);
   };
 
   const handleDismissStarCta = (): void => {
@@ -377,11 +397,26 @@ export function TransferCard({
             {transfer.direction === "receive" &&
             (transfer.appError?.retryable ?? true) ? (
               <p className="mt-2 text-[11px] leading-5 text-rose-100/60">
-                Tip: paste the ticket again to resume. Verified chunks
-                already on disk are skipped automatically.
+                Tip: retrying uses the same in-memory ticket for this app
+                session. Verified chunks already on disk are skipped
+                automatically.
               </p>
             ) : null}
             <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+              {canRetryReceive ? (
+                <button
+                  type="button"
+                  onClick={() => void handleRetryReceive()}
+                  className="inline-flex items-center gap-1 rounded-full border border-rose-200/20 bg-rose-100/10 px-2 py-1 font-semibold text-rose-50 transition hover:bg-rose-100/16"
+                >
+                  <TimerReset className="h-3.5 w-3.5" />
+                  {retryState === "started"
+                    ? "Retry started"
+                    : retryState === "error"
+                      ? "Retry failed"
+                      : "Retry receive"}
+                </button>
+              ) : null}
               {transfer.appError ? (
                 <span className="rounded-full border border-rose-300/15 bg-rose-300/10 px-2 py-1 font-medium text-rose-50/80">
                   {transfer.appError.retryable
