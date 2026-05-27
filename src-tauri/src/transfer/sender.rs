@@ -85,7 +85,8 @@ pub async fn send_files(
         TransferMetrics::default(),
         TransferPhase::Preparing,
     )?;
-    let sampler = ProgressSampler::spawn_with_interval(reporter.clone(), None, profile.progress_interval);
+    let sampler =
+        ProgressSampler::spawn_with_interval(reporter.clone(), None, profile.progress_interval);
     let progress = sampler.handle();
 
     let result = create_share_with_plan(node, plan, Some(progress.clone()), profile).await;

@@ -218,15 +218,7 @@ pub async fn receive_ticket(
 ) -> Result<ReceiveOutcome> {
     let (_cancel_tx, mut cancel_rx) = watch::channel(false);
     let profile = crate::transfer::TransferMode::platform_default().profile();
-    let summary = receive_core(
-        node,
-        &ticket,
-        destination,
-        &mut cancel_rx,
-        None,
-        profile,
-    )
-    .await?;
+    let summary = receive_core(node, &ticket, destination, &mut cancel_rx, None, profile).await?;
     Ok(ReceiveOutcome {
         hash: summary.hash,
         label: summary.label,
@@ -375,7 +367,13 @@ async fn download_to_store(
     let idle_timeout = profile.idle_timeout.max(MIN_DOWNLOAD_IDLE_TIMEOUT);
 
     loop {
-        let event = next_event(&mut stream, cancel_rx, lifecycle.contacted_peer, idle_timeout).await?;
+        let event = next_event(
+            &mut stream,
+            cancel_rx,
+            lifecycle.contacted_peer,
+            idle_timeout,
+        )
+        .await?;
         let Some(event) = event else {
             return stream_end_error();
         };
@@ -801,7 +799,9 @@ mod tests {
         assert!(!is_transient_download_failure(FailureCategory::DiskSpace));
         assert!(!is_transient_download_failure(FailureCategory::Destination));
         assert!(!is_transient_download_failure(FailureCategory::Export));
-        assert!(!is_transient_download_failure(FailureCategory::InvalidTicket));
+        assert!(!is_transient_download_failure(
+            FailureCategory::InvalidTicket
+        ));
         assert!(!is_transient_download_failure(FailureCategory::Unknown));
     }
 }

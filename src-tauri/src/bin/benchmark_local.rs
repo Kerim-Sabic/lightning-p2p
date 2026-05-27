@@ -219,9 +219,7 @@ fn parse_args() -> Result<CliArgs, String> {
                 })?;
             }
             "--hardware-notes" => {
-                hardware_notes = iter
-                    .next()
-                    .ok_or("--hardware-notes requires a value")?;
+                hardware_notes = iter.next().ok_or("--hardware-notes requires a value")?;
             }
             "--help" | "-h" => {
                 print_usage();
@@ -267,7 +265,9 @@ fn print_usage() {
     eprintln!("  standard, fast, extreme, lan_beast, battery_safe");
     eprintln!();
     eprintln!("Environment tuning hooks:");
-    eprintln!("  LIGHTNING_P2P_IMPORT_PARALLELISM=N    cap concurrent file imports for sweep tests");
+    eprintln!(
+        "  LIGHTNING_P2P_IMPORT_PARALLELISM=N    cap concurrent file imports for sweep tests"
+    );
 }
 
 async fn run_all(args: CliArgs) -> i32 {
@@ -438,10 +438,7 @@ struct ScenarioMetrics {
     route_kind: String,
 }
 
-async fn execute_scenario(
-    scenario: &Scenario,
-    mode: TransferMode,
-) -> BenchResult<ScenarioMetrics> {
+async fn execute_scenario(scenario: &Scenario, mode: TransferMode) -> BenchResult<ScenarioMetrics> {
     let root = TempRoot::new("lightning-p2p-bench")?;
     let source_dir = root.path().join("source");
     let receive_dir = root.path().join("received");

@@ -190,9 +190,14 @@ async fn start_receive_ticket(
     };
 
     tauri::async_runtime::spawn(async move {
-        if let Err(err) =
-            crate::transfer::receiver::receive_blob(node.as_ref(), ctx, ticket, destination, profile)
-                .await
+        if let Err(err) = crate::transfer::receiver::receive_blob(
+            node.as_ref(),
+            ctx,
+            ticket,
+            destination,
+            profile,
+        )
+        .await
         {
             tracing::error!(transfer_id = %transfer_id_for_task, "receive failed: {err}");
         }

@@ -284,19 +284,17 @@ async fn restart_node_after_endpoint_setting(
     settings: AppSettings,
     reason: &'static str,
 ) -> CommandResult<()> {
-    state
-        .node_supervisor
-        .restart_if_idle(
-            app,
-            settings,
-            &state.transfers,
-            state.nearby_shares.clone(),
-            state.offer_inbox.clone(),
-            reason,
-        )
-        .await
-        .map(|_| ())
-        .map_err(command_error)
+    Box::pin(state.node_supervisor.restart_if_idle(
+        app,
+        settings,
+        &state.transfers,
+        state.nearby_shares.clone(),
+        state.offer_inbox.clone(),
+        reason,
+    ))
+    .await
+    .map(|_| ())
+    .map_err(command_error)
 }
 
 /// Opens the current download directory in the operating system's file explorer.
