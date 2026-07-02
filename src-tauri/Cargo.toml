@@ -1,8 +1,8 @@
 [package]
 name = "lightning-p2p"
-version = "0.5.1"
+version = "0.6.0"
 edition = "2021"
-rust-version = "1.81"
+rust-version = "1.88"
 default-run = "lightning-p2p"
 description = "Lightning P2P - direct peer-to-peer file sharing for Windows and Android"
 license = "Apache-2.0"
@@ -23,8 +23,12 @@ tauri-plugin-shell = "2"
 tauri-plugin-updater = "2"
 
 # iroh P2P networking
-iroh = { version = "0.32", features = ["discovery-local-network"] }
-iroh-blobs = { version = "0.32", features = ["rpc"] }
+iroh = { version = "0.35", features = ["discovery-local-network"] }
+iroh-blobs = { version = "0.35", features = ["rpc"] }
+# Same quinn fork iroh 0.35 uses internally; pulled in directly only for the
+# congestion controller configs (BbrConfig/CubicConfig) that iroh does not
+# re-export. Must stay version-locked to iroh's own quinn dependency.
+iroh-quinn-proto = "0.13"
 
 # Serialization
 serde = { version = "1", features = ["derive"] }
@@ -34,7 +38,7 @@ base64 = "0.22"
 # Async runtime
 tokio = { version = "1", features = ["full"] }
 futures-util = "0.3"
-n0-future = "0.1.2"
+n0-future = "0.3"
 
 # Error handling
 anyhow = "1"
@@ -51,7 +55,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Secure key storage
-keyring = "3"
+keyring = "4"
 
 # Utilities
 dirs = "6"
@@ -60,13 +64,13 @@ mime_guess = "2"
 qrcode = "0.14"
 rand = "0.8"
 sha2 = "0.10"
-socket2 = "0.5"
+socket2 = "0.6"
 tauri-plugin-os = "2.3.2"
 tauri-plugin-clipboard-manager = "2.3.2"
 tauri-plugin-barcode-scanner = "2.4.4"
 
 [dev-dependencies]
-criterion = { version = "0.5", features = ["async_tokio"] }
+criterion = { version = "0.8", features = ["async_tokio"] }
 tempfile = "3"
 
 [target.'cfg(windows)'.dependencies]
@@ -76,13 +80,13 @@ windows = { version = "0.62", features = [
   "Foundation",
   "Storage_Streams",
 ] }
-windows-sys = { version = "0.59", features = [
+windows-sys = { version = "0.61", features = [
   "Win32_Foundation",
   "Win32_Storage_FileSystem",
 ] }
 
 [target.'cfg(target_os = "android")'.dependencies]
-jni = "0.21"
+jni = "0.22"
 ndk-context = "0.1"
 uuid = { version = "1", features = ["v4"] }
 

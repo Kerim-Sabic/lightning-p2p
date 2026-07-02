@@ -576,11 +576,15 @@ jobs:
 
             - Encrypted peer transport through iroh / QUIC TLS 1.3
             - BLAKE3 verified streaming with iroh-blobs
+            - Six speed modes with BBR congestion control on Fast and above, including the new Warp mode
+            - Experimental swarm receive: parallel per-file fetches for folder transfers (opt-in, auto-fallback)
+            - Ticket pre-warming: the connection is already hot when you press Receive
             - WAN reachability with direct and relay-assisted connectivity
-            - Live progress tracking with speed and ETA
+            - Live progress tracking with speed, ETA, route, and first-byte telemetry
             - Receive handoff links and QR sharing
             - Transfer history with one-click re-share
             - HTTPS receive handoff links: `https://lightning-p2p.netlify.app/receive#t=...`
+            - Custom speed-lab branded installers (NSIS, MSI, Velopack)
             - Code-signed Windows binaries and signed updater metadata
 
             ### Installation

@@ -153,7 +153,7 @@ fn available_disk_space(path: &Path) -> Option<u64> {
     let ok = unsafe {
         GetDiskFreeSpaceExW(
             wide_path.as_ptr(),
-            &mut available_bytes,
+            &raw mut available_bytes,
             std::ptr::null_mut(),
             std::ptr::null_mut(),
         )

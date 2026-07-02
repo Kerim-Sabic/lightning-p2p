@@ -108,6 +108,10 @@ pub struct ReceiveContext {
     pub transfer_id: String,
     /// Cancel signal — flip the watched bool to abort.
     pub cancel_rx: watch::Receiver<bool>,
+    /// Opt-in experimental swarm receive: collection children fetched
+    /// concurrently over parallel direct connections. Falls back to the
+    /// standard sequential path on any non-cancel failure.
+    pub swarm_enabled: bool,
 }
 
 /// Downloads the content addressed by a ticket using the supplied profile and
@@ -130,6 +134,7 @@ pub async fn receive_blob(
         window,
         transfer_id,
         mut cancel_rx,
+        swarm_enabled,
     } = ctx;
     let peer = ticket.primary().node_addr().node_id.to_string();
     let initial_metrics = metrics_for_ticket(&ticket);
@@ -159,6 +164,7 @@ pub async fn receive_blob(
         &mut cancel_rx,
         Some(&progress),
         profile,
+        swarm_enabled,
     )
     .await;
 
@@ -218,7 +224,16 @@ pub async fn receive_ticket(
 ) -> Result<ReceiveOutcome> {
     let (_cancel_tx, mut cancel_rx) = watch::channel(false);
     let profile = crate::transfer::TransferMode::platform_default().profile();
-    let summary = receive_core(node, &ticket, destination, &mut cancel_rx, None, profile).await?;
+    let summary = receive_core(
+        node,
+        &ticket,
+        destination,
+        &mut cancel_rx,
+        None,
+        profile,
+        false,
+    )
+    .await?;
     Ok(ReceiveOutcome {
         hash: summary.hash,
         label: summary.label,
@@ -240,9 +255,11 @@ async fn receive_core(
     cancel_rx: &mut watch::Receiver<bool>,
     progress: Option<&ProgressHandle>,
     profile: TransferProfile,
+    swarm_enabled: bool,
 ) -> Result<ReceiveSummary> {
     let download_started_at = Instant::now();
-    let download = download_with_retry(node, ticket, cancel_rx, progress, profile).await?;
+    let download =
+        download_with_retry(node, ticket, cancel_rx, progress, profile, swarm_enabled).await?;
     let download_ms = elapsed_ms(download_started_at.elapsed());
 
     // The download just completed but the user may have flipped the cancel
@@ -289,12 +306,18 @@ async fn receive_core(
     })
 }
 
-/// Wraps [`download_to_store`] with bounded retries + exponential backoff for
+/// Wraps the download with bounded retries + exponential backoff for
 /// transient failures (`Unreachable`, `Interrupted`). Non-transient failures
 /// (`Cancelled`, `DiskSpace`, `Destination`, `Export`, `InvalidTicket`,
 /// `Unknown`) bubble up on the first attempt. The retry sleep is also
 /// cancel-aware so a user cancel during backoff aborts immediately instead of
 /// waiting out the timer.
+///
+/// When `swarm_enabled` is set and the ticket is a collection, the first
+/// attempt uses the experimental swarm path (parallel child fetches). A swarm
+/// failure other than cancellation falls back to the standard sequential path
+/// without consuming the retry budget, so opting in is never worse than the
+/// default.
 ///
 /// iroh-blobs keeps any already-verified chunks in the persistent store, so a
 /// retry resumes from where the previous attempt failed — only the missing
@@ -305,42 +328,91 @@ async fn download_with_retry(
     cancel_rx: &mut watch::Receiver<bool>,
     progress: Option<&ProgressHandle>,
     profile: TransferProfile,
+    swarm_enabled: bool,
 ) -> Result<DownloadSummary> {
+    let mut use_swarm = swarm_enabled && crate::transfer::swarm::eligible(ticket);
     let mut backoff = INITIAL_RETRY_BACKOFF;
-    let mut last_error: Option<LightningP2PError> = None;
-    for attempt in 1..=MAX_DOWNLOAD_ATTEMPTS {
-        match download_to_store(node, ticket, cancel_rx, progress, profile).await {
+    let mut attempt = 0u32;
+    loop {
+        let result = if use_swarm {
+            swarm_download(node, ticket, cancel_rx, progress, profile).await
+        } else {
+            download_to_store(node, ticket, cancel_rx, progress, profile).await
+        };
+        let error = match result {
             Ok(summary) => return Ok(summary),
-            Err(error) => {
-                let category = categorize_receive_error(&error, TransferPhase::Downloading);
-                if !is_transient_download_failure(category) || attempt == MAX_DOWNLOAD_ATTEMPTS {
-                    return Err(error);
+            Err(error) => error,
+        };
+        let category = categorize_receive_error(&error, TransferPhase::Downloading);
+        if category == FailureCategory::Cancelled {
+            return Err(error);
+        }
+        if use_swarm {
+            tracing::warn!(
+                %error,
+                "swarm receive failed; falling back to the standard sequential path"
+            );
+            use_swarm = false;
+            if let Some(progress) = progress {
+                progress.set_phase(TransferPhase::Connecting);
+            }
+            continue;
+        }
+        attempt += 1;
+        if !is_transient_download_failure(category) || attempt >= MAX_DOWNLOAD_ATTEMPTS {
+            return Err(error);
+        }
+        tracing::warn!(
+            %error,
+            attempt,
+            backoff_ms = u64::try_from(backoff.as_millis()).unwrap_or(u64::MAX),
+            "transient receive failure; retrying after backoff"
+        );
+        if let Some(progress) = progress {
+            progress.set_phase(TransferPhase::Connecting);
+        }
+        tokio::select! {
+            () = tokio::time::sleep(backoff) => {}
+            changed = cancel_rx.changed() => {
+                if changed.is_ok() && *cancel_rx.borrow() {
+                    return Err(LightningP2PError::Other("Cancelled".into()));
                 }
-                tracing::warn!(
-                    %error,
-                    attempt,
-                    backoff_ms = u64::try_from(backoff.as_millis()).unwrap_or(u64::MAX),
-                    "transient receive failure; retrying after backoff"
-                );
-                if let Some(progress) = progress {
-                    progress.set_phase(TransferPhase::Connecting);
-                }
-                tokio::select! {
-                    () = tokio::time::sleep(backoff) => {}
-                    changed = cancel_rx.changed() => {
-                        if changed.is_ok() && *cancel_rx.borrow() {
-                            return Err(LightningP2PError::Other("Cancelled".into()));
-                        }
-                    }
-                }
-                backoff = backoff.saturating_mul(2);
-                last_error = Some(error);
             }
         }
+        backoff = backoff.saturating_mul(2);
     }
-    Err(last_error.unwrap_or_else(|| {
-        LightningP2PError::Other("Retry budget exhausted without recording an error".into())
-    }))
+}
+
+/// Runs the experimental swarm path and shapes its observations into the
+/// standard [`DownloadSummary`] metrics row.
+async fn swarm_download(
+    node: &LightningP2PNode,
+    ticket: &ShareTicket,
+    cancel_rx: &mut watch::Receiver<bool>,
+    progress: Option<&ProgressHandle>,
+    profile: TransferProfile,
+) -> Result<DownloadSummary> {
+    let observations =
+        crate::transfer::swarm::download_collection(node, ticket, cancel_rx, progress, profile)
+            .await?;
+    let live_route = node.route_kind(ticket.primary().node_addr().node_id);
+    let route_kind = if live_route == RouteKind::Unknown {
+        infer_route_kind(ticket)
+    } else {
+        live_route
+    };
+    if let Some(progress) = progress {
+        progress.set_route_kind(route_kind);
+    }
+    Ok(DownloadSummary {
+        metrics: TransferMetrics {
+            route_kind,
+            connect_ms: observations.connect_ms,
+            first_byte_ms: observations.first_byte_ms,
+            strategy: TransferStrategy::SwarmParallel,
+            ..metrics_for_ticket(ticket)
+        },
+    })
 }
 
 /// Returns true for download failure categories that are worth retrying.

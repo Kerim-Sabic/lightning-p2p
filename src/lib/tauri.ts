@@ -60,7 +60,8 @@ export type RouteKind = "unknown" | "direct" | "relay" | "mixed";
 export type TransferStrategy =
   | "unknown"
   | "queued_single_provider"
-  | "queued_multi_provider";
+  | "queued_multi_provider"
+  | "swarm_parallel";
 export type TransferPhase =
   | "preparing"
   | "connecting"
@@ -172,6 +173,7 @@ export type TransferMode =
   | "fast"
   | "extreme"
   | "lan_beast"
+  | "warp"
   | "battery_safe";
 
 export const TRANSFER_MODES: TransferMode[] = [
@@ -179,6 +181,7 @@ export const TRANSFER_MODES: TransferMode[] = [
   "fast",
   "extreme",
   "lan_beast",
+  "warp",
   "battery_safe",
 ];
 
@@ -189,6 +192,8 @@ export interface TransferModeDescriptor {
   label: string;
   /** One-line description used in tooltips and the Settings copy. */
   description: string;
+  /** Congestion controller the mode bakes into the QUIC endpoint. */
+  engine: "cubic" | "bbr";
   /** True if the mode is only meaningful on Android. */
   androidOnly?: boolean;
 }
@@ -201,31 +206,43 @@ export const TRANSFER_MODE_DESCRIPTORS: Record<
     value: "standard",
     label: "Standard",
     description:
-      "Safe default. Moderate parallelism and conservative QUIC windows.",
+      "Safe default. Moderate parallelism, conservative QUIC windows, and the historical CUBIC transport behavior.",
+    engine: "cubic",
   },
   fast: {
     value: "fast",
     label: "Fast",
     description:
-      "Full parallelism, same QUIC windows as Standard. Aimed at typical LAN.",
+      "Full parallelism plus BBR congestion control, which holds throughput through stray packet loss. Aimed at typical LAN and Wi-Fi.",
+    engine: "bbr",
   },
   extreme: {
     value: "extreme",
     label: "Extreme",
     description:
-      "Larger windows, more streams, slower UI emit. Aimed at fast LAN to multi-GbE.",
+      "BBR with larger windows, more streams, jumbo-frame MTU probing, and slower UI emit. Aimed at fast LAN to multi-GbE.",
+    engine: "bbr",
   },
   lan_beast: {
     value: "lan_beast",
     label: "LAN Beast",
     description:
-      "Maximum windows and permissive timeouts. For sustained large transfers on local networks.",
+      "BBR, maximum windows, and permissive timeouts. For sustained large transfers on local networks.",
+    engine: "bbr",
+  },
+  warp: {
+    value: "warp",
+    label: "Warp",
+    description:
+      "Everything maxed: BBR with a giant initial window, jumbo-frame probing, and the largest flow-control windows. For saturating whatever link you have.",
+    engine: "bbr",
   },
   battery_safe: {
     value: "battery_safe",
     label: "Battery Safe",
     description:
-      "Small parallelism and slow UI emit. Reduces RAM and CPU pressure on Android.",
+      "Small parallelism, slow UI emit, and CUBIC to minimize CPU wakeups. Reduces RAM and battery pressure on Android.",
+    engine: "cubic",
     androidOnly: true,
   },
 };
@@ -239,6 +256,7 @@ export interface AppSettings {
   local_discovery_enabled: boolean;
   bluetooth_discovery_enabled: boolean;
   transfer_mode: TransferMode;
+  experimental_swarm_receive: boolean;
 }
 
 export interface DownloadDirectoryDiagnostics {
@@ -453,6 +471,7 @@ export type TransferEvent =
     };
 
 let pendingUpdate: Update | null = null;
+const EXTERNAL_URL_PROTOCOLS = new Set(["https:", "http:"]);
 
 const browserNodeStatus: NodeStatus = {
   online: false,
@@ -490,6 +509,7 @@ const browserSettings: AppSettings = {
   local_discovery_enabled: true,
   bluetooth_discovery_enabled: false,
   transfer_mode: "standard",
+  experimental_swarm_receive: false,
 };
 
 const browserNetworkDiagnostics: NetworkDiagnostics = {
@@ -747,6 +767,22 @@ export async function startReceive(ticket: string): Promise<string> {
   return invoke<string>("start_receive", { ticket });
 }
 
+/**
+ * Pre-dial the sender named in a ticket so holepunching and the QUIC
+ * handshake finish while the user is still looking at the Receive button.
+ * Fire-and-forget: failures are silent because nothing was asked for yet.
+ */
+export async function prewarmTicket(ticket: string): Promise<boolean> {
+  if (!isDesktopRuntime()) {
+    return false;
+  }
+  try {
+    return await invoke<boolean>("prewarm_ticket", { ticket });
+  } catch {
+    return false;
+  }
+}
+
 export async function startReceiveDiscoveredShare(
   shareId: string,
 ): Promise<string> {
@@ -909,6 +945,13 @@ export async function setTransferMode(mode: TransferMode): Promise<AppSettings> 
   return invoke<AppSettings>("set_transfer_mode", { mode });
 }
 
+export async function setExperimentalSwarmReceive(
+  enabled: boolean,
+): Promise<AppSettings> {
+  requireNativeRuntime("Changing swarm receive");
+  return invoke<AppSettings>("set_experimental_swarm_receive", { enabled });
+}
+
 export async function completeFirstRun(): Promise<AppSettings> {
   requireNativeRuntime("Completing setup");
   return invoke<AppSettings>("complete_first_run");
@@ -925,11 +968,28 @@ export async function openDownloadDir(): Promise<void> {
  * so the URL is opened outside the embedded webview.
  */
 export async function openExternalUrl(url: string): Promise<void> {
+  const safeUrl = normalizeExternalUrl(url);
   if (!isTauri()) {
-    window.open(url, "_blank", "noopener,noreferrer");
+    window.open(safeUrl, "_blank", "noopener,noreferrer");
     return;
   }
-  await shellOpen(url);
+  await shellOpen(safeUrl);
+}
+
+export function normalizeExternalUrl(url: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error("External URL must be absolute.");
+  }
+  if (!EXTERNAL_URL_PROTOCOLS.has(parsed.protocol)) {
+    throw new Error("External URL must use http or https.");
+  }
+  if (parsed.username || parsed.password) {
+    throw new Error("External URL must not contain credentials.");
+  }
+  return parsed.href;
 }
 
 export async function clearActiveShare(): Promise<void> {
@@ -1007,7 +1067,9 @@ export async function resolveAndroidUris(paths: string[]): Promise<string[]> {
     if (appError.source !== "unknown") {
       throw appError;
     }
-    throw new Error("Could not read the selected file from the system picker.");
+    throw new Error("Could not read the selected file from the system picker.", {
+      cause: error,
+    });
   }
 }
 

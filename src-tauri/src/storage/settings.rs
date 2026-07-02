@@ -54,6 +54,11 @@ pub struct AppSettings {
     /// parallelism, idle timeouts, and progress emit cadence.
     #[serde(default = "default_transfer_mode")]
     pub transfer_mode: TransferMode,
+    /// Experimental swarm receive: fetch collection children concurrently
+    /// over parallel direct connections. Off by default; falls back to the
+    /// standard sequential path on any non-cancel failure.
+    #[serde(default)]
+    pub experimental_swarm_receive: bool,
 }
 
 impl AppSettings {
@@ -67,6 +72,7 @@ impl AppSettings {
             local_discovery_enabled: default_local_discovery_enabled(),
             bluetooth_discovery_enabled: default_bluetooth_discovery_enabled(),
             transfer_mode: default_transfer_mode(),
+            experimental_swarm_receive: false,
         }
     }
 
@@ -237,6 +243,19 @@ impl SettingsState {
     pub async fn set_transfer_mode(&self, mode: TransferMode) -> Result<AppSettings> {
         self.update_settings(|settings| {
             settings.transfer_mode = mode;
+            Ok(())
+        })
+        .await
+    }
+
+    /// Toggles the experimental swarm-receive path.
+    ///
+    /// # Errors
+    ///
+    /// Returns `LightningP2PError` if the updated settings cannot be written.
+    pub async fn set_experimental_swarm_receive(&self, enabled: bool) -> Result<AppSettings> {
+        self.update_settings(|settings| {
+            settings.experimental_swarm_receive = enabled;
             Ok(())
         })
         .await

@@ -14,6 +14,7 @@ import { appErrorFromCode } from "../lib/appErrors";
 import {
   isDesktopRuntime,
   isMobileRuntime,
+  prewarmTicket,
   readClipboardText,
   scanReceiveTicketQr,
   type NearbyShare,
@@ -128,6 +129,19 @@ export function ReceiveView({ onNavigateSend }: ReceiveViewProps = {}) {
       setTicketInput(ticket);
     }
   }, [pendingReceiveTicket, consumePendingReceiveTicket]);
+
+  // As soon as the field holds a valid ticket, pre-dial the sender in the
+  // background so holepunching and the QUIC handshake are already done when
+  // the user presses Receive. Debounced so keystrokes don't stack dials.
+  useEffect(() => {
+    if (!nativeRuntime || !normalizedTicket) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      void prewarmTicket(normalizedTicket);
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [nativeRuntime, normalizedTicket]);
 
   const activeReceiveCount = useMemo(
     () =>

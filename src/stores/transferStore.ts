@@ -133,6 +133,7 @@ interface TransferStore {
   setLocalDiscoveryEnabled: (enabled: boolean) => Promise<void>;
   setBluetoothDiscoveryEnabled: (enabled: boolean) => Promise<void>;
   setTransferMode: (mode: tauri.TransferMode) => Promise<void>;
+  setExperimentalSwarmReceive: (enabled: boolean) => Promise<void>;
   completeFirstRun: () => Promise<void>;
   checkForUpdates: (silent?: boolean) => Promise<void>;
   installUpdate: () => Promise<void>;
@@ -819,6 +820,15 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
   setTransferMode: async (mode) => {
     try {
       const settings = await tauri.setTransferMode(mode);
+      set(withSettings(settings));
+    } catch (error) {
+      set(errorState(error));
+    }
+  },
+
+  setExperimentalSwarmReceive: async (enabled) => {
+    try {
+      const settings = await tauri.setExperimentalSwarmReceive(enabled);
       set(withSettings(settings));
     } catch (error) {
       set(errorState(error));

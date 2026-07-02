@@ -214,7 +214,7 @@ fn parse_args() -> Result<CliArgs, String> {
                 let value = iter.next().ok_or("--mode requires a value")?;
                 mode = TransferMode::from_wire(&value).ok_or_else(|| {
                     format!(
-                        "--mode must be one of standard|fast|extreme|lan_beast|battery_safe, got '{value}'"
+                        "--mode must be one of standard|fast|extreme|lan_beast|warp|battery_safe, got '{value}'"
                     )
                 })?;
             }

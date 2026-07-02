@@ -219,6 +219,9 @@ export function SettingsView() {
     (state) => state.setBluetoothDiscoveryEnabled,
   );
   const setTransferMode = useTransferStore((state) => state.setTransferMode);
+  const setExperimentalSwarmReceive = useTransferStore(
+    (state) => state.setExperimentalSwarmReceive,
+  );
   const clearPeerCache = useTransferStore((state) => state.clearPeerCache);
   const checkForUpdates = useTransferStore((state) => state.checkForUpdates);
   const installUpdate = useTransferStore((state) => state.installUpdate);
@@ -828,7 +831,16 @@ export function SettingsView() {
                     transition={{ type: "spring", stiffness: 340, damping: 30, mass: 0.6 }}
                   />
                 )}
-                <span className="relative z-10">{descriptor.label}</span>
+                <span className="relative z-10 inline-flex items-baseline gap-1.5">
+                  {descriptor.label}
+                  <span
+                    className={`font-mono text-[9px] uppercase tracking-[0.14em] ${
+                      active ? "text-sky-200/70" : "text-slate-500"
+                    }`}
+                  >
+                    {descriptor.engine}
+                  </span>
+                </span>
               </button>
             );
           })}
@@ -840,11 +852,63 @@ export function SettingsView() {
           ].description}
         </p>
         <p className="mt-2 text-[11px] leading-6 text-slate-500">
-          Honest scope: on same-machine loopback the throughput delta between
-          Standard, Fast, Extreme, and LAN Beast is within sample noise. The
-          modes encode design intent (windows, streams, parallelism, idle
-          timeouts); end-to-end LAN/WAN validation lands in v0.6.
+          Honest scope: the congestion controller switch is evidence-based
+          (upstream iroh measured loss-based CUBIC far below BBR on real
+          network paths), while window, stream, and parallelism sizing encode
+          design intent. On same-machine loopback the modes measure within
+          sample noise; end-to-end LAN/WAN validation lands in v0.6.
         </p>
+
+        <div className="mt-4 flex items-center justify-between rounded-[24px] border border-white/8 bg-black/20 px-4 py-4">
+          <div className="flex items-start gap-3">
+            <div className="glass-icon h-10 w-10 rounded-[16px]">
+              <Gauge className="h-4 w-4 text-sky-200" />
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-sm font-medium text-white">Swarm receive</p>
+                <span className="rounded-full border border-amber-300/16 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-100">
+                  Experimental
+                </span>
+              </div>
+              <p className="text-[13px] leading-6 text-slate-300/72">
+                Fetch the files of a folder transfer concurrently over parallel
+                connections instead of one at a time. Every byte stays BLAKE3
+                verified; any failure falls back to the standard path
+                automatically.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() =>
+              void setExperimentalSwarmReceive(
+                !(settings?.experimental_swarm_receive ?? false),
+              )
+            }
+            disabled={!nativeRuntime}
+            className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-all duration-200 ${
+              (settings?.experimental_swarm_receive ?? false)
+                ? "border-sky-300/20 bg-sky-500/20"
+                : "border-white/10 bg-white/[0.04]"
+            } disabled:cursor-not-allowed disabled:opacity-50`}
+            aria-pressed={settings?.experimental_swarm_receive ?? false}
+          >
+            <motion.span
+              layout
+              transition={{ type: "spring", stiffness: 500, damping: 30 }}
+              className={`inline-block h-4 w-4 rounded-full shadow-sm transition-colors ${
+                (settings?.experimental_swarm_receive ?? false)
+                  ? "bg-sky-200"
+                  : "bg-slate-300"
+              }`}
+              style={{
+                marginLeft: (settings?.experimental_swarm_receive ?? false)
+                  ? "22px"
+                  : "3px",
+              }}
+            />
+          </button>
+        </div>
       </section>
 
       <section className="glass-panel p-6">

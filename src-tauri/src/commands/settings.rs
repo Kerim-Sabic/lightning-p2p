@@ -27,8 +27,10 @@ pub struct SettingsPayload {
     pub local_discovery_enabled: bool,
     /// Whether Bluetooth proximity discovery is enabled once supported by this build.
     pub bluetooth_discovery_enabled: bool,
-    /// Session transfer mode (Standard, Fast, Extreme, `LanBeast`, `BatterySafe`).
+    /// Session transfer mode (Standard, Fast, Extreme, `LanBeast`, Warp, `BatterySafe`).
     pub transfer_mode: TransferMode,
+    /// Experimental swarm receive: parallel child-blob fetches for collections.
+    pub experimental_swarm_receive: bool,
 }
 
 impl From<AppSettings> for SettingsPayload {
@@ -42,6 +44,7 @@ impl From<AppSettings> for SettingsPayload {
             local_discovery_enabled: settings.local_discovery_enabled,
             bluetooth_discovery_enabled: settings.bluetooth_discovery_enabled,
             transfer_mode: settings.transfer_mode,
+            experimental_swarm_receive: settings.experimental_swarm_receive,
         }
     }
 }
@@ -275,6 +278,25 @@ pub async fn set_bluetooth_discovery_enabled(
                 .map_err(|error| error.to_string())?;
         }
     }
+    Ok(SettingsPayload::from(settings))
+}
+
+/// Toggles the experimental swarm-receive path (parallel child-blob fetches
+/// for collections). Takes effect on the next receive; no node restart.
+///
+/// # Errors
+///
+/// Returns an error string if persistence fails.
+#[tauri::command]
+pub async fn set_experimental_swarm_receive(
+    state: State<'_, AppState>,
+    enabled: bool,
+) -> Result<SettingsPayload, String> {
+    let settings = state
+        .settings
+        .set_experimental_swarm_receive(enabled)
+        .await
+        .map_err(String::from)?;
     Ok(SettingsPayload::from(settings))
 }
 
