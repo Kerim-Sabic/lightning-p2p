@@ -14,7 +14,16 @@
 //! actually show throughput delta only when validated against LAN/WAN
 //! conditions. That LAN validation is a v0.6 deliverable. Until then the modes
 //! ship with values chosen for clear hierarchy (Standard < Fast < Extreme <
-//! `LanBeast` in resource use), not bench-validated speed gain.
+//! `LanBeast` < Warp in resource use), not bench-validated speed gain.
+//!
+//! One exception is **evidence-based, not design intent**: the congestion
+//! controller. quinn defaults to loss-based CUBIC, and upstream iroh
+//! measured CUBIC dramatically underperforming BBR on real network paths
+//! (n0-computer/iroh#4286 reports CUBIC ~30x slower than BBR on the same
+//! LAN path, and single-stream throughput capping well below link capacity).
+//! Fast and above therefore run BBR. Standard keeps CUBIC so the default
+//! matches historical behavior; Battery Safe keeps CUBIC because BBR's
+//! pacing model costs more CPU wakeups than a phone needs to spend.
 
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
@@ -35,9 +44,26 @@ pub enum TransferMode {
     /// Maximally permissive timeouts plus the largest windows. Aimed at
     /// sustained large-file transfers on local networks.
     LanBeast,
+    /// Everything maxed: BBR congestion control with a giant initial window,
+    /// jumbo-frame MTU probing, and the largest flow-control windows. The
+    /// no-compromises tier for saturating whatever link you have.
+    Warp,
     /// Mobile-friendly profile: small parallelism, slow UI emit, fast-fail
     /// idle timeout. Reduces RAM and CPU pressure on Android.
     BatterySafe,
+}
+
+/// Congestion control algorithm applied to the session's QUIC connections.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CongestionAlgorithm {
+    /// quinn's default. Loss-based; halves the window on packet loss, which
+    /// collapses throughput on lossy Wi-Fi and high-bandwidth-delay paths.
+    Cubic,
+    /// Model-based bandwidth estimation (Bottleneck Bandwidth and RTT).
+    /// Keeps the pipe full through stray loss; see the module honesty note
+    /// for the upstream evidence.
+    Bbr,
 }
 
 /// Concrete numeric parameters derived from a [`TransferMode`].
@@ -66,6 +92,15 @@ pub struct TransferProfile {
     pub max_concurrent_streams: u32,
     /// QUIC keepalive interval. Longer values reduce wakeups on mobile.
     pub keep_alive_interval: Duration,
+    /// Congestion control algorithm baked into the endpoint at bind time.
+    pub congestion: CongestionAlgorithm,
+    /// Initial congestion window (bytes). Larger values skip most of
+    /// slow-start, which dominates total time for short transfers.
+    pub initial_congestion_window: u64,
+    /// Upper bound for QUIC MTU discovery (bytes). quinn binary-searches up
+    /// to this bound and falls back on black-hole detection, so probing for
+    /// jumbo frames is safe on networks that cannot carry them.
+    pub mtu_upper_bound: u16,
 }
 
 impl TransferMode {
@@ -78,6 +113,7 @@ impl TransferMode {
             Self::Fast => "fast",
             Self::Extreme => "extreme",
             Self::LanBeast => "lan_beast",
+            Self::Warp => "warp",
             Self::BatterySafe => "battery_safe",
         }
     }
@@ -90,6 +126,7 @@ impl TransferMode {
             "fast" => Self::Fast,
             "extreme" => Self::Extreme,
             "lan_beast" => Self::LanBeast,
+            "warp" => Self::Warp,
             "battery_safe" => Self::BatterySafe,
             _ => return None,
         })
@@ -100,6 +137,14 @@ impl TransferMode {
     #[must_use]
     pub const fn profile(self) -> TransferProfile {
         const MB: u32 = 1024 * 1024;
+        // RFC 9002 default initial congestion window (quinn's CUBIC default).
+        const DEFAULT_INITIAL_CWND: u64 = 14_720;
+        // quinn's default MTU-discovery ceiling: 1500-byte Ethernet minus
+        // IPv6 + UDP headers. Safe everywhere.
+        const ETHERNET_MTU_CEILING: u16 = 1452;
+        // 9000-byte jumbo frames minus IPv6 + UDP headers. MTUD probes up to
+        // this and black-hole detection recovers when the path can't carry it.
+        const JUMBO_MTU_CEILING: u16 = 8952;
         match self {
             Self::Standard => TransferProfile {
                 mode: self,
@@ -111,6 +156,9 @@ impl TransferMode {
                 quic_stream_recv_window_bytes: 64 * MB,
                 max_concurrent_streams: 1024,
                 keep_alive_interval: Duration::from_secs(5),
+                congestion: CongestionAlgorithm::Cubic,
+                initial_congestion_window: DEFAULT_INITIAL_CWND,
+                mtu_upper_bound: ETHERNET_MTU_CEILING,
             },
             Self::Fast => TransferProfile {
                 mode: self,
@@ -122,6 +170,9 @@ impl TransferMode {
                 quic_stream_recv_window_bytes: 64 * MB,
                 max_concurrent_streams: 1024,
                 keep_alive_interval: Duration::from_secs(5),
+                congestion: CongestionAlgorithm::Bbr,
+                initial_congestion_window: 256 * 1024,
+                mtu_upper_bound: ETHERNET_MTU_CEILING,
             },
             Self::Extreme => TransferProfile {
                 mode: self,
@@ -133,6 +184,9 @@ impl TransferMode {
                 quic_stream_recv_window_bytes: 128 * MB,
                 max_concurrent_streams: 2048,
                 keep_alive_interval: Duration::from_secs(5),
+                congestion: CongestionAlgorithm::Bbr,
+                initial_congestion_window: MB as u64,
+                mtu_upper_bound: JUMBO_MTU_CEILING,
             },
             Self::LanBeast => TransferProfile {
                 mode: self,
@@ -144,6 +198,23 @@ impl TransferMode {
                 quic_stream_recv_window_bytes: 256 * MB,
                 max_concurrent_streams: 4096,
                 keep_alive_interval: Duration::from_secs(15),
+                congestion: CongestionAlgorithm::Bbr,
+                initial_congestion_window: 4 * MB as u64,
+                mtu_upper_bound: JUMBO_MTU_CEILING,
+            },
+            Self::Warp => TransferProfile {
+                mode: self,
+                import_parallelism: 128,
+                progress_interval: Duration::from_millis(200),
+                idle_timeout: Duration::from_secs(120),
+                quic_send_window_bytes: 2048 * MB as u64,
+                quic_recv_window_bytes: 2048 * MB,
+                quic_stream_recv_window_bytes: 512 * MB,
+                max_concurrent_streams: 8192,
+                keep_alive_interval: Duration::from_secs(15),
+                congestion: CongestionAlgorithm::Bbr,
+                initial_congestion_window: 8 * MB as u64,
+                mtu_upper_bound: JUMBO_MTU_CEILING,
             },
             Self::BatterySafe => TransferProfile {
                 mode: self,
@@ -155,6 +226,9 @@ impl TransferMode {
                 quic_stream_recv_window_bytes: 16 * MB,
                 max_concurrent_streams: 256,
                 keep_alive_interval: Duration::from_secs(30),
+                congestion: CongestionAlgorithm::Cubic,
+                initial_congestion_window: DEFAULT_INITIAL_CWND,
+                mtu_upper_bound: ETHERNET_MTU_CEILING,
             },
         }
     }
@@ -176,15 +250,18 @@ impl TransferMode {
 mod tests {
     use super::*;
 
+    const ALL_MODES: [TransferMode; 6] = [
+        TransferMode::Standard,
+        TransferMode::Fast,
+        TransferMode::Extreme,
+        TransferMode::LanBeast,
+        TransferMode::Warp,
+        TransferMode::BatterySafe,
+    ];
+
     #[test]
     fn wire_names_round_trip() {
-        for mode in [
-            TransferMode::Standard,
-            TransferMode::Fast,
-            TransferMode::Extreme,
-            TransferMode::LanBeast,
-            TransferMode::BatterySafe,
-        ] {
+        for mode in ALL_MODES {
             assert_eq!(TransferMode::from_wire(mode.as_str()), Some(mode));
         }
     }
@@ -206,26 +283,22 @@ mod tests {
 
     #[test]
     fn profile_carries_its_mode_tag() {
-        for mode in [
-            TransferMode::Standard,
-            TransferMode::Fast,
-            TransferMode::Extreme,
-            TransferMode::LanBeast,
-            TransferMode::BatterySafe,
-        ] {
+        for mode in ALL_MODES {
             assert_eq!(mode.profile().mode, mode);
         }
     }
 
     #[test]
-    fn profile_resource_hierarchy_increases_through_lan_beast() {
-        // BatterySafe < Standard < Fast <= Extreme <= LanBeast for windows + streams.
+    fn profile_resource_hierarchy_increases_through_warp() {
+        // BatterySafe < Standard < Fast <= Extreme <= LanBeast <= Warp
+        // for windows + streams.
         let modes = [
             TransferMode::BatterySafe,
             TransferMode::Standard,
             TransferMode::Fast,
             TransferMode::Extreme,
             TransferMode::LanBeast,
+            TransferMode::Warp,
         ];
         for pair in modes.windows(2) {
             let a = pair[0].profile();
@@ -243,6 +316,52 @@ mod tests {
                 pair[1]
             );
         }
+    }
+
+    #[test]
+    fn congestion_algorithm_matches_mode_tier() {
+        // Standard keeps quinn's CUBIC default so historical deployments see
+        // no transport behavior change; BatterySafe keeps CUBIC for CPU.
+        // Fast and above run BBR (see module honesty note for the evidence).
+        assert_eq!(
+            TransferMode::Standard.profile().congestion,
+            CongestionAlgorithm::Cubic
+        );
+        assert_eq!(
+            TransferMode::BatterySafe.profile().congestion,
+            CongestionAlgorithm::Cubic
+        );
+        for mode in [
+            TransferMode::Fast,
+            TransferMode::Extreme,
+            TransferMode::LanBeast,
+            TransferMode::Warp,
+        ] {
+            assert_eq!(mode.profile().congestion, CongestionAlgorithm::Bbr);
+        }
+    }
+
+    #[test]
+    fn initial_window_and_mtu_scale_with_tier() {
+        let mut previous = 0u64;
+        for mode in [
+            TransferMode::Standard,
+            TransferMode::Fast,
+            TransferMode::Extreme,
+            TransferMode::LanBeast,
+            TransferMode::Warp,
+        ] {
+            let profile = mode.profile();
+            assert!(
+                profile.initial_congestion_window >= previous,
+                "initial cwnd hierarchy violated at {mode:?}"
+            );
+            previous = profile.initial_congestion_window;
+            assert!(profile.mtu_upper_bound >= 1452);
+        }
+        // Jumbo probing is reserved for the explicitly LAN-oriented tiers.
+        assert_eq!(TransferMode::Standard.profile().mtu_upper_bound, 1452);
+        assert_eq!(TransferMode::Warp.profile().mtu_upper_bound, 8952);
     }
 
     #[test]

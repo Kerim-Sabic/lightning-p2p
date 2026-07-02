@@ -9,10 +9,11 @@ use crate::crypto::load_or_create_secret_key;
 use crate::error::{LightningP2PError, Result};
 use crate::storage::db::StorageDb;
 use crate::transfer::metrics::RouteKind;
-use crate::transfer::mode::TransferProfile;
+use crate::transfer::mode::{CongestionAlgorithm, TransferProfile};
 use crate::transfer::TransferMode;
 use iroh::endpoint::ConnectionType;
-use iroh::endpoint::TransportConfig;
+use iroh::endpoint::{ControllerFactory, MtuDiscoveryConfig, TransportConfig};
+use iroh_quinn_proto::congestion::{BbrConfig, CubicConfig};
 use iroh::protocol::Router;
 use iroh::{Endpoint, NodeAddr, NodeId, RelayMap, RelayMode, RelayUrl};
 use iroh_blobs::net_protocol::Blobs;
@@ -335,7 +336,36 @@ fn tuned_transport_config(profile: TransferProfile) -> TransportConfig {
     config.send_window(profile.quic_send_window_bytes);
     config.receive_window(profile.quic_recv_window_bytes.into());
     config.stream_receive_window(profile.quic_stream_recv_window_bytes.into());
+    config.congestion_controller_factory(congestion_factory(profile));
+    config.mtu_discovery_config(Some(mtu_discovery(profile)));
     config
+}
+
+/// Builds the congestion controller factory for the profile. BBR keeps the
+/// pipe full through stray loss on real networks; CUBIC remains for the
+/// conservative tiers (see `transfer::mode` honesty note for the evidence).
+fn congestion_factory(profile: TransferProfile) -> Arc<dyn ControllerFactory + Send + Sync> {
+    match profile.congestion {
+        CongestionAlgorithm::Cubic => {
+            let mut cubic = CubicConfig::default();
+            cubic.initial_window(profile.initial_congestion_window);
+            Arc::new(cubic)
+        }
+        CongestionAlgorithm::Bbr => {
+            let mut bbr = BbrConfig::default();
+            bbr.initial_window(profile.initial_congestion_window);
+            Arc::new(bbr)
+        }
+    }
+}
+
+/// MTU discovery bounded by the profile's ceiling. quinn binary-searches the
+/// path MTU and black-hole detection recovers if the network drops large
+/// datagrams, so probing beyond the 1452-byte default is safe.
+fn mtu_discovery(profile: TransferProfile) -> MtuDiscoveryConfig {
+    let mut mtud = MtuDiscoveryConfig::default();
+    mtud.upper_bound(profile.mtu_upper_bound);
+    mtud
 }
 
 async fn load_blob_store(data_dir: &std::path::Path) -> Result<BlobStore> {
@@ -430,6 +460,22 @@ mod tests {
 
         // tuned_transport_config builds with these values without panicking.
         let _config = tuned_transport_config(standard);
+    }
+
+    #[test]
+    fn transport_config_builds_for_every_mode() {
+        for mode in [
+            TransferMode::Standard,
+            TransferMode::Fast,
+            TransferMode::Extreme,
+            TransferMode::LanBeast,
+            TransferMode::Warp,
+            TransferMode::BatterySafe,
+        ] {
+            // Exercises window/stream VarInt conversions, the congestion
+            // factory, and MTU discovery bounds for each tier.
+            let _config = tuned_transport_config(mode.profile());
+        }
     }
 
     #[test]

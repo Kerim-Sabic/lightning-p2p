@@ -3624,6 +3624,7 @@ dependencies = [
  "hex",
  "iroh",
  "iroh-blobs",
+ "iroh-quinn-proto",
  "jni 0.22.4",
  "keyring",
  "mime_guess",

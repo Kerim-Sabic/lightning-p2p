@@ -172,6 +172,7 @@ export type TransferMode =
   | "fast"
   | "extreme"
   | "lan_beast"
+  | "warp"
   | "battery_safe";
 
 export const TRANSFER_MODES: TransferMode[] = [
@@ -179,6 +180,7 @@ export const TRANSFER_MODES: TransferMode[] = [
   "fast",
   "extreme",
   "lan_beast",
+  "warp",
   "battery_safe",
 ];
 
@@ -189,6 +191,8 @@ export interface TransferModeDescriptor {
   label: string;
   /** One-line description used in tooltips and the Settings copy. */
   description: string;
+  /** Congestion controller the mode bakes into the QUIC endpoint. */
+  engine: "cubic" | "bbr";
   /** True if the mode is only meaningful on Android. */
   androidOnly?: boolean;
 }
@@ -201,31 +205,43 @@ export const TRANSFER_MODE_DESCRIPTORS: Record<
     value: "standard",
     label: "Standard",
     description:
-      "Safe default. Moderate parallelism and conservative QUIC windows.",
+      "Safe default. Moderate parallelism, conservative QUIC windows, and the historical CUBIC transport behavior.",
+    engine: "cubic",
   },
   fast: {
     value: "fast",
     label: "Fast",
     description:
-      "Full parallelism, same QUIC windows as Standard. Aimed at typical LAN.",
+      "Full parallelism plus BBR congestion control, which holds throughput through stray packet loss. Aimed at typical LAN and Wi-Fi.",
+    engine: "bbr",
   },
   extreme: {
     value: "extreme",
     label: "Extreme",
     description:
-      "Larger windows, more streams, slower UI emit. Aimed at fast LAN to multi-GbE.",
+      "BBR with larger windows, more streams, jumbo-frame MTU probing, and slower UI emit. Aimed at fast LAN to multi-GbE.",
+    engine: "bbr",
   },
   lan_beast: {
     value: "lan_beast",
     label: "LAN Beast",
     description:
-      "Maximum windows and permissive timeouts. For sustained large transfers on local networks.",
+      "BBR, maximum windows, and permissive timeouts. For sustained large transfers on local networks.",
+    engine: "bbr",
+  },
+  warp: {
+    value: "warp",
+    label: "Warp",
+    description:
+      "Everything maxed: BBR with a giant initial window, jumbo-frame probing, and the largest flow-control windows. For saturating whatever link you have.",
+    engine: "bbr",
   },
   battery_safe: {
     value: "battery_safe",
     label: "Battery Safe",
     description:
-      "Small parallelism and slow UI emit. Reduces RAM and CPU pressure on Android.",
+      "Small parallelism, slow UI emit, and CUBIC to minimize CPU wakeups. Reduces RAM and battery pressure on Android.",
+    engine: "cubic",
     androidOnly: true,
   },
 };
@@ -746,6 +762,22 @@ export async function renderTicketQr(ticket: string): Promise<string> {
 export async function startReceive(ticket: string): Promise<string> {
   requireNativeRuntime("Receiving transfers");
   return invoke<string>("start_receive", { ticket });
+}
+
+/**
+ * Pre-dial the sender named in a ticket so holepunching and the QUIC
+ * handshake finish while the user is still looking at the Receive button.
+ * Fire-and-forget: failures are silent because nothing was asked for yet.
+ */
+export async function prewarmTicket(ticket: string): Promise<boolean> {
+  if (!isDesktopRuntime()) {
+    return false;
+  }
+  try {
+    return await invoke<boolean>("prewarm_ticket", { ticket });
+  } catch {
+    return false;
+  }
 }
 
 export async function startReceiveDiscoveredShare(

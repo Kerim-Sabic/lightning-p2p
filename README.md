@@ -20,7 +20,7 @@ Built on **Rust**, **Tauri 2**, **iroh QUIC**, **iroh-blobs**, and **BLAKE3**.
 [![Windows stable](https://img.shields.io/badge/Windows-v0.4.6_stable-7ddf9c?style=flat-square&logo=windows&logoColor=white)](https://github.com/Kerim-Sabic/lightning-p2p/releases/tag/v0.4.6)
 [![Android sideload](https://img.shields.io/badge/Android-v0.4.6_sideload-7ddf9c?style=flat-square&logo=android&logoColor=white)](https://github.com/Kerim-Sabic/lightning-p2p/releases/tag/v0.4.6)
 [![Experimental](https://img.shields.io/badge/Experimental-v0.5.1_speed_modes-f0c76b?style=flat-square)](https://github.com/Kerim-Sabic/lightning-p2p/releases/tag/v0.5.1)
-[![Rust](https://img.shields.io/badge/Rust-1.81+-f0c76b?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org/)
+[![Rust](https://img.shields.io/badge/Rust-1.88+-f0c76b?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![Tauri 2](https://img.shields.io/badge/Tauri-2-7ddf9c?style=flat-square&logo=tauri&logoColor=white)](https://tauri.app/)
 [![iroh QUIC](https://img.shields.io/badge/iroh-QUIC_+_relay-7ddf9c?style=flat-square)](https://iroh.computer/)
 [![BLAKE3](https://img.shields.io/badge/integrity-BLAKE3-7ddf9c?style=flat-square)](https://github.com/BLAKE3-team/BLAKE3)
@@ -138,19 +138,22 @@ Handoff URLs use `/receive#t=<ticket>` — the ticket lives in the URL fragment,
 
 ---
 
-## ◆ Speed modes <sup>v0.5.1</sup>
+## ◆ Speed modes <sup>v0.5.1+</sup>
 
-Five session-level transfer modes. Each swaps a **complete** transport profile: QUIC send/recv/stream windows, max streams, keepalive, import concurrency, idle timeout, UI emit cadence. Persists across launches; node restarts on change (deferred if a transfer is in flight).
+Six session-level transfer modes. Each swaps a **complete** transport profile: congestion controller, QUIC send/recv/stream windows, initial congestion window, MTU-discovery ceiling, max streams, keepalive, import concurrency, idle timeout, UI emit cadence. Persists across launches; node restarts on change (deferred if a transfer is in flight).
 
-| Mode | Parallelism | Emit | Conn win | Stream win | Streams | Idle | Default for |
-|---|---:|---:|---:|---:|---:|---:|---|
-| **Battery Safe** | 8 | 250 ms | 64 MB | 16 MB | 256 | 30 s | Android |
-| **Standard** | 64 | 100 ms | 256 MB | 64 MB | 1024 | 60 s | Desktop |
-| **Fast** | 128 | 100 ms | 256 MB | 64 MB | 1024 | 60 s | — |
-| **Extreme** | 128 | 200 ms | 512 MB | 128 MB | 2048 | 90 s | — |
-| **LAN Beast** | 128 | 200 ms | **1024 MB** | **256 MB** | **4096** | 120 s | — |
+| Mode | Engine | Parallelism | Emit | Conn win | Stream win | Streams | Init cwnd | MTU probe | Default for |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---|
+| **Battery Safe** | CUBIC | 8 | 250 ms | 64 MB | 16 MB | 256 | 14.7 KB | 1452 | Android |
+| **Standard** | CUBIC | 64 | 100 ms | 256 MB | 64 MB | 1024 | 14.7 KB | 1452 | Desktop |
+| **Fast** | **BBR** | 128 | 100 ms | 256 MB | 64 MB | 1024 | 256 KB | 1452 | — |
+| **Extreme** | **BBR** | 128 | 200 ms | 512 MB | 128 MB | 2048 | 1 MB | 8952 | — |
+| **LAN Beast** | **BBR** | 128 | 200 ms | 1024 MB | 256 MB | 4096 | 4 MB | 8952 | — |
+| **Warp** | **BBR** | 128 | 200 ms | **2048 MB** | **512 MB** | **8192** | **8 MB** | **8952** | — |
 
-> **Honest scope.** On same-machine loopback all five modes cluster within ~13% (626 – 710 Mbps median). The hierarchy encodes design intent; LAN/WAN throughput-delta validation lands in v0.6.<br/>
+**Why BBR matters:** quinn (iroh's QUIC engine) defaults to loss-based CUBIC, which halves its window on packet loss — devastating on lossy Wi-Fi and high-bandwidth paths. Upstream iroh measured CUBIC up to ~30× slower than BBR on the same LAN path ([n0-computer/iroh#4286](https://github.com/n0-computer/iroh/issues/4286)). Fast and above run BBR; Standard keeps CUBIC so the default behavior stays unchanged. MTU probing above 1452 targets jumbo-frame LANs — quinn binary-searches the path and black-hole detection recovers safely on networks that can't carry large datagrams.
+
+> **Honest scope.** The congestion-controller switch is evidence-based (upstream measurements); window/stream/parallelism sizing encodes design intent. On same-machine loopback the modes cluster within ~13% (626 – 710 Mbps median) because loopback is CPU-bound, not congestion-bound. LAN/WAN throughput-delta validation lands in v0.6.<br/>
 > Mode-sweep receipts: [`AUDIT.md §2.1.1`](AUDIT.md) · [`docs/reports/raw/audit-v0.5.1/mode-sweep/`](docs/reports/raw/audit-v0.5.1/mode-sweep/).
 
 ---
@@ -227,7 +230,8 @@ Read [`SECURITY.md`](SECURITY.md) · [`docs/security-model.md`](docs/security-mo
 | 🟢 | Atomic single-blob writes (`.part` + rename) | **Stable** v0.5.1 |
 | 🟢 | Retry + exponential backoff on transient receive errors | **Stable** v0.5.1 |
 | 🟢 | Implicit resume across restarts (re-paste ticket) | **Stable** (iroh-blobs persistent store) |
-| 🟡 | Speed modes (5 profiles) | **Experimental** v0.5.1 |
+| 🟡 | Speed modes (6 profiles, BBR on Fast+) | **Experimental** v0.5.1+ |
+| 🟡 | Ticket pre-warming (pre-dial on paste) | **Experimental** |
 | 🟡 | BLE proximity discovery (Android + Windows) | **Experimental** since v0.5.0 |
 | 🟡 | NFC ticket receive (Android) | **Experimental** since v0.5.0 |
 | ⏳ | Explicit resume UI for failed transfers | Planned v0.6 |

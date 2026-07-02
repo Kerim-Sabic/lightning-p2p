@@ -188,6 +188,7 @@ pub fn run() {
             commands::share::render_ticket_qr,
             commands::share::clear_active_share,
             commands::transfer::start_receive,
+            commands::transfer::prewarm_ticket,
             commands::transfer::get_discovered_shares,
             commands::transfer::start_receive_discovered_share,
             commands::transfer::cancel_transfer,

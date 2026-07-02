@@ -828,7 +828,16 @@ export function SettingsView() {
                     transition={{ type: "spring", stiffness: 340, damping: 30, mass: 0.6 }}
                   />
                 )}
-                <span className="relative z-10">{descriptor.label}</span>
+                <span className="relative z-10 inline-flex items-baseline gap-1.5">
+                  {descriptor.label}
+                  <span
+                    className={`font-mono text-[9px] uppercase tracking-[0.14em] ${
+                      active ? "text-sky-200/70" : "text-slate-500"
+                    }`}
+                  >
+                    {descriptor.engine}
+                  </span>
+                </span>
               </button>
             );
           })}
@@ -840,10 +849,11 @@ export function SettingsView() {
           ].description}
         </p>
         <p className="mt-2 text-[11px] leading-6 text-slate-500">
-          Honest scope: on same-machine loopback the throughput delta between
-          Standard, Fast, Extreme, and LAN Beast is within sample noise. The
-          modes encode design intent (windows, streams, parallelism, idle
-          timeouts); end-to-end LAN/WAN validation lands in v0.6.
+          Honest scope: the congestion controller switch is evidence-based
+          (upstream iroh measured loss-based CUBIC far below BBR on real
+          network paths), while window, stream, and parallelism sizing encode
+          design intent. On same-machine loopback the modes measure within
+          sample noise; end-to-end LAN/WAN validation lands in v0.6.
         </p>
       </section>
 

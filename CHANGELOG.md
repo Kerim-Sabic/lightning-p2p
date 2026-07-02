@@ -4,8 +4,19 @@ All notable changes to Lightning P2P are documented here. The project follows se
 
 ## [Unreleased]
 
+### Added
+
+- **BBR congestion control** for Fast, Extreme, LAN Beast, and Warp modes. quinn's default loss-based CUBIC collapses throughput on lossy Wi-Fi and high-bandwidth-delay paths; upstream iroh measured CUBIC up to ~30× slower than BBR on the same LAN path (n0-computer/iroh#4286). Standard and Battery Safe keep CUBIC so default behavior is unchanged.
+- **Warp mode**: new flagship transfer mode — BBR with an 8 MB initial congestion window, jumbo-frame MTU probing, 2 GB connection windows, 512 MB stream windows, and 8192 streams.
+- **Per-mode initial congestion window**: Fast 256 KB, Extreme 1 MB, LAN Beast 4 MB, Warp 8 MB. Skips most of slow-start, which dominates total time for short transfers.
+- **Jumbo-frame MTU discovery** on Extreme, LAN Beast, and Warp (ceiling 8952 bytes = 9000-byte jumbo minus IPv6/UDP headers). quinn binary-searches the path MTU; black-hole detection recovers safely on networks that cannot carry large datagrams.
+- **Ticket pre-warming**: the receive screen pre-dials the sender as soon as a valid ticket lands in the input field, so discovery, NAT holepunching, and the QUIC handshake complete while the user is still looking at the Receive button. Cuts time-to-first-byte on the actual transfer.
+- Transfer-mode picker now shows each mode's congestion engine (CUBIC/BBR) inline.
+
 ### Changed
 
+- Upgraded to iroh 0.35 / iroh-blobs 0.35, jni 0.22 (new `Env` API), keyring 4, TypeScript 6, Vite 8, ESLint 10.
+- Android: new `TransferForegroundService` JNI bridge keeps transfers alive with a foreground service while the app is backgrounded.
 - Default branch continues the `v0.5.x` experimental track for BLE proximity discovery and NFC ticket handoff.
 
 ## [0.5.1] - 2026-05-26 ("the elegant brook")

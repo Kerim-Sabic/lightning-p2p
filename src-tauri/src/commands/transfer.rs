@@ -9,8 +9,26 @@ use crate::transfer::progress::{TransferDirection, TransferInfo, TransferPhase};
 use crate::transfer::ticket::ShareTicket;
 use crate::AppState;
 use iroh_blobs::ticket::BlobTicket;
+use std::collections::HashSet;
+use std::sync::{LazyLock, Mutex, PoisonError};
+use std::time::Duration;
 use tauri::State;
 use tokio::sync::watch;
+
+/// Ceiling on how long a pre-warm dial may spend on discovery, holepunching,
+/// and the QUIC handshake before giving up. Generous because relay-assisted
+/// paths legitimately take several seconds to negotiate.
+const PREWARM_CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
+
+/// How long an established pre-warm connection is held open. Keepalives on
+/// the connection keep NAT bindings and the direct path hot until the user
+/// actually presses Receive.
+const PREWARM_HOLD: Duration = Duration::from_secs(45);
+
+/// Node ids with a pre-warm dial currently in flight, so repeated keystrokes
+/// in the ticket field cannot stack duplicate dials to the same sender.
+static PREWARM_INFLIGHT: LazyLock<Mutex<HashSet<String>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
 
 /// Starts downloading shared content from a legacy or Lightning P2P ticket string.
 ///
@@ -28,6 +46,72 @@ pub async fn start_receive(
     let ticket = ShareTicket::parse(&ticket)
         .map_err(|_err| command_error(AppErrorPayload::invalid_ticket()))?;
     start_receive_ticket(state, window, node, ticket).await
+}
+
+/// Pre-dials the providers named in a ticket so discovery, NAT holepunching,
+/// and the QUIC handshake complete while the user is still looking at the
+/// confirm button. By the time `start_receive` runs, the endpoint already
+/// knows a working path to the sender, cutting time-to-first-byte.
+///
+/// Best-effort by design: invalid tickets, a node that is still starting, or
+/// unreachable peers all return `Ok(false)` rather than surfacing an error,
+/// because nothing user-visible has been asked for yet.
+///
+/// # Errors
+///
+/// Never returns an error; the `Result` shape is required by Tauri IPC.
+#[tauri::command]
+pub async fn prewarm_ticket(state: State<'_, AppState>, ticket: String) -> CommandResult<bool> {
+    let Ok(parsed) = ShareTicket::parse(&ticket) else {
+        return Ok(false);
+    };
+    let Ok(node) = state.get_node().await else {
+        return Ok(false);
+    };
+    Ok(spawn_prewarm(&node, &parsed))
+}
+
+/// Spawns one background dial per provider that is not already being warmed.
+/// Returns whether at least one new dial was started.
+fn spawn_prewarm(
+    node: &std::sync::Arc<crate::node::LightningP2PNode>,
+    ticket: &ShareTicket,
+) -> bool {
+    let mut started = false;
+    for addr in ticket.provider_node_addrs() {
+        let node_id = addr.node_id.to_string();
+        {
+            let mut inflight = PREWARM_INFLIGHT
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner);
+            if !inflight.insert(node_id.clone()) {
+                continue;
+            }
+        }
+        started = true;
+        let node = node.clone();
+        tauri::async_runtime::spawn(async move {
+            let dial = node.endpoint().connect(addr, iroh_blobs::ALPN);
+            match tokio::time::timeout(PREWARM_CONNECT_TIMEOUT, dial).await {
+                Ok(Ok(connection)) => {
+                    tracing::debug!(node_id = %node_id, "prewarm: peer path established");
+                    tokio::time::sleep(PREWARM_HOLD).await;
+                    drop(connection);
+                }
+                Ok(Err(error)) => {
+                    tracing::debug!(node_id = %node_id, %error, "prewarm: dial failed");
+                }
+                Err(_) => {
+                    tracing::debug!(node_id = %node_id, "prewarm: dial timed out");
+                }
+            }
+            PREWARM_INFLIGHT
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .remove(&node_id);
+        });
+    }
+    started
 }
 
 /// Returns the current LAN-discovered nearby shares.

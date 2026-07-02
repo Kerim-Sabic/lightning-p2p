@@ -200,11 +200,12 @@ const workflowSteps: Array<{ icon: LucideIcon; index: string; title: string; cop
 ];
 
 const speedModes: ModeRow[] = [
-  { key: "battery_safe", name: "Battery Safe", tagline: "Mobile-friendly. Smallest windows, fast-fail idle.", parallelism: 8,   emitMs: 250, windowMb: 64,   streamMb: 16,  streams: 256,  tone: "amber" },
-  { key: "standard",     name: "Standard",     tagline: "Safe default. Moderate concurrency, conservative QUIC.", parallelism: 64,  emitMs: 100, windowMb: 256,  streamMb: 64,  streams: 1024, tone: "muted" },
-  { key: "fast",         name: "Fast",         tagline: "Full parallelism, same windows as Standard.", parallelism: 128, emitMs: 100, windowMb: 256,  streamMb: 64,  streams: 1024, tone: "signal" },
-  { key: "extreme",      name: "Extreme",      tagline: "Larger windows + more streams. Slower UI emit.", parallelism: 128, emitMs: 200, windowMb: 512,  streamMb: 128, streams: 2048, tone: "signal" },
-  { key: "lan_beast",    name: "LAN Beast",    tagline: "Maximum windows. Permissive timeouts for sustained transfers.", parallelism: 128, emitMs: 200, windowMb: 1024, streamMb: 256, streams: 4096, tone: "signal" },
+  { key: "battery_safe", name: "Battery Safe", tagline: "Mobile-friendly. Smallest windows, fast-fail idle, CUBIC.", parallelism: 8,   emitMs: 250, windowMb: 64,   streamMb: 16,  streams: 256,  tone: "amber" },
+  { key: "standard",     name: "Standard",     tagline: "Safe default. Moderate concurrency, conservative QUIC, CUBIC.", parallelism: 64,  emitMs: 100, windowMb: 256,  streamMb: 64,  streams: 1024, tone: "muted" },
+  { key: "fast",         name: "Fast",         tagline: "Full parallelism + BBR congestion control.", parallelism: 128, emitMs: 100, windowMb: 256,  streamMb: 64,  streams: 1024, tone: "signal" },
+  { key: "extreme",      name: "Extreme",      tagline: "BBR, larger windows, jumbo-frame MTU probing.", parallelism: 128, emitMs: 200, windowMb: 512,  streamMb: 128, streams: 2048, tone: "signal" },
+  { key: "lan_beast",    name: "LAN Beast",    tagline: "BBR + maximum windows. Permissive timeouts for sustained transfers.", parallelism: 128, emitMs: 200, windowMb: 1024, streamMb: 256, streams: 4096, tone: "signal" },
+  { key: "warp",         name: "Warp",         tagline: "Everything maxed: BBR, giant initial window, jumbo frames.", parallelism: 128, emitMs: 200, windowMb: 2048, streamMb: 512, streams: 8192, tone: "signal" },
 ];
 
 const capabilityRows: Array<{ index: string; label: string; headline: string; body: string; proof: { text: string; href: string } }> = [

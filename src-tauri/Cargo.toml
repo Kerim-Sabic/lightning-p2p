@@ -25,6 +25,10 @@ tauri-plugin-updater = "2"
 # iroh P2P networking
 iroh = { version = "0.35", features = ["discovery-local-network"] }
 iroh-blobs = { version = "0.35", features = ["rpc"] }
+# Same quinn fork iroh 0.35 uses internally; pulled in directly only for the
+# congestion controller configs (BbrConfig/CubicConfig) that iroh does not
+# re-export. Must stay version-locked to iroh's own quinn dependency.
+iroh-quinn-proto = "0.13"
 
 # Serialization
 serde = { version = "1", features = ["derive"] }
