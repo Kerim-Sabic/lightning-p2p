@@ -28,6 +28,16 @@
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
+const MB: u32 = 1024 * 1024;
+/// RFC 9002 default initial congestion window (quinn's CUBIC default).
+const DEFAULT_INITIAL_CWND: u64 = 14_720;
+/// quinn's default MTU-discovery ceiling: 1500-byte Ethernet minus
+/// IPv6 + UDP headers. Safe everywhere.
+const ETHERNET_MTU_CEILING: u16 = 1452;
+/// 9000-byte jumbo frames minus IPv6 + UDP headers. MTUD probes up to
+/// this and black-hole detection recovers when the path can't carry it.
+const JUMBO_MTU_CEILING: u16 = 8952;
+
 /// User-selectable transfer mode. The active mode lives in `AppSettings` and
 /// applies to every transfer started in the session until changed.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -139,116 +149,131 @@ impl TransferMode {
         })
     }
 
-    /// Returns the [`TransferProfile`] for this mode. Values are deliberately
-    /// expressed inline so reviewers can see every tier in one place.
+    /// Returns the [`TransferProfile`] for this mode. Values live in one
+    /// per-mode constructor each so reviewers can read a tier at a glance.
     #[must_use]
     pub const fn profile(self) -> TransferProfile {
-        const MB: u32 = 1024 * 1024;
-        // RFC 9002 default initial congestion window (quinn's CUBIC default).
-        const DEFAULT_INITIAL_CWND: u64 = 14_720;
-        // quinn's default MTU-discovery ceiling: 1500-byte Ethernet minus
-        // IPv6 + UDP headers. Safe everywhere.
-        const ETHERNET_MTU_CEILING: u16 = 1452;
-        // 9000-byte jumbo frames minus IPv6 + UDP headers. MTUD probes up to
-        // this and black-hole detection recovers when the path can't carry it.
-        const JUMBO_MTU_CEILING: u16 = 8952;
         match self {
-            Self::Standard => TransferProfile {
-                mode: self,
-                import_parallelism: 64,
-                progress_interval: Duration::from_millis(100),
-                idle_timeout: Duration::from_secs(60),
-                quic_send_window_bytes: 256 * MB as u64,
-                quic_recv_window_bytes: 256 * MB,
-                quic_stream_recv_window_bytes: 64 * MB,
-                max_concurrent_streams: 1024,
-                keep_alive_interval: Duration::from_secs(5),
-                congestion: CongestionAlgorithm::Cubic,
-                initial_congestion_window: DEFAULT_INITIAL_CWND,
-                mtu_upper_bound: ETHERNET_MTU_CEILING,
-                swarm_receive_default: false,
-                swarm_parallelism: 4,
-            },
-            Self::Fast => TransferProfile {
-                mode: self,
-                import_parallelism: 128,
-                progress_interval: Duration::from_millis(100),
-                idle_timeout: Duration::from_secs(60),
-                quic_send_window_bytes: 256 * MB as u64,
-                quic_recv_window_bytes: 256 * MB,
-                quic_stream_recv_window_bytes: 64 * MB,
-                max_concurrent_streams: 1024,
-                keep_alive_interval: Duration::from_secs(5),
-                congestion: CongestionAlgorithm::Bbr,
-                initial_congestion_window: 256 * 1024,
-                mtu_upper_bound: ETHERNET_MTU_CEILING,
-                swarm_receive_default: false,
-                swarm_parallelism: 6,
-            },
-            Self::Extreme => TransferProfile {
-                mode: self,
-                import_parallelism: 128,
-                progress_interval: Duration::from_millis(200),
-                idle_timeout: Duration::from_secs(90),
-                quic_send_window_bytes: 512 * MB as u64,
-                quic_recv_window_bytes: 512 * MB,
-                quic_stream_recv_window_bytes: 128 * MB,
-                max_concurrent_streams: 2048,
-                keep_alive_interval: Duration::from_secs(5),
-                congestion: CongestionAlgorithm::Bbr,
-                initial_congestion_window: MB as u64,
-                mtu_upper_bound: JUMBO_MTU_CEILING,
-                swarm_receive_default: true,
-                swarm_parallelism: 8,
-            },
-            Self::LanBeast => TransferProfile {
-                mode: self,
-                import_parallelism: 128,
-                progress_interval: Duration::from_millis(200),
-                idle_timeout: Duration::from_secs(120),
-                quic_send_window_bytes: 1024 * MB as u64,
-                quic_recv_window_bytes: 1024 * MB,
-                quic_stream_recv_window_bytes: 256 * MB,
-                max_concurrent_streams: 4096,
-                keep_alive_interval: Duration::from_secs(15),
-                congestion: CongestionAlgorithm::Bbr,
-                initial_congestion_window: 4 * MB as u64,
-                mtu_upper_bound: JUMBO_MTU_CEILING,
-                swarm_receive_default: true,
-                swarm_parallelism: 12,
-            },
-            Self::Warp => TransferProfile {
-                mode: self,
-                import_parallelism: 128,
-                progress_interval: Duration::from_millis(200),
-                idle_timeout: Duration::from_secs(120),
-                quic_send_window_bytes: 2048 * MB as u64,
-                quic_recv_window_bytes: 2048 * MB,
-                quic_stream_recv_window_bytes: 512 * MB,
-                max_concurrent_streams: 8192,
-                keep_alive_interval: Duration::from_secs(15),
-                congestion: CongestionAlgorithm::Bbr,
-                initial_congestion_window: 8 * MB as u64,
-                mtu_upper_bound: JUMBO_MTU_CEILING,
-                swarm_receive_default: true,
-                swarm_parallelism: 16,
-            },
-            Self::BatterySafe => TransferProfile {
-                mode: self,
-                import_parallelism: 8,
-                progress_interval: Duration::from_millis(250),
-                idle_timeout: Duration::from_secs(30),
-                quic_send_window_bytes: 64 * MB as u64,
-                quic_recv_window_bytes: 64 * MB,
-                quic_stream_recv_window_bytes: 16 * MB,
-                max_concurrent_streams: 256,
-                keep_alive_interval: Duration::from_secs(30),
-                congestion: CongestionAlgorithm::Cubic,
-                initial_congestion_window: DEFAULT_INITIAL_CWND,
-                mtu_upper_bound: ETHERNET_MTU_CEILING,
-                swarm_receive_default: false,
-                swarm_parallelism: 2,
-            },
+            Self::Standard => Self::standard_profile(),
+            Self::Fast => Self::fast_profile(),
+            Self::Extreme => Self::extreme_profile(),
+            Self::LanBeast => Self::lan_beast_profile(),
+            Self::Warp => Self::warp_profile(),
+            Self::BatterySafe => Self::battery_safe_profile(),
+        }
+    }
+
+    const fn standard_profile() -> TransferProfile {
+        TransferProfile {
+            mode: Self::Standard,
+            import_parallelism: 64,
+            progress_interval: Duration::from_millis(100),
+            idle_timeout: Duration::from_secs(60),
+            quic_send_window_bytes: 256 * MB as u64,
+            quic_recv_window_bytes: 256 * MB,
+            quic_stream_recv_window_bytes: 64 * MB,
+            max_concurrent_streams: 1024,
+            keep_alive_interval: Duration::from_secs(5),
+            congestion: CongestionAlgorithm::Cubic,
+            initial_congestion_window: DEFAULT_INITIAL_CWND,
+            mtu_upper_bound: ETHERNET_MTU_CEILING,
+            swarm_receive_default: false,
+            swarm_parallelism: 4,
+        }
+    }
+
+    const fn fast_profile() -> TransferProfile {
+        TransferProfile {
+            mode: Self::Fast,
+            import_parallelism: 128,
+            progress_interval: Duration::from_millis(100),
+            idle_timeout: Duration::from_secs(60),
+            quic_send_window_bytes: 256 * MB as u64,
+            quic_recv_window_bytes: 256 * MB,
+            quic_stream_recv_window_bytes: 64 * MB,
+            max_concurrent_streams: 1024,
+            keep_alive_interval: Duration::from_secs(5),
+            congestion: CongestionAlgorithm::Bbr,
+            initial_congestion_window: 256 * 1024,
+            mtu_upper_bound: ETHERNET_MTU_CEILING,
+            swarm_receive_default: false,
+            swarm_parallelism: 6,
+        }
+    }
+
+    const fn extreme_profile() -> TransferProfile {
+        TransferProfile {
+            mode: Self::Extreme,
+            import_parallelism: 128,
+            progress_interval: Duration::from_millis(200),
+            idle_timeout: Duration::from_secs(90),
+            quic_send_window_bytes: 512 * MB as u64,
+            quic_recv_window_bytes: 512 * MB,
+            quic_stream_recv_window_bytes: 128 * MB,
+            max_concurrent_streams: 2048,
+            keep_alive_interval: Duration::from_secs(5),
+            congestion: CongestionAlgorithm::Bbr,
+            initial_congestion_window: MB as u64,
+            mtu_upper_bound: JUMBO_MTU_CEILING,
+            swarm_receive_default: true,
+            swarm_parallelism: 8,
+        }
+    }
+
+    const fn lan_beast_profile() -> TransferProfile {
+        TransferProfile {
+            mode: Self::LanBeast,
+            import_parallelism: 128,
+            progress_interval: Duration::from_millis(200),
+            idle_timeout: Duration::from_secs(120),
+            quic_send_window_bytes: 1024 * MB as u64,
+            quic_recv_window_bytes: 1024 * MB,
+            quic_stream_recv_window_bytes: 256 * MB,
+            max_concurrent_streams: 4096,
+            keep_alive_interval: Duration::from_secs(15),
+            congestion: CongestionAlgorithm::Bbr,
+            initial_congestion_window: 4 * MB as u64,
+            mtu_upper_bound: JUMBO_MTU_CEILING,
+            swarm_receive_default: true,
+            swarm_parallelism: 12,
+        }
+    }
+
+    const fn warp_profile() -> TransferProfile {
+        TransferProfile {
+            mode: Self::Warp,
+            import_parallelism: 128,
+            progress_interval: Duration::from_millis(200),
+            idle_timeout: Duration::from_secs(120),
+            quic_send_window_bytes: 2048 * MB as u64,
+            quic_recv_window_bytes: 2048 * MB,
+            quic_stream_recv_window_bytes: 512 * MB,
+            max_concurrent_streams: 8192,
+            keep_alive_interval: Duration::from_secs(15),
+            congestion: CongestionAlgorithm::Bbr,
+            initial_congestion_window: 8 * MB as u64,
+            mtu_upper_bound: JUMBO_MTU_CEILING,
+            swarm_receive_default: true,
+            swarm_parallelism: 16,
+        }
+    }
+
+    const fn battery_safe_profile() -> TransferProfile {
+        TransferProfile {
+            mode: Self::BatterySafe,
+            import_parallelism: 8,
+            progress_interval: Duration::from_millis(250),
+            idle_timeout: Duration::from_secs(30),
+            quic_send_window_bytes: 64 * MB as u64,
+            quic_recv_window_bytes: 64 * MB,
+            quic_stream_recv_window_bytes: 16 * MB,
+            max_concurrent_streams: 256,
+            keep_alive_interval: Duration::from_secs(30),
+            congestion: CongestionAlgorithm::Cubic,
+            initial_congestion_window: DEFAULT_INITIAL_CWND,
+            mtu_upper_bound: ETHERNET_MTU_CEILING,
+            swarm_receive_default: false,
+            swarm_parallelism: 2,
         }
     }
 
