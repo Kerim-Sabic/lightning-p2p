@@ -1,9 +1,9 @@
 //! Experimental swarm receive: concurrent child-blob downloads for collections.
 //!
-//! iroh-blobs' standard HashSeq download walks collection children
+//! iroh-blobs' standard `HashSeq` download walks collection children
 //! sequentially over a single stream, so many-file transfers pay one
 //! round-trip of dead air per file. The swarm path first fetches the tiny
-//! HashSeq root, then fans the children out over parallel *direct*
+//! `HashSeq` root, then fans the children out over parallel *direct*
 //! connections (`DownloadMode::Direct` applies no queue limits by design).
 //! Every child still lands in the same verified iroh-blobs store, so
 //! BLAKE3 verification and resume semantics are unchanged.
@@ -205,7 +205,7 @@ pub(crate) async fn download_collection(
     Ok(tracker.observations())
 }
 
-/// Reads and parses the HashSeq root, deduplicating repeated content hashes
+/// Reads and parses the `HashSeq` root, deduplicating repeated content hashes
 /// so identical files are fetched once.
 async fn read_child_hashes(node: &LightningP2PNode, root: Hash) -> Result<Vec<Hash>> {
     let bytes = node
@@ -347,7 +347,7 @@ mod tests {
         // No env override in the test environment.
         std::env::remove_var("LIGHTNING_P2P_SWARM_PARALLELISM");
         assert_eq!(swarm_parallelism(), DEFAULT_SWARM_FETCHES);
-        assert!(DEFAULT_SWARM_FETCHES <= MAX_SWARM_FETCHES);
+        const { assert!(DEFAULT_SWARM_FETCHES <= MAX_SWARM_FETCHES) };
     }
 
     #[test]
