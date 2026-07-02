@@ -4,7 +4,7 @@ use super::nearby_protocol::{fetch_remote_shares, RemoteAdvertisedShare};
 use crate::error::{LightningP2PError, Result};
 use futures_util::{stream, StreamExt};
 use iroh::{
-    discovery::{local_swarm_discovery, DiscoveryItem},
+    discovery::{mdns, DiscoveryItem},
     endpoint::{ConnectionType, RemoteInfo, Source},
     Endpoint, NodeAddr, NodeId,
 };
@@ -890,7 +890,7 @@ fn is_local_network_candidate(remote: &RemoteInfo, stream_seen: &HashSet<NodeId>
     remote.sources().into_iter().any(|(source, _age)| {
         matches!(
             source,
-            Source::Discovery { name } if name == local_swarm_discovery::NAME
+            Source::Discovery { name } if name == mdns::NAME
         )
     })
 }
@@ -919,7 +919,7 @@ fn remote_freshness(remote: &RemoteInfo) -> Duration {
                 .sources()
                 .into_iter()
                 .filter_map(|(source, age)| match source {
-                    Source::Discovery { name } if name == local_swarm_discovery::NAME => Some(age),
+                    Source::Discovery { name } if name == mdns::NAME => Some(age),
                     _ => None,
                 })
                 .min()
@@ -937,27 +937,28 @@ fn candidate_from_discovery_item(
     item: DiscoveryItem,
     local_node_id: NodeId,
 ) -> Option<RemoteCandidate> {
-    if item.provenance != local_swarm_discovery::NAME {
+    if item.provenance() != mdns::NAME {
         return None;
     }
-    if item.node_addr.node_id == local_node_id {
+    let node_addr = item.into_node_addr();
+    if node_addr.node_id == local_node_id {
         return None;
     }
 
-    let direct_address_count = item.node_addr.direct_addresses.len();
-    let route_hint = if direct_address_count > 0 && item.node_addr.relay_url.is_some() {
+    let direct_address_count = node_addr.direct_addresses.len();
+    let route_hint = if direct_address_count > 0 && node_addr.relay_url.is_some() {
         NearbyRouteHint::Mixed
     } else if direct_address_count > 0 {
         NearbyRouteHint::Direct
-    } else if item.node_addr.relay_url.is_some() {
+    } else if node_addr.relay_url.is_some() {
         NearbyRouteHint::Relay
     } else {
         NearbyRouteHint::Unknown
     };
 
     Some(RemoteCandidate {
-        node_id: item.node_addr.node_id,
-        node_addr: item.node_addr,
+        node_id: node_addr.node_id,
+        node_addr,
         route_hint,
         direct_address_count,
         last_seen_at: Instant::now(),
@@ -1088,7 +1089,7 @@ fn unix_timestamp() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use iroh::{NodeAddr, PublicKey, SecretKey};
+    use iroh::{discovery::NodeInfo, NodeAddr, PublicKey, SecretKey};
     use std::str::FromStr;
 
     fn sample_record(share_id: &str) -> NearbyShareRecord {
@@ -1269,11 +1270,11 @@ mod tests {
     #[test]
     fn discovery_item_for_local_node_is_ignored() {
         let local_node_id = SecretKey::from_bytes(&[1_u8; 32]).public();
-        let item = DiscoveryItem {
-            node_addr: NodeAddr::new(local_node_id),
-            provenance: local_swarm_discovery::NAME,
-            last_updated: None,
-        };
+        let item = DiscoveryItem::new(
+            NodeInfo::from(NodeAddr::new(local_node_id)),
+            mdns::NAME,
+            None,
+        );
 
         assert!(candidate_from_discovery_item(item, local_node_id).is_none());
     }
@@ -1282,11 +1283,11 @@ mod tests {
     fn discovery_item_from_other_node_becomes_candidate() {
         let local_node_id = SecretKey::from_bytes(&[1_u8; 32]).public();
         let remote_node_id = SecretKey::from_bytes(&[2_u8; 32]).public();
-        let item = DiscoveryItem {
-            node_addr: NodeAddr::new(remote_node_id),
-            provenance: local_swarm_discovery::NAME,
-            last_updated: None,
-        };
+        let item = DiscoveryItem::new(
+            NodeInfo::from(NodeAddr::new(remote_node_id)),
+            mdns::NAME,
+            None,
+        );
 
         let candidate =
             candidate_from_discovery_item(item, local_node_id).expect("remote candidate");

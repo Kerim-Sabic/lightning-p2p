@@ -36,8 +36,12 @@ impl TransferQueue {
 
     /// Adds a transfer to the active queue.
     pub async fn add(&self, info: TransferInfo, cancel: Option<watch::Sender<bool>>) {
-        let mut map = self.active.write().await;
-        map.insert(info.transfer_id.clone(), QueueEntry { info, cancel });
+        let count = {
+            let mut map = self.active.write().await;
+            map.insert(info.transfer_id.clone(), QueueEntry { info, cancel });
+            map.len()
+        };
+        crate::commands::mobile::sync_transfer_queue_foreground_count(count);
     }
 
     /// Updates the progress snapshot for an active transfer.
@@ -71,8 +75,13 @@ impl TransferQueue {
 
     /// Removes a transfer from the active queue.
     pub async fn remove(&self, transfer_id: &str) -> Option<TransferInfo> {
-        let mut map = self.active.write().await;
-        map.remove(transfer_id).map(|entry| entry.info)
+        let (removed, count) = {
+            let mut map = self.active.write().await;
+            let removed = map.remove(transfer_id).map(|entry| entry.info);
+            (removed, map.len())
+        };
+        crate::commands::mobile::sync_transfer_queue_foreground_count(count);
+        removed
     }
 
     /// Requests cancellation for a transfer if it is cancelable.

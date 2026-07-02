@@ -116,9 +116,7 @@ impl MemoryNode {
         let client = blobs.client().clone();
         let router = Router::builder(endpoint)
             .accept(iroh_blobs::ALPN, blobs.clone())
-            .spawn()
-            .await
-            .expect("memory router");
+            .spawn();
         Self { client, router }
     }
 

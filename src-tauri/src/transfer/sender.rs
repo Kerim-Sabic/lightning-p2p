@@ -71,6 +71,7 @@ pub async fn send_files(
     paths: Vec<PathBuf>,
     profile: TransferProfile,
 ) -> Result<ShareOutcome> {
+    let _foreground = crate::commands::mobile::TransferForegroundGuard::acquire();
     let started_at = Instant::now();
     let plan = build_share_plan(paths)?;
     let reporter = EventReporter::new(
@@ -92,9 +93,10 @@ pub async fn send_files(
     let result = create_share_with_plan(node, plan, Some(progress.clone()), profile).await;
     match result {
         Ok(outcome) => {
+            let prep_ms = elapsed_ms(started_at.elapsed());
             let metrics = TransferMetrics {
                 route_kind: RouteKind::Unknown,
-                connect_ms: elapsed_ms(started_at.elapsed()),
+                connect_ms: prep_ms,
                 download_ms: 0,
                 export_ms: 0,
                 provider_count: 1,
@@ -102,7 +104,7 @@ pub async fn send_files(
                 relay_provider_count: 0,
                 strategy: TransferStrategy::QueuedSingleProvider,
                 first_byte_ms: 0,
-                effective_mbps: 0,
+                effective_mbps: effective_mbps(outcome.total_size, prep_ms),
             };
             progress.set(outcome.total_size, outcome.total_size);
             progress.set_metrics(metrics);
@@ -446,6 +448,14 @@ fn elapsed_ms(duration: std::time::Duration) -> u64 {
     u64::try_from(duration.as_millis()).unwrap_or(u64::MAX)
 }
 
+fn effective_mbps(bytes: u64, duration_ms: u64) -> u64 {
+    if duration_ms == 0 {
+        return 0;
+    }
+    let mbps = u128::from(bytes).saturating_mul(8) / u128::from(duration_ms) / 1000;
+    u64::try_from(mbps).unwrap_or(u64::MAX)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -489,5 +499,11 @@ mod tests {
         assert_eq!(compute_import_parallelism(256, 4), 4);
         assert_eq!(compute_import_parallelism(1, 4), 1);
         assert_eq!(compute_import_parallelism(10, 0), 1);
+    }
+
+    #[test]
+    fn effective_mbps_uses_payload_and_elapsed_time() {
+        assert_eq!(effective_mbps(125_000_000, 1_000), 1000);
+        assert_eq!(effective_mbps(125_000_000, 0), 0);
     }
 }

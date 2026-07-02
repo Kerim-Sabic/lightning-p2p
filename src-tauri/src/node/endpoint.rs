@@ -110,10 +110,7 @@ impl LightningP2PNode {
             router_builder =
                 router_builder.accept(super::nearby_protocol::NEARBY_PROTOCOL_ALPN, protocol);
         }
-        let router = router_builder
-            .spawn()
-            .await
-            .map_err(LightningP2PError::Network)?;
+        let router = router_builder.spawn();
         let db = open_storage_db(&data_dir)?;
 
         Ok(Self {
@@ -244,7 +241,7 @@ async fn bind_endpoint(
     profile: TransferProfile,
 ) -> Result<Endpoint> {
     let relay_mode = relay_url
-        .map(RelayMap::from_url)
+        .map(RelayMap::from)
         .map_or(RelayMode::Default, RelayMode::Custom);
     let secret_key = load_or_create_secret_key(data_dir)?;
 

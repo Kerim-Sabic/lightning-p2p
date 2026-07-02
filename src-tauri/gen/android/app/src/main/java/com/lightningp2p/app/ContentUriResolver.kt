@@ -9,6 +9,8 @@ import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.provider.OpenableColumns
 import java.io.File
+import java.io.InputStream
+import java.io.OutputStream
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicReference
 
@@ -31,6 +33,7 @@ import java.util.concurrent.atomic.AtomicReference
 object ContentUriResolver {
     private const val STAGING_DIR = "shared-staging"
     private const val MEDIASTORE_SUBDIR = "Lightning P2P"
+    private const val COPY_BUFFER_BYTES = 1024 * 1024
 
     private val pendingSharedFiles = AtomicReference<List<String>>(emptyList())
     private val pendingSharedTicket = AtomicReference<String?>(null)
@@ -70,7 +73,7 @@ object ContentUriResolver {
         val input = resolver.openInputStream(uri)
             ?: throw IllegalStateException("Could not open input stream for $uri")
         input.use { source ->
-            outFile.outputStream().use { sink -> source.copyTo(sink) }
+            outFile.outputStream().use { sink -> copyLarge(source, sink) }
         }
         return outFile.absolutePath
     }
@@ -95,10 +98,11 @@ object ContentUriResolver {
         require(staged.exists()) { "Staged file does not exist: $stagedPath" }
 
         val collection = collectionFor(bucket)
-        val relativeDir = "${directoryFor(bucket)}/$MEDIASTORE_SUBDIR"
+        val relativeDir = "${directoryFor(bucket)}/$MEDIASTORE_SUBDIR/"
+        val displayName = uniqueDisplayName(context, collection, relativeDir, safeFilename(filename))
 
         val values = ContentValues().apply {
-            put(MediaStore.MediaColumns.DISPLAY_NAME, filename)
+            put(MediaStore.MediaColumns.DISPLAY_NAME, displayName)
             put(MediaStore.MediaColumns.MIME_TYPE, mime)
             put(MediaStore.MediaColumns.RELATIVE_PATH, relativeDir)
             put(MediaStore.MediaColumns.IS_PENDING, 1)
@@ -112,7 +116,7 @@ object ContentUriResolver {
             val output = resolver.openOutputStream(uri)
                 ?: throw IllegalStateException("Could not open output stream for $uri")
             output.use { sink ->
-                staged.inputStream().use { source -> source.copyTo(sink) }
+                staged.inputStream().use { source -> copyLarge(source, sink) }
             }
             val clearPending = ContentValues().apply {
                 put(MediaStore.MediaColumns.IS_PENDING, 0)
@@ -127,6 +131,55 @@ object ContentUriResolver {
             }
             throw error
         }
+    }
+
+    private fun copyLarge(source: InputStream, sink: OutputStream): Long {
+        val buffer = ByteArray(COPY_BUFFER_BYTES)
+        var copied = 0L
+        while (true) {
+            val read = source.read(buffer)
+            if (read < 0) break
+            sink.write(buffer, 0, read)
+            copied += read.toLong()
+        }
+        return copied
+    }
+
+    private fun safeFilename(filename: String): String {
+        val clean = filename.replace(Regex("[/\\\\]"), "_").trim()
+        return clean.ifEmpty { "lightning-p2p-transfer.bin" }
+    }
+
+    private fun uniqueDisplayName(
+        context: Context,
+        collection: Uri,
+        relativeDir: String,
+        filename: String,
+    ): String {
+        val dot = filename.lastIndexOf('.')
+        val hasExtension = dot > 0 && dot < filename.lastIndex - 1
+        val stem = if (hasExtension) filename.substring(0, dot) else filename
+        val extension = if (hasExtension) filename.substring(dot) else ""
+        var candidate = filename
+        var suffix = 1
+        while (mediaNameExists(context, collection, relativeDir, candidate)) {
+            candidate = "$stem ($suffix)$extension"
+            suffix++
+        }
+        return candidate
+    }
+
+    private fun mediaNameExists(
+        context: Context,
+        collection: Uri,
+        relativeDir: String,
+        filename: String,
+    ): Boolean {
+        val projection = arrayOf(MediaStore.MediaColumns._ID)
+        val selection = "${MediaStore.MediaColumns.DISPLAY_NAME}=? AND ${MediaStore.MediaColumns.RELATIVE_PATH}=?"
+        val args = arrayOf(filename, relativeDir)
+        return context.contentResolver.query(collection, projection, selection, args, null)
+            ?.use { cursor -> cursor.moveToFirst() } ?: false
     }
 
     private fun collectionFor(bucket: String) = when (bucket) {

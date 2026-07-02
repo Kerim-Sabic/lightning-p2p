@@ -10,7 +10,7 @@ import {
   ExternalLink,
   Eye,
   FileCheck2,
-  Github,
+  GitBranch,
   KeyRound,
   Menu,
   Minus,
@@ -183,7 +183,7 @@ const defaultFaqs: Faq[] = [
 ];
 
 const trustBadges: Array<{ icon: LucideIcon; label: string }> = [
-  { icon: Github, label: "Open source" },
+  { icon: GitBranch, label: "Open source" },
   { icon: BadgeCheck, label: "Apache-2.0" },
   { icon: Code2, label: "Rust" },
   { icon: MonitorDown, label: "Tauri 2" },
@@ -619,7 +619,7 @@ function Header({ activePath }: { activePath: string }) {
         </nav>
         <div className="ml-auto flex items-center gap-2 md:ml-0">
           <CTA href={RELEASE_URL} variant="secondary" className="hidden sm:inline-flex">
-            <Github className="h-3.5 w-3.5" /> GitHub
+            <GitBranch className="h-3.5 w-3.5" /> GitHub
           </CTA>
           <CTA href="/download">
             <Download className="h-3.5 w-3.5" /> Download
@@ -684,7 +684,7 @@ function Hero({ page }: { page: WebPage }) {
           <div className="hero-rise hero-rise--stagger-3 flex flex-wrap items-center gap-3">
             <MagneticWrap><CTA href="/download" variant="primary"><Download className="h-3.5 w-3.5" /> Download for Windows</CTA></MagneticWrap>
             <MagneticWrap><CTA href={ANDROID_APK_DOWNLOAD_URL} variant="secondary"><Smartphone className="h-3.5 w-3.5" /> Android APK</CTA></MagneticWrap>
-            <MagneticWrap strength={0.18}><CTA href={REPO_URL} variant="ghost"><Github className="h-3.5 w-3.5" /> Source <ExternalLink className="h-3 w-3" /></CTA></MagneticWrap>
+            <MagneticWrap strength={0.18}><CTA href={REPO_URL} variant="ghost"><GitBranch className="h-3.5 w-3.5" /> Source <ExternalLink className="h-3 w-3" /></CTA></MagneticWrap>
           </div>
           <ul className="hero-rise hero-rise--stagger-4 mt-1 flex flex-wrap items-center gap-x-2 gap-y-2 text-[11px]">
             {trustBadges.slice(0, 6).map(({ icon: Icon, label }) => (

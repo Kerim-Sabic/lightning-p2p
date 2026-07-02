@@ -103,7 +103,7 @@
                 <data android:mimeType="application/vnd.lightning-p2p.ticket" />
             </intent-filter>
             <!-- DEEP LINK PLUGIN. AUTO-GENERATED. DO NOT REMOVE. -->
-
+            
             <!-- DEEP LINK PLUGIN. AUTO-GENERATED. DO NOT REMOVE. -->
         </activity>
 

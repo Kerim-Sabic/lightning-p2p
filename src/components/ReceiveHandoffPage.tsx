@@ -6,7 +6,7 @@ import {
   Eye,
   EyeOff,
   FileCheck2,
-  Github,
+  GitBranch,
   Link2,
   ShieldCheck,
   Smartphone,
@@ -110,7 +110,7 @@ export function ReceiveHandoffPage() {
             <span aria-hidden className="signal-dot mt-[2px]" />
           </a>
           <a href={REPO_URL} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/8 text-white/72 transition hover:bg-white/5 hover:text-white" aria-label="GitHub">
-            <Github className="h-4 w-4" />
+            <GitBranch className="h-4 w-4" />
           </a>
         </div>
       </header>

@@ -453,6 +453,7 @@ export type TransferEvent =
     };
 
 let pendingUpdate: Update | null = null;
+const EXTERNAL_URL_PROTOCOLS = new Set(["https:", "http:"]);
 
 const browserNodeStatus: NodeStatus = {
   online: false,
@@ -925,11 +926,28 @@ export async function openDownloadDir(): Promise<void> {
  * so the URL is opened outside the embedded webview.
  */
 export async function openExternalUrl(url: string): Promise<void> {
+  const safeUrl = normalizeExternalUrl(url);
   if (!isTauri()) {
-    window.open(url, "_blank", "noopener,noreferrer");
+    window.open(safeUrl, "_blank", "noopener,noreferrer");
     return;
   }
-  await shellOpen(url);
+  await shellOpen(safeUrl);
+}
+
+export function normalizeExternalUrl(url: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error("External URL must be absolute.");
+  }
+  if (!EXTERNAL_URL_PROTOCOLS.has(parsed.protocol)) {
+    throw new Error("External URL must use http or https.");
+  }
+  if (parsed.username || parsed.password) {
+    throw new Error("External URL must not contain credentials.");
+  }
+  return parsed.href;
 }
 
 export async function clearActiveShare(): Promise<void> {
@@ -1007,7 +1025,9 @@ export async function resolveAndroidUris(paths: string[]): Promise<string[]> {
     if (appError.source !== "unknown") {
       throw appError;
     }
-    throw new Error("Could not read the selected file from the system picker.");
+    throw new Error("Could not read the selected file from the system picker.", {
+      cause: error,
+    });
   }
 }
 

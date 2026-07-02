@@ -13,7 +13,7 @@ use super::nearby_offer::{
 };
 use crate::error::{LightningP2PError, Result};
 use anyhow::Result as AnyhowResult;
-use iroh::{endpoint::Connecting, protocol::ProtocolHandler, Endpoint, NodeAddr};
+use iroh::{endpoint::Connection, protocol::ProtocolHandler, Endpoint, NodeAddr};
 use iroh_blobs::{BlobFormat, Hash};
 use n0_future::boxed::BoxFuture;
 use serde::{Deserialize, Serialize};
@@ -168,10 +168,9 @@ impl NearbyShareProtocol {
 }
 
 impl ProtocolHandler for NearbyShareProtocol {
-    fn accept(&self, connecting: Connecting) -> BoxFuture<AnyhowResult<()>> {
+    fn accept(&self, connection: Connection) -> BoxFuture<AnyhowResult<()>> {
         let this = self.clone();
         Box::pin(async move {
-            let connection = connecting.await?;
             let (mut send, mut recv) = connection.accept_bi().await?;
             let request = recv.read_to_end(MAX_MESSAGE_BYTES).await?;
             let response = this.response_bytes(request).await?;
