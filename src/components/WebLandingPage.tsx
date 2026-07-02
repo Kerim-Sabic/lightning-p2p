@@ -129,7 +129,7 @@ const baseKeyFacts: KeyFact[] = [
   { label: "Category", value: "Peer-to-peer file transfer app" },
   { label: "Platform", value: "Windows stable, Android 10+ sideload" },
   { label: "Stable release", value: "v0.4.6" },
-  { label: "Experimental release", value: "v0.6.0 BBR + Warp + swarm receive" },
+  { label: "Experimental release", value: "v0.7.0 BBR + Warp + swarm receive" },
   { label: "License", value: "Apache-2.0" },
   { label: "Account required", value: "No" },
   { label: "Cloud upload", value: "No" },
@@ -945,7 +945,7 @@ function HowItWorks() {
   );
 }
 
-// ── Speed modes showcase (v0.6.0 feature set) ───────────────────────────────
+// ── Speed modes showcase (v0.7.0 feature set) ───────────────────────────────
 
 function SpeedModesShowcase() {
   const [hoverKey, setHoverKey] = useState<string>("fast");
@@ -956,7 +956,7 @@ function SpeedModesShowcase() {
   return (
     <section className="section-beam relative mx-auto max-w-[1320px] px-6 py-24 sm:px-10 lg:py-32">
       <Reveal>
-        <p className="text-[12px] font-bold uppercase tracking-[0.28em] text-[var(--signal-green)]">New in v0.6.0</p>
+        <p className="text-[12px] font-bold uppercase tracking-[0.28em] text-[var(--signal-green)]">New in v0.7.0</p>
         <h2 className="font-display mt-3 max-w-[20ch] text-balance text-[clamp(2.4rem,5vw,4rem)] font-extrabold leading-[1.0] tracking-[-0.024em] text-white">
           Five speed modes. <span className="text-white/56">Five real configs.</span>
         </h2>

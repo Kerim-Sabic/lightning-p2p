@@ -32,9 +32,6 @@ use tokio::sync::watch;
 /// QUIC connection to the sender, so this bounds sender-side load too.
 const MAX_SWARM_FETCHES: usize = 16;
 
-/// Default concurrent child fetches when no env override is present.
-const DEFAULT_SWARM_FETCHES: usize = 6;
-
 /// Floor on the per-stream idle timeout, mirroring the standard receive path.
 const MIN_IDLE_TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -132,14 +129,15 @@ pub(crate) fn eligible(ticket: &ShareTicket) -> bool {
     ticket.primary().recursive()
 }
 
-/// Number of concurrent child fetches, env-overridable for bench sweeps via
-/// `LIGHTNING_P2P_SWARM_PARALLELISM`.
-pub(crate) fn swarm_parallelism() -> usize {
+/// Number of concurrent child fetches for the active profile,
+/// env-overridable for bench sweeps via `LIGHTNING_P2P_SWARM_PARALLELISM`.
+pub(crate) fn swarm_parallelism(profile: TransferProfile) -> usize {
     std::env::var("LIGHTNING_P2P_SWARM_PARALLELISM")
         .ok()
         .and_then(|raw| raw.parse::<usize>().ok())
         .filter(|&n| n > 0)
-        .map_or(DEFAULT_SWARM_FETCHES, |n| n.min(MAX_SWARM_FETCHES))
+        .unwrap_or(profile.swarm_parallelism)
+        .clamp(1, MAX_SWARM_FETCHES)
 }
 
 /// Downloads a collection by fanning children out over parallel direct
@@ -177,7 +175,7 @@ pub(crate) async fn download_collection(
     let children = read_child_hashes(node, root).await?;
     tracing::info!(
         children = children.len(),
-        parallelism = swarm_parallelism(),
+        parallelism = swarm_parallelism(profile),
         "swarm receive: fanning out child downloads"
     );
 
@@ -195,7 +193,7 @@ pub(crate) async fn download_collection(
             idle_timeout,
         )
     }))
-    .buffer_unordered(swarm_parallelism());
+    .buffer_unordered(swarm_parallelism(profile));
     while let Some(result) = fan_out.next().await {
         result?;
     }
@@ -343,11 +341,23 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parallelism_defaults_and_ceiling() {
+    fn parallelism_follows_profile_and_ceiling() {
+        use crate::transfer::TransferMode;
         // No env override in the test environment.
         std::env::remove_var("LIGHTNING_P2P_SWARM_PARALLELISM");
-        assert_eq!(swarm_parallelism(), DEFAULT_SWARM_FETCHES);
-        const { assert!(DEFAULT_SWARM_FETCHES <= MAX_SWARM_FETCHES) };
+        for mode in [
+            TransferMode::Standard,
+            TransferMode::Fast,
+            TransferMode::Extreme,
+            TransferMode::LanBeast,
+            TransferMode::Warp,
+            TransferMode::BatterySafe,
+        ] {
+            let profile = mode.profile();
+            assert_eq!(swarm_parallelism(profile), profile.swarm_parallelism);
+            assert!(profile.swarm_parallelism >= 1);
+            assert!(profile.swarm_parallelism <= MAX_SWARM_FETCHES);
+        }
     }
 
     #[test]

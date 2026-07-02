@@ -873,9 +873,10 @@ export function SettingsView() {
               </div>
               <p className="text-[13px] leading-6 text-slate-300/72">
                 Fetch the files of a folder transfer concurrently over parallel
-                connections instead of one at a time. Every byte stays BLAKE3
-                verified; any failure falls back to the standard path
-                automatically.
+                connections instead of one at a time. Already on by default in
+                Extreme, LAN Beast, and Warp; this switch forces it for every
+                mode. Every byte stays BLAKE3 verified; any failure falls back
+                to the standard path automatically.
               </p>
             </div>
           </div>

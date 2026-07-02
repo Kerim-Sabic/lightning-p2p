@@ -31,7 +31,7 @@ This roadmap is deliberately conservative. Do not publish speed, platform, secur
 - NFC receive handling only carries ticket material.
 - Physical-device validation is required before these features move into a stable release.
 
-### v0.6.0 - Speed engine pre-release
+### v0.7.0 - Speed engine pre-release
 
 - BBR congestion control on Fast, Extreme, LAN Beast, and the new Warp mode (evidence: upstream iroh measured CUBIC far below BBR on real paths).
 - Per-mode initial congestion window and jumbo-frame MTU probing.
