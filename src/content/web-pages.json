@@ -113,7 +113,7 @@
       },
       {
         "q": "Does Android transfer through Bluetooth or NFC?",
-        "a": "No stable release transfers file bytes through Bluetooth or NFC. File bytes use iroh QUIC and iroh-blobs. BLE and NFC are experimental discovery and ticket-handoff features carried from v0.5.0 into v0.6.0."
+        "a": "No stable release transfers file bytes through Bluetooth or NFC. File bytes use iroh QUIC and iroh-blobs. BLE and NFC are experimental discovery and ticket-handoff features carried from v0.5.0 into v0.7.0."
       },
       {
         "q": "Why does Android require sideloading?",

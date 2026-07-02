@@ -271,7 +271,10 @@ async fn start_receive_ticket(
         window: window_clone,
         transfer_id: transfer_id_for_task.clone(),
         cancel_rx,
-        swarm_enabled: settings.experimental_swarm_receive,
+        // Swarm receive runs when the user forced it on in Settings, or by
+        // default on the performance tiers (Extreme, LAN Beast, Warp). The
+        // swarm path auto-falls-back to the sequential download on failure.
+        swarm_enabled: settings.experimental_swarm_receive || profile.swarm_receive_default,
     };
 
     tauri::async_runtime::spawn(async move {

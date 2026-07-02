@@ -14,7 +14,7 @@ Built on **Rust**, **Tauri 2**, **iroh QUIC**, **iroh-blobs**, and **BLAKE3**.
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-7ddf9c?style=flat-square)](LICENSE)
 [![Windows stable](https://img.shields.io/badge/Windows-v0.4.6_stable-7ddf9c?style=flat-square&logo=windows&logoColor=white)](https://github.com/Kerim-Sabic/lightning-p2p/releases/tag/v0.4.6)
 [![Android sideload](https://img.shields.io/badge/Android-v0.4.6_sideload-7ddf9c?style=flat-square&logo=android&logoColor=white)](https://github.com/Kerim-Sabic/lightning-p2p/releases/tag/v0.4.6)
-[![Experimental](https://img.shields.io/badge/Experimental-v0.6.0_BBR_+_Warp_+_swarm-f0c76b?style=flat-square)](https://github.com/Kerim-Sabic/lightning-p2p/releases/tag/v0.6.0)
+[![Experimental](https://img.shields.io/badge/Experimental-v0.7.0_BBR_+_Warp_+_swarm-f0c76b?style=flat-square)](https://github.com/Kerim-Sabic/lightning-p2p/releases/tag/v0.7.0)
 [![Rust](https://img.shields.io/badge/Rust-1.88+-f0c76b?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![Tauri 2](https://img.shields.io/badge/Tauri-2-7ddf9c?style=flat-square&logo=tauri&logoColor=white)](https://tauri.app/)
 [![iroh QUIC](https://img.shields.io/badge/iroh-QUIC_+_relay-7ddf9c?style=flat-square)](https://iroh.computer/)
@@ -55,7 +55,7 @@ Built on **Rust**, **Tauri 2**, **iroh QUIC**, **iroh-blobs**, and **BLAKE3**.
 
 ## ◆ Install
 
-Stable: **v0.4.6**. Experimental: **v0.6.0** (BBR congestion control, Warp mode, swarm receive, ticket pre-warming; carries v0.5.x speed modes + BLE/NFC).
+Stable: **v0.4.6**. Experimental: **v0.7.0** (BBR congestion control, Warp mode, swarm receive, ticket pre-warming; carries v0.5.x speed modes + BLE/NFC).
 
 | Platform | Asset | Channel | Best for |
 | --- | --- | --- | --- |
@@ -63,7 +63,7 @@ Stable: **v0.4.6**. Experimental: **v0.6.0** (BBR congestion control, Warp mode,
 | **Windows** | [`LightningP2PSetup.exe`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2PSetup.exe) | Stable | Classic NSIS |
 | **Windows** | [`LightningP2P.msi`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P.msi) | Stable | Policy-managed deployments |
 | **Android** | [`LightningP2P-android-latest.apk`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P-android-latest.apk) | Stable | Android 10+ sideload (signed) |
-| **Experimental** | [Release v0.6.0](https://github.com/Kerim-Sabic/lightning-p2p/releases/tag/v0.6.0) | Pre-release | BBR engine · Warp mode · swarm receive · pre-warm |
+| **Experimental** | [Release v0.7.0](https://github.com/Kerim-Sabic/lightning-p2p/releases/tag/v0.7.0) | Pre-release | BBR engine · Warp mode · swarm receive · pre-warm |
 
 <details>
 <summary><b>◆ Verify your install before you trust it</b> (click to expand)</summary>
@@ -133,7 +133,7 @@ Handoff URLs use `/receive#t=<ticket>` — the ticket lives in the URL fragment,
 
 ---
 
-## ◆ Speed modes <sup>v0.6.0</sup>
+## ◆ Speed modes <sup>v0.7.0</sup>
 
 Six session-level transfer modes. Each swaps a **complete** transport profile: congestion controller, QUIC send/recv/stream windows, initial congestion window, MTU-discovery ceiling, max streams, keepalive, import concurrency, idle timeout, UI emit cadence. Persists across launches; node restarts on change (deferred if a transfer is in flight).
 
@@ -148,7 +148,7 @@ Six session-level transfer modes. Each swaps a **complete** transport profile: c
 
 **Why BBR matters:** quinn (iroh's QUIC engine) defaults to loss-based CUBIC, which halves its window on packet loss — devastating on lossy Wi-Fi and high-bandwidth paths. Upstream iroh measured CUBIC up to ~30× slower than BBR on the same LAN path ([n0-computer/iroh#4286](https://github.com/n0-computer/iroh/issues/4286)). Fast and above run BBR; Standard keeps CUBIC so the default behavior stays unchanged. MTU probing above 1452 targets jumbo-frame LANs — quinn binary-searches the path and black-hole detection recovers safely on networks that can't carry large datagrams.
 
-**Swarm receive** <sup>experimental · opt-in</sup> — folder transfers normally fetch files one at a time over a single stream, paying a round trip of dead air per file. With swarm receive enabled (Settings), the receiver first grabs the tiny content index, then fans the files out over **parallel direct connections**. Every byte stays BLAKE3-verified in the same store, and any failure falls back to the standard path automatically — enabling it is never worse than the default.
+**Swarm receive** <sup>experimental</sup> — folder transfers normally fetch files one at a time over a single stream, paying a round trip of dead air per file. With swarm receive, the receiver first grabs the tiny content index, then fans the files out over **parallel direct connections** — on by default in Extreme (8-wide), LAN Beast (12-wide), and Warp (16-wide), and forceable for every mode in Settings. Every byte stays BLAKE3-verified in the same store, and any failure falls back to the standard path automatically — it is never worse than the default.
 
 > **Honest scope.** The congestion-controller switch is evidence-based (upstream measurements); window/stream/parallelism sizing encodes design intent. On same-machine loopback the modes cluster within ~13% (626 – 710 Mbps median) because loopback is CPU-bound, not congestion-bound. LAN/WAN throughput-delta validation lands in v0.6.<br/>
 > Mode-sweep receipts: [`AUDIT.md §2.1.1`](AUDIT.md) · [`docs/reports/raw/audit-v0.5.1/mode-sweep/`](docs/reports/raw/audit-v0.5.1/mode-sweep/).
@@ -227,9 +227,9 @@ Read [`SECURITY.md`](SECURITY.md) · [`docs/security-model.md`](docs/security-mo
 | 🟢 | Atomic single-blob writes (`.part` + rename) | **Stable** v0.5.1 |
 | 🟢 | Retry + exponential backoff on transient receive errors | **Stable** v0.5.1 |
 | 🟢 | Implicit resume across restarts (re-paste ticket) | **Stable** (iroh-blobs persistent store) |
-| 🟡 | Speed modes (6 profiles, BBR on Fast+) | **Experimental** v0.6.0 |
-| 🟡 | Swarm receive (parallel child fetches, auto-fallback) | **Experimental** v0.6.0 |
-| 🟡 | Ticket pre-warming (pre-dial on paste) | **Experimental** v0.6.0 |
+| 🟡 | Speed modes (6 profiles, BBR on Fast+) | **Experimental** v0.7.0 |
+| 🟡 | Swarm receive (parallel fetches, default-on in Extreme+, auto-fallback) | **Experimental** v0.7.0 |
+| 🟡 | Ticket pre-warming (pre-dial on paste) | **Experimental** v0.7.0 |
 | 🟡 | BLE proximity discovery (Android + Windows) | **Experimental** since v0.5.0 |
 | 🟡 | NFC ticket receive (Android) | **Experimental** since v0.5.0 |
 | ⏳ | Explicit resume UI for failed transfers | Planned v0.6 |

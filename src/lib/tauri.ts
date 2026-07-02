@@ -220,21 +220,21 @@ export const TRANSFER_MODE_DESCRIPTORS: Record<
     value: "extreme",
     label: "Extreme",
     description:
-      "BBR with larger windows, more streams, jumbo-frame MTU probing, and slower UI emit. Aimed at fast LAN to multi-GbE.",
+      "BBR with larger windows, more streams, jumbo-frame MTU probing, and swarm receive on by default. Aimed at fast LAN to multi-GbE.",
     engine: "bbr",
   },
   lan_beast: {
     value: "lan_beast",
     label: "LAN Beast",
     description:
-      "BBR, maximum windows, and permissive timeouts. For sustained large transfers on local networks.",
+      "BBR, maximum windows, permissive timeouts, and swarm receive on by default. For sustained large transfers on local networks.",
     engine: "bbr",
   },
   warp: {
     value: "warp",
     label: "Warp",
     description:
-      "Everything maxed: BBR with a giant initial window, jumbo-frame probing, and the largest flow-control windows. For saturating whatever link you have.",
+      "Everything maxed: BBR with a giant initial window, jumbo-frame probing, the largest windows, and the widest swarm fan-out. For saturating whatever link you have.",
     engine: "bbr",
   },
   battery_safe: {

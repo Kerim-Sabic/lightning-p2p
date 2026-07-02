@@ -8,13 +8,19 @@ All notable changes to Lightning P2P are documented here. The project follows se
 
 - Nothing yet.
 
-## [0.6.0] - 2026-07-02 ("the warp drive")
+## [0.7.0] - 2026-07-02 ("the warp drive")
+
+> v0.6.0 was tagged but never published (release CI failed on a docs lint);
+> its content ships here.
 
 ### Added
 
+- **Swarm receive on by default for the performance tiers**: Extreme, LAN Beast, and Warp now run the parallel swarm path automatically, with per-mode fan-out width (Extreme 8, LAN Beast 12, Warp 16 concurrent connections; Standard 4 and Battery Safe 2 when forced on via Settings). The Settings toggle still forces it for every mode, and automatic fallback to the sequential path is unchanged.
+- **Redesigned app icon**: the installed app, Start Menu, taskbar, Windows Store logos, and Android launcher now carry a clean speed-lab tile — dark lab surface, signal-green bolt, amber packet trail — rendered reproducibly by `scripts/render-app-icon.ps1` + `tauri icon`.
+
 - **BBR congestion control** for Fast, Extreme, LAN Beast, and Warp modes. quinn's default loss-based CUBIC collapses throughput on lossy Wi-Fi and high-bandwidth-delay paths; upstream iroh measured CUBIC up to ~30× slower than BBR on the same LAN path (n0-computer/iroh#4286). Standard and Battery Safe keep CUBIC so default behavior is unchanged.
 - **Warp mode**: new flagship transfer mode — BBR with an 8 MB initial congestion window, jumbo-frame MTU probing, 2 GB connection windows, 512 MB stream windows, and 8192 streams.
-- **Swarm receive (experimental, opt-in)**: folder transfers fetch their files concurrently over parallel direct connections instead of iroh-blobs' sequential single-stream walk. Every byte stays BLAKE3-verified in the same store; any non-cancel failure falls back to the standard sequential path automatically, so enabling it is never worse than the default. Toggle in Settings; `LIGHTNING_P2P_SWARM_PARALLELISM` overrides the fan-out (default 6, max 16).
+- **Swarm receive (experimental)**: folder transfers fetch their files concurrently over parallel direct connections instead of iroh-blobs' sequential single-stream walk. Every byte stays BLAKE3-verified in the same store; any non-cancel failure falls back to the standard sequential path automatically, so enabling it is never worse than the default. `LIGHTNING_P2P_SWARM_PARALLELISM` overrides the fan-out (max 16).
 - **Per-mode initial congestion window**: Fast 256 KB, Extreme 1 MB, LAN Beast 4 MB, Warp 8 MB. Skips most of slow-start, which dominates total time for short transfers.
 - **Jumbo-frame MTU discovery** on Extreme, LAN Beast, and Warp (ceiling 8952 bytes = 9000-byte jumbo minus IPv6/UDP headers). quinn binary-searches the path MTU; black-hole detection recovers safely on networks that cannot carry large datagrams.
 - **Ticket pre-warming**: the receive screen pre-dials the sender as soon as a valid ticket lands in the input field, so discovery, NAT holepunching, and the QUIC handshake complete while the user is still looking at the Receive button. Cuts time-to-first-byte on the actual transfer.

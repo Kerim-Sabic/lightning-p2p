@@ -101,6 +101,13 @@ pub struct TransferProfile {
     /// to this bound and falls back on black-hole detection, so probing for
     /// jumbo frames is safe on networks that cannot carry them.
     pub mtu_upper_bound: u16,
+    /// Whether swarm receive (parallel child-blob fetches for collections)
+    /// is on by default in this mode. The Settings toggle forces it on for
+    /// every mode; swarm always auto-falls-back to the sequential path.
+    pub swarm_receive_default: bool,
+    /// Concurrent child fetches when the swarm path runs. Each fetch is its
+    /// own direct connection to the sender, so this also bounds sender load.
+    pub swarm_parallelism: usize,
 }
 
 impl TransferMode {
@@ -159,6 +166,8 @@ impl TransferMode {
                 congestion: CongestionAlgorithm::Cubic,
                 initial_congestion_window: DEFAULT_INITIAL_CWND,
                 mtu_upper_bound: ETHERNET_MTU_CEILING,
+                swarm_receive_default: false,
+                swarm_parallelism: 4,
             },
             Self::Fast => TransferProfile {
                 mode: self,
@@ -173,6 +182,8 @@ impl TransferMode {
                 congestion: CongestionAlgorithm::Bbr,
                 initial_congestion_window: 256 * 1024,
                 mtu_upper_bound: ETHERNET_MTU_CEILING,
+                swarm_receive_default: false,
+                swarm_parallelism: 6,
             },
             Self::Extreme => TransferProfile {
                 mode: self,
@@ -187,6 +198,8 @@ impl TransferMode {
                 congestion: CongestionAlgorithm::Bbr,
                 initial_congestion_window: MB as u64,
                 mtu_upper_bound: JUMBO_MTU_CEILING,
+                swarm_receive_default: true,
+                swarm_parallelism: 8,
             },
             Self::LanBeast => TransferProfile {
                 mode: self,
@@ -201,6 +214,8 @@ impl TransferMode {
                 congestion: CongestionAlgorithm::Bbr,
                 initial_congestion_window: 4 * MB as u64,
                 mtu_upper_bound: JUMBO_MTU_CEILING,
+                swarm_receive_default: true,
+                swarm_parallelism: 12,
             },
             Self::Warp => TransferProfile {
                 mode: self,
@@ -215,6 +230,8 @@ impl TransferMode {
                 congestion: CongestionAlgorithm::Bbr,
                 initial_congestion_window: 8 * MB as u64,
                 mtu_upper_bound: JUMBO_MTU_CEILING,
+                swarm_receive_default: true,
+                swarm_parallelism: 16,
             },
             Self::BatterySafe => TransferProfile {
                 mode: self,
@@ -229,6 +246,8 @@ impl TransferMode {
                 congestion: CongestionAlgorithm::Cubic,
                 initial_congestion_window: DEFAULT_INITIAL_CWND,
                 mtu_upper_bound: ETHERNET_MTU_CEILING,
+                swarm_receive_default: false,
+                swarm_parallelism: 2,
             },
         }
     }
@@ -362,6 +381,35 @@ mod tests {
         // Jumbo probing is reserved for the explicitly LAN-oriented tiers.
         assert_eq!(TransferMode::Standard.profile().mtu_upper_bound, 1452);
         assert_eq!(TransferMode::Warp.profile().mtu_upper_bound, 8952);
+    }
+
+    #[test]
+    fn swarm_defaults_match_performance_tiers() {
+        // Swarm receive ships on by default only where users explicitly chose
+        // a performance tier; the conservative and mobile tiers stay opt-in.
+        for mode in [
+            TransferMode::Standard,
+            TransferMode::Fast,
+            TransferMode::BatterySafe,
+        ] {
+            assert!(!mode.profile().swarm_receive_default, "{mode:?}");
+        }
+        for mode in [
+            TransferMode::Extreme,
+            TransferMode::LanBeast,
+            TransferMode::Warp,
+        ] {
+            assert!(mode.profile().swarm_receive_default, "{mode:?}");
+        }
+        // Fan-out width grows with the tier.
+        assert!(
+            TransferMode::Warp.profile().swarm_parallelism
+                >= TransferMode::LanBeast.profile().swarm_parallelism
+        );
+        assert!(
+            TransferMode::LanBeast.profile().swarm_parallelism
+                >= TransferMode::Extreme.profile().swarm_parallelism
+        );
     }
 
     #[test]
