@@ -60,7 +60,8 @@ export type RouteKind = "unknown" | "direct" | "relay" | "mixed";
 export type TransferStrategy =
   | "unknown"
   | "queued_single_provider"
-  | "queued_multi_provider";
+  | "queued_multi_provider"
+  | "swarm_parallel";
 export type TransferPhase =
   | "preparing"
   | "connecting"
@@ -255,6 +256,7 @@ export interface AppSettings {
   local_discovery_enabled: boolean;
   bluetooth_discovery_enabled: boolean;
   transfer_mode: TransferMode;
+  experimental_swarm_receive: boolean;
 }
 
 export interface DownloadDirectoryDiagnostics {
@@ -507,6 +509,7 @@ const browserSettings: AppSettings = {
   local_discovery_enabled: true,
   bluetooth_discovery_enabled: false,
   transfer_mode: "standard",
+  experimental_swarm_receive: false,
 };
 
 const browserNetworkDiagnostics: NetworkDiagnostics = {
@@ -940,6 +943,13 @@ export async function setBluetoothDiscoveryEnabled(
 export async function setTransferMode(mode: TransferMode): Promise<AppSettings> {
   requireNativeRuntime("Changing transfer mode");
   return invoke<AppSettings>("set_transfer_mode", { mode });
+}
+
+export async function setExperimentalSwarmReceive(
+  enabled: boolean,
+): Promise<AppSettings> {
+  requireNativeRuntime("Changing swarm receive");
+  return invoke<AppSettings>("set_experimental_swarm_receive", { enabled });
 }
 
 export async function completeFirstRun(): Promise<AppSettings> {

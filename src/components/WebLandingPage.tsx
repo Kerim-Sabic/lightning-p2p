@@ -129,7 +129,7 @@ const baseKeyFacts: KeyFact[] = [
   { label: "Category", value: "Peer-to-peer file transfer app" },
   { label: "Platform", value: "Windows stable, Android 10+ sideload" },
   { label: "Stable release", value: "v0.4.6" },
-  { label: "Experimental release", value: "v0.5.1 speed modes + reliability" },
+  { label: "Experimental release", value: "v0.6.0 BBR + Warp + swarm receive" },
   { label: "License", value: "Apache-2.0" },
   { label: "Account required", value: "No" },
   { label: "Cloud upload", value: "No" },
@@ -360,7 +360,7 @@ function CursorGlow({ children, className, color = "oklch(82% 0.16 150 / 0.22)",
   );
 }
 
-function TiltCard({ children, className, max = 7, scale = 1.012 }: { children: ReactNode; className?: string; max?: number; scale?: number }) {
+function TiltCard({ children, className, max = 7, scale = 1.012, float = false }: { children: ReactNode; className?: string; max?: number; scale?: number; float?: boolean }) {
   const reduce = useReducedMotion();
   const ref = useRef<HTMLDivElement>(null);
   const rx = useMotionValue(0);
@@ -372,7 +372,17 @@ function TiltCard({ children, className, max = 7, scale = 1.012 }: { children: R
     <motion.div
       ref={ref}
       className={cx("tilt-card will-change-transform", className)}
-      style={reduce ? undefined : { transform }}
+      style={reduce ? undefined : { transform, transformStyle: "preserve-3d" }}
+      animate={
+        reduce || !float
+          ? undefined
+          : { rotateX: [0, 1.2, 0, -1.2, 0], rotateY: [0, -1.6, 0, 1.6, 0] }
+      }
+      transition={
+        reduce || !float
+          ? undefined
+          : { duration: 14, repeat: Infinity, ease: "easeInOut" }
+      }
       onPointerMove={(e) => {
         if (reduce || !ref.current) return;
         const r = ref.current.getBoundingClientRect();
@@ -388,6 +398,24 @@ function TiltCard({ children, className, max = 7, scale = 1.012 }: { children: R
     >
       {children}
     </motion.div>
+  );
+}
+
+/** Floats a child on its own Z-plane inside a `preserve-3d` TiltCard, so
+ *  tilting the card produces true parallax depth instead of a flat rotation. */
+function DepthLayer({ children, z = 24, className }: { children: ReactNode; z?: number; className?: string }) {
+  const reduce = useReducedMotion();
+  return (
+    <div
+      className={className}
+      style={
+        reduce
+          ? undefined
+          : { transform: `translateZ(${z}px)`, transformStyle: "preserve-3d" }
+      }
+    >
+      {children}
+    </div>
   );
 }
 
@@ -710,7 +738,7 @@ function Hero({ page }: { page: WebPage }) {
         </motion.div>
         <div className="relative">
           <CursorGlow className="rounded-[28px]">
-            <TiltCard max={5}>
+            <TiltCard max={5} float>
               <HeroInstrument />
             </TiltCard>
           </CursorGlow>
@@ -734,9 +762,16 @@ function MarqueeStrip() {
 // live throughput sparkline, BLAKE3 verification badge.
 function HeroInstrument() {
   return (
-    <div className="relative aspect-[4/5] w-full max-w-[560px] overflow-hidden rounded-[28px] border border-white/8 bg-gradient-to-br from-[var(--lab-black)]/96 via-[var(--lab-black)]/82 to-[var(--lab-green)]/72 p-6 shadow-[0_50px_160px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.04)] sm:aspect-[5/6]">
-      <div className="absolute inset-0 cinematic-grid opacity-95" />
-      <div className="lab-scan-line" />
+    <div
+      className="relative aspect-[4/5] w-full max-w-[560px] rounded-[28px] border border-white/8 bg-gradient-to-br from-[var(--lab-black)]/96 via-[var(--lab-black)]/82 to-[var(--lab-green)]/72 p-6 shadow-[0_50px_160px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.04)] sm:aspect-[5/6]"
+      style={{ transformStyle: "preserve-3d" }}
+    >
+      {/* Clipping lives on this background wrapper so the content above can
+          float on real translateZ planes without being flattened. */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-[inherit]">
+        <div className="absolute inset-0 cinematic-grid opacity-95" />
+        <div className="lab-scan-line" />
+      </div>
       {/* Top instrument bar — live readouts */}
       <div className="relative z-10 flex items-baseline justify-between gap-3 border-b border-white/8 pb-3">
         <div className="flex items-center gap-2">
@@ -745,8 +780,8 @@ function HeroInstrument() {
         </div>
         <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-white/40">tick {benchmarkSummary.commitHash.slice(0, 6)}</span>
       </div>
-      {/* Topology canvas */}
-      <div className="relative mt-4 aspect-[5/4]">
+      {/* Topology canvas — floats above the grid plane */}
+      <DepthLayer z={18} className="relative mt-4 aspect-[5/4]">
         <svg viewBox="0 0 500 360" className="absolute inset-0 h-full w-full" aria-hidden>
           <defs>
             <linearGradient id="route-direct" x1="0%" y1="0%" x2="100%" y2="0%">
@@ -823,14 +858,16 @@ function HeroInstrument() {
           <div className="packet-trail packet-trail--lag-2" />
           <div className="packet-trail packet-trail--lag-3" />
         </div>
-      </div>
-      {/* Bottom instrument: live readouts */}
-      <div className="relative z-10 mt-3 grid grid-cols-4 gap-px overflow-hidden rounded-xl border border-white/8 bg-white/[0.03]">
-        <ReadoutCell label="route" value="direct" tone="signal" />
-        <ReadoutCell label="verify" value="blake3" tone="signal" />
-        <ReadoutCell label="encrypt" value="quic tls 1.3" tone="muted" />
-        <ReadoutCell label="cloud" value="—" tone="muted" />
-      </div>
+      </DepthLayer>
+      {/* Bottom instrument: live readouts — nearest plane */}
+      <DepthLayer z={34} className="relative z-10">
+        <div className="mt-3 grid grid-cols-4 gap-px overflow-hidden rounded-xl border border-white/8 bg-white/[0.03]">
+          <ReadoutCell label="route" value="direct" tone="signal" />
+          <ReadoutCell label="verify" value="blake3" tone="signal" />
+          <ReadoutCell label="encrypt" value="quic tls 1.3" tone="muted" />
+          <ReadoutCell label="cloud" value="—" tone="muted" />
+        </div>
+      </DepthLayer>
     </div>
   );
 }
@@ -908,7 +945,7 @@ function HowItWorks() {
   );
 }
 
-// ── Speed modes showcase (v0.5.1 feature) ───────────────────────────────────
+// ── Speed modes showcase (v0.6.0 feature set) ───────────────────────────────
 
 function SpeedModesShowcase() {
   const [hoverKey, setHoverKey] = useState<string>("fast");
@@ -919,7 +956,7 @@ function SpeedModesShowcase() {
   return (
     <section className="section-beam relative mx-auto max-w-[1320px] px-6 py-24 sm:px-10 lg:py-32">
       <Reveal>
-        <p className="text-[12px] font-bold uppercase tracking-[0.28em] text-[var(--signal-green)]">New in v0.5.1</p>
+        <p className="text-[12px] font-bold uppercase tracking-[0.28em] text-[var(--signal-green)]">New in v0.6.0</p>
         <h2 className="font-display mt-3 max-w-[20ch] text-balance text-[clamp(2.4rem,5vw,4rem)] font-extrabold leading-[1.0] tracking-[-0.024em] text-white">
           Five speed modes. <span className="text-white/56">Five real configs.</span>
         </h2>
@@ -969,7 +1006,7 @@ function SpeedModesShowcase() {
           </ul>
         </div>
         {/* Live profile viz */}
-        <TiltCard className="relative overflow-hidden bg-gradient-to-br from-[var(--lab-black)]/96 via-[var(--lab-green)]/80 to-[var(--lab-black)]/92 p-6 sm:p-8" max={4} scale={1.005}>
+        <TiltCard className="relative overflow-hidden bg-gradient-to-br from-[var(--lab-black)]/96 via-[var(--lab-green)]/80 to-[var(--lab-black)]/92 p-6 sm:p-8" max={4} scale={1.005} float>
           <div aria-hidden className="absolute inset-0 cinematic-grid opacity-60" />
           <div className="lab-scan-line" />
           <div className="relative">

@@ -10,6 +10,7 @@ pub mod progress;
 pub mod queue;
 pub mod receiver;
 pub mod sender;
+pub(crate) mod swarm;
 pub mod ticket;
 
 pub use mode::{TransferMode, TransferProfile};

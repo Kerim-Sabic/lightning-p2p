@@ -218,6 +218,7 @@ pub fn run() {
             commands::settings::set_local_discovery_enabled,
             commands::settings::set_bluetooth_discovery_enabled,
             commands::settings::set_transfer_mode,
+            commands::settings::set_experimental_swarm_receive,
             commands::settings::open_download_dir,
             commands::mobile::resolve_content_uris,
             commands::mobile::take_pending_shared_files,

@@ -52,6 +52,9 @@ pub enum TransferStrategy {
     QueuedSingleProvider,
     /// Multiple providers are available to the iroh-blobs queued downloader.
     QueuedMultiProvider,
+    /// Experimental swarm receive: collection children fetched concurrently
+    /// over parallel direct connections.
+    SwarmParallel,
 }
 
 impl TransferStrategy {
@@ -61,6 +64,7 @@ impl TransferStrategy {
         match value {
             1 => Self::QueuedSingleProvider,
             2 => Self::QueuedMultiProvider,
+            3 => Self::SwarmParallel,
             _ => Self::Unknown,
         }
     }
@@ -72,6 +76,7 @@ impl TransferStrategy {
             Self::Unknown => 0,
             Self::QueuedSingleProvider => 1,
             Self::QueuedMultiProvider => 2,
+            Self::SwarmParallel => 3,
         }
     }
 }

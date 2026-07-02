@@ -31,6 +31,14 @@ This roadmap is deliberately conservative. Do not publish speed, platform, secur
 - NFC receive handling only carries ticket material.
 - Physical-device validation is required before these features move into a stable release.
 
+### v0.6.0 - Speed engine pre-release
+
+- BBR congestion control on Fast, Extreme, LAN Beast, and the new Warp mode (evidence: upstream iroh measured CUBIC far below BBR on real paths).
+- Per-mode initial congestion window and jumbo-frame MTU probing.
+- Experimental swarm receive: parallel child-blob fetches for folder transfers, with automatic fallback to the standard path.
+- Ticket pre-warming: pre-dial the sender while the ticket is still in the input field.
+- LAN/WAN throughput validation for these changes is still owed before any speed-delta claim.
+
 ## Next
 
 ### v0.5.1 - Stabilize proximity features

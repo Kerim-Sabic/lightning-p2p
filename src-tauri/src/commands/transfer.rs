@@ -271,6 +271,7 @@ async fn start_receive_ticket(
         window: window_clone,
         transfer_id: transfer_id_for_task.clone(),
         cancel_rx,
+        swarm_enabled: settings.experimental_swarm_receive,
     };
 
     tauri::async_runtime::spawn(async move {

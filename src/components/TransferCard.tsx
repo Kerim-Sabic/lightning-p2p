@@ -92,6 +92,8 @@ function strategyLabel(strategy: TransferEntry["strategy"]): string {
       return "Multi-provider";
     case "queued_single_provider":
       return "Queued";
+    case "swarm_parallel":
+      return "Swarm";
     case "unknown":
     default:
       return "Pending";
