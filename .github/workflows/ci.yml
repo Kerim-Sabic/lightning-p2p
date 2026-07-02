@@ -820,6 +820,23 @@ jobs:
         with:
           packages: "platforms;android-36 build-tools;36.0.0 ndk;26.3.11579264"
 
+      - name: Resolve NDK_HOME
+        # setup-android stopped exporting ANDROID_NDK_HOME on newer runner
+        # images; the NDK is installed under the SDK root, so resolve it
+        # ourselves and export both spellings for the Tauri CLI.
+        run: |
+          ndk_root="${ANDROID_SDK_ROOT:-$ANDROID_HOME}/ndk"
+          version=$(ls -1 "$ndk_root" | sort -V | tail -n 1)
+          if [ -z "$version" ]; then
+            echo "::error::No NDK found under $ndk_root"
+            exit 1
+          fi
+          {
+            echo "NDK_HOME=$ndk_root/$version"
+            echo "ANDROID_NDK_HOME=$ndk_root/$version"
+          } >> "$GITHUB_ENV"
+          echo "Resolved NDK at $ndk_root/$version"
+
       - name: Free Android runner disk space
         uses: jlumbroso/free-disk-space@v1.3.1
         with:
@@ -1034,6 +1051,23 @@ jobs:
         uses: android-actions/setup-android@v3
         with:
           packages: "platforms;android-36 build-tools;36.0.0 ndk;26.3.11579264"
+
+      - name: Resolve NDK_HOME
+        # setup-android stopped exporting ANDROID_NDK_HOME on newer runner
+        # images; the NDK is installed under the SDK root, so resolve it
+        # ourselves and export both spellings for the Tauri CLI.
+        run: |
+          ndk_root="${ANDROID_SDK_ROOT:-$ANDROID_HOME}/ndk"
+          version=$(ls -1 "$ndk_root" | sort -V | tail -n 1)
+          if [ -z "$version" ]; then
+            echo "::error::No NDK found under $ndk_root"
+            exit 1
+          fi
+          {
+            echo "NDK_HOME=$ndk_root/$version"
+            echo "ANDROID_NDK_HOME=$ndk_root/$version"
+          } >> "$GITHUB_ENV"
+          echo "Resolved NDK at $ndk_root/$version"
 
       - name: Free Android runner disk space
         uses: jlumbroso/free-disk-space@v1.3.1
