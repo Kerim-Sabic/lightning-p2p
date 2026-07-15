@@ -387,6 +387,14 @@ jobs:
             Copy-Item -LiteralPath $releasesFile -Destination (Join-Path $stage "RELEASES") -Force
           }
 
+      - name: Build and stage CLI binary
+        shell: pwsh
+        run: |
+          cargo build --release --features cli --bin lightning-p2p-cli --target x86_64-pc-windows-msvc --manifest-path src-tauri/Cargo.toml
+          $cliExe = "src-tauri/target/x86_64-pc-windows-msvc/release/lightning-p2p-cli.exe"
+          if (-not (Test-Path $cliExe)) { throw "CLI binary was not built." }
+          Compress-Archive -Path $cliExe -DestinationPath (Join-Path "windows-release-stage" "lightning-p2p-cli-windows-x86_64.zip") -Force
+
       - name: Generate SHA256 checksums
         shell: pwsh
         run: |
@@ -423,9 +431,11 @@ jobs:
           $body = @(
             "## Lightning P2P v$env:APP_VERSION"
             ""
-            "Community unsigned Windows build."
+            "Community unsigned builds for Windows, macOS, and Linux, plus the standalone terminal client."
             ""
-            'This build is not Authenticode code-signed. Windows Defender SmartScreen may show "Windows protected your PC" or "unrecognized app" because Windows cannot verify a publisher identity for unsigned files.'
+            'Windows: this build is not Authenticode code-signed. Windows Defender SmartScreen may show "Windows protected your PC" or "unrecognized app" because Windows cannot verify a publisher identity for unsigned files.'
+            ""
+            'macOS: the app is not notarized yet. After dragging it to Applications, either right-click -> Open the first time, or run: xattr -cr "/Applications/Lightning P2P.app"'
             ""
             "Verify the source and SHA256 checksum before installing. If you do not trust the source or checksum, do not install."
             ""
@@ -433,10 +443,14 @@ jobs:
             ""
             "| File | Description |"
             "|------|-------------|"
-            "| ``LightningP2P-win-Setup.exe`` | Recommended Velopack one-click installer, unsigned community build |"
-            "| ``LightningP2PSetup.exe`` | Stable alias for the NSIS setup installer, unsigned community build |"
-            "| ``LightningP2P.msi`` | Stable alias for the MSI installer, unsigned community build |"
-            "| ``SHA256SUMS.txt`` | SHA256 checksums for this release |"
+            "| ``LightningP2P-win-Setup.exe`` | Windows - recommended Velopack one-click installer |"
+            "| ``LightningP2PSetup.exe`` | Windows - stable alias for the NSIS setup installer |"
+            "| ``LightningP2P.msi`` | Windows - stable alias for the MSI installer |"
+            "| ``LightningP2P-macos-universal.dmg`` | macOS 10.15+ (Intel + Apple Silicon) |"
+            "| ``LightningP2P-linux-x86_64.AppImage`` | Linux - portable, no install needed |"
+            "| ``LightningP2P-linux-x86_64.deb`` / ``.rpm`` | Linux - Debian/Ubuntu and Fedora packages |"
+            "| ``lightning-p2p-cli-*`` | Terminal client: ``lightning-p2p-cli send <file>`` prints a ticket; pipe it anywhere |"
+            "| ``SHA256SUMS*.txt`` | SHA256 checksums per platform |"
             ""
             "### Verify before installing"
             ""
@@ -470,6 +484,175 @@ jobs:
         with:
           name: lightning-p2p-windows-community-unsigned-bundle
           path: windows-release-stage/*
+
+  release-macos-community:
+    name: Release macOS (community unsigned)
+    if: needs.release-plan.outputs.windows_release_mode == 'community_unsigned'
+    runs-on: macos-latest
+    # Serialized on the Windows job so the draft release already exists and
+    # multi-job asset uploads cannot race on draft creation.
+    needs: [release-windows-community, release-plan]
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install Rust stable (universal targets)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        continue-on-error: true
+        with:
+          workspaces: ./src-tauri -> target
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Resolve release version
+        run: |
+          version=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          echo "APP_VERSION=$version" >> "$GITHUB_ENV"
+          echo "RELEASE_TAG=v$version" >> "$GITHUB_ENV"
+
+      - name: Build universal macOS bundles
+        run: pnpm tauri build --ci --target universal-apple-darwin
+
+      - name: Build universal CLI binary
+        run: |
+          cargo build --release --features cli --bin lightning-p2p-cli --target aarch64-apple-darwin --manifest-path src-tauri/Cargo.toml
+          cargo build --release --features cli --bin lightning-p2p-cli --target x86_64-apple-darwin --manifest-path src-tauri/Cargo.toml
+          lipo -create -output lightning-p2p-cli \
+            src-tauri/target/aarch64-apple-darwin/release/lightning-p2p-cli \
+            src-tauri/target/x86_64-apple-darwin/release/lightning-p2p-cli
+
+      - name: Stage macOS release artifacts
+        run: |
+          set -euo pipefail
+          bundle="src-tauri/target/universal-apple-darwin/release/bundle"
+          stage="macos-release-stage"
+          mkdir -p "$stage"
+
+          dmg=$(find "$bundle/dmg" -name '*.dmg' -type f | sort | head -n 1)
+          app=$(find "$bundle/macos" -name '*.app' -maxdepth 1 -type d | sort | head -n 1)
+          if [ -z "$dmg" ]; then echo "::error::DMG was not found"; exit 1; fi
+          if [ -z "$app" ]; then echo "::error::.app bundle was not found"; exit 1; fi
+
+          # GitHub release asset names normalize spaces to dots; stage the
+          # exact public names so SHA256SUMS-macos.txt stays checkable.
+          dmg_asset=$(basename "$dmg" | tr ' ' '.')
+          cp "$dmg" "$stage/$dmg_asset"
+          cp "$dmg" "$stage/LightningP2P-macos-universal.dmg"
+          ditto -c -k --keepParent "$app" "$stage/LightningP2P-macos-universal.app.zip"
+          tar -czf "$stage/lightning-p2p-cli-macos-universal.tar.gz" lightning-p2p-cli
+
+          (cd "$stage" && shasum -a 256 * > SHA256SUMS-macos.txt)
+          cat "$stage/SHA256SUMS-macos.txt"
+
+      - name: Upload macOS artifacts to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          fail_on_unmatched_files: true
+          files: macos-release-stage/*
+
+      - name: Upload macOS bundle artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lightning-p2p-macos-community-bundle
+          path: macos-release-stage/*
+
+  release-linux-community:
+    name: Release Linux (community)
+    if: needs.release-plan.outputs.windows_release_mode == 'community_unsigned'
+    # ubuntu-22.04 pinned (not -latest): the AppImage inherits the build
+    # host's glibc floor, so older runners maximize distro compatibility.
+    runs-on: ubuntu-22.04
+    needs: [release-windows-community, release-plan]
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libsoup-3.0-dev libjavascriptcoregtk-4.1-dev
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        continue-on-error: true
+        with:
+          workspaces: ./src-tauri -> target
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Resolve release version
+        run: |
+          version=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          echo "APP_VERSION=$version" >> "$GITHUB_ENV"
+          echo "RELEASE_TAG=v$version" >> "$GITHUB_ENV"
+
+      - name: Build Linux bundles
+        run: pnpm tauri build --ci
+
+      - name: Build CLI binary
+        run: cargo build --release --features cli --bin lightning-p2p-cli --manifest-path src-tauri/Cargo.toml
+
+      - name: Stage Linux release artifacts
+        run: |
+          set -euo pipefail
+          bundle="src-tauri/target/release/bundle"
+          stage="linux-release-stage"
+          mkdir -p "$stage"
+
+          deb=$(find "$bundle/deb" -name '*.deb' -type f | sort | head -n 1)
+          rpm=$(find "$bundle/rpm" -name '*.rpm' -type f | sort | head -n 1)
+          appimage=$(find "$bundle/appimage" -name '*.AppImage' -type f | sort | head -n 1)
+          if [ -z "$deb" ]; then echo "::error::deb was not found"; exit 1; fi
+          if [ -z "$rpm" ]; then echo "::error::rpm was not found"; exit 1; fi
+          if [ -z "$appimage" ]; then echo "::error::AppImage was not found"; exit 1; fi
+
+          cp "$deb" "$stage/LightningP2P-linux-x86_64.deb"
+          cp "$rpm" "$stage/LightningP2P-linux-x86_64.rpm"
+          cp "$appimage" "$stage/LightningP2P-linux-x86_64.AppImage"
+          tar -czf "$stage/lightning-p2p-cli-linux-x86_64.tar.gz" \
+            -C src-tauri/target/release lightning-p2p-cli
+
+          (cd "$stage" && sha256sum * > SHA256SUMS-linux.txt)
+          cat "$stage/SHA256SUMS-linux.txt"
+
+      - name: Upload Linux artifacts to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          fail_on_unmatched_files: true
+          files: linux-release-stage/*
+
+      - name: Upload Linux bundle artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lightning-p2p-linux-community-bundle
+          path: linux-release-stage/*
 
   release-windows-signed:
     name: Release Windows (production signed)

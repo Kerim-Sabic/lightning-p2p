@@ -6,6 +6,8 @@
 //! Built on [iroh](https://iroh.computer) for P2P networking and
 //! [iroh-blobs](https://docs.rs/iroh-blobs) for content-addressed blob transfer.
 
+#[cfg(feature = "cli")]
+pub mod cli;
 pub mod commands;
 pub mod crypto;
 pub mod error;

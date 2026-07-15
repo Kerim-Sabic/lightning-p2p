@@ -4,6 +4,20 @@ All notable changes to Lightning P2P are documented here. The project follows se
 
 ## [Unreleased]
 
+### Changed
+
+- Nothing yet.
+
+## [0.8.0] - 2026-07-15 ("everywhere")
+
+### Added
+
+- **macOS build** (universal DMG, macOS 10.15+, Intel + Apple Silicon): native traffic-light title bar via overlay chrome, all transfer features. Unsigned community build; right-click → Open or `xattr -cr` on first launch.
+- **Linux build** (AppImage, deb, rpm; built on Ubuntu 22.04 for broad glibc compatibility): keys in the Secret Service keyring with an app-data fallback for headless boxes.
+- **`lightning-p2p-cli`**: `send <paths...>` prints the receive ticket to stdout (everything else on stderr, so piping stays clean) and stays online until Ctrl+C; `receive <ticket> -o <dir>` pulls BLAKE3-verified bytes. `--qr` renders a terminal QR for the Android scanner. Tickets are byte-identical to app tickets — the CLI reuses the exact GUI engine paths and keeps its own node profile so it never contends with a running GUI. Shipped as standalone tarballs for Windows/macOS/Linux.
+- Per-platform bundle configs (`tauri.windows/macos/linux.conf.json`); release CI now publishes macOS and Linux assets with per-platform SHA256SUMS files.
+- Signed Android APK returns with this release, carrying the startup-crash fix below.
+
 ### Fixed
 
 - **Android startup crash**: tao 0.35 stopped initializing `ndk-context`, so the first Rust JNI bridge call (the deferred staging-cache sweep) hit an assert and aborted the app under `panic = "abort"`. `MainActivity` now installs a typed, process-wide JavaVM and application Context via `initRustAndroidContext`; bridge helpers create valid local references and fail soft until bootstrap completes. CI launches the release-shaped APK on an emulator and requires a positive end-to-end JNI marker.

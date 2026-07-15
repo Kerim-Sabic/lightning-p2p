@@ -6,7 +6,7 @@
 
 ### **Direct files. Verified bytes. No cloud account.**
 
-A free, open-source peer-to-peer file transfer app for **Windows + Android.**
+A free, open-source peer-to-peer file transfer app for **Windows, macOS, Linux + Android** — with a **CLI** for scripts and servers.
 Built on **Rust**, **Tauri 2**, **iroh QUIC**, **iroh-blobs**, and **BLAKE3**.
 
 <sub>◆ no upload step ◆ no account ◆ no artificial file-size cap ◆ no telemetry ◆ no cloud bucket ◆</sub>
@@ -14,7 +14,7 @@ Built on **Rust**, **Tauri 2**, **iroh QUIC**, **iroh-blobs**, and **BLAKE3**.
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-7ddf9c?style=flat-square)](LICENSE)
 [![Windows stable](https://img.shields.io/badge/Windows-v0.4.6_stable-7ddf9c?style=flat-square&logo=windows&logoColor=white)](https://github.com/Kerim-Sabic/lightning-p2p/releases/tag/v0.4.6)
 [![Android sideload](https://img.shields.io/badge/Android-v0.4.6_sideload-7ddf9c?style=flat-square&logo=android&logoColor=white)](https://github.com/Kerim-Sabic/lightning-p2p/releases/tag/v0.4.6)
-[![Experimental](https://img.shields.io/badge/Experimental-v0.7.0_BBR_+_Warp_+_swarm-f0c76b?style=flat-square)](https://github.com/Kerim-Sabic/lightning-p2p/releases/tag/v0.7.0)
+[![Experimental](https://img.shields.io/badge/Experimental-v0.8.0_BBR_+_Warp_+_swarm-f0c76b?style=flat-square)](https://github.com/Kerim-Sabic/lightning-p2p/releases/tag/v0.8.0)
 [![Rust](https://img.shields.io/badge/Rust-1.88+-f0c76b?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![Tauri 2](https://img.shields.io/badge/Tauri-2-7ddf9c?style=flat-square&logo=tauri&logoColor=white)](https://tauri.app/)
 [![iroh QUIC](https://img.shields.io/badge/iroh-QUIC_+_relay-7ddf9c?style=flat-square)](https://iroh.computer/)
@@ -49,8 +49,8 @@ Built on **Rust**, **Tauri 2**, **iroh QUIC**, **iroh-blobs**, and **BLAKE3**.
 
 | ✓ Best fit | ✗ Not for |
 | --- | --- |
-| Moving large builds, databases, media between Windows machines | Browser-only transfer (web is handoff, not the engine) |
-| Windows ↔ Android sideload testing | macOS / Linux production (planned, not shipped) |
+| Moving large builds, databases, media between desktops | Browser-only transfer (web is handoff, not the engine — in-browser receive is on the roadmap) |
+| Desktop ↔ Android sideload testing | iOS (planned, not shipped) |
 | Sharing without cloud accounts, upload caps, or hosted retention | AirDrop protocol compatibility |
 | Open-source workflows that need inspectable artifacts + checksums | Phone-to-phone NFC writing (NFC receive only) |
 | Honest benchmark methodology with committed evidence | "Fastest in the world" marketing claims |
@@ -59,15 +59,24 @@ Built on **Rust**, **Tauri 2**, **iroh QUIC**, **iroh-blobs**, and **BLAKE3**.
 
 ## ◆ Install
 
-Stable: **v0.4.6**. Experimental: **v0.7.0** (BBR congestion control, Warp mode, swarm receive, ticket pre-warming; carries v0.5.x speed modes + BLE/NFC).
+Stable: **v0.4.6**. Experimental: **v0.8.0** (BBR congestion control, Warp mode, swarm receive, ticket pre-warming; carries v0.5.x speed modes + BLE/NFC).
 
 | Platform | Asset | Channel | Best for |
 | --- | --- | --- | --- |
 | **Windows** | [`LightningP2P-win-Setup.exe`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P-win-Setup.exe) | Stable | Most users · one-click Velopack |
 | **Windows** | [`LightningP2PSetup.exe`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2PSetup.exe) | Stable | Classic NSIS |
 | **Windows** | [`LightningP2P.msi`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P.msi) | Stable | Policy-managed deployments |
-| **Android** | [`LightningP2P-android-latest.apk`](https://github.com/Kerim-Sabic/lightning-p2p/releases/download/v0.5.1/LightningP2P-android-latest.apk) | Stable v0.5.1 | Android 10+ sideload (signed) · new APK returns in v0.8.0 |
-| **Experimental** | [Release v0.7.0](https://github.com/Kerim-Sabic/lightning-p2p/releases/tag/v0.7.0) | Pre-release | BBR engine · Warp mode · swarm receive · pre-warm |
+| **macOS** | [`LightningP2P-macos-universal.dmg`](https://github.com/Kerim-Sabic/lightning-p2p/releases/download/v0.8.0/LightningP2P-macos-universal.dmg) | Beta v0.8.0 | 10.15+ · Intel + Apple Silicon · unsigned: right-click → Open |
+| **Linux** | [`LightningP2P-linux-x86_64.AppImage`](https://github.com/Kerim-Sabic/lightning-p2p/releases/download/v0.8.0/LightningP2P-linux-x86_64.AppImage) | Beta v0.8.0 | Portable AppImage · `.deb` / `.rpm` also published |
+| **Android** | [`LightningP2P-android-latest.apk`](https://github.com/Kerim-Sabic/lightning-p2p/releases/download/v0.5.1/LightningP2P-android-latest.apk) | Stable v0.5.1 | Android 10+ sideload (signed) · new APK ships with v0.8.0 |
+| **CLI** | [`lightning-p2p-cli`](https://github.com/Kerim-Sabic/lightning-p2p/releases/tag/v0.8.0) | Beta v0.8.0 | `send <file>` prints a ticket to stdout · Win/mac/Linux tarballs |
+| **Experimental** | [Release v0.8.0](https://github.com/Kerim-Sabic/lightning-p2p/releases/tag/v0.8.0) | Pre-release | BBR engine · Warp mode · swarm receive · pre-warm |
+
+```bash
+# The CLI in one breath: share a file, pipe the ticket anywhere.
+lightning-p2p-cli send big.iso | qrencode -t ansiutf8   # or just copy it
+lightning-p2p-cli receive "fd2:..." -o ~/Downloads
+```
 
 <details>
 <summary><b>◆ Verify your install before you trust it</b> (click to expand)</summary>
@@ -152,7 +161,7 @@ Handoff URLs use `/receive#t=<ticket>` — the ticket lives in the URL fragment,
 
 ---
 
-## ◆ Speed modes <sup>v0.7.0</sup>
+## ◆ Speed modes <sup>v0.8.0</sup>
 
 Six session-level transfer modes. Each swaps a **complete** transport profile: congestion controller, QUIC send/recv/stream windows, initial congestion window, MTU-discovery ceiling, max streams, keepalive, import concurrency, idle timeout, UI emit cadence. Persists across launches; node restarts on change (deferred if a transfer is in flight).
 
@@ -246,9 +255,9 @@ Read [`SECURITY.md`](SECURITY.md) · [`docs/security-model.md`](docs/security-mo
 | 🟢 | Atomic single-blob writes (`.part` + rename) | **Stable** v0.5.1 |
 | 🟢 | Retry + exponential backoff on transient receive errors | **Stable** v0.5.1 |
 | 🟢 | Implicit resume across restarts (re-paste ticket) | **Stable** (iroh-blobs persistent store) |
-| 🟡 | Speed modes (6 profiles, BBR on Fast+) | **Experimental** v0.7.0 |
-| 🟡 | Swarm receive (parallel fetches, default-on in Extreme+, auto-fallback) | **Experimental** v0.7.0 |
-| 🟡 | Ticket pre-warming (pre-dial on paste) | **Experimental** v0.7.0 |
+| 🟡 | Speed modes (6 profiles, BBR on Fast+) | **Experimental** v0.8.0 |
+| 🟡 | Swarm receive (parallel fetches, default-on in Extreme+, auto-fallback) | **Experimental** v0.8.0 |
+| 🟡 | Ticket pre-warming (pre-dial on paste) | **Experimental** v0.8.0 |
 | 🟡 | BLE proximity discovery (Android + Windows) | **Experimental** since v0.5.0 |
 | 🟡 | NFC ticket receive (Android) | **Experimental** since v0.5.0 |
 | ⏳ | Explicit resume UI for failed transfers | Planned v0.6 |
