@@ -945,6 +945,138 @@ function HowItWorks() {
   );
 }
 
+// ── Architecture: the whole path, animated ──────────────────────────────────
+
+/** A packet dot that travels a horizontal channel on a loop. */
+function FlowPacket({ delay, color, duration = 2.4, reduce }: { delay: number; color: string; duration?: number; reduce: boolean | null }) {
+  if (reduce) {
+    return <span aria-hidden className="absolute left-1/2 top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full" style={{ background: color, boxShadow: `0 0 8px ${color}` }} />;
+  }
+  return (
+    <motion.span
+      aria-hidden
+      className="absolute top-1/2 h-1.5 w-1.5 rounded-full"
+      style={{ background: color, boxShadow: `0 0 10px ${color}`, y: "-50%" }}
+      initial={{ left: "0%", opacity: 0 }}
+      animate={{ left: ["0%", "100%"], opacity: [0, 1, 1, 0] }}
+      transition={{ duration, delay, repeat: Infinity, ease: "linear", times: [0, 0.1, 0.9, 1] }}
+    />
+  );
+}
+
+/** One transport channel (direct or relay) with flowing packets. */
+function FlowChannel({ label, color, dashed, count, reduce }: { label: string; color: string; dashed?: boolean; count: number; reduce: boolean | null }) {
+  return (
+    <div className="relative">
+      <div className="relative h-8 overflow-hidden">
+        <div className="absolute left-0 right-0 top-1/2 h-px -translate-y-1/2" style={{ background: `linear-gradient(90deg, transparent, ${color}, transparent)`, opacity: dashed ? 0.4 : 0.7 }} />
+        {Array.from({ length: count }).map((_, i) => (
+          <FlowPacket key={i} delay={(i * (dashed ? 1.6 : 1.0))} color={color} duration={dashed ? 3.0 : 2.2} reduce={reduce} />
+        ))}
+      </div>
+      <p className="mt-0.5 text-center font-mono text-[9px] font-bold uppercase tracking-[0.22em]" style={{ color }}>{label}</p>
+    </div>
+  );
+}
+
+/** A labelled node card at either end of the flow. */
+function FlowNode({ icon: Icon, kicker, title, steps, accent }: { icon: LucideIcon; kicker: string; title: string; steps: Array<{ icon: LucideIcon; text: string }>; accent: string }) {
+  return (
+    <div className="relative flex-1 overflow-hidden rounded-2xl border border-white/10 bg-[var(--lab-black)]/70 p-5">
+      <div className="pointer-events-none absolute inset-0 cinematic-grid opacity-40" />
+      <div className="relative flex items-center gap-2.5">
+        <span className="grid h-10 w-10 place-items-center rounded-xl border" style={{ borderColor: `${accent}44`, background: `${accent}18` }}>
+          <Icon className="h-5 w-5" style={{ color: accent }} />
+        </span>
+        <div>
+          <p className="font-mono text-[9px] font-bold uppercase tracking-[0.24em]" style={{ color: accent }}>{kicker}</p>
+          <p className="font-display text-[17px] font-bold leading-tight text-white">{title}</p>
+        </div>
+      </div>
+      <div className="relative mt-4 space-y-2">
+        {steps.map((s, i) => (
+          <div
+            key={s.text}
+            className="flex items-center gap-2.5 rounded-lg border border-white/8 bg-white/[0.04] px-3 py-2"
+          >
+            <span className="grid h-5 w-5 shrink-0 place-items-center rounded-md bg-white/[0.05] font-mono text-[9px] font-bold text-white/40">{i + 1}</span>
+            <s.icon className="h-3.5 w-3.5 shrink-0 text-white/56" />
+            <span className="text-[12.5px] leading-5 text-[color:var(--soft-copy)]">{s.text}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ArchitectureFlow() {
+  const reduce = useReducedMotion();
+  const senderSteps = [
+    { icon: Upload, text: "Files stay on disk — nothing uploads" },
+    { icon: FileCheck2, text: "iroh-blobs chunks + BLAKE3-hashes them" },
+    { icon: QrCode, text: "Emits a tiny ticket: NodeId + hash" },
+  ];
+  const receiverSteps = [
+    { icon: Download, text: "Pulls chunks straight from the sender" },
+    { icon: ShieldCheck, text: "Verifies every chunk's BLAKE3 as it lands" },
+    { icon: PackageCheck, text: "Writes verified bytes to the destination" },
+  ];
+  return (
+    <section className="section-beam relative mx-auto max-w-[1320px] px-6 py-24 sm:px-10 lg:py-32">
+      <Reveal>
+        <p className="text-[12px] font-bold uppercase tracking-[0.28em] text-[var(--signal-green)]">Architecture</p>
+        <h2 className="font-display mt-3 max-w-[24ch] text-balance text-[clamp(2.2rem,4.8vw,3.8rem)] font-extrabold leading-[1.02] tracking-[-0.024em] text-white">
+          The whole path, <span className="text-white/56">end to end.</span>
+        </h2>
+        <p className="mt-5 max-w-[64ch] text-[15.5px] leading-7 text-[color:var(--soft-copy)]">
+          One encrypted QUIC connection carries content-addressed chunks straight from the sender's disk to yours. Direct when the network allows it, relay-assisted when NAT gets in the way — and never a plaintext byte on any server.
+        </p>
+      </Reveal>
+
+      <Reveal delay={0.1}>
+        <div className="mt-12 rounded-3xl border border-white/8 bg-white/[0.02] p-5 sm:p-8">
+          <div className="flex flex-col items-stretch gap-5 lg:flex-row lg:items-center">
+            <FlowNode icon={MonitorDown} kicker="Sender" title="Native app" steps={senderSteps} accent="var(--signal-green)" />
+
+            {/* Transport channel */}
+            <div className="relative w-full shrink-0 lg:w-[280px]">
+              <div className="rounded-2xl border border-white/8 bg-[var(--lab-black)]/50 px-4 py-4">
+                <p className="mb-3 text-center font-mono text-[9px] font-bold uppercase tracking-[0.24em] text-white/40">encrypted iroh QUIC · TLS 1.3</p>
+                <FlowChannel label="direct route" color="oklch(82% 0.16 150)" count={3} reduce={reduce} />
+                <div className="my-2" />
+                <FlowChannel label="relay fallback" color="oklch(81% 0.13 83)" dashed count={2} reduce={reduce} />
+              </div>
+              <div className="mt-2 flex items-center justify-center gap-1.5">
+                <span aria-hidden className="signal-dot !h-1.5 !w-1.5" />
+                <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-white/40">BLAKE3-verified chunks</span>
+              </div>
+            </div>
+
+            <FlowNode icon={Smartphone} kicker="Receiver" title="Any device" steps={receiverSteps} accent="oklch(82% 0.16 150)" />
+          </div>
+
+          {/* Guarantee strip */}
+          <div className="mt-6 grid gap-px overflow-hidden rounded-xl border border-white/8 bg-white/[0.04] sm:grid-cols-3">
+            {[
+              { icon: CloudOff, k: "no cloud", v: "bytes never touch a server" },
+              { icon: KeyRound, k: "no account", v: "the ticket is the only credential" },
+              { icon: FileCheck2, k: "no trust in the path", v: "every chunk is hash-checked" },
+            ].map((g) => (
+              <div key={g.k} className="flex items-center gap-3 bg-[var(--lab-black)]/70 px-4 py-3.5">
+                <g.icon className="h-4 w-4 shrink-0 text-[var(--signal-green)]" />
+                <div>
+                  <p className="font-mono text-[9px] font-bold uppercase tracking-[0.2em] text-white/40">{g.k}</p>
+                  <p className="text-[12.5px] leading-5 text-white/78">{g.v}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </Reveal>
+    </section>
+  );
+}
+
 // ── Speed modes showcase (v0.8.0 feature set) ───────────────────────────────
 
 function SpeedModesShowcase() {
@@ -1533,6 +1665,7 @@ export function WebLandingPage() {
       <main>
         <Hero page={page} />
         <HowItWorks />
+        <ArchitectureFlow />
         <SpeedModesShowcase />
         <BenchEvidence />
         <SecurityModel />
