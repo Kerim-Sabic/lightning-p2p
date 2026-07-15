@@ -1,86 +1,105 @@
-# Show HN — Lightning P2P
+# Show HN — Lightning P2P (v0.9.0 launch)
+
+> Launch **after v0.9.0 ships** (the in-browser receiver is the differentiator
+> and pre-empts HN's first objection, "both sides need your app"). Use the
+> v0.8.0 r/rust rehearsal (`reddit-rust-v0.8-rehearsal.md`) first. HN is
+> one-shot — don't spend it before the browser receiver is live.
 
 ## Title (≤80 chars)
 
 ```
-Show HN: Lightning P2P – direct P2P file transfer for Windows and Android
+Show HN: Lightning P2P – send a file, receive it in any browser, no account
 ```
 
 Alternates if the slot is taken:
 
-- `Show HN: Lightning P2P – send huge files without cloud upload (Rust + iroh)`
-- `Show HN: Lightning P2P – Rust + Tauri + iroh QUIC, no cloud, no account`
+- `Show HN: Lightning P2P – P2P file transfer that receives in the browser (Rust/iroh)`
+- `Show HN: Lightning P2P – the same Rust engine on desktop, phone, and in-browser`
 
 ## Body (≤2000 chars; HN strips formatting except links)
 
 ```
-Hi HN — Lightning P2P is a free, Apache-2.0 desktop and Android app that
-sends files directly between two devices over iroh QUIC, with BLAKE3
-verification on every chunk. No cloud upload. No account. No artificial
-file-size cap.
+Hi HN — Lightning P2P sends files directly between devices over iroh QUIC,
+BLAKE3-verified on every chunk. No cloud upload, no account, no file-size
+cap. Free, Apache-2.0.
 
-It exists because I kept hitting the same wall: a 6 GB video that needed
-to go from a Windows laptop to an Android phone in a different country.
-WeTransfer would upload + retain it on a third-party bucket. LocalSend
-only works on LAN. Croc and Magic Wormhole are CLI-only. AirDrop is
-Apple-only. iroh's QUIC + relay-fallback finally makes direct-first
-transfer practical across NAT, so I wrapped it in Tauri v2 with a
-React 19 UI.
+The thing I'm proudest of in this release: you can receive a file in any
+browser with nothing installed. The receive page runs the exact same Rust
+transfer engine (iroh + iroh-blobs) compiled to WebAssembly, dials the
+sender directly over iroh's relay, and verifies BLAKE3 in the tab. There is
+no HTTP file server in the middle — the bytes never touch our infrastructure.
 
-What it is:
-- Rust backend (iroh + iroh-blobs streaming, no full-file buffering).
-- Direct-first across LAN and WAN; relay fallback when direct fails.
-- BLAKE3 content-addressed verification on every chunk.
-- Windows installers: signed Velopack (delta updates), NSIS, MSI.
-- Android APK + AAB with published signer cert fingerprint.
-- Browser receive-handoff page that drops you back into the native app.
+It started because I kept hitting the same wall: a 6 GB video from a Windows
+laptop to an Android phone in another country. WeTransfer uploads and retains
+it on someone else's bucket. LocalSend is LAN-only. croc/Wormhole are
+CLI-only. AirDrop is Apple-only. iroh's QUIC + relay-fallback makes
+direct-first transfer practical across NAT, so I wrapped it in Tauri and,
+now, WASM.
 
-What it is not:
-- A hosted cloud bucket. The sender stays online; bytes stream peer-to-peer.
+Ships everywhere:
+- Desktop: Windows (Velopack/NSIS/MSI), macOS (universal DMG), Linux
+  (AppImage/deb/rpm).
+- Android APK with a published signer fingerprint.
+- CLI: `lightning-p2p-cli send big.iso` prints a ticket to stdout; pipe it.
+- Browser: open the receive link, receive in the tab. No install.
+
+What it isn't:
+- A hosted bucket. The sender stays online; bytes stream peer-to-peer
+  (browser peers are relay-only, so expect LAN/direct to be faster).
 - Audited. No external security audit yet.
-- Cross-platform-complete. macOS / Linux / iOS are roadmap.
-- Faster than X. We refuse to claim speed leadership without a published
-  real-device benchmark report. An automated same-machine harness ships
-  in this release (pnpm bench:local; raw CSV/JSON in docs/reports/raw/
-  on every CI push) but it measures loopback only — it is not a
-  competitor comparison or a WAN claim.
+- "Fastest." I refuse to claim speed leadership without a real-device
+  benchmark matrix. There's a reproducible loopback harness in-repo
+  (pnpm bench:local); it is not a WAN or competitor claim.
 
-Source, releases, security model, threat model, and roadmap:
+Source, releases, security + threat model, benchmarks:
 https://github.com/Kerim-Sabic/lightning-p2p
 
-Happy to answer anything about iroh, Tauri v2 on Windows + Android, the
-signing flow, the diagnostics-redaction layer, or the anti-hype claims
-guardrail.
+Happy to go deep on compiling iroh to WASM, the relay-only browser trade-off,
+Tauri v2 across four OSes + Android, or the anti-hype claims guardrail.
 ```
 
 ## Prepared replies
 
-### Q: "How is this different from LocalSend / PairDrop / Croc?"
+### Q: "If it's in the browser, where do the bytes actually go?"
 
-> LocalSend is excellent on LAN but doesn't traverse NAT. PairDrop runs
-> in the browser and relies on a WebRTC relay; Lightning P2P uses iroh
-> QUIC with relay fallback and a native installer, so the threat model
-> and trust surface are different. Croc is CLI-only and uses PAKE
-> phrases; Lightning P2P trades the code phrase for QR + handoff link
-> and a real native UI. On speed: we ship a same-machine automated
-> harness (docs/reports/automated-local-benchmarks.md) you can run
-> locally, but real-device WAN / Wi-Fi numbers and competitor
-> comparisons need a real-device matrix that we have not yet published.
+> Directly from the sender to your tab. The receive page is the Rust
+> iroh/iroh-blobs engine compiled to WebAssembly; it opens an iroh
+> connection (relay-over-WebSocket in the browser) straight to the sender
+> and verifies each BLAKE3 chunk in-page. Our site serves static files and
+> the wasm bundle — it never sees your file bytes, and there's no HTTP
+> upload/download server. Browser peers are relay-only (no hole punching in
+> a tab), so the native app's direct path is faster for big transfers.
+
+### Q: "How is this different from LocalSend / PairDrop / croc / Wormhole?"
+
+> LocalSend is great on LAN but doesn't traverse NAT. PairDrop is browser +
+> WebRTC; we use iroh QUIC with relay fallback and ship a native engine that
+> also compiles to WASM, so desktop, phone, CLI, and browser all run the
+> same Rust code. croc and Magic Wormhole are CLI-only PAKE tools — we have
+> a CLI too (`lightning-p2p-cli`), but also a GUI, QR/handoff links, and the
+> in-browser receiver. On speed: there's a reproducible in-repo loopback
+> harness; real-device WAN/Wi-Fi numbers and competitor comparisons need a
+> matrix I haven't published, so I don't claim them.
 
 ### Q: "Why should I trust an unsigned installer?"
 
-> Windows installers are Authenticode-signed via Azure Trusted Signing
-> when our signed CI path runs. The community path produces an unsigned
-> build with SHA256SUMS and a verify-release.ps1 script — verification
-> is one command. Android APKs are signed with our keystore; the
-> signer certificate SHA-256 is published in the README and in
-> docs/android-trust.md, and we ship `apksigner verify` instructions.
+> Windows installers are Authenticode-signed via Azure Trusted Signing on
+> the signed CI path; the community path is unsigned with SHA256SUMS and a
+> one-command verify-release.ps1. macOS community builds are unsigned
+> (right-click → Open or `xattr -cr`), notarization is tracked. Android APKs
+> are signed with our keystore; the signer cert SHA-256 is in the README
+> with `apksigner verify` steps.
 
-### Q: "What happens to my files if I lose connectivity mid-transfer?"
+### Q: "What happens if I lose connectivity mid-transfer?"
 
-> The transfer fails with a structured error (sender_offline,
-> connection_timeout, or relay_unavailable depending on phase). The
-> partial bytes stay local on the receiver; you can retry from the
-> same ticket while the sender is still online. iroh-blobs handles
-> resumable streaming; we surface that to the UI via a Retry hint when
-> the error code is marked retryable.
+> The transfer fails with a structured error (sender_offline /
+> connection_timeout / relay_unavailable by phase). Partial verified bytes
+> stay in the receiver's store, so re-pasting the same ticket resumes and
+> only fetches what's missing (iroh-blobs is content-addressed). The native
+> app surfaces a Retry hint when the error is retryable.
+
+### Q: "Isn't the whole app on an unmaintained iroh version?" (pre-empt)
+
+> This release is the iroh 1.0 migration — the browser receiver is only
+> possible on the 1.0 line, and iroh's 1.0 gives a wire-stability guarantee
+> so a v1 desktop and a v1 browser interoperate regardless of minor version.
