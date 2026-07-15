@@ -1,68 +1,92 @@
 //! Android JNI context bootstrap.
 //!
-//! tao 0.35 stopped initializing `ndk-context`, so the app installs the
-//! (`JavaVM`, application `Context`) pair itself. Kotlin `MainActivity`
-//! calls the exported `initRustAndroidContext` during `onCreate`, and every
-//! JNI bridge helper in [`super::mobile`] checks [`context_ready`] first.
-//! Without that guard, `ndk_context::android_context()` asserts on an
-//! uninitialized context — which aborts the whole app under the release
-//! profile's `panic = "abort"` (the v0.7.0 Android startup crash).
+//! `MainActivity` installs a typed process-wide `JavaVM` and application
+//! `Context` before Tauri starts. Bridge callers fail soft until this state is
+//! ready, without treating a raw global JNI reference as a local reference.
 
-use jni::objects::JObject;
 use jni::errors::LogErrorAndDefault;
-use jni::{Env, EnvUnowned};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Once;
+use jni::objects::{Global, JObject};
+use jni::sys::{jboolean, JNI_FALSE, JNI_TRUE};
+use jni::{Env, EnvUnowned, JavaVM};
+use std::sync::OnceLock;
 
-static INIT: Once = Once::new();
-static CONTEXT_READY: AtomicBool = AtomicBool::new(false);
-
-/// True once the (`JavaVM`, `Context`) pair has been installed into
-/// `ndk-context`. Bridge helpers must check this before touching
-/// `ndk_context::android_context()`, which aborts when uninitialized.
-pub(crate) fn context_ready() -> bool {
-    CONTEXT_READY.load(Ordering::Acquire)
+struct BridgeContext {
+    vm: JavaVM,
+    application: Global<JObject<'static>>,
 }
 
-/// Called once from Kotlin `MainActivity.onCreate` before Tauri spins up.
+static CONTEXT: OnceLock<BridgeContext> = OnceLock::new();
+
+/// True once the process-wide JNI bridge is ready.
+pub(crate) fn context_ready() -> bool {
+    CONTEXT.get().is_some()
+}
+
+/// Returns the process `JavaVM`, or a fail-soft error before bootstrap.
+pub(crate) fn java_vm() -> Result<JavaVM, String> {
+    CONTEXT
+        .get()
+        .map(|context| context.vm.clone())
+        .ok_or_else(|| "Android JNI context is not initialized yet".to_owned())
+}
+
+/// Creates a local reference to the process-lifetime application context.
+pub(crate) fn application_context<'local>(
+    env: &mut Env<'local>,
+) -> Result<JObject<'local>, String> {
+    let context = CONTEXT
+        .get()
+        .ok_or_else(|| "Android JNI context is not initialized yet".to_owned())?;
+    env.new_local_ref(&context.application)
+        .map_err(|error| error.to_string())
+}
+
+/// Installs the process JNI state before `MainActivity` starts Tauri.
 ///
-/// Installs the `JavaVM` pointer plus a process-lifetime global reference
-/// to the application `Context` into `ndk-context`. Errors are logged and
-/// swallowed: a failed init leaves the JNI bridge disabled (every caller
-/// fails soft through [`context_ready`]) instead of crashing startup.
+/// Returning `false` exposes bootstrap failures to Kotlin diagnostics and the
+/// emulator smoke test. A failed attempt leaves `CONTEXT` empty so a later
+/// activity creation can retry.
 #[no_mangle]
 pub extern "system" fn Java_com_lightningp2p_app_MainActivity_initRustAndroidContext<'caller>(
     mut unowned_env: EnvUnowned<'caller>,
     _this: JObject<'caller>,
-    context: JObject<'caller>,
-) {
+    application: JObject<'caller>,
+) -> jboolean {
     unowned_env
-        .with_env(|env| -> jni::errors::Result<()> {
-            INIT.call_once(|| match install_context(env, &context) {
-                Ok(()) => {
-                    CONTEXT_READY.store(true, Ordering::Release);
-                    tracing::info!("Android JNI context installed for ndk-context");
-                }
+        .with_env(|env| -> jni::errors::Result<jboolean> {
+            match install_context(env, &application) {
+                Ok(()) => Ok(JNI_TRUE),
                 Err(error) => {
                     tracing::error!(%error, "failed to install Android JNI context");
+                    Ok(JNI_FALSE)
                 }
-            });
-            Ok(())
+            }
         })
-        .resolve::<LogErrorAndDefault>();
+        .resolve::<LogErrorAndDefault>()
 }
 
-fn install_context(env: &mut Env<'_>, context: &JObject<'_>) -> jni::errors::Result<()> {
-    let vm = env.get_java_vm()?;
-    // Promote the Context to a global reference and leak it via `into_raw`:
-    // ndk-context holds the pointer for the rest of the process lifetime.
-    let context_ptr = env.new_global_ref(context)?.into_raw();
-    // SAFETY: both pointers stay valid for the process lifetime (the JavaVM
-    // by JVM contract, the Context via the leaked global ref), and the
-    // surrounding `Once` guarantees the at-most-once call that
-    // `initialize_android_context` requires.
-    unsafe {
-        ndk_context::initialize_android_context(vm.get_raw().cast(), context_ptr.cast());
+fn install_context(env: &mut Env<'_>, application: &JObject<'_>) -> Result<(), String> {
+    if CONTEXT.get().is_some() {
+        return Ok(());
     }
-    Ok(())
+    let candidate = BridgeContext {
+        vm: env.get_java_vm().map_err(|error| error.to_string())?,
+        application: env
+            .new_global_ref(application)
+            .map_err(|error| error.to_string())?,
+    };
+    let _ = CONTEXT.set(candidate);
+    context_ready()
+        .then_some(())
+        .ok_or_else(|| "Android JNI context could not be stored".to_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::context_ready;
+
+    #[test]
+    fn context_starts_uninitialized() {
+        assert!(!context_ready());
+    }
 }

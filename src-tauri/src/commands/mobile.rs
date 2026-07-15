@@ -27,14 +27,13 @@ static SCOPED_FOREGROUND_TRANSFERS: AtomicUsize = AtomicUsize::new(0);
 pub(crate) mod android {
     use jni::objects::{JClass, JObject, JObjectArray, JString, JValue};
     use jni::signature::RuntimeMethodSignature;
+    use jni::strings::JNIString;
     use jni::sys::jint;
     use jni::{jni_sig, jni_str, Env, JavaVM};
-    use jni::strings::JNIString;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     const RESOLVER_CLASS_DOTTED: &str = "com.lightningp2p.app.ContentUriResolver";
-    const FOREGROUND_SERVICE_CLASS_DOTTED: &str =
-        "com.lightningp2p.app.TransferForegroundService";
+    const FOREGROUND_SERVICE_CLASS_DOTTED: &str = "com.lightningp2p.app.TransferForegroundService";
 
     type BridgeResult<T> = Result<T, BridgeError>;
 
@@ -59,34 +58,12 @@ pub(crate) mod android {
         }
     }
 
-    /// Fail-soft readiness gate. `ndk_context::android_context()` asserts
-    /// when nothing initialized it (tao 0.35 no longer does), and under the
-    /// release profile's `panic = "abort"` that assert kills the whole app.
-    /// Returning an error here instead lets every bridge caller degrade
-    /// gracefully until `MainActivity` has run `initRustAndroidContext`.
-    fn ensure_context_ready() -> Result<(), String> {
-        if crate::commands::mobile_context::context_ready() {
-            Ok(())
-        } else {
-            Err("Android JNI context is not initialized yet".into())
-        }
-    }
-
     fn jvm() -> Result<JavaVM, String> {
-        ensure_context_ready()?;
-        let ctx = ndk_context::android_context();
-        // SAFETY: ndk-context guarantees the JavaVM pointer outlives the app.
-        Ok(unsafe { JavaVM::from_raw(ctx.vm().cast()) })
+        crate::commands::mobile_context::java_vm()
     }
 
     fn context_obj<'local>(env: &mut Env<'local>) -> BridgeResult<JObject<'local>> {
-        ensure_context_ready().map_err(BridgeError)?;
-        let ctx = ndk_context::android_context();
-        // SAFETY: ndk-context guarantees the Context jobject outlives the app.
-        let raw = ctx.context() as jni::sys::jobject;
-        let obj = unsafe { JObject::from_raw(env, raw) };
-        // Promote to a local ref so it stays alive for this JNI call frame.
-        Ok(env.new_local_ref(&obj)?)
+        crate::commands::mobile_context::application_context(env).map_err(BridgeError)
     }
 
     /// Load an app-defined class via the host activity's classloader.
@@ -358,12 +335,8 @@ pub(crate) mod android {
         let vm = jvm()?;
         vm.attach_current_thread(|env| -> BridgeResult<()> {
             let class = load_app_class(env, BLE_CLASS_DOTTED)?;
-            let raw = env.call_static_method(
-                class,
-                jni_str!("stopAdvertising"),
-                jni_sig!("()V"),
-                &[],
-            );
+            let raw =
+                env.call_static_method(class, jni_str!("stopAdvertising"), jni_sig!("()V"), &[]);
             if let Err(e) = raw {
                 return Err(drain_exception(env, &e));
             }
@@ -494,7 +467,8 @@ pub(crate) mod android {
             let class = load_app_class(env, BLE_CLASS_DOTTED)?;
             let method_name = JNIString::new(method);
             let method_sig = RuntimeMethodSignature::from_str(signature)?;
-            let raw = env.call_static_method(class, &method_name, method_sig.method_signature(), &[]);
+            let raw =
+                env.call_static_method(class, &method_name, method_sig.method_signature(), &[]);
             let result = match raw {
                 Ok(r) => r,
                 Err(e) => return Err(drain_exception(env, &e)),
@@ -510,7 +484,8 @@ pub(crate) mod android {
             let class = load_app_class(env, BLE_CLASS_DOTTED)?;
             let method_name = JNIString::new(method);
             let method_sig = RuntimeMethodSignature::from_str(signature)?;
-            let raw = env.call_static_method(class, &method_name, method_sig.method_signature(), &[]);
+            let raw =
+                env.call_static_method(class, &method_name, method_sig.method_signature(), &[]);
             let result = match raw {
                 Ok(r) => r,
                 Err(e) => return Err(drain_exception(env, &e)),

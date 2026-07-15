@@ -214,8 +214,9 @@ Run this from PowerShell with one Android phone connected over USB debugging. It
 ```powershell
 $ErrorActionPreference = "Stop"
 $adb = "$env:LocalAppData\Android\Sdk\platform-tools\adb.exe"
-$apkUrl = "https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P-android-latest.apk"
-$sumUrl = "https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/SHA256SUMS-android.txt"
+# v0.5.1 is the newest release that currently carries signed Android assets.
+$apkUrl = "https://github.com/Kerim-Sabic/lightning-p2p/releases/download/v0.5.1/LightningP2P-android-latest.apk"
+$sumUrl = "https://github.com/Kerim-Sabic/lightning-p2p/releases/download/v0.5.1/SHA256SUMS-android.txt"
 $apk = ".\LightningP2P-android-latest.apk"
 $sums = ".\SHA256SUMS-android.txt"
 $logcat = ".\lightning-p2p-launch-logcat.txt"

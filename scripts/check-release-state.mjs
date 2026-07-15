@@ -55,6 +55,11 @@ const experimentalTag = matchRequired(
   /EXPERIMENTAL_RELEASE_TAG\s*=\s*"([^"]+)"/,
   "EXPERIMENTAL_RELEASE_TAG",
 );
+const lastAndroidReleaseTag = matchRequired(
+  shareLinks,
+  /LAST_ANDROID_RELEASE_TAG\s*=\s*"([^"]+)"/,
+  "LAST_ANDROID_RELEASE_TAG",
+);
 
 assertEqual(cargoVersion, packageJson.version, "Cargo/package version");
 assertEqual(tauriConfig.version, packageJson.version, "Tauri/package version");
@@ -78,6 +83,28 @@ for (const [path, label] of [
   const text = await readText(path);
   assertIncludes(text, stableTag, label);
   assertIncludes(text, experimentalTag, label);
+}
+
+const staleAndroidApkUrl =
+  "releases/latest/download/LightningP2P-android-latest.apk";
+const staleAndroidChecksumsUrl =
+  "releases/latest/download/SHA256SUMS-android.txt";
+for (const [path, label] of [
+  ["README.md", "README"],
+  ["index.html", "source HTML metadata"],
+  ["public/llms-full.txt", "LLM context"],
+  ["scripts/build-web-metadata.mjs", "metadata generator"],
+  ["scripts/android-physical-acceptance.ps1", "Android acceptance script"],
+  ["docs/android-release-runbook.md", "Android release runbook"],
+]) {
+  const text = await readText(path);
+  assertIncludes(text, lastAndroidReleaseTag, label);
+  if (text.includes(staleAndroidApkUrl)) {
+    fail(`${label} still points the Android APK at /releases/latest.`);
+  }
+  if (text.includes(staleAndroidChecksumsUrl)) {
+    fail(`${label} still points Android checksums at /releases/latest.`);
+  }
 }
 
 if (failures.length > 0) {

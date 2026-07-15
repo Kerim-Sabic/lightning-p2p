@@ -23,12 +23,10 @@ class MainActivity : TauriActivity() {
   private var multicastLock: WifiManager.MulticastLock? = null
 
   /**
-   * Installs the (JavaVM, application Context) pair into Rust's ndk-context.
-   * tao 0.35 stopped doing this, and without it every Rust JNI bridge call
-   * aborts the app ("android context was not initialized"). Must run before
-   * any Rust code that can touch the bridge.
+   * Installs the process JavaVM and application Context into Rust's typed JNI
+   * bridge. Must run before any Rust code that can touch Android APIs.
    */
-  private external fun initRustAndroidContext(context: Context)
+  private external fun initRustAndroidContext(context: Context): Boolean
 
   override fun onCreate(savedInstanceState: Bundle?) {
     AndroidDiagnostics.install(this)
@@ -36,7 +34,12 @@ class MainActivity : TauriActivity() {
 
     try {
       safeStep("prepare Rust app data directory") { prepareRustAppDataDir() }
-      safeStep("init Rust Android context") { initRustAndroidContext(applicationContext) }
+      safeStep("init Rust Android context") {
+        check(initRustAndroidContext(applicationContext)) {
+          "Rust Android context initialization returned false"
+        }
+        AndroidDiagnostics.info(this, "Rust Android context ready")
+      }
       enableEdgeToEdge()
       super.onCreate(savedInstanceState)
       safeStep("acquire multicast lock") { acquireMulticastLock() }
@@ -59,6 +62,16 @@ class MainActivity : TauriActivity() {
     setIntent(intent)
     safeStep("handle warm share intent") { handleShareIntent(intent) }
     safeStep("handle warm NFC intent") { handleNfcIntent(intent) }
+  }
+
+  override fun onResume() {
+    super.onResume()
+    LightningBleService.attachActivity(this)
+  }
+
+  override fun onPause() {
+    LightningBleService.detachActivity(this)
+    super.onPause()
   }
 
   /**
@@ -189,6 +202,7 @@ class MainActivity : TauriActivity() {
 
   override fun onDestroy() {
     AndroidDiagnostics.info(this, "MainActivity.onDestroy")
+    LightningBleService.detachActivity(this)
     safeStep("release multicast lock") { releaseMulticastLock() }
     safeStep("stop idle foreground service") { TransferForegroundService.stop(applicationContext) }
     super.onDestroy()

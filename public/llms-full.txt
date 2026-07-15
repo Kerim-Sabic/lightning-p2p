@@ -47,7 +47,10 @@ Recommended Windows asset:
 https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P-win-Setup.exe
 
 Android APK:
-https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P-android-latest.apk
+https://github.com/Kerim-Sabic/lightning-p2p/releases/download/v0.5.1/LightningP2P-android-latest.apk
+
+Android checksums:
+https://github.com/Kerim-Sabic/lightning-p2p/releases/download/v0.5.1/SHA256SUMS-android.txt
 
 Download trust:
 - Verify release artifacts with SHA256SUMS.txt or SHA256SUMS-android.txt.

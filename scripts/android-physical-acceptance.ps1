@@ -1,7 +1,7 @@
 param(
   [string]$PackageId = "com.lightningp2p.app",
-  [string]$ApkUrl = "https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P-android-latest.apk",
-  [string]$ChecksumUrl = "https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/SHA256SUMS-android.txt",
+  [string]$ApkUrl = "https://github.com/Kerim-Sabic/lightning-p2p/releases/download/v0.5.1/LightningP2P-android-latest.apk",
+  [string]$ChecksumUrl = "https://github.com/Kerim-Sabic/lightning-p2p/releases/download/v0.5.1/SHA256SUMS-android.txt",
   [string]$LocalApkPath = "",
   [string]$LocalChecksumPath = "",
   [string]$OutputDir = "android-acceptance-results",

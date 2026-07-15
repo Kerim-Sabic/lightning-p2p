@@ -87,7 +87,6 @@ windows-sys = { version = "0.61", features = [
 
 [target.'cfg(target_os = "android")'.dependencies]
 jni = "0.22"
-ndk-context = "0.1"
 uuid = { version = "1", features = ["v4"] }
 
 [features]

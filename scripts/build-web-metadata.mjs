@@ -22,8 +22,12 @@ const releaseUrl = `${repoUrl}/releases/latest`;
 const exeDownloadUrl = `${repoUrl}/releases/latest/download/LightningP2PSetup.exe`;
 const msiDownloadUrl = `${repoUrl}/releases/latest/download/LightningP2P.msi`;
 const velopackDownloadUrl = `${repoUrl}/releases/latest/download/LightningP2P-win-Setup.exe`;
-const androidApkDownloadUrl = `${repoUrl}/releases/latest/download/LightningP2P-android-latest.apk`;
-const androidChecksumsUrl = `${repoUrl}/releases/latest/download/SHA256SUMS-android.txt`;
+// Community Windows releases can become `/releases/latest` without shipping
+// Android assets. Keep static metadata on the newest APK-bearing release.
+const lastAndroidReleaseTag = "v0.5.1";
+const androidReleaseUrl = `${repoUrl}/releases/download/${lastAndroidReleaseTag}`;
+const androidApkDownloadUrl = `${androidReleaseUrl}/LightningP2P-android-latest.apk`;
+const androidChecksumsUrl = `${androidReleaseUrl}/SHA256SUMS-android.txt`;
 const siteLogoUrl = `${siteUrl}/site-logo.png`;
 
 function escapeHtml(value) {

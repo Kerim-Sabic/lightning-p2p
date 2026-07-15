@@ -96,6 +96,21 @@ Full trust guide: [`docs/download-trust.md`](docs/download-trust.md).
 
 ---
 
+## ◆ Screenshots & product tour
+
+The animated walkthrough near the top follows the complete handoff: stage a file,
+share the ticket, connect the receiver, and finish with BLAKE3-verified bytes.
+This static view summarizes the guarantees the app keeps visible throughout
+that flow.
+
+<div align="center">
+<img src="public/web-hero.png" alt="Lightning P2P transfer overview showing direct-path QUIC, BLAKE3 verification, relay fallback, and signed releases" width="760" />
+<br />
+<sub><b>Direct first, verified end to end.</b> Relay is the encrypted fallback, not a cloud upload.</sub>
+</div>
+
+---
+
 ## ◆ How it works
 
 ```mermaid
