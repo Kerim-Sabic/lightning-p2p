@@ -46,6 +46,7 @@ $buildArgs = @(
   "build",
   "--manifest-path", "src-tauri/Cargo.toml",
   "--release",
+  "--features", "benchmark-bin",
   "--bin", "benchmark-local"
 )
 & cargo @buildArgs

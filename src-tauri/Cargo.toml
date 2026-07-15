@@ -93,10 +93,15 @@ uuid = { version = "1", features = ["v4"] }
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
 cli = ["clap"]
+# Gates the dev benchmark harness behind a feature so `tauri build` never sees
+# it as an app binary. Without this the macOS universal bundler tries to copy a
+# `benchmark-local` that was never lipo'd for the universal target and fails.
+benchmark-bin = []
 
 [[bin]]
 name = "benchmark-local"
 path = "src/bin/benchmark_local.rs"
+required-features = ["benchmark-bin"]
 
 [[bin]]
 name = "lightning-p2p-cli"

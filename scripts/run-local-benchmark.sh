@@ -48,6 +48,7 @@ echo "Step 1/2: building benchmark-local in release mode..."
 cargo build \
   --manifest-path src-tauri/Cargo.toml \
   --release \
+  --features benchmark-bin \
   --bin benchmark-local
 
 echo
