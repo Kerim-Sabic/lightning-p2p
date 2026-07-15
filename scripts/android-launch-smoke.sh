@@ -36,7 +36,7 @@ echo "Watching Android process for ${wait_seconds} seconds"
 sleep "${wait_seconds}"
 collect_android_state
 
-if grep -E 'FATAL EXCEPTION|AndroidRuntime: FATAL|SIGSEGV|signal 11|Rust panic|panicked at|Force finishing activity.*com\.lightningp2p\.app|Process com\.lightningp2p\.app.*has died' "${logcat_path}"; then
+if grep -E 'FATAL EXCEPTION|AndroidRuntime: FATAL|SIGSEGV|signal 11|Rust panic|panicked at|android context was not initialized|Force finishing activity.*com\.lightningp2p\.app|Process com\.lightningp2p\.app.*has died' "${logcat_path}"; then
   echo "::error::Fatal exception, native crash, or Rust panic during Android APK launch"
   tail -n 240 "${logcat_path}"
   exit 1

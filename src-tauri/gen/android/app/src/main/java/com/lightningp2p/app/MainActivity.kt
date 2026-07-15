@@ -22,12 +22,21 @@ import androidx.core.content.ContextCompat
 class MainActivity : TauriActivity() {
   private var multicastLock: WifiManager.MulticastLock? = null
 
+  /**
+   * Installs the (JavaVM, application Context) pair into Rust's ndk-context.
+   * tao 0.35 stopped doing this, and without it every Rust JNI bridge call
+   * aborts the app ("android context was not initialized"). Must run before
+   * any Rust code that can touch the bridge.
+   */
+  private external fun initRustAndroidContext(context: Context)
+
   override fun onCreate(savedInstanceState: Bundle?) {
     AndroidDiagnostics.install(this)
     AndroidDiagnostics.info(this, "MainActivity.onCreate start")
 
     try {
       safeStep("prepare Rust app data directory") { prepareRustAppDataDir() }
+      safeStep("init Rust Android context") { initRustAndroidContext(applicationContext) }
       enableEdgeToEdge()
       super.onCreate(savedInstanceState)
       safeStep("acquire multicast lock") { acquireMulticastLock() }
@@ -252,5 +261,13 @@ class MainActivity : TauriActivity() {
   private companion object {
     private const val MULTICAST_LOCK_TAG = "lightning-p2p-mdns"
     private const val POST_NOTIFICATIONS_REQUEST_CODE = 1001
+
+    init {
+      // Idempotent with the load in generated Rust.kt; needed here because
+      // initRustAndroidContext is called before Tauri touches the library.
+      // A load failure surfaces later as UnsatisfiedLinkError inside
+      // safeStep instead of aborting class initialization.
+      runCatching { System.loadLibrary("lightning_p2p_lib") }
+    }
   }
 }

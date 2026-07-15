@@ -16,6 +16,8 @@ pub fn command_error(error: impl Into<AppErrorPayload>) -> Box<AppErrorPayload> 
 
 pub mod diagnostics;
 pub mod mobile;
+#[cfg(target_os = "android")]
+pub mod mobile_context;
 pub mod nearby;
 pub mod peer;
 pub mod platform;

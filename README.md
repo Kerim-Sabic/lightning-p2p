@@ -39,6 +39,10 @@ Built on **Rust**, **Tauri 2**, **iroh QUIC**, **iroh-blobs**, and **BLAKE3**.
 > lands.** When NAT blocks the direct path, iroh relay carries the
 > encrypted frames — still no plaintext on any server.
 
+<div align="center">
+<img src="public/demo-lightning-p2p.gif" alt="Lightning P2P demo: drop a file, share the ticket, receiver streams verified bytes" width="720" />
+</div>
+
 ---
 
 ## ◆ What it is, what it isn't
@@ -62,7 +66,7 @@ Stable: **v0.4.6**. Experimental: **v0.7.0** (BBR congestion control, Warp mode,
 | **Windows** | [`LightningP2P-win-Setup.exe`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P-win-Setup.exe) | Stable | Most users · one-click Velopack |
 | **Windows** | [`LightningP2PSetup.exe`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2PSetup.exe) | Stable | Classic NSIS |
 | **Windows** | [`LightningP2P.msi`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P.msi) | Stable | Policy-managed deployments |
-| **Android** | [`LightningP2P-android-latest.apk`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P-android-latest.apk) | Stable | Android 10+ sideload (signed) |
+| **Android** | [`LightningP2P-android-latest.apk`](https://github.com/Kerim-Sabic/lightning-p2p/releases/download/v0.5.1/LightningP2P-android-latest.apk) | Stable v0.5.1 | Android 10+ sideload (signed) · new APK returns in v0.8.0 |
 | **Experimental** | [Release v0.7.0](https://github.com/Kerim-Sabic/lightning-p2p/releases/tag/v0.7.0) | Pre-release | BBR engine · Warp mode · swarm receive · pre-warm |
 
 <details>

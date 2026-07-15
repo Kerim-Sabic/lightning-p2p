@@ -66,9 +66,9 @@ pub async fn export_ticket(
 }
 
 /// On Android, move a single-file export from app-private staging into the
-/// public MediaStore collection that matches its MIME bucket. The original
+/// public `MediaStore` collection that matches its MIME bucket. The original
 /// staged file is deleted on successful publish. Returns a synthetic
-/// "Pictures/Lightning P2P/foo.jpg" descriptor path for UI display.
+/// `Pictures/Lightning P2P/foo.jpg` descriptor path for UI display.
 ///
 /// Folder transfers stay in app-private staging in v0.4.6; per-file publish
 /// for folders lands in a follow-up release.
@@ -121,7 +121,7 @@ async fn publish_to_public_storage(staged_path: PathBuf, recursive: bool) -> Pat
             if let Err(error) = tokio::fs::remove_file(&staged_path).await {
                 tracing::warn!(%error, path = %staged_path.display(), "could not remove staged file after MediaStore publish");
             }
-            PathBuf::from(format!("{}/Lightning P2P/{}", bucket_id, file_name))
+            PathBuf::from(format!("{bucket_id}/Lightning P2P/{file_name}"))
         }
         Ok(Err(error)) => {
             tracing::warn!(%error, "MediaStore publish failed");

@@ -89,7 +89,7 @@ pub async fn set_download_dir(
     #[cfg(any(target_os = "android", target_os = "ios"))]
     {
         let _ = (state, path);
-        return Err(command_error("Changing the download folder is not available in the mobile alpha. Receives stay in app-private storage."));
+        Err(command_error("Changing the download folder is not available in the mobile alpha. Receives stay in app-private storage."))
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -332,8 +332,7 @@ pub async fn open_download_dir(state: State<'_, AppState>) -> CommandResult<()> 
         let _ = state;
         // Android routes receives into MediaStore Downloads under a
         // "Lightning P2P" subfolder; jump there in the system file UI.
-        return crate::commands::mobile::android::open_system_folder("Downloads")
-            .map_err(command_error);
+        crate::commands::mobile::android::open_system_folder("Downloads").map_err(command_error)
     }
     #[cfg(target_os = "ios")]
     {
