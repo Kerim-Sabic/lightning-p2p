@@ -108,7 +108,7 @@ jobs:
 
       - name: Build benchmark-local
         working-directory: src-tauri
-        run: cargo build --release --bin benchmark-local
+        run: cargo build --release --features benchmark-bin --bin benchmark-local
 
       - name: Run smoke benchmark (10 MB, 3 runs)
         run: bash scripts/run-local-benchmark.sh --profile smoke --runs 3
