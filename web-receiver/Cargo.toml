@@ -1,0 +1,44 @@
+# Standalone WASM crate: the "receive in any browser" feature.
+#
+# Kept OUT of the src-tauri graph on purpose — it pins the new iroh 1.0 /
+# iroh-blobs 0.103 line (the only line with browser support) with its own
+# lockfile, so the desktop/mobile app and the browser receiver can move
+# independently. The app must also be on iroh 1.0 for a browser peer to
+# receive from it (iroh 0.91 broke the relay wire protocol), which is why
+# this ships alongside the app's iroh 1.0 migration in v0.9.0.
+#
+# Build (CI has clang for `ring`'s wasm C):
+#   cargo build --target wasm32-unknown-unknown --release
+#   wasm-bindgen --target web --out-dir ../public/webrx target/.../web_receiver.wasm
+#   wasm-opt -Os
+[package]
+name = "web-receiver"
+version = "0.9.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Lightning P2P browser receiver: fetch BLAKE3-verified blobs in-page via iroh relay."
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# iroh 1.0 compiles to wasm with relay-over-WebSocket transport (verified).
+iroh = { version = "1.0", default-features = false, features = ["tls-ring"] }
+iroh-blobs = { version = "0.103", default-features = false }
+n0-future = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+base64 = "0.22"
+tracing = "0.1"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+js-sys = "0.3"
+getrandom = { version = "0.3", features = ["wasm_js"] }
+console_error_panic_hook = "0.1"
+
+[profile.release]
+opt-level = "s"
+lto = true
