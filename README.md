@@ -11,20 +11,19 @@ Built on **Rust**, **Tauri 2**, **iroh QUIC**, **iroh-blobs**, and **BLAKE3**.
 
 <sub>◆ no upload step ◆ no account ◆ no artificial file-size cap ◆ no telemetry ◆ no cloud bucket ◆</sub>
 
+[![Stars](https://img.shields.io/github/stars/Kerim-Sabic/lightning-p2p?style=flat-square&color=f0c76b&logo=github)](https://github.com/Kerim-Sabic/lightning-p2p/stargazers)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-7ddf9c?style=flat-square)](LICENSE)
-[![Windows stable](https://img.shields.io/badge/Windows-v0.4.6_stable-7ddf9c?style=flat-square&logo=windows&logoColor=white)](https://github.com/Kerim-Sabic/lightning-p2p/releases/tag/v0.4.6)
-[![Android sideload](https://img.shields.io/badge/Android-v0.4.6_sideload-7ddf9c?style=flat-square&logo=android&logoColor=white)](https://github.com/Kerim-Sabic/lightning-p2p/releases/tag/v0.4.6)
-[![Experimental](https://img.shields.io/badge/Experimental-v0.8.0_BBR_+_Warp_+_swarm-f0c76b?style=flat-square)](https://github.com/Kerim-Sabic/lightning-p2p/releases/tag/v0.8.0)
+[![Platforms](https://img.shields.io/badge/platforms-Windows_·_macOS_·_Linux_·_Android_·_CLI-7ddf9c?style=flat-square)](#-install)
+[![Experimental](https://img.shields.io/badge/latest-v0.8.0_%22everywhere%22-f0c76b?style=flat-square)](https://github.com/Kerim-Sabic/lightning-p2p/releases/tag/v0.8.0)
 [![Rust](https://img.shields.io/badge/Rust-1.88+-f0c76b?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![Tauri 2](https://img.shields.io/badge/Tauri-2-7ddf9c?style=flat-square&logo=tauri&logoColor=white)](https://tauri.app/)
 [![iroh QUIC](https://img.shields.io/badge/iroh-QUIC_+_relay-7ddf9c?style=flat-square)](https://iroh.computer/)
 [![BLAKE3](https://img.shields.io/badge/integrity-BLAKE3-7ddf9c?style=flat-square)](https://github.com/BLAKE3-team/BLAKE3)
-[![Bundle](https://img.shields.io/badge/web_bundle-181_KB_gzip-7ddf9c?style=flat-square)](https://lightning-p2p.netlify.app/)
 
 [**Download**](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest)
 · [**Website**](https://lightning-p2p.netlify.app/)
 · [**AUDIT.md**](AUDIT.md)
-· [**Roadmap**](docs/ROADMAP_v0.5_to_v0.7.md)
+· [**Roadmap**](docs/ROADMAP.md)
 · [**Changelog**](CHANGELOG.md)
 · [**Security**](#-security-model)
 
@@ -42,6 +41,25 @@ Built on **Rust**, **Tauri 2**, **iroh QUIC**, **iroh-blobs**, and **BLAKE3**.
 <div align="center">
 <img src="public/demo-lightning-p2p.gif" alt="Lightning P2P demo: drop a file, share the ticket, receiver streams verified bytes" width="720" />
 </div>
+
+---
+
+## ◆ Why people use it
+
+|  |  |
+| --- | --- |
+| 🚀 **Direct, not uploaded** | Bytes stream peer-to-peer over QUIC. No cloud bucket, no upload wait, no retention. |
+| 🔒 **Verified every chunk** | iroh-blobs checks BLAKE3 as data lands. The receiver never has to trust the path. |
+| 🌐 **NAT-traversing** | Direct-first; iroh relay carries encrypted frames when the direct path is blocked. Still no plaintext on any server. |
+| 📦 **No account, no cap** | The ticket is the only credential. No sign-up, no artificial file-size limit, no telemetry. |
+| 🖥️ **Everywhere** | Windows, macOS, Linux, Android — plus a scriptable CLI. One Rust engine behind all of them. |
+| ⚡ **Tuned for throughput** | Six speed modes with BBR congestion control, jumbo-frame probing, and parallel swarm receive. |
+
+```bash
+# The whole thing, from a terminal:
+lightning-p2p-cli send report.pdf        # → prints a ticket to stdout
+lightning-p2p-cli receive "fd2:…" -o .   # → BLAKE3-verified into ./
+```
 
 ---
 
@@ -246,23 +264,21 @@ Read [`SECURITY.md`](SECURITY.md) · [`docs/security-model.md`](docs/security-mo
 | | Capability | Status |
 |:-:|---|---|
 | 🟢 | Windows send + receive (Tauri 2 desktop) | **Stable** |
+| 🟢 | **macOS** send + receive (universal DMG, Intel + Apple Silicon) | **Beta** v0.8.0 |
+| 🟢 | **Linux** send + receive (AppImage / deb / rpm) | **Beta** v0.8.0 |
 | 🟢 | Android send + receive (sideload APK) | **Stable** |
-| 🟢 | Android system share-target | **Stable** v0.4.6 |
-| 🟢 | Android MediaStore routing (Pictures / Movies / Music / Downloads) | **Stable** v0.4.6 |
+| 🟢 | **CLI** (`lightning-p2p-cli send`/`receive`, pipe-friendly) | **Beta** v0.8.0 |
+| 🟢 | Android system share-target + MediaStore routing | **Stable** v0.4.6 |
 | 🟢 | QR + handoff link + raw ticket | **Stable** |
 | 🟢 | Nearby Wi-Fi / LAN discovery (mDNS) | **Stable** |
 | 🟢 | iroh relay fallback when direct path is blocked | **Stable** |
-| 🟢 | Atomic single-blob writes (`.part` + rename) | **Stable** v0.5.1 |
-| 🟢 | Retry + exponential backoff on transient receive errors | **Stable** v0.5.1 |
-| 🟢 | Implicit resume across restarts (re-paste ticket) | **Stable** (iroh-blobs persistent store) |
+| 🟢 | Atomic writes + retry/backoff + implicit resume | **Stable** v0.5.1 |
 | 🟡 | Speed modes (6 profiles, BBR on Fast+) | **Experimental** v0.8.0 |
-| 🟡 | Swarm receive (parallel fetches, default-on in Extreme+, auto-fallback) | **Experimental** v0.8.0 |
+| 🟡 | Swarm receive (parallel fetches, default-on in Extreme+) | **Experimental** v0.8.0 |
 | 🟡 | Ticket pre-warming (pre-dial on paste) | **Experimental** v0.8.0 |
-| 🟡 | BLE proximity discovery (Android + Windows) | **Experimental** since v0.5.0 |
-| 🟡 | NFC ticket receive (Android) | **Experimental** since v0.5.0 |
-| ⏳ | Explicit resume UI for failed transfers | Planned v0.6 |
-| ⏳ | Phone-to-phone NFC write, macOS/Linux BLE | Roadmap |
-| ⏳ | macOS / Linux / iOS desktop builds | Roadmap |
+| 🟡 | BLE proximity discovery + NFC ticket receive | **Experimental** since v0.5.0 |
+| 🔨 | **Receive in any browser** (same Rust engine as WASM) | **In progress** v0.9.0 · [spike GO](docs/browser-receiver-spike.md) |
+| ⏳ | iOS build, phone-to-phone NFC write, macOS/Linux BLE | Roadmap |
 
 <sub>BLE and NFC **never carry file bytes** — beacons + ticket material only. Bytes always travel through iroh QUIC. Full behavior + hardware test plan: [`docs/proximity.md`](docs/proximity.md).</sub>
 
