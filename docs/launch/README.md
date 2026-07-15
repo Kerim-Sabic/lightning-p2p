@@ -19,7 +19,9 @@ benchmarks" stay held.
 
 ## Files
 
-- [`hackernews-show-hn.md`](hackernews-show-hn.md) — Show HN title, body, and three prepared replies.
+- [`PLAYBOOK.md`](PLAYBOOK.md) — **start here.** The day-by-day launch runbook, grounded in what actually moves stars.
+- [`hackernews-show-hn.md`](hackernews-show-hn.md) — Show HN (v0.9.0, browser-receiver headline), title, body, prepared replies.
+- [`reddit-rust-v0.8-rehearsal.md`](reddit-rust-v0.8-rehearsal.md) — **post now.** Low-key r/rust progress post for v0.8.0; the launch rehearsal.
 - [`reddit-rust.md`](reddit-rust.md) — r/rust angle.
 - [`reddit-opensource.md`](reddit-opensource.md) — r/opensource angle.
 - [`reddit-selfhosted.md`](reddit-selfhosted.md) — r/selfhosted angle.
@@ -27,6 +29,11 @@ benchmarks" stay held.
 - [`twitter-thread.md`](twitter-thread.md) — six-tweet thread.
 - [`producthunt.md`](producthunt.md) — Product Hunt title, tagline, description, first comment.
 - [`linkedin.md`](linkedin.md) — single long-form post.
+
+## Sequence
+
+1. **Now (v0.8.0 out):** post `reddit-rust-v0.8-rehearsal.md` to r/rust. Rehearsal + early issues.
+2. **After v0.9.0 (browser receiver live):** run `PLAYBOOK.md` — Show HN is the D-0 lever.
 
 ## Posting checklist
 
@@ -51,7 +58,8 @@ benchmarks" stay held.
 Have honest answers prepared for:
 
 - "How is this different from LocalSend / PairDrop / Croc / Magic Wormhole?"
-- "Why no macOS / Linux / iOS yet?"
+- "If it's in the browser, where do the bytes actually go?" (relay-only, no HTTP server)
+- "Why no iOS yet?" (macOS + Linux now ship; iOS is roadmap)
 - "Why should I trust the signed installer?"
 - "Where is the benchmark data?"
 - "Is the sender required to stay online?"
