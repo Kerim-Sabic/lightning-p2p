@@ -9,8 +9,15 @@ export const RECEIVE_PATH = "/receive";
 export const VELOPACK_DOWNLOAD_URL = `${RELEASE_URL}/download/LightningP2P-win-Setup.exe`;
 export const NSIS_DOWNLOAD_URL = `${RELEASE_URL}/download/LightningP2PSetup.exe`;
 export const MSI_DOWNLOAD_URL = `${RELEASE_URL}/download/LightningP2P.msi`;
-export const ANDROID_APK_DOWNLOAD_URL = `${RELEASE_URL}/download/LightningP2P-android-latest.apk`;
-export const ANDROID_CHECKSUMS_URL = `${RELEASE_URL}/download/SHA256SUMS-android.txt`;
+/**
+ * Last release tag that actually shipped Android artifacts. Community
+ * (unsigned) Windows releases skip the Android job, so `/releases/latest`
+ * would 404 for the APK; pin to the newest APK-bearing tag instead and bump
+ * this constant whenever a new signed Android release lands.
+ */
+export const LAST_ANDROID_RELEASE_TAG = "v0.5.1";
+export const ANDROID_APK_DOWNLOAD_URL = `${REPO_URL}/releases/download/${LAST_ANDROID_RELEASE_TAG}/LightningP2P-android-latest.apk`;
+export const ANDROID_CHECKSUMS_URL = `${REPO_URL}/releases/download/${LAST_ANDROID_RELEASE_TAG}/SHA256SUMS-android.txt`;
 
 export function versionedNsisDownloadUrl(version: string): string {
   return `${RELEASE_URL}/download/Lightning.P2P_${version}_x64-setup.exe`;

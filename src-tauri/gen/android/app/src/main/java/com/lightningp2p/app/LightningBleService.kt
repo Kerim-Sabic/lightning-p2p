@@ -23,6 +23,7 @@ import android.util.Log
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import java.io.ByteArrayOutputStream
+import java.lang.ref.WeakReference
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
@@ -61,6 +62,9 @@ object LightningBleService {
     private var permissionRequestIssued = false
 
     @Volatile
+    private var activityRef: WeakReference<Activity>? = null
+
+    @Volatile
     private var lastError: String? = null
 
     /** full-node-id-hex -> last-seen epoch millis. */
@@ -73,6 +77,22 @@ object LightningBleService {
             if (advertising && advertisePayloads.isNotEmpty()) {
                 advertiseHandler.postDelayed(this, ROTATION_MS)
             }
+        }
+    }
+
+    /** Keeps a non-owning reference to the resumed activity for permission prompts. */
+    @JvmStatic
+    @Synchronized
+    fun attachActivity(activity: Activity) {
+        activityRef = WeakReference(activity)
+    }
+
+    /** Drops the permission host without retaining a destroyed activity. */
+    @JvmStatic
+    @Synchronized
+    fun detachActivity(activity: Activity) {
+        if (activityRef?.get() === activity) {
+            activityRef = null
         }
     }
 
@@ -330,8 +350,11 @@ object LightningBleService {
 
     private fun ensureRuntimePermissions(context: Context): Boolean {
         val required = requiredBlePermissions()
-        if (hasRequiredPermissions(context, required)) return true
-        requestRuntimePermissions(context, required)
+        if (hasRequiredPermissions(context, required)) {
+            permissionRequestIssued = false
+            return true
+        }
+        requestRuntimePermissions(required)
         return false
     }
 
@@ -359,15 +382,28 @@ object LightningBleService {
         }
     }
 
-    private fun requestRuntimePermissions(context: Context, permissions: Array<String>) {
-        if (permissions.isEmpty()) return
-        permissionRequestIssued = true
-        val activity = context as? Activity
-        if (activity == null) {
-            fail("BLE permissions are not granted and cannot be requested from this context")
+    private fun requestRuntimePermissions(permissions: Array<String>) {
+        if (permissions.isEmpty() || permissionRequestIssued) return
+        val activity = activityRef?.get()
+        if (activity == null || activity.isFinishing || activity.isDestroyed) {
+            fail("BLE permissions cannot be requested without an active Activity")
             return
         }
-        ActivityCompat.requestPermissions(activity, permissions, PERMISSION_REQUEST_CODE)
+        permissionRequestIssued = true
+        activity.runOnUiThread {
+            val currentActivity = activityRef?.get()
+            if (currentActivity !== activity || activity.isFinishing || activity.isDestroyed) {
+                permissionRequestIssued = false
+                fail("BLE permission request lost its active Activity")
+                return@runOnUiThread
+            }
+            try {
+                ActivityCompat.requestPermissions(activity, permissions, PERMISSION_REQUEST_CODE)
+            } catch (error: Throwable) {
+                permissionRequestIssued = false
+                fail("BLE permission request failed: ${error.message}")
+            }
+        }
         fail("BLE permission is required. Grant Nearby devices, then enable discovery again.")
     }
 

@@ -36,7 +36,7 @@ echo "Watching Android process for ${wait_seconds} seconds"
 sleep "${wait_seconds}"
 collect_android_state
 
-if grep -E 'FATAL EXCEPTION|AndroidRuntime: FATAL|SIGSEGV|signal 11|Rust panic|panicked at|Force finishing activity.*com\.lightningp2p\.app|Process com\.lightningp2p\.app.*has died' "${logcat_path}"; then
+if grep -E 'FATAL EXCEPTION|AndroidRuntime: FATAL|SIGSEGV|signal 11|Rust panic|panicked at|android context was not initialized|Android JNI context is not initialized|failed to install Android JNI context|Android startup step failed: init Rust Android context|Force finishing activity.*com\.lightningp2p\.app|Process com\.lightningp2p\.app.*has died' "${logcat_path}"; then
   echo "::error::Fatal exception, native crash, or Rust panic during Android APK launch"
   tail -n 240 "${logcat_path}"
   exit 1
@@ -51,6 +51,12 @@ fi
 if ! grep -Fq "${main_activity}" "${activities_path}"; then
   echo "::error::${main_activity} is not in the activity stack after launch"
   head -n 120 "${activities_path}"
+  exit 1
+fi
+
+if ! grep -Fq 'Android JNI bootstrap verified' "${logcat_path}"; then
+  echo "::error::Android JNI bootstrap was not verified end to end"
+  tail -n 240 "${logcat_path}"
   exit 1
 fi
 

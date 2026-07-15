@@ -22,12 +22,24 @@ import androidx.core.content.ContextCompat
 class MainActivity : TauriActivity() {
   private var multicastLock: WifiManager.MulticastLock? = null
 
+  /**
+   * Installs the process JavaVM and application Context into Rust's typed JNI
+   * bridge. Must run before any Rust code that can touch Android APIs.
+   */
+  private external fun initRustAndroidContext(context: Context): Boolean
+
   override fun onCreate(savedInstanceState: Bundle?) {
     AndroidDiagnostics.install(this)
     AndroidDiagnostics.info(this, "MainActivity.onCreate start")
 
     try {
       safeStep("prepare Rust app data directory") { prepareRustAppDataDir() }
+      safeStep("init Rust Android context") {
+        check(initRustAndroidContext(applicationContext)) {
+          "Rust Android context initialization returned false"
+        }
+        AndroidDiagnostics.info(this, "Rust Android context ready")
+      }
       enableEdgeToEdge()
       super.onCreate(savedInstanceState)
       safeStep("acquire multicast lock") { acquireMulticastLock() }
@@ -50,6 +62,16 @@ class MainActivity : TauriActivity() {
     setIntent(intent)
     safeStep("handle warm share intent") { handleShareIntent(intent) }
     safeStep("handle warm NFC intent") { handleNfcIntent(intent) }
+  }
+
+  override fun onResume() {
+    super.onResume()
+    LightningBleService.attachActivity(this)
+  }
+
+  override fun onPause() {
+    LightningBleService.detachActivity(this)
+    super.onPause()
   }
 
   /**
@@ -180,6 +202,7 @@ class MainActivity : TauriActivity() {
 
   override fun onDestroy() {
     AndroidDiagnostics.info(this, "MainActivity.onDestroy")
+    LightningBleService.detachActivity(this)
     safeStep("release multicast lock") { releaseMulticastLock() }
     safeStep("stop idle foreground service") { TransferForegroundService.stop(applicationContext) }
     super.onDestroy()
@@ -252,5 +275,13 @@ class MainActivity : TauriActivity() {
   private companion object {
     private const val MULTICAST_LOCK_TAG = "lightning-p2p-mdns"
     private const val POST_NOTIFICATIONS_REQUEST_CODE = 1001
+
+    init {
+      // Idempotent with the load in generated Rust.kt; needed here because
+      // initRustAndroidContext is called before Tauri touches the library.
+      // A load failure surfaces later as UnsatisfiedLinkError inside
+      // safeStep instead of aborting class initialization.
+      runCatching { System.loadLibrary("lightning_p2p_lib") }
+    }
   }
 }

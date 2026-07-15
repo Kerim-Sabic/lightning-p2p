@@ -369,8 +369,12 @@ jobs:
           if (-not $msi) { throw "MSI installer was not found." }
           if (-not $velopackSetup) { throw "Velopack setup artifact was not found." }
 
-          Copy-Item -LiteralPath $nsis.FullName -Destination (Join-Path $stage $nsis.Name) -Force
-          Copy-Item -LiteralPath $msi.FullName -Destination (Join-Path $stage $msi.Name) -Force
+          # GitHub release asset names normalize spaces to dots. Stage the
+          # exact public names so SHA256SUMS.txt remains directly checkable.
+          $nsisAssetName = $nsis.Name.Replace(" ", ".")
+          $msiAssetName = $msi.Name.Replace(" ", ".")
+          Copy-Item -LiteralPath $nsis.FullName -Destination (Join-Path $stage $nsisAssetName) -Force
+          Copy-Item -LiteralPath $msi.FullName -Destination (Join-Path $stage $msiAssetName) -Force
           Copy-Item -LiteralPath (Join-Path $bundleRoot "LightningP2PSetup.exe") -Destination (Join-Path $stage "LightningP2PSetup.exe") -Force
           Copy-Item -LiteralPath (Join-Path $bundleRoot "LightningP2P.msi") -Destination (Join-Path $stage "LightningP2P.msi") -Force
           Copy-Item -LiteralPath $velopackSetup.FullName -Destination (Join-Path $stage "LightningP2P-win-Setup.exe") -Force
@@ -564,9 +568,9 @@ jobs:
             | File | Description |
             |------|-------------|
             | `LightningP2P-win-Setup.exe` | Recommended Velopack installer (one-click, per-user install, delta-update ready) |
-            | `Lightning P2P_${{ env.APP_VERSION }}_x64-setup.exe` | Classic NSIS installer with Tauri updater metadata |
+            | `Lightning.P2P_${{ env.APP_VERSION }}_x64-setup.exe` | Classic NSIS installer with Tauri updater metadata |
             | `LightningP2PSetup.exe` | Stable alias for the latest NSIS installer |
-            | `Lightning P2P_${{ env.APP_VERSION }}_x64_en-US.msi` | Windows MSI installer (managed environments) |
+            | `Lightning.P2P_${{ env.APP_VERSION }}_x64_en-US.msi` | Windows MSI installer (managed environments) |
             | `LightningP2P.msi` | Stable alias for the latest MSI installer |
             | winget manifest | Planned; publish after the package is accepted in `microsoft/winget-pkgs` |
 
@@ -752,7 +756,9 @@ jobs:
 
           $lines = foreach ($file in $files) {
             $hash = (Get-FileHash -Path $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-            "$hash  $($file.Name)"
+            # GitHub normalizes spaces in uploaded release asset names to dots.
+            $assetName = $file.Name.Replace(" ", ".")
+            "$hash  $assetName"
           }
 
           $lines | Set-Content -Path $checksumPath -Encoding utf8
@@ -940,11 +946,9 @@ jobs:
 
   android-emulator-smoke:
     name: Android emulator launch smoke
-    # Only run on push to main and tagged releases — the emulator boot adds
-    # ~10 minutes and would slow PR iteration. PRs still get build verification
-    # via android-package; this catches "release APK launches" regressions
-    # before they reach a tag.
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    # JNI/bootstrap failures can survive a successful package build, so launch
+    # the release-shaped APK on PRs as well as main and tagged releases.
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')))
     runs-on: ubuntu-latest
     needs: [android-package]
     steps:

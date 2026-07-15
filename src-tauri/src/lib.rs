@@ -105,10 +105,12 @@ fn sweep_mobile_staging_cache() {
         tauri::async_runtime::spawn_blocking(|| {
             let cutoff = commands::mobile::android::epoch_ms_24h_ago();
             match commands::mobile::android::sweep_staging_older_than(cutoff) {
-                Ok(removed) if removed > 0 => {
-                    tracing::info!(removed, "swept stale shared-staging cache entries");
+                Ok(removed) => {
+                    tracing::info!(removed, "Android JNI bootstrap verified");
+                    if removed > 0 {
+                        tracing::info!(removed, "swept stale shared-staging cache entries");
+                    }
                 }
-                Ok(_) => {}
                 Err(error) => tracing::warn!(%error, "shared-staging cleanup failed"),
             }
         });

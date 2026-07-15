@@ -27,14 +27,13 @@ static SCOPED_FOREGROUND_TRANSFERS: AtomicUsize = AtomicUsize::new(0);
 pub(crate) mod android {
     use jni::objects::{JClass, JObject, JObjectArray, JString, JValue};
     use jni::signature::RuntimeMethodSignature;
+    use jni::strings::JNIString;
     use jni::sys::jint;
     use jni::{jni_sig, jni_str, Env, JavaVM};
-    use jni::strings::JNIString;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     const RESOLVER_CLASS_DOTTED: &str = "com.lightningp2p.app.ContentUriResolver";
-    const FOREGROUND_SERVICE_CLASS_DOTTED: &str =
-        "com.lightningp2p.app.TransferForegroundService";
+    const FOREGROUND_SERVICE_CLASS_DOTTED: &str = "com.lightningp2p.app.TransferForegroundService";
 
     type BridgeResult<T> = Result<T, BridgeError>;
 
@@ -60,18 +59,11 @@ pub(crate) mod android {
     }
 
     fn jvm() -> Result<JavaVM, String> {
-        let ctx = ndk_context::android_context();
-        // SAFETY: ndk-context guarantees the JavaVM pointer outlives the app.
-        Ok(unsafe { JavaVM::from_raw(ctx.vm().cast()) })
+        crate::commands::mobile_context::java_vm()
     }
 
     fn context_obj<'local>(env: &mut Env<'local>) -> BridgeResult<JObject<'local>> {
-        let ctx = ndk_context::android_context();
-        // SAFETY: ndk-context guarantees the Context jobject outlives the app.
-        let raw = ctx.context() as jni::sys::jobject;
-        let obj = unsafe { JObject::from_raw(env, raw) };
-        // Promote to a local ref so it stays alive for this JNI call frame.
-        Ok(env.new_local_ref(&obj)?)
+        crate::commands::mobile_context::application_context(env).map_err(BridgeError)
     }
 
     /// Load an app-defined class via the host activity's classloader.
@@ -124,7 +116,7 @@ pub(crate) mod android {
 
     fn jstring_array_to_vec(
         env: &mut Env<'_>,
-        array: JObjectArray<'_, JString<'_>>,
+        array: &JObjectArray<'_, JString<'_>>,
     ) -> BridgeResult<Vec<String>> {
         let len = array.len(env)?;
         let mut out = Vec::with_capacity(len);
@@ -137,8 +129,8 @@ pub(crate) mod android {
 
     /// Clear any pending Java exception so it does not crash the host
     /// thread on return, and return its string description.
-    fn drain_exception(env: &mut Env<'_>, err: jni::errors::Error) -> BridgeError {
-        let _ = env.exception_clear();
+    fn drain_exception(env: &mut Env<'_>, err: &jni::errors::Error) -> BridgeError {
+        env.exception_clear();
         BridgeError(err.to_string())
     }
 
@@ -159,12 +151,12 @@ pub(crate) mod android {
             );
             let result = match raw {
                 Ok(r) => r,
-                Err(e) => return Err(drain_exception(env, e)),
+                Err(e) => return Err(drain_exception(env, &e)),
             };
             let obj = result.l().map_err(BridgeError::from)?;
             let array_out: JObjectArray<'_, JString<'_>> =
                 env.cast_local::<JObjectArray<JString>>(obj)?;
-            jstring_array_to_vec(env, array_out)
+            jstring_array_to_vec(env, &array_out)
         })
         .map_err(|e| e.to_string())
     }
@@ -186,7 +178,7 @@ pub(crate) mod android {
                 &[JValue::Object(&context), JValue::Int(count)],
             );
             if let Err(e) = raw {
-                return Err(drain_exception(env, e));
+                return Err(drain_exception(env, &e));
             }
             Ok(())
         })
@@ -221,7 +213,7 @@ pub(crate) mod android {
             );
             let result = match raw {
                 Ok(r) => r,
-                Err(e) => return Err(drain_exception(env, e)),
+                Err(e) => return Err(drain_exception(env, &e)),
             };
             let obj = result.l().map_err(BridgeError::from)?;
             let jstr: JString<'_> = env.cast_local::<JString>(obj)?;
@@ -242,12 +234,12 @@ pub(crate) mod android {
             );
             let result = match raw {
                 Ok(r) => r,
-                Err(e) => return Err(drain_exception(env, e)),
+                Err(e) => return Err(drain_exception(env, &e)),
             };
             let obj = result.l().map_err(BridgeError::from)?;
             let array_out: JObjectArray<'_, JString<'_>> =
                 env.cast_local::<JObjectArray<JString>>(obj)?;
-            jstring_array_to_vec(env, array_out)
+            jstring_array_to_vec(env, &array_out)
         })
         .map_err(|e| e.to_string())
     }
@@ -265,7 +257,7 @@ pub(crate) mod android {
                 &[JValue::Object(&context), JValue::Object(&bucket_j)],
             );
             if let Err(e) = raw {
-                return Err(drain_exception(env, e));
+                return Err(drain_exception(env, &e));
             }
             Ok(())
         })
@@ -289,9 +281,9 @@ pub(crate) mod android {
             );
             let result = match raw {
                 Ok(r) => r,
-                Err(e) => return Err(drain_exception(env, e)),
+                Err(e) => return Err(drain_exception(env, &e)),
             };
-            Ok(result.i().map_err(BridgeError::from)?)
+            result.i().map_err(BridgeError::from)
         })
         .map_err(|e| e.to_string())
     }
@@ -310,7 +302,7 @@ pub(crate) mod android {
             );
             let result = match raw {
                 Ok(r) => r,
-                Err(e) => return Err(drain_exception(env, e)),
+                Err(e) => return Err(drain_exception(env, &e)),
             };
             let obj = result.l().map_err(BridgeError::from)?;
             optional_jstring(env, obj)
@@ -332,9 +324,9 @@ pub(crate) mod android {
             );
             let result = match raw {
                 Ok(r) => r,
-                Err(e) => return Err(drain_exception(env, e)),
+                Err(e) => return Err(drain_exception(env, &e)),
             };
-            Ok(result.z().map_err(BridgeError::from)?)
+            result.z().map_err(BridgeError::from)
         })
         .map_err(|e| e.to_string())
     }
@@ -343,14 +335,10 @@ pub(crate) mod android {
         let vm = jvm()?;
         vm.attach_current_thread(|env| -> BridgeResult<()> {
             let class = load_app_class(env, BLE_CLASS_DOTTED)?;
-            let raw = env.call_static_method(
-                class,
-                jni_str!("stopAdvertising"),
-                jni_sig!("()V"),
-                &[],
-            );
+            let raw =
+                env.call_static_method(class, jni_str!("stopAdvertising"), jni_sig!("()V"), &[]);
             if let Err(e) = raw {
-                return Err(drain_exception(env, e));
+                return Err(drain_exception(env, &e));
             }
             Ok(())
         })
@@ -370,9 +358,9 @@ pub(crate) mod android {
             );
             let result = match raw {
                 Ok(r) => r,
-                Err(e) => return Err(drain_exception(env, e)),
+                Err(e) => return Err(drain_exception(env, &e)),
             };
-            Ok(result.z().map_err(BridgeError::from)?)
+            result.z().map_err(BridgeError::from)
         })
         .map_err(|e| e.to_string())
     }
@@ -383,7 +371,7 @@ pub(crate) mod android {
             let class = load_app_class(env, BLE_CLASS_DOTTED)?;
             let raw = env.call_static_method(class, jni_str!("stopScan"), jni_sig!("()V"), &[]);
             if let Err(e) = raw {
-                return Err(drain_exception(env, e));
+                return Err(drain_exception(env, &e));
             }
             Ok(())
         })
@@ -403,12 +391,12 @@ pub(crate) mod android {
             );
             let result = match raw {
                 Ok(r) => r,
-                Err(e) => return Err(drain_exception(env, e)),
+                Err(e) => return Err(drain_exception(env, &e)),
             };
             let obj = result.l().map_err(BridgeError::from)?;
             let arr: JObjectArray<'_, JString<'_>> =
                 env.cast_local::<JObjectArray<JString>>(obj)?;
-            let flat = jstring_array_to_vec(env, arr)?;
+            let flat = jstring_array_to_vec(env, &arr)?;
             let mut pairs = Vec::with_capacity(flat.len() / 2);
             let mut iter = flat.into_iter();
             while let (Some(hex), Some(ts)) = (iter.next(), iter.next()) {
@@ -466,7 +454,7 @@ pub(crate) mod android {
             );
             let result = match raw {
                 Ok(r) => r,
-                Err(e) => return Err(drain_exception(env, e)),
+                Err(e) => return Err(drain_exception(env, &e)),
             };
             optional_jstring(env, result.l().map_err(BridgeError::from)?)
         })
@@ -479,10 +467,11 @@ pub(crate) mod android {
             let class = load_app_class(env, BLE_CLASS_DOTTED)?;
             let method_name = JNIString::new(method);
             let method_sig = RuntimeMethodSignature::from_str(signature)?;
-            let raw = env.call_static_method(class, &method_name, method_sig.method_signature(), &[]);
+            let raw =
+                env.call_static_method(class, &method_name, method_sig.method_signature(), &[]);
             let result = match raw {
                 Ok(r) => r,
-                Err(e) => return Err(drain_exception(env, e)),
+                Err(e) => return Err(drain_exception(env, &e)),
             };
             optional_jstring(env, result.l().map_err(BridgeError::from)?)
         })
@@ -495,12 +484,13 @@ pub(crate) mod android {
             let class = load_app_class(env, BLE_CLASS_DOTTED)?;
             let method_name = JNIString::new(method);
             let method_sig = RuntimeMethodSignature::from_str(signature)?;
-            let raw = env.call_static_method(class, &method_name, method_sig.method_signature(), &[]);
+            let raw =
+                env.call_static_method(class, &method_name, method_sig.method_signature(), &[]);
             let result = match raw {
                 Ok(r) => r,
-                Err(e) => return Err(drain_exception(env, e)),
+                Err(e) => return Err(drain_exception(env, &e)),
             };
-            Ok(result.z().map_err(BridgeError::from)?)
+            result.z().map_err(BridgeError::from)
         })
         .map_err(|e| e.to_string())
     }
@@ -515,11 +505,10 @@ pub(crate) mod android {
 
     /// Wall-clock epoch (ms) for a "older than 24h" cutoff used at app boot.
     pub fn epoch_ms_24h_ago() -> u128 {
+        const DAY_MS: u128 = 24 * 60 * 60 * 1000;
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_millis())
-            .unwrap_or(0);
-        const DAY_MS: u128 = 24 * 60 * 60 * 1000;
+            .map_or(0, |d| d.as_millis());
         now.saturating_sub(DAY_MS)
     }
 }
@@ -539,7 +528,7 @@ impl TransferForegroundGuard {
         {
             SCOPED_FOREGROUND_TRANSFERS.fetch_add(1, Ordering::SeqCst);
             refresh_transfer_foreground_count();
-            return Self { active: true };
+            Self { active: true }
         }
         #[cfg(not(target_os = "android"))]
         {

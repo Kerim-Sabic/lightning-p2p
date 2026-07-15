@@ -380,7 +380,7 @@ async fn build_ble_status(state: &AppState) -> BleDiscoveryStatus {
 
     #[cfg(target_os = "android")]
     {
-        return BleDiscoveryStatus {
+        BleDiscoveryStatus {
             supported,
             enabled,
             permission_state: ble_permission_state(),
@@ -390,7 +390,7 @@ async fn build_ble_status(state: &AppState) -> BleDiscoveryStatus {
             last_error: crate::commands::mobile::android::ble_last_error()
                 .ok()
                 .flatten(),
-        };
+        }
     }
 
     #[cfg(windows)]

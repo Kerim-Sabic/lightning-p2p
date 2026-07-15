@@ -394,7 +394,7 @@ fn android_device_name() -> Option<String> {
             {
                 Some(mdl)
             } else {
-                Some(mdl)
+                Some(format!("{mfr} {mdl}"))
             }
         }
         (None, Some(mdl)) => Some(mdl),
@@ -419,7 +419,8 @@ fn read_android_property(name: &str) -> Option<String> {
     if len <= 0 {
         return None;
     }
-    let trimmed = &buf[..len as usize];
+    let len = usize::try_from(len).ok()?;
+    let trimmed = &buf[..len];
     let value = std::str::from_utf8(trimmed).ok()?.trim().to_string();
     if value.is_empty() {
         None

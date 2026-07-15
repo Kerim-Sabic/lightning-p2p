@@ -4,9 +4,15 @@ All notable changes to Lightning P2P are documented here. The project follows se
 
 ## [Unreleased]
 
+### Fixed
+
+- **Android startup crash**: tao 0.35 stopped initializing `ndk-context`, so the first Rust JNI bridge call (the deferred staging-cache sweep) hit an assert and aborted the app under `panic = "abort"`. `MainActivity` now installs a typed, process-wide JavaVM and application Context via `initRustAndroidContext`; bridge helpers create valid local references and fail soft until bootstrap completes. CI launches the release-shaped APK on an emulator and requires a positive end-to-end JNI marker.
+- Android download links no longer 404: community (unsigned) releases skip the Android build, so `/releases/latest` had no APK. Links are pinned to the newest APK-bearing release (v0.5.1) until the signed Android pipeline returns in v0.8.0.
+- Latent device-name bug exposed by clippy: manufacturer-prefixed Android model names ("Samsung SM-G991U") were never produced because both branches returned the bare model.
+
 ### Changed
 
-- Nothing yet.
+- README now leads with the animated product demo; the whole Android-only code path is clippy-pedantic clean for the first time (18 findings fixed — CI's Linux clippy never compiles `cfg(target_os = "android")` code, so these had accumulated silently).
 
 ## [0.7.0] - 2026-07-02 ("the warp drive")
 
