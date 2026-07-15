@@ -31,6 +31,13 @@ This roadmap is deliberately conservative. Do not publish speed, platform, secur
 - NFC receive handling only carries ticket material.
 - Physical-device validation is required before these features move into a stable release.
 
+### v0.8.0 - Everywhere release
+
+- macOS (universal DMG) and Linux (AppImage/deb/rpm) community builds, unsigned with documented Gatekeeper steps.
+- `lightning-p2p-cli`: send/receive from the terminal; tickets byte-identical to app tickets, stdout stays pipe-clean.
+- Signed Android APK returns, carrying the v0.7.x startup-crash fix.
+- macOS/Linux hardware validation of transfers is community-assisted until maintainer hardware exists.
+
 ### v0.7.0 - Speed engine pre-release
 
 - BBR congestion control on Fast, Extreme, LAN Beast, and the new Warp mode (evidence: upstream iroh measured CUBIC far below BBR on real paths).

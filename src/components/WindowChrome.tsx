@@ -48,6 +48,10 @@ function viewLabel(view: View): string {
 
 export function WindowChrome({ currentView }: WindowChromeProps) {
   const desktopRuntime = isDesktopRuntime();
+  const platformProfile = useTransferStore((state) => state.platformProfile);
+  // macOS renders native traffic lights over the top-left of the overlay
+  // title bar, so inset the brand block and skip the custom controls.
+  const isMac = platformProfile.platform_kind === "macos";
   const nodeStatus = useTransferStore((state) => state.nodeStatus);
   const activeTransferCount = useTransferStore(
     (state) =>
@@ -114,7 +118,7 @@ export function WindowChrome({ currentView }: WindowChromeProps) {
 
   return (
     <header
-      className={`window-chrome ${windowState.focused ? "opacity-100" : "opacity-90"}`}
+      className={`window-chrome ${windowState.focused ? "opacity-100" : "opacity-90"} ${isMac ? "pl-20" : ""}`}
     >
       <div className="flex min-w-0 items-center gap-3">
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[16px] border border-white/[0.08] bg-white/[0.03]">
@@ -157,7 +161,7 @@ export function WindowChrome({ currentView }: WindowChromeProps) {
         </div>
       </div>
 
-      {desktopRuntime ? (
+      {desktopRuntime && !isMac ? (
         <div className="ml-4 flex items-center gap-1">
           <button
             onClick={() => void runWindowAction(() => minimizeDesktopWindow())}

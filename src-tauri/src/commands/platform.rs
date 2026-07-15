@@ -264,7 +264,9 @@ fn capabilities(platform_kind: NativePlatformKind) -> PlatformCapabilities {
         // configured user folder.
         public_downloads_export: public_storage || android,
         smart_routing: android,
-        auto_update: desktop,
+        // Tauri-updater artifacts (latest.json + signatures) are published
+        // for Windows only; community macOS/Linux builds update manually.
+        auto_update: windows,
         deep_link_receive: windows || android,
         web_handoff_receive: windows || android,
         background_transfer: false,

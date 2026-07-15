@@ -228,7 +228,10 @@ export function SettingsView() {
   const nativeRuntime = isDesktopRuntime();
   const mobileRuntime = isMobileRuntime();
   const desktopStorageControlsEnabled = nativeRuntime && !mobileRuntime;
-  const desktopUpdateControlsEnabled = nativeRuntime && !mobileRuntime;
+  // Community macOS/Linux builds ship without updater artifacts, so the
+  // backend capability (Windows-only) gates the whole update UI.
+  const desktopUpdateControlsEnabled =
+    nativeRuntime && !mobileRuntime && platformProfile.capabilities.auto_update;
   const [customRelayUrl, setCustomRelayUrlInput] = useState("");
   const [diagnosticsState, setDiagnosticsState] = useState<
     "idle" | "copied" | "error"

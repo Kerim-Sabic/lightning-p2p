@@ -1,6 +1,6 @@
 [package]
 name = "lightning-p2p"
-version = "0.7.0"
+version = "0.8.0"
 edition = "2021"
 rust-version = "1.88"
 default-run = "lightning-p2p"
@@ -97,6 +97,11 @@ cli = ["clap"]
 [[bin]]
 name = "benchmark-local"
 path = "src/bin/benchmark_local.rs"
+
+[[bin]]
+name = "lightning-p2p-cli"
+path = "src/bin/cli.rs"
+required-features = ["cli"]
 
 [[bench]]
 name = "transfer_bench"
