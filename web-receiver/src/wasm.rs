@@ -3,6 +3,7 @@
 //! Kept thin on purpose: it adapts the [`Receiver`](crate::Receiver) engine to
 //! JS types (strings, `Uint8Array`, JSON). All transfer logic stays in Rust.
 
+use crate::sender::Sharer;
 use crate::Receiver;
 use iroh_blobs::Hash;
 use std::str::FromStr;
@@ -82,5 +83,45 @@ impl WebReceiver {
         let hash = Hash::from_str(&hash_hex).map_err(|e| JsError::new(&e.to_string()))?;
         let bytes = self.inner.read_bytes(hash).await.map_err(|e| JsError::new(&e))?;
         Ok(js_sys::Uint8Array::from(bytes.as_slice()))
+    }
+}
+
+/// A live browser share exposed to JS: stage files, then publish a ticket.
+/// The tab must stay open while peers download.
+#[wasm_bindgen]
+pub struct WebSender {
+    inner: Sharer,
+}
+
+#[wasm_bindgen]
+impl WebSender {
+    /// Binds the endpoint and starts accepting iroh-blobs requests.
+    #[wasm_bindgen]
+    pub async fn spawn() -> Result<WebSender, JsError> {
+        let inner = Sharer::spawn().await.map_err(|e| JsError::new(&e))?;
+        Ok(Self { inner })
+    }
+
+    /// Stages one file's bytes under `name`.
+    #[wasm_bindgen]
+    pub async fn add_file(&mut self, name: String, bytes: js_sys::Uint8Array) -> Result<(), JsError> {
+        self.inner
+            .add_file(name, bytes.to_vec())
+            .await
+            .map_err(|e| JsError::new(&e))
+    }
+
+    /// Total bytes staged so far, for the UI's size gate.
+    #[wasm_bindgen]
+    pub fn staged_bytes(&self) -> f64 {
+        // f64 keeps JS ergonomics; exact for anything a tab can hold.
+        self.inner.staged_bytes() as f64
+    }
+
+    /// Publishes the staged files and returns the `fd2:` ticket string.
+    /// Waits for relay reachability, so the returned ticket dials.
+    #[wasm_bindgen]
+    pub async fn publish(&mut self, label: String) -> Result<String, JsError> {
+        self.inner.publish(&label).await.map_err(|e| JsError::new(&e))
     }
 }

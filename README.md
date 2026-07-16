@@ -86,7 +86,7 @@ drop files → share the /receive link  →     open link → "Receive in this b
 
 - **Not a JS reimplementation** — the identical `iroh` + `iroh-blobs` core, compiled to WebAssembly ([`web-receiver/`](web-receiver/)).
 - **No server in the middle** — the ticket stays in the URL fragment (never sent to the site), the bytes go peer → tab over the iroh relay.
-- **Honest limits** — browsers can't hole-punch (relay-only) and the file lives in tab memory (use the app past ~2 GB). Sending still needs the app or CLI.
+- **Honest limits** — browsers can't hole-punch (relay-only) and files live in tab memory (use the app past ~2 GB). The tab must stay open while sharing.
 
 ---
 
@@ -94,7 +94,7 @@ drop files → share the /receive link  →     open link → "Receive in this b
 
 | ✓ Best fit | ✗ Not for |
 | --- | --- |
-| Moving large builds, databases, media between desktops | Sending _from_ a browser (the browser can receive in-page, but sending still needs the app or CLI) |
+| Moving large builds, databases, media between desktops | Browser shares beyond ~2 GB (tabs are memory-bound; the app streams from disk without limits) |
 | Desktop ↔ Android sideload testing | iOS (planned, not shipped) |
 | Sharing without cloud accounts, upload caps, or hosted retention | AirDrop protocol compatibility |
 | Open-source workflows that need inspectable artifacts + checksums | Phone-to-phone NFC writing (NFC receive only) |

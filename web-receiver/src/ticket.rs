@@ -9,7 +9,8 @@
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine as _;
 use iroh_blobs::ticket::BlobTicket;
-use serde::Deserialize;
+use iroh_blobs::BlobFormat;
+use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
 const FD2_PREFIX: &str = "fd2:";
@@ -27,6 +28,55 @@ struct TicketV2 {
     label: String,
     #[serde(default)]
     size: u64,
+}
+
+/// Wire form of a provider entry, mirroring the app's `LightningP2PProviderV2`
+/// field-for-field so app/CLI receivers accept browser-made tickets.
+#[derive(Debug, Serialize)]
+struct ProviderV2Out {
+    ticket: String,
+    node_id: String,
+    direct_address_count: usize,
+    relay: bool,
+}
+
+/// Wire form of the envelope, mirroring the app's `LightningP2PTicketV2`.
+#[derive(Debug, Serialize)]
+struct TicketV2Out {
+    version: u8,
+    hash: String,
+    format: &'static str,
+    providers: Vec<ProviderV2Out>,
+    label: String,
+    size: u64,
+    features: Vec<&'static str>,
+}
+
+/// Encodes a browser share as the app's `fd2:` envelope (schema v2). The
+/// feature list matches what the desktop sender advertises so receivers make
+/// the same capability decisions either way.
+#[must_use]
+pub fn fd2_encode(ticket: &BlobTicket, label: &str, size: u64) -> String {
+    let addr = ticket.addr();
+    let payload = TicketV2Out {
+        version: 2,
+        hash: ticket.hash().to_string(),
+        format: match ticket.format() {
+            BlobFormat::Raw => "raw",
+            BlobFormat::HashSeq => "hash_seq",
+        },
+        providers: vec![ProviderV2Out {
+            ticket: ticket.to_string(),
+            node_id: addr.id.to_string(),
+            direct_address_count: addr.addrs.iter().filter(|a| a.is_ip()).count(),
+            relay: addr.addrs.iter().any(iroh::TransportAddr::is_relay),
+        }],
+        label: label.to_owned(),
+        size,
+        features: vec!["legacy_blob_ticket", "multi_provider", "queued_downloader"],
+    };
+    let json = serde_json::to_vec(&payload).unwrap_or_default();
+    format!("{FD2_PREFIX}{}", URL_SAFE_NO_PAD.encode(json))
 }
 
 /// A parsed ticket: the metadata to display plus the provider `BlobTicket`s
@@ -141,6 +191,23 @@ mod tests {
         let parsed = parse(&url).expect("receive-url ticket should parse");
         assert_eq!(parsed.primary().hash(), hash);
         assert_eq!(parsed.label, "clip.mov");
+    }
+
+    #[test]
+    fn browser_encoded_ticket_round_trips_through_the_decoder() {
+        let node_id = SecretKey::from_bytes(&[5_u8; 32]).public();
+        let relay: RelayUrl = "https://relay.example.com".parse().expect("relay url");
+        let addr = EndpointAddr::from_parts(node_id, [TransportAddr::Relay(relay)]);
+        let hash = Hash::new(b"browser-share");
+        let blob = BlobTicket::new(addr, hash, BlobFormat::HashSeq);
+
+        let envelope = fd2_encode(&blob, "photos.zip", 9001);
+        let parsed = parse(&envelope).expect("browser envelope should parse");
+
+        assert_eq!(parsed.label, "photos.zip");
+        assert_eq!(parsed.size, 9001);
+        assert_eq!(parsed.primary().hash(), hash);
+        assert_eq!(parsed.primary().format(), BlobFormat::HashSeq);
     }
 
     #[test]

@@ -36,7 +36,7 @@
       },
       {
         "q": "Can I use Lightning P2P in a mobile browser today?",
-        "a": "Receiving works in modern browsers, including mobile: opening a receive link runs the same Rust engine in-page as WebAssembly and BLAKE3-verifies the files as they arrive (beta; relay-only and memory-bound). Sending still needs a native app — Windows, macOS, Linux, and Android 10+ builds are available."
+        "a": "Receiving works in modern browsers, including mobile: opening a receive link runs the same Rust engine in-page as WebAssembly and BLAKE3-verifies the files as they arrive (beta; relay-only and memory-bound). Sending works from the browser too at /send (same beta limits). Native apps for Windows, macOS, Linux, and Android 10+ stream from disk without the memory cap."
       },
       {
         "q": "Why not promise speed leadership immediately?",
@@ -118,6 +118,38 @@
       {
         "q": "Why does Android require sideloading?",
         "a": "The project is not in the Play Store yet. Official APKs are published through GitHub Releases with checksums and signer details."
+      }
+    ]
+  },
+  {
+    "path": "/send",
+    "label": "Send",
+    "title": "Send Files From Your Browser - Lightning P2P",
+    "description": "Share files straight from a browser tab with Lightning P2P. The Rust engine runs in-page as WebAssembly and serves files directly to the receiver - no upload, no account, no install.",
+    "eyebrow": "Send from this browser",
+    "heading": "Share files straight from this tab.",
+    "intro": "Drop files on the page and this tab serves them directly to whoever opens your link - their browser, desktop app, or terminal. Nothing uploads to a server.",
+    "focus": "Browser sending is beta: files live in tab memory (best under 500 MB, hard limit ~2 GB), the connection is relay-assisted, and the tab must stay open while peers download. The desktop app streams from disk without those limits.",
+    "inNav": true,
+    "priority": "0.8",
+    "related": ["/receive", "/download", "/security"],
+    "body": [
+      "Sending from the browser runs the identical iroh + iroh-blobs Rust core as the desktop app, compiled to WebAssembly. Files are imported into an in-memory store, the tab answers iroh-blobs requests over the relay, and every receiver verifies BLAKE3 hashes as bytes arrive.",
+      "The share link is a normal HTTPS receive link with the ticket in the URL fragment, so the ticket never reaches the website server. Anyone opening it can receive in their own browser tab, the desktop app, or the CLI.",
+      "Browser peers cannot hole-punch, so browser-to-anywhere transfers ride the iroh relay as encrypted frames. The relay never sees plaintext and never stores the files."
+    ],
+    "faqs": [
+      {
+        "q": "Does sending from the browser upload my files anywhere?",
+        "a": "No. The files stay in the tab's memory and stream directly to the receiver when they connect. The iroh relay forwards encrypted frames when needed but never stores or decrypts them."
+      },
+      {
+        "q": "How big can a browser share be?",
+        "a": "Files live in the tab's memory, so the page warns past 500 MB and refuses past about 2 GB. For bigger transfers, the desktop app and CLI stream from disk with no artificial limit."
+      },
+      {
+        "q": "Can I close the tab after sharing the link?",
+        "a": "No - the tab is the sender. Keep it open until the receiver finishes, exactly like keeping the desktop app running during a transfer."
       }
     ]
   },
