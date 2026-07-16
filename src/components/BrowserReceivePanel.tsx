@@ -171,6 +171,19 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
           {phase === "receiving" && (
             <Frame key="receiving" reduce={reduce}>
               <Busy label={status} />
+              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/[0.06]" aria-hidden>
+                {!reduce && (
+                  <motion.div
+                    className="h-full w-1/3 rounded-full"
+                    style={{
+                      background:
+                        "linear-gradient(90deg, transparent, oklch(82% 0.16 150 / 0.9), transparent)",
+                    }}
+                    animate={{ x: ["-120%", "340%"] }}
+                    transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
+                  />
+                )}
+              </div>
               <p className="mt-2 text-center text-[11px] text-[color:var(--muted-copy)]">
                 The sender must stay online until this completes.
               </p>
@@ -179,16 +192,24 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
 
           {phase === "done" && (
             <Frame key="done" reduce={reduce}>
-              <div className="flex items-center gap-2 rounded-lg border border-[color:var(--signal-green)]/25 bg-[color:var(--signal-green)]/10 px-3 py-2 text-[12.5px] font-semibold text-[var(--signal-green)]">
+              <motion.div
+                initial={reduce ? false : { scale: 0.92, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ type: "spring", stiffness: 360, damping: 22 }}
+                className="flex items-center gap-2 rounded-lg border border-[color:var(--signal-green)]/25 bg-[color:var(--signal-green)]/10 px-3 py-2 text-[12.5px] font-semibold text-[var(--signal-green)]"
+              >
                 <ShieldCheck className="h-4 w-4" /> BLAKE3 verified — bytes are proven correct.
-              </div>
+              </motion.div>
               <ul className="mt-3 space-y-2">
-                {files.map((file) => {
+                {files.map((file, index) => {
                   const saved = savedHashes.has(file.hash);
                   const saving = savingHash === file.hash;
                   return (
-                    <li
+                    <motion.li
                       key={file.hash}
+                      initial={reduce ? false : { opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: reduce ? 0 : 0.12 + index * 0.08, duration: 0.3 }}
                       className="flex items-center gap-3 rounded-xl border border-white/8 bg-black/30 px-3.5 py-2.5"
                     >
                       <FileDown className="h-4 w-4 shrink-0 text-[color:var(--soft-copy)]" />
@@ -219,7 +240,7 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
                         )}
                         {saved ? "Saved" : saving ? "Saving" : "Save"}
                       </button>
-                    </li>
+                    </motion.li>
                   );
                 })}
               </ul>

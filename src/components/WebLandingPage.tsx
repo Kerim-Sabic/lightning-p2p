@@ -11,6 +11,7 @@ import {
   Eye,
   FileCheck2,
   GitBranch,
+  Globe,
   KeyRound,
   Menu,
   Minus,
@@ -51,7 +52,8 @@ import {
   ANDROID_APK_DOWNLOAD_URL,
   ANDROID_CHECKSUMS_URL,
   EXPERIMENTAL_RELEASE_URL,
-  MSI_DOWNLOAD_URL,
+  LINUX_APPIMAGE_DOWNLOAD_URL,
+  MACOS_DMG_DOWNLOAD_URL,
   RELEASE_URL,
   REPO_URL,
   SITE_URL,
@@ -178,7 +180,8 @@ const defaultFaqs: Faq[] = [
   { q: "Can I use it in a browser?", a: "No. The browser site handles receive handoff and marketing. Real file transfer requires the native Lightning P2P app." },
   { q: "Does the sender need to stay online?", a: "Yes. The sender must keep Lightning P2P open and keep the content available until the receiver finishes." },
   { q: "Is there a file size limit?", a: "Lightning P2P does not impose an artificial file-size cap. Disk space, filesystem limits, network stability, and time still matter." },
-  { q: "Is it available for macOS or Linux?", a: "Not yet. Windows and Android 10+ are the public release targets. macOS and Linux packaging are planned after the current native paths stay reliable." },
+  { q: "Is it available for macOS or Linux?", a: "Yes. v0.8.0 ships a universal macOS DMG (Intel + Apple Silicon) and Linux AppImage/deb/rpm as unsigned community builds, plus a pipe-friendly CLI. Windows and Android remain the most-tested paths." },
+  { q: "Can I receive without installing anything?", a: "Yes. Open the receive link in any modern browser and the same Rust engine runs in the page as WebAssembly — it pulls the files straight from the sender over the iroh relay, BLAKE3-verifies every chunk, and saves to disk. No server ever holds the bytes. Sending still needs the app or CLI." },
   { q: "Are tickets secret?", a: "Yes. Tickets are capability tokens. Anyone with a valid ticket can request that transfer while the sender is online, so treat tickets like secrets." },
 ];
 
@@ -189,6 +192,7 @@ const trustBadges: Array<{ icon: LucideIcon; label: string }> = [
   { icon: MonitorDown, label: "Tauri 2" },
   { icon: Route, label: "iroh QUIC" },
   { icon: FileCheck2, label: "BLAKE3" },
+  { icon: Globe, label: "Browser receive" },
   { icon: CloudOff, label: "No cloud" },
   { icon: KeyRound, label: "No account" },
 ];
@@ -196,7 +200,7 @@ const trustBadges: Array<{ icon: LucideIcon; label: string }> = [
 const workflowSteps: Array<{ icon: LucideIcon; index: string; title: string; copy: string }> = [
   { index: "01", icon: Upload, title: "Drop files", copy: "Pick a file or folder in the native app. Lightning P2P prepares it locally and produces a content hash." },
   { index: "02", icon: QrCode, title: "Share a ticket", copy: "Send the receive link, QR, or raw ticket through whatever messenger you trust. The ticket is the capability." },
-  { index: "03", icon: ClipboardCheck, title: "Stream to disk", copy: "Receiver pastes the ticket; iroh-blobs streams BLAKE3-verified bytes straight into the destination folder." },
+  { index: "03", icon: ClipboardCheck, title: "Stream to disk", copy: "Receiver pastes the ticket in the app — or opens the link in any browser — and iroh-blobs streams BLAKE3-verified bytes straight to disk." },
 ];
 
 const speedModes: ModeRow[] = [
@@ -212,13 +216,13 @@ const capabilityRows: Array<{ index: string; label: string; headline: string; bo
   { index: "01", label: "Transport",      headline: "Direct-first iroh QUIC with relay fallback.",                        body: "Peers dial directly when possible. Behind NAT or firewall, iroh relay assistance keeps the path reachable without becoming hosted storage.", proof: { text: "Architecture docs", href: `${REPO_URL}/blob/main/docs/ARCHITECTURE.md` } },
   { index: "02", label: "Blob transfer",  headline: "iroh-blobs handles content addressing, not custom chunking.",         body: "The Rust engine imports content into iroh-blobs, creates a ticket, and streams content-addressed bytes to the receiver.",          proof: { text: "Sender source",    href: `${REPO_URL}/blob/main/src-tauri/src/transfer/sender.rs` } },
   { index: "03", label: "Verification",   headline: "BLAKE3 ties output to the expected content hash.",                    body: "Receiver verifies bytes as they land. Mismatches surface as structured transfer errors, never silent corruption.",                 proof: { text: "Receiver source",  href: `${REPO_URL}/blob/main/src-tauri/src/transfer/receiver.rs` } },
-  { index: "04", label: "Handoff",        headline: "Receive links keep raw tickets in the URL fragment.",                 body: "The website can help a receiver open the native app, but file bytes stay in the Rust path. Browser transfer is intentionally not the engine.", proof: { text: "Share link source", href: `${REPO_URL}/blob/main/src/lib/shareLinks.ts` } },
+  { index: "04", label: "Browser receive", headline: "The same Rust engine runs in the page as WebAssembly.",              body: "Receive links keep the ticket in the URL fragment — never sent to a server. Open one in any browser and the iroh + BLAKE3 engine fetches the files in-page: no install, no backend, relay-only and memory-bound by design.", proof: { text: "Engine source", href: `${REPO_URL}/blob/main/web-receiver/src/lib.rs` } },
   { index: "05", label: "Release trust",  headline: "Installers, checksums, signing status, release notes attached.",      body: "Windows and Android artifacts publish through GitHub Releases with checksum material and documented installer behavior.",        proof: { text: "Release evidence", href: `${REPO_URL}/blob/main/docs/release-evidence.md` } },
   { index: "06", label: "Diagnostics",    headline: "Support data is designed to redact tickets and local paths.",         body: "Diagnostics are gathered locally, redacted, and copied by the user. Transfer secrets are not posted by the frontend automatically.", proof: { text: "Diagnostics source", href: `${REPO_URL}/blob/main/src-tauri/src/commands/diagnostics.rs` } },
 ];
 
 const comparisonRows: ComparisonRow[] = [
-  { tool: "Lightning P2P",  detail: "Direct-first Windows + Android app",  cloudUpload: { label: "No",      tone: "positive" }, account: { label: "No",      tone: "positive" }, wan: { label: "Yes",     tone: "positive" }, openSource: { label: "Yes", tone: "positive" }, nativeWindows: { label: "Yes",     tone: "positive" }, verifiedContent: { label: "Yes",     tone: "positive" } },
+  { tool: "Lightning P2P",  detail: "Native app everywhere + receive in any browser",  cloudUpload: { label: "No",      tone: "positive" }, account: { label: "No",      tone: "positive" }, wan: { label: "Yes",     tone: "positive" }, openSource: { label: "Yes", tone: "positive" }, nativeWindows: { label: "Yes",     tone: "positive" }, verifiedContent: { label: "Yes",     tone: "positive" } },
   { tool: "WeTransfer",     detail: "Hosted upload link",                  cloudUpload: { label: "Yes",     tone: "negative" }, account: { label: "Partial", tone: "neutral"  }, wan: { label: "Yes",     tone: "positive" }, openSource: { label: "No",  tone: "negative" }, nativeWindows: { label: "No",      tone: "negative" }, verifiedContent: { label: "No",      tone: "negative" } },
   { tool: "LocalSend",      detail: "Cross-platform LAN sharing",          cloudUpload: { label: "No",      tone: "positive" }, account: { label: "No",      tone: "positive" }, wan: { label: "No",      tone: "neutral"  }, openSource: { label: "Yes", tone: "positive" }, nativeWindows: { label: "Yes",     tone: "positive" }, verifiedContent: { label: "Partial", tone: "neutral"  } },
   { tool: "PairDrop",       detail: "Browser WebRTC sharing",              cloudUpload: { label: "No",      tone: "positive" }, account: { label: "No",      tone: "positive" }, wan: { label: "Partial", tone: "neutral"  }, openSource: { label: "Yes", tone: "positive" }, nativeWindows: { label: "No",      tone: "neutral"  }, verifiedContent: { label: "No",      tone: "negative" } },
@@ -228,15 +232,16 @@ const comparisonRows: ComparisonRow[] = [
 const downloadOptions: Array<{ icon: LucideIcon; title: string; subtitle: string; copy: string; href: string; action: string; tone: StatusTone }> = [
   { icon: MonitorDown,  title: "Windows setup",  subtitle: "Stable v0.4.6",          copy: "One-click Velopack installer. Installs under your user profile and opens the native send + receive app.",                href: VELOPACK_DOWNLOAD_URL,        action: "Download for Windows", tone: "signal" },
   { icon: Smartphone,   title: "Android APK",    subtitle: "Android 10+ sideload",   copy: "Stable signed APK from GitHub Releases. Verify the SHA256 file before allowing sideload install.",                       href: ANDROID_APK_DOWNLOAD_URL,    action: "Download APK",         tone: "signal" },
-  { icon: PackageCheck, title: "MSI package",    subtitle: "Managed deployments",    copy: "Use MSI when deployment tooling, inventory, or policy-managed installation matters more than the one-click setup.",     href: MSI_DOWNLOAD_URL,            action: "Download MSI",         tone: "muted"  },
+  { icon: Code2,        title: "macOS DMG",      subtitle: "Beta v0.8.0 · universal", copy: "Universal build for Intel + Apple Silicon. Unsigned community build — right-click → Open on first launch.",             href: MACOS_DMG_DOWNLOAD_URL,      action: "Download DMG",         tone: "signal" },
+  { icon: PackageCheck, title: "Linux AppImage", subtitle: "Beta v0.8.0 · x86_64",   copy: "Portable AppImage; deb and rpm packages ship in the same release with SHA256 checksums.",                               href: LINUX_APPIMAGE_DOWNLOAD_URL, action: "Download AppImage",    tone: "signal" },
 ];
 
 const platformStatus = [
-  { label: "Windows",        value: "Stable release",       tone: "signal" as StatusTone },
-  { label: "Android",        value: "Stable sideload",      tone: "signal" as StatusTone },
-  { label: "macOS / Linux",  value: "Planned",              tone: "amber"  as StatusTone },
-  { label: "iOS",            value: "Not shipped",          tone: "muted"  as StatusTone },
-  { label: "Browser",        value: "Receive handoff only", tone: "muted"  as StatusTone },
+  { label: "Windows",        value: "Stable release",        tone: "signal" as StatusTone },
+  { label: "Android",        value: "Stable sideload",       tone: "signal" as StatusTone },
+  { label: "macOS / Linux",  value: "Beta v0.8.0",           tone: "signal" as StatusTone },
+  { label: "Browser",        value: "Receive in-page (beta)", tone: "signal" as StatusTone },
+  { label: "iOS",            value: "Not shipped",           tone: "muted"  as StatusTone },
 ];
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -708,7 +713,7 @@ function Hero({ page }: { page: WebPage }) {
             <span className="block text-white/82"><WordReveal text="No cloud account." delay={1020} /></span>
           </h1>
           <p className="hero-rise hero-rise--stagger-2 max-w-[56ch] text-pretty text-[17px] leading-[1.6] text-[color:var(--soft-copy)] sm:text-[18px]">
-            {page.intro} Built in Rust on <strong className="font-semibold text-white">iroh QUIC</strong> and <strong className="font-semibold text-white">iroh-blobs</strong>. BLAKE3 verifies every chunk. The sender stays online; the receiver streams to disk. No upload to a cloud bucket, no account, no artificial size cap.
+            {page.intro} Built in Rust on <strong className="font-semibold text-white">iroh QUIC</strong> and <strong className="font-semibold text-white">iroh-blobs</strong>. BLAKE3 verifies every chunk. The receiver can even be <strong className="font-semibold text-white">a browser tab</strong> — the same engine runs as WebAssembly, no install. No cloud bucket, no account, no artificial size cap.
           </p>
           <div className="hero-rise hero-rise--stagger-3 flex flex-wrap items-center gap-3">
             <MagneticWrap><CTA href="/download" variant="primary"><Download className="h-3.5 w-3.5" /> Download for Windows</CTA></MagneticWrap>
@@ -730,6 +735,7 @@ function Hero({ page }: { page: WebPage }) {
                   "create-share ./build-artifacts/  → fd2:eyJ2IjoyLCJoYXNoIjoi…",
                   "route: direct · first-byte 7ms · 100 MB / 1.2s",
                   "BLAKE3 verified · 200/200 chunks · no cloud upload",
+                  "receiver: browser tab · engine: wasm · install: none",
                   "mode: standard · streams 1024 · win 256MB",
                 ]}
               />
@@ -1073,6 +1079,207 @@ function ArchitectureFlow() {
           </div>
         </div>
       </Reveal>
+    </section>
+  );
+}
+
+// ── Browser receive showcase (v0.9.0 headline) ──────────────────────────────
+
+type RxStage = "link" | "engine" | "stream" | "verified";
+const RX_STAGES: Array<{ key: RxStage; ms: number }> = [
+  { key: "link", ms: 2600 },
+  { key: "engine", ms: 2200 },
+  { key: "stream", ms: 3400 },
+  { key: "verified", ms: 3600 },
+];
+
+function useRxStage(reduce: boolean | null): RxStage {
+  const [index, setIndex] = useState(0);
+  const current = RX_STAGES[index] ?? { key: "link" as RxStage, ms: 2600 };
+  useEffect(() => {
+    if (reduce) return;
+    const timer = window.setTimeout(
+      () => setIndex((value) => (value + 1) % RX_STAGES.length),
+      current.ms,
+    );
+    return () => window.clearTimeout(timer);
+  }, [index, reduce, current.ms]);
+  return reduce ? "verified" : current.key;
+}
+
+function RxStatusLine({ stage }: { stage: RxStage }) {
+  const lines: Record<RxStage, { text: string; tone: string }> = {
+    link: { text: "ticket read from #fragment — never sent to a server", tone: "text-white/56" },
+    engine: { text: "rust engine loaded · iroh endpoint bound in-page", tone: "text-[var(--proof-amber)]" },
+    stream: { text: "pulling chunks from the sender over the relay…", tone: "text-[var(--signal-green)]" },
+    verified: { text: "BLAKE3 verified — every byte proven correct", tone: "text-[var(--signal-green)]" },
+  };
+  return (
+    <AnimatePresence mode="wait">
+      <motion.p
+        key={stage}
+        initial={{ opacity: 0, y: 4 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -4 }}
+        transition={{ duration: 0.25 }}
+        className={cx("font-mono text-[10px] uppercase tracking-[0.18em]", lines[stage].tone)}
+      >
+        {lines[stage].text}
+      </motion.p>
+    </AnimatePresence>
+  );
+}
+
+function RxBrowserMock({ reduce }: { reduce: boolean | null }) {
+  const stage = useRxStage(reduce);
+  const streaming = stage === "stream";
+  const verified = stage === "verified";
+  const engineOn = stage !== "link";
+  const files = [
+    { name: "render-final.mp4", size: "1.2 GB" },
+    { name: "color-grade.cube", size: "18 KB" },
+    { name: "notes.pdf", size: "412 KB" },
+  ];
+  return (
+    <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-[#0b0f0d] shadow-[0_48px_140px_rgba(0,0,0,0.55)]">
+      {/* Browser chrome */}
+      <div className="flex items-center gap-3 border-b border-white/[0.07] bg-white/[0.03] px-4 py-3">
+        <div className="flex gap-1.5" aria-hidden>
+          <span className="h-2.5 w-2.5 rounded-full bg-white/14" />
+          <span className="h-2.5 w-2.5 rounded-full bg-white/14" />
+          <span className="h-2.5 w-2.5 rounded-full bg-white/14" />
+        </div>
+        <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-white/8 bg-black/40 px-3 py-1.5">
+          <ShieldCheck className="h-3 w-3 shrink-0 text-[var(--signal-green)]" />
+          <span className="truncate font-mono text-[11px] text-white/64">
+            lightning-p2p.netlify.app/receive<span className="text-[var(--signal-green)]">#t=fd2:eyJ2IjoyLCJoYXNoIjoi…</span>
+          </span>
+        </div>
+        <span
+          className={cx(
+            "hidden shrink-0 rounded-full border px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[0.16em] transition-colors duration-500 sm:inline",
+            engineOn
+              ? "border-[color:var(--signal-green)]/40 bg-[color:var(--signal-green)]/12 text-[var(--signal-green)]"
+              : "border-white/10 bg-white/[0.04] text-white/40",
+          )}
+        >
+          wasm
+        </span>
+      </div>
+
+      {/* Page body */}
+      <div className="relative px-5 py-5 sm:px-6 sm:py-6">
+        <div className="pointer-events-none absolute inset-0 cinematic-grid opacity-50" aria-hidden />
+        <div className="relative">
+          <div className="flex items-baseline justify-between gap-3">
+            <p className="truncate text-[13.5px] font-semibold text-white">delivery-drop · 3 files</p>
+            <p className="shrink-0 font-mono text-[11.5px] text-[var(--signal-green)]">1.21 GB</p>
+          </div>
+
+          {/* Transfer meter */}
+          <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/[0.06]">
+            <motion.div
+              className="h-full rounded-full"
+              style={{ background: "linear-gradient(90deg, oklch(82% 0.16 150), oklch(88% 0.14 150))" }}
+              initial={false}
+              animate={{ width: verified ? "100%" : streaming ? ["6%", "88%"] : engineOn ? "6%" : "0%" }}
+              transition={streaming && !reduce ? { duration: 3.1, ease: [0.3, 0.6, 0.4, 1] } : { duration: 0.5 }}
+            />
+          </div>
+          <div className="mt-2 flex items-center justify-between">
+            <RxStatusLine stage={stage} />
+            <AnimatePresence>
+              {verified && (
+                <motion.span
+                  initial={reduce ? false : { scale: 0.6, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ type: "spring", stiffness: 380, damping: 22 }}
+                  className="inline-flex items-center gap-1 rounded-full border border-[color:var(--signal-green)]/38 bg-[color:var(--signal-green)]/14 px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--signal-green)]"
+                >
+                  <ShieldCheck className="h-2.5 w-2.5" /> verified
+                </motion.span>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* File rows appear once verified */}
+          <div className="mt-4 space-y-2">
+            {files.map((file, index) => (
+              <motion.div
+                key={file.name}
+                initial={false}
+                animate={verified ? { opacity: 1, y: 0 } : { opacity: 0.28, y: reduce ? 0 : 4 }}
+                transition={{ delay: verified && !reduce ? 0.16 + index * 0.14 : 0, duration: 0.34 }}
+                className="flex items-center gap-3 rounded-xl border border-white/[0.07] bg-black/34 px-3.5 py-2.5"
+              >
+                <FileCheck2 className={cx("h-3.5 w-3.5 shrink-0 transition-colors duration-500", verified ? "text-[var(--signal-green)]" : "text-white/24")} />
+                <span className="min-w-0 flex-1 truncate font-mono text-[11.5px] text-white/78">{file.name}</span>
+                <span className="shrink-0 font-mono text-[10px] text-white/40">{file.size}</span>
+                <span
+                  className={cx(
+                    "shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-semibold transition-colors duration-500",
+                    verified
+                      ? "border-[color:var(--signal-green)]/38 bg-[color:var(--signal-green)]/12 text-[var(--signal-green)]"
+                      : "border-white/10 text-white/32",
+                  )}
+                >
+                  Save
+                </span>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BrowserReceiveShowcase() {
+  const reduce = useReducedMotion();
+  const guarantees = [
+    { icon: Download, title: "Zero install", copy: "The receive link is the whole product. Open it, the engine loads lazily, the files arrive." },
+    { icon: Code2, title: "Same Rust engine", copy: "Not a JavaScript reimplementation — the identical iroh + iroh-blobs core, compiled to WebAssembly." },
+    { icon: ShieldCheck, title: "Same guarantees", copy: "BLAKE3 verifies every chunk in the tab, exactly like the desktop app. No server ever holds the bytes." },
+  ];
+  return (
+    <section className="section-beam relative mx-auto max-w-[1320px] px-6 py-24 sm:px-10 lg:py-32">
+      <div className="grid items-center gap-12 lg:grid-cols-[0.94fr_1.06fr] lg:gap-16">
+        <Reveal>
+          <p className="text-[12px] font-bold uppercase tracking-[0.28em] text-[var(--signal-green)]">New in v0.9.0</p>
+          <h2 className="font-display mt-3 max-w-[18ch] text-balance text-[clamp(2.2rem,4.8vw,3.8rem)] font-extrabold leading-[1.02] tracking-[-0.024em] text-white">
+            Receive in <span className="text-[var(--signal-green)]">any browser.</span>
+          </h2>
+          <p className="mt-5 max-w-[56ch] text-[15.5px] leading-7 text-[color:var(--soft-copy)]">
+            The oldest objection to P2P transfer is <em className="not-italic text-white/85">“but they'd have to install it too.”</em> Not anymore. The person you're sending to opens your link in the browser they already have — and the same Rust engine runs in the page.
+          </p>
+          <div className="mt-8 space-y-4">
+            {guarantees.map((g, index) => (
+              <Reveal key={g.title} delay={0.08 + index * 0.08}>
+                <div className="flex items-start gap-3.5">
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-[color:var(--signal-green)]/26 bg-[color:var(--signal-green)]/10">
+                    <g.icon className="h-4 w-4 text-[var(--signal-green)]" />
+                  </span>
+                  <div>
+                    <p className="text-[14px] font-semibold text-white">{g.title}</p>
+                    <p className="mt-1 text-[13px] leading-6 text-[color:var(--soft-copy)]">{g.copy}</p>
+                  </div>
+                </div>
+              </Reveal>
+            ))}
+          </div>
+          <p className="mt-7 font-mono text-[10.5px] uppercase tracking-[0.16em] text-white/36">
+            beta · relay-only in browsers · memory-bound (desktop app for &gt;2 GB) · sending still needs the app
+          </p>
+        </Reveal>
+        <Reveal delay={0.12}>
+          <CursorGlow className="rounded-[24px]">
+            <TiltCard max={4}>
+              <RxBrowserMock reduce={reduce} />
+            </TiltCard>
+          </CursorGlow>
+        </Reveal>
+      </div>
     </section>
   );
 }
@@ -1666,6 +1873,7 @@ export function WebLandingPage() {
         <Hero page={page} />
         <HowItWorks />
         <ArchitectureFlow />
+        <BrowserReceiveShowcase />
         <SpeedModesShowcase />
         <BenchEvidence />
         <SecurityModel />
