@@ -67,7 +67,7 @@ lightning-p2p-cli receive "fd2:…" -o .   # → BLAKE3-verified into ./
 
 | ✓ Best fit | ✗ Not for |
 | --- | --- |
-| Moving large builds, databases, media between desktops | Browser-only transfer (web is handoff, not the engine — in-browser receive is on the roadmap) |
+| Moving large builds, databases, media between desktops | Sending _from_ a browser (the browser can receive in-page, but sending still needs the app or CLI) |
 | Desktop ↔ Android sideload testing | iOS (planned, not shipped) |
 | Sharing without cloud accounts, upload caps, or hosted retention | AirDrop protocol compatibility |
 | Open-source workflows that need inspectable artifacts + checksums | Phone-to-phone NFC writing (NFC receive only) |
@@ -277,7 +277,7 @@ Read [`SECURITY.md`](SECURITY.md) · [`docs/security-model.md`](docs/security-mo
 | 🟡 | Swarm receive (parallel fetches, default-on in Extreme+) | **Experimental** v0.8.0 |
 | 🟡 | Ticket pre-warming (pre-dial on paste) | **Experimental** v0.8.0 |
 | 🟡 | BLE proximity discovery + NFC ticket receive | **Experimental** since v0.5.0 |
-| 🔨 | **Receive in any browser** (same Rust engine as WASM) | **In progress** v0.9.0 · [spike GO](docs/browser-receiver-spike.md) |
+| 🟢 | **Receive in any browser** — no install, same Rust engine as WASM, BLAKE3-verified | **Beta** v0.9.0 |
 | ⏳ | iOS build, phone-to-phone NFC write, macOS/Linux BLE | Roadmap |
 
 <sub>BLE and NFC **never carry file bytes** — beacons + ticket material only. Bytes always travel through iroh QUIC. Full behavior + hardware test plan: [`docs/proximity.md`](docs/proximity.md).</sub>
