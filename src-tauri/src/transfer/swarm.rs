@@ -18,12 +18,11 @@ use crate::transfer::mode::TransferProfile;
 use crate::transfer::progress::{ProgressHandle, TransferPhase};
 use crate::transfer::ticket::ShareTicket;
 use futures_util::{stream, StreamExt};
-use iroh_blobs::get::db::DownloadProgress;
+use iroh::EndpointId;
+use iroh_blobs::api::downloader::DownloadProgressItem;
 use iroh_blobs::hashseq::HashSeq;
-use iroh_blobs::rpc::client::blobs::{DownloadMode, DownloadOptions};
-use iroh_blobs::util::SetTagOption;
-use iroh_blobs::{BlobFormat, Hash};
-use std::collections::{HashMap, HashSet};
+use iroh_blobs::Hash;
+use std::collections::HashSet;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 use tokio::sync::watch;
@@ -49,7 +48,6 @@ struct SwarmTracker {
     started_at: Instant,
     done_bytes: AtomicU64,
     total_bytes: AtomicU64,
-    total_is_known: bool,
     contacted: AtomicBool,
     connect_ms: AtomicU64,
     first_byte_ms: AtomicU64,
@@ -61,7 +59,6 @@ impl SwarmTracker {
             started_at: Instant::now(),
             done_bytes: AtomicU64::new(0),
             total_bytes: AtomicU64::new(known_total.unwrap_or(0)),
-            total_is_known: known_total.is_some(),
             contacted: AtomicBool::new(false),
             connect_ms: AtomicU64::new(0),
             first_byte_ms: AtomicU64::new(0),
@@ -90,12 +87,6 @@ impl SwarmTracker {
             Ordering::Relaxed,
             Ordering::Relaxed,
         );
-    }
-
-    fn add_total(&self, size: u64) {
-        if !self.total_is_known {
-            self.total_bytes.fetch_add(size, Ordering::Relaxed);
-        }
     }
 
     fn publish(&self, progress: Option<&ProgressHandle>) {
@@ -156,22 +147,18 @@ pub(crate) async fn download_collection(
     profile: TransferProfile,
 ) -> Result<SwarmObservations> {
     let idle_timeout = profile.idle_timeout.max(MIN_IDLE_TIMEOUT);
-    let providers = ticket.provider_node_addrs();
+    // Teach the endpoint how to reach the sender, then dial by endpoint id.
+    node.register_ticket_addrs(ticket.provider_node_addrs());
+    let providers: Vec<EndpointId> = ticket
+        .provider_node_addrs()
+        .iter()
+        .map(|addr| addr.id)
+        .collect();
     let root = ticket.primary().hash();
     let tracker = SwarmTracker::new(ticket.size().filter(|&size| size > 0));
 
     // Stage 1: the HashSeq root is a tiny blob listing child hashes.
-    fetch_blob(
-        node,
-        root,
-        &providers,
-        DownloadMode::Queued,
-        cancel_rx,
-        &tracker,
-        None,
-        idle_timeout,
-    )
-    .await?;
+    fetch_blob(node, root, &providers, cancel_rx, &tracker, None, idle_timeout).await?;
     let children = read_child_hashes(node, root).await?;
     tracing::info!(
         children = children.len(),
@@ -182,16 +169,7 @@ pub(crate) async fn download_collection(
     // Stage 2: fan the children out. Futures are polled in place (not
     // spawned), so the first error drops all in-flight siblings.
     let mut fan_out = stream::iter(children.into_iter().map(|child| {
-        fetch_blob(
-            node,
-            child,
-            &providers,
-            DownloadMode::Direct,
-            cancel_rx,
-            &tracker,
-            progress,
-            idle_timeout,
-        )
+        fetch_blob(node, child, &providers, cancel_rx, &tracker, progress, idle_timeout)
     }))
     .buffer_unordered(swarm_parallelism(profile));
     while let Some(result) = fan_out.next().await {
@@ -208,45 +186,42 @@ pub(crate) async fn download_collection(
 async fn read_child_hashes(node: &LightningP2PNode, root: Hash) -> Result<Vec<Hash>> {
     let bytes = node
         .blobs_client()
-        .read_to_bytes(root)
+        .blobs()
+        .get_bytes(root)
         .await
         .map_err(|error| blob_error(&error))?;
     let seq = HashSeq::try_from(bytes)
         .map_err(|error| LightningP2PError::Blob(format!("Invalid hash sequence: {error}")))?;
+    // The first entry of a collection HashSeq is the metadata blob, not a file.
     let mut seen = HashSet::new();
-    Ok(seq.iter().filter(|hash| seen.insert(*hash)).collect())
+    Ok(seq
+        .iter()
+        .skip(1)
+        .filter(|hash| seen.insert(*hash))
+        .collect())
 }
 
 /// Runs one blob download to completion, forwarding progress into the shared
 /// tracker. Cancel-aware and idle-timeout-guarded like the standard path.
-#[allow(clippy::too_many_arguments)]
 async fn fetch_blob(
     node: &LightningP2PNode,
     hash: Hash,
-    providers: &[iroh::NodeAddr],
-    mode: DownloadMode,
+    providers: &[EndpointId],
     cancel_rx: &watch::Receiver<bool>,
     tracker: &SwarmTracker,
     progress: Option<&ProgressHandle>,
     idle_timeout: Duration,
 ) -> Result<()> {
     let mut cancel_rx = cancel_rx.clone();
-    let mut events = node
-        .blobs_client()
-        .download_with_opts(
-            hash,
-            DownloadOptions {
-                format: BlobFormat::Raw,
-                nodes: providers.to_vec(),
-                tag: SetTagOption::Auto,
-                mode,
-            },
-        )
+    let downloader = node.blobs_client().downloader(node.endpoint());
+    let mut events = downloader
+        .download(hash, providers.to_vec())
+        .stream()
         .await
         .map_err(|error| blob_error(&error))?;
 
-    // Per-blob bookkeeping: request id -> (expected size, bytes credited).
-    let mut blobs: HashMap<u64, (u64, u64)> = HashMap::new();
+    // The new downloader emits a single cumulative offset per blob.
+    let mut credited = 0u64;
     loop {
         let event = tokio::select! {
             changed = cancel_rx.changed() => {
@@ -256,58 +231,38 @@ async fn fetch_blob(
                 continue;
             }
             item = tokio::time::timeout(idle_timeout, events.next()) => match item {
-                Ok(Some(event)) => event.map_err(|error| blob_error(&error))?,
+                Ok(Some(event)) => event,
                 Ok(None) => return Ok(()),
                 Err(_) => return Err(idle_error(tracker)),
             },
         };
-        if handle_event(event, tracker, &mut blobs)? {
-            tracker.publish(progress);
-            return Ok(());
-        }
+        handle_event(event, tracker, &mut credited)?;
         tracker.publish(progress);
     }
 }
 
-/// Applies one download event to the tracker. Returns `true` on completion.
+/// Applies one download event to the shared tracker.
 fn handle_event(
-    event: DownloadProgress,
+    event: DownloadProgressItem,
     tracker: &SwarmTracker,
-    blobs: &mut HashMap<u64, (u64, u64)>,
-) -> Result<bool> {
+    credited: &mut u64,
+) -> Result<()> {
     match event {
-        DownloadProgress::Connected => tracker.mark_contacted(),
-        DownloadProgress::Found { id, size, .. } => {
+        DownloadProgressItem::TryProvider { .. } => tracker.mark_contacted(),
+        DownloadProgressItem::Progress(offset) => {
             tracker.mark_contacted();
-            tracker.add_total(size);
-            blobs.insert(id, (size, 0));
+            tracker.add_done(offset.saturating_sub(*credited));
+            *credited = offset;
         }
-        DownloadProgress::FoundLocal { size, .. } => {
-            let size = size.value();
-            tracker.add_total(size);
-            tracker.add_done(size);
-        }
-        DownloadProgress::Progress { id, offset } => {
-            tracker.mark_contacted();
-            if let Some((size, credited)) = blobs.get_mut(&id) {
-                let capped = offset.min(*size);
-                tracker.add_done(capped.saturating_sub(*credited));
-                *credited = capped;
-            }
-        }
-        DownloadProgress::Done { id } => {
-            if let Some((size, credited)) = blobs.get_mut(&id) {
-                tracker.add_done(size.saturating_sub(*credited));
-                *credited = *size;
-            }
-        }
-        DownloadProgress::AllDone(_) => return Ok(true),
-        DownloadProgress::Abort(error) => {
+        DownloadProgressItem::ProviderFailed { .. } | DownloadProgressItem::PartComplete { .. } => {}
+        DownloadProgressItem::Error(error) => {
             return Err(abort_error(&error.to_string(), tracker));
         }
-        DownloadProgress::InitialState(_) | DownloadProgress::FoundHashSeq { .. } => {}
+        DownloadProgressItem::DownloadError => {
+            return Err(abort_error("download failed", tracker));
+        }
     }
-    Ok(false)
+    Ok(())
 }
 
 /// Mirrors the standard path's timeout wording so failure categorization
@@ -377,35 +332,18 @@ mod tests {
     }
 
     #[test]
-    fn tracker_only_grows_total_when_size_was_unknown() {
-        let known = SwarmTracker::new(Some(500));
-        known.add_total(100);
-        assert_eq!(known.total_bytes.load(Ordering::Relaxed), 500);
-
-        let unknown = SwarmTracker::new(None);
-        unknown.add_total(100);
-        unknown.add_total(50);
-        assert_eq!(unknown.total_bytes.load(Ordering::Relaxed), 150);
-    }
-
-    #[test]
-    fn done_event_credits_remaining_bytes_exactly_once() {
+    fn progress_credits_only_the_delta() {
         let tracker = SwarmTracker::new(Some(1000));
-        let mut blobs = HashMap::new();
-        blobs.insert(1, (100u64, 0u64));
+        let mut credited = 0u64;
 
-        let done = handle_event(
-            DownloadProgress::Progress { id: 1, offset: 60 },
-            &tracker,
-            &mut blobs,
-        )
-        .expect("progress event");
-        assert!(!done);
+        handle_event(DownloadProgressItem::Progress(60), &tracker, &mut credited)
+            .expect("progress event");
         assert_eq!(tracker.done_bytes.load(Ordering::Relaxed), 60);
+        assert_eq!(credited, 60);
 
-        let done = handle_event(DownloadProgress::Done { id: 1 }, &tracker, &mut blobs)
-            .expect("done event");
-        assert!(!done);
+        handle_event(DownloadProgressItem::Progress(100), &tracker, &mut credited)
+            .expect("progress event");
         assert_eq!(tracker.done_bytes.load(Ordering::Relaxed), 100);
+        assert_eq!(credited, 100);
     }
 }

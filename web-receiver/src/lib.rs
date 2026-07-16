@@ -15,6 +15,8 @@ pub mod ticket;
 use iroh::address_lookup::memory::MemoryLookup;
 use iroh::endpoint::presets;
 use iroh::Endpoint;
+use iroh_blobs::api::proto::BlobStatus;
+use iroh_blobs::format::collection::Collection;
 use iroh_blobs::store::mem::MemStore;
 use iroh_blobs::Hash;
 use ticket::ParsedTicket;
@@ -33,6 +35,17 @@ pub struct Receiver {
 #[derive(Debug, Clone)]
 pub struct TicketInfo {
     pub label: String,
+    pub size: u64,
+}
+
+/// One file inside a fetched collection, ready to save.
+#[derive(Debug, Clone)]
+pub struct CollectionEntry {
+    /// File name (may contain `/` for nested directory entries).
+    pub name: String,
+    /// Content hash to pass back into [`Receiver::read_bytes`].
+    pub hash: Hash,
+    /// Size in bytes.
     pub size: u64,
 }
 
@@ -92,6 +105,30 @@ impl Receiver {
         Ok(primary.hash())
     }
 
+    /// Lists the files inside a fetched collection so the UI can offer a save
+    /// button per file. Every Lightning P2P ticket is a HashSeq collection
+    /// (a single shared file is a one-entry collection), so this is the
+    /// uniform way to enumerate what landed.
+    ///
+    /// # Errors
+    ///
+    /// Returns a message if the collection metadata is missing or unreadable.
+    pub async fn list_collection(&self, root: Hash) -> Result<Vec<CollectionEntry>, String> {
+        let collection = Collection::load(root, &*self.store)
+            .await
+            .map_err(|e| e.to_string())?;
+        let mut entries = Vec::new();
+        for (name, hash) in collection.iter() {
+            let size = self.blob_size(*hash).await?;
+            entries.push(CollectionEntry {
+                name: name.clone(),
+                hash: *hash,
+                size,
+            });
+        }
+        Ok(entries)
+    }
+
     /// Reads a fetched blob's bytes out of the store.
     ///
     /// # Errors
@@ -104,6 +141,21 @@ impl Receiver {
             .await
             .map(|bytes| bytes.to_vec())
             .map_err(|e| e.to_string())
+    }
+
+    /// Returns a stored blob's size in bytes.
+    async fn blob_size(&self, hash: Hash) -> Result<u64, String> {
+        match self
+            .store
+            .blobs()
+            .status(hash)
+            .await
+            .map_err(|e| e.to_string())?
+        {
+            BlobStatus::Complete { size } => Ok(size),
+            BlobStatus::Partial { size } => Ok(size.unwrap_or(0)),
+            BlobStatus::NotFound => Err(format!("missing blob {hash}")),
+        }
     }
 
     /// Teaches the endpoint how to reach every provider (relay addresses from

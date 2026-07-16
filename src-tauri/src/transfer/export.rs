@@ -5,8 +5,9 @@ use super::destination::{
     ensure_enough_space, next_available_path, safe_collection_label, staging_dir_name,
 };
 use crate::error::{LightningP2PError, Result};
-use iroh_blobs::rpc::client::blobs::{BlobStatus, MemClient};
-use iroh_blobs::store::{ExportFormat, ExportMode};
+use iroh_blobs::api::proto::BlobStatus;
+use iroh_blobs::api::Store;
+use iroh_blobs::format::collection::Collection;
 use iroh_blobs::ticket::BlobTicket;
 use iroh_blobs::Hash;
 use std::ffi::OsString;
@@ -38,22 +39,22 @@ pub struct ExportSummary {
 ///
 /// Returns `LightningP2PError` if the ticket cannot be exported to disk.
 pub async fn export_ticket(
-    client: &MemClient,
+    store: &Store,
     ticket: &BlobTicket,
     destination: &Path,
     known_size: Option<u64>,
 ) -> Result<ExportSummary> {
     preflight_destination(destination)?;
-    let label = resolve_label(client, ticket).await?;
+    let label = resolve_label(store, ticket).await?;
     let size = match known_size {
         Some(size) if size > 0 => size,
-        _ => ticket_size(client, ticket).await?,
+        _ => ticket_size(store, ticket).await?,
     };
     ensure_enough_space(destination, size)?;
     let output_path = if ticket.recursive() {
-        export_collection(client, ticket, destination, &label).await?
+        export_collection(store, ticket, destination, &label).await?
     } else {
-        export_blob(client, ticket, destination).await?
+        export_blob(store, ticket, destination).await?
     };
 
     let output_path = publish_to_public_storage(output_path, ticket.recursive()).await;
@@ -145,13 +146,12 @@ async fn publish_to_public_storage(staged_path: PathBuf, _recursive: bool) -> Pa
 /// # Errors
 ///
 /// Returns `LightningP2PError` if collection metadata cannot be read.
-pub async fn resolve_label(client: &MemClient, ticket: &BlobTicket) -> Result<String> {
+pub async fn resolve_label(store: &Store, ticket: &BlobTicket) -> Result<String> {
     if !ticket.recursive() {
         return Ok(ticket.hash().to_string());
     }
 
-    let collection = client
-        .get_collection(ticket.hash())
+    let collection = Collection::load(ticket.hash(), store)
         .await
         .map_err(|error| blob_error(&error))?;
     Ok(summarize_names(
@@ -160,7 +160,7 @@ pub async fn resolve_label(client: &MemClient, ticket: &BlobTicket) -> Result<St
 }
 
 async fn export_blob(
-    client: &MemClient,
+    store: &Store,
     ticket: &BlobTicket,
     destination: &Path,
 ) -> Result<PathBuf> {
@@ -173,21 +173,11 @@ async fn export_blob(
     let output_path = next_available_path(&destination.join(ticket.hash().to_string()));
     let temp_path = part_path_for(&output_path);
 
-    let export_result = async {
-        client
-            .export(
-                ticket.hash(),
-                temp_path.clone(),
-                ExportFormat::Blob,
-                ExportMode::TryReference,
-            )
-            .await
-            .map_err(|error| blob_error(&error))?
-            .finish()
-            .await
-            .map_err(|error| blob_error(&error))
-    }
-    .await;
+    let export_result = store
+        .blobs()
+        .export(ticket.hash(), &temp_path)
+        .await
+        .map_err(|error| blob_error(&error));
 
     if let Err(error) = export_result {
         let _ = tokio::fs::remove_file(&temp_path).await;
@@ -213,7 +203,7 @@ fn part_path_for(final_path: &Path) -> PathBuf {
 }
 
 async fn export_collection(
-    client: &MemClient,
+    store: &Store,
     ticket: &BlobTicket,
     destination: &Path,
     label: &str,
@@ -221,21 +211,10 @@ async fn export_collection(
     let staging_dir = next_available_path(&destination.join(staging_dir_name(ticket.hash())));
     tokio::fs::create_dir_all(&staging_dir).await?;
 
-    let export_result = async {
-        client
-            .export(
-                ticket.hash(),
-                staging_dir.clone(),
-                ExportFormat::Collection,
-                ExportMode::TryReference,
-            )
-            .await
-            .map_err(|error| blob_error(&error))?
-            .finish()
-            .await
-            .map_err(|error| blob_error(&error))
-    }
-    .await;
+    // iroh-blobs 1.0 has no collection-export helper, so load the collection
+    // and export each child to `staging/<name>` (creating parent dirs for
+    // nested names).
+    let export_result = export_collection_children(store, ticket.hash(), &staging_dir).await;
 
     if let Err(error) = export_result {
         let _ = tokio::fs::remove_dir_all(&staging_dir).await;
@@ -243,6 +222,24 @@ async fn export_collection(
     }
 
     move_staged_collection(&staging_dir, destination, label).await
+}
+
+async fn export_collection_children(store: &Store, root: Hash, staging_dir: &Path) -> Result<()> {
+    let collection = Collection::load(root, store)
+        .await
+        .map_err(|error| blob_error(&error))?;
+    for (name, hash) in collection.iter() {
+        let target = staging_dir.join(name);
+        if let Some(parent) = target.parent() {
+            tokio::fs::create_dir_all(parent).await?;
+        }
+        store
+            .blobs()
+            .export(*hash, &target)
+            .await
+            .map_err(|error| blob_error(&error))?;
+    }
+    Ok(())
 }
 
 fn summarize_names<'a>(names: impl Iterator<Item = &'a str>) -> String {
@@ -259,18 +256,17 @@ fn summarize_names<'a>(names: impl Iterator<Item = &'a str>) -> String {
     }
 }
 
-async fn ticket_size(client: &MemClient, ticket: &BlobTicket) -> Result<u64> {
+async fn ticket_size(store: &Store, ticket: &BlobTicket) -> Result<u64> {
     if !ticket.recursive() {
-        return blob_size(client, ticket.hash()).await;
+        return blob_size(store, ticket.hash()).await;
     }
 
-    let collection = client
-        .get_collection(ticket.hash())
+    let collection = Collection::load(ticket.hash(), store)
         .await
         .map_err(|error| blob_error(&error))?;
     let mut total = 0u64;
     for (_name, hash) in collection.iter() {
-        total += blob_size(client, *hash).await?;
+        total += blob_size(store, *hash).await?;
     }
     Ok(total)
 }
@@ -311,14 +307,15 @@ async fn read_dir_entries(path: &Path) -> Result<Vec<PathBuf>> {
     Ok(entries)
 }
 
-async fn blob_size(client: &MemClient, hash: Hash) -> Result<u64> {
-    match client
+async fn blob_size(store: &Store, hash: Hash) -> Result<u64> {
+    match store
+        .blobs()
         .status(hash)
         .await
         .map_err(|error| blob_error(&error))?
     {
         BlobStatus::Complete { size } => Ok(size),
-        BlobStatus::Partial { size } => Ok(size.value()),
+        BlobStatus::Partial { size } => Ok(size.unwrap_or(0)),
         BlobStatus::NotFound => Err(LightningP2PError::Blob(format!("Missing blob {hash}"))),
     }
 }

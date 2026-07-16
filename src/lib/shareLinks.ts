@@ -9,6 +9,8 @@ export const RECEIVE_PATH = "/receive";
 export const VELOPACK_DOWNLOAD_URL = `${RELEASE_URL}/download/LightningP2P-win-Setup.exe`;
 export const NSIS_DOWNLOAD_URL = `${RELEASE_URL}/download/LightningP2PSetup.exe`;
 export const MSI_DOWNLOAD_URL = `${RELEASE_URL}/download/LightningP2P.msi`;
+export const MACOS_DMG_DOWNLOAD_URL = `${RELEASE_URL}/download/LightningP2P-macos-universal.dmg`;
+export const LINUX_APPIMAGE_DOWNLOAD_URL = `${RELEASE_URL}/download/LightningP2P-linux-x86_64.AppImage`;
 /**
  * Last release tag that actually shipped Android artifacts. Community
  * (unsigned) Windows releases skip the Android job, so `/releases/latest`

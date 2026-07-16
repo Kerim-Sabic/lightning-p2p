@@ -11,18 +11,23 @@ use crate::transfer::progress::{
 };
 use futures_util::stream;
 use futures_util::StreamExt;
+use iroh_blobs::api::proto::AddProgressItem;
+use iroh_blobs::api::Store;
 use iroh_blobs::format::collection::Collection;
-use iroh_blobs::provider::AddProgress;
-use iroh_blobs::rpc::client::blobs::{MemClient, WrapOption};
 use iroh_blobs::ticket::BlobTicket;
-use iroh_blobs::util::fs::{scan_path, DataSource};
-use iroh_blobs::util::{SetTagOption, Tag};
-use iroh_blobs::Hash;
+use iroh_blobs::{BlobFormat, Hash};
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use tauri::Window;
+
+/// A single file to import, with the name it should carry inside a collection.
+#[derive(Debug, Clone)]
+struct Source {
+    name: String,
+    path: PathBuf,
+}
 
 /// Hard upper bound on import parallelism. The per-transfer
 /// [`TransferProfile`] picks a value within this range; env-var override is
@@ -30,7 +35,7 @@ use tauri::Window;
 const MAX_IMPORT_PARALLELISM: usize = 128;
 
 struct SharePlan {
-    sources: Vec<DataSource>,
+    sources: Vec<Source>,
     label: String,
     total_size: u64,
 }
@@ -38,7 +43,6 @@ struct SharePlan {
 struct ImportedSource {
     name: String,
     hash: Hash,
-    tag: Tag,
 }
 
 struct IndexedImport {
@@ -149,7 +153,7 @@ async fn create_share_with_plan(
     progress: Option<ProgressHandle>,
     profile: TransferProfile,
 ) -> Result<ShareOutcome> {
-    let imported = import_sources(node.blobs_client().clone(), &plan, progress, profile).await?;
+    let imported = import_sources(node.blobs_client(), &plan, progress, profile).await?;
     let hash = persist_collection(node.blobs_client(), imported).await?;
     let ticket = build_ticket(node, hash).await?;
     tracing::info!(
@@ -203,12 +207,10 @@ fn canonicalize_paths(paths: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
         .collect()
 }
 
-fn collect_sources(paths: &[PathBuf]) -> Result<Vec<DataSource>> {
+fn collect_sources(paths: &[PathBuf]) -> Result<Vec<Source>> {
     let mut sources = Vec::new();
     for path in paths {
-        let mut scanned = scan_path(path.clone(), WrapOption::Wrap { name: None })
-            .map_err(|err| LightningP2PError::Blob(err.to_string()))?;
-        sources.append(&mut scanned);
+        scan_into(path, &mut sources)?;
     }
     if sources.is_empty() {
         return Err(LightningP2PError::Other(
@@ -219,40 +221,74 @@ fn collect_sources(paths: &[PathBuf]) -> Result<Vec<DataSource>> {
     Ok(sources)
 }
 
-fn ensure_unique_names(sources: &[DataSource]) -> Result<()> {
+/// Walks `path` and appends importable [`Source`]s. A file is wrapped under its
+/// own name; a directory is walked recursively with `dirname/relative` names.
+/// Replaces iroh-blobs 0.35's `scan_path` (removed in the 1.0 line).
+fn scan_into(path: &Path, out: &mut Vec<Source>) -> Result<()> {
+    let name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let meta = fs::metadata(path)?;
+    if meta.is_file() {
+        out.push(Source {
+            name,
+            path: path.to_path_buf(),
+        });
+    } else if meta.is_dir() {
+        scan_dir(path, &name, out)?;
+    }
+    Ok(())
+}
+
+fn scan_dir(dir: &Path, prefix: &str, out: &mut Vec<Source>) -> Result<()> {
+    let mut entries = fs::read_dir(dir)?
+        .map(|entry| entry.map(|e| e.path()))
+        .collect::<std::io::Result<Vec<_>>>()?;
+    entries.sort();
+    for entry in entries {
+        let entry_name = entry
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let name = format!("{prefix}/{entry_name}");
+        let meta = fs::metadata(&entry)?;
+        if meta.is_file() {
+            out.push(Source { name, path: entry });
+        } else if meta.is_dir() {
+            scan_dir(&entry, &name, out)?;
+        }
+    }
+    Ok(())
+}
+
+fn ensure_unique_names(sources: &[Source]) -> Result<()> {
     let mut names = HashSet::new();
     for source in sources {
-        let name = source.name().into_owned();
-        if !names.insert(name.clone()) {
+        if !names.insert(source.name.clone()) {
             return Err(LightningP2PError::Other(format!(
-                "Duplicate share path name: {name}"
+                "Duplicate share path name: {}",
+                source.name
             )));
         }
     }
     Ok(())
 }
 
-fn total_size(sources: &[DataSource]) -> Result<u64> {
+fn total_size(sources: &[Source]) -> Result<u64> {
     sources
         .iter()
-        .try_fold(0, |total, source| Ok(total + file_size(source.path())?))
+        .try_fold(0, |total, source| Ok(total + file_size(&source.path)?))
 }
 
 fn file_size(path: &Path) -> Result<u64> {
     Ok(fs::metadata(path)?.len())
 }
 
-fn summarize_sources(sources: &[DataSource]) -> String {
+fn summarize_sources(sources: &[Source]) -> String {
     let mut roots = sources
         .iter()
-        .map(|source| {
-            source
-                .name()
-                .split('/')
-                .next()
-                .unwrap_or_default()
-                .to_string()
-        })
+        .map(|source| source.name.split('/').next().unwrap_or_default().to_string())
         .collect::<Vec<_>>();
     roots.sort();
     roots.dedup();
@@ -263,7 +299,7 @@ fn summarize_sources(sources: &[DataSource]) -> String {
 }
 
 async fn import_sources(
-    client: MemClient,
+    store: &Store,
     plan: &SharePlan,
     progress: Option<ProgressHandle>,
     profile: TransferProfile,
@@ -274,7 +310,7 @@ async fn import_sources(
         .cloned()
         .enumerate()
         .map(|(index, source)| {
-            import_task(&client, source, index, plan.total_size, progress.clone())
+            import_source(store, source, index, plan.total_size, progress.clone())
         });
     let mut pending =
         stream::iter(tasks).buffer_unordered(import_parallelism(plan.sources.len(), profile));
@@ -286,17 +322,6 @@ async fn import_sources(
 
     imported.sort_by_key(|item| item.index);
     Ok(imported.into_iter().map(|item| item.source).collect())
-}
-
-fn import_task(
-    client: &MemClient,
-    source: DataSource,
-    index: usize,
-    total_size: u64,
-    progress: Option<ProgressHandle>,
-) -> impl std::future::Future<Output = Result<IndexedImport>> {
-    let client = client.clone();
-    async move { import_source(client, source, index, total_size, progress).await }
 }
 
 fn import_parallelism(source_count: usize, profile: TransferProfile) -> usize {
@@ -322,71 +347,48 @@ fn compute_import_parallelism(source_count: usize, cap: usize) -> usize {
 }
 
 async fn import_source(
-    client: MemClient,
-    source: DataSource,
+    store: &Store,
+    source: Source,
     index: usize,
     total_size: u64,
     progress: Option<ProgressHandle>,
 ) -> Result<IndexedImport> {
-    let size = file_size(source.path())?;
+    let size = file_size(&source.path)?;
     let mut last_offset = 0u64;
-    let mut stream = client
-        .add_from_path(
-            source.path().to_path_buf(),
-            true,
-            SetTagOption::Auto,
-            WrapOption::NoWrap,
-        )
-        .await
-        .map_err(|err| blob_error(&err))?;
+    let mut stream = store.blobs().add_path(&source.path).stream().await;
+    let mut hash: Option<Hash> = None;
 
-    while let Some(event) = stream.next().await {
-        let event = event.map_err(|err| blob_error(&err))?;
-        if let Some(imported) = handle_add_progress(
-            event,
-            &source,
-            size,
-            total_size,
-            progress.as_ref(),
-            &mut last_offset,
-        )? {
-            return Ok(IndexedImport {
-                index,
-                source: imported,
-            });
+    while let Some(item) = stream.next().await {
+        match item {
+            AddProgressItem::CopyProgress(offset) | AddProgressItem::OutboardProgress(offset) => {
+                advance_progress(
+                    progress.as_ref(),
+                    offset.saturating_sub(last_offset),
+                    total_size,
+                );
+                last_offset = offset;
+            }
+            AddProgressItem::Done(temp_tag) => {
+                hash = Some(temp_tag.hash());
+            }
+            AddProgressItem::Error(error) => {
+                return Err(LightningP2PError::Blob(error.to_string()))
+            }
+            AddProgressItem::Size(_) | AddProgressItem::CopyDone => {}
         }
     }
 
-    Err(LightningP2PError::Blob(
-        "Import stream ended before completion".into(),
-    ))
-}
-
-fn handle_add_progress(
-    event: AddProgress,
-    source: &DataSource,
-    size: u64,
-    total_size: u64,
-    progress: Option<&ProgressHandle>,
-    last_offset: &mut u64,
-) -> Result<Option<ImportedSource>> {
-    match event {
-        AddProgress::Found { .. } | AddProgress::Done { .. } => Ok(None),
-        AddProgress::Progress { offset, .. } => {
-            advance_progress(progress, offset.saturating_sub(*last_offset), total_size);
-            *last_offset = offset;
-            Ok(None)
-        }
-        AddProgress::AllDone { hash, tag, .. } => {
-            advance_progress(progress, size.saturating_sub(*last_offset), total_size);
-            Ok(Some(ImportedSource {
-                name: source.name().into_owned(),
-                hash,
-                tag,
-            }))
-        }
-        AddProgress::Abort(error) => Err(LightningP2PError::Blob(error.to_string())),
-    }
+    let hash = hash.ok_or_else(|| {
+        LightningP2PError::Blob("Import stream ended before completion".into())
+    })?;
+    advance_progress(progress.as_ref(), size.saturating_sub(last_offset), total_size);
+    Ok(IndexedImport {
+        index,
+        source: ImportedSource {
+            name: source.name,
+            hash,
+        },
+    })
 }
 
 fn advance_progress(progress: Option<&ProgressHandle>, bytes_delta: u64, total_size: u64) {
@@ -395,29 +397,24 @@ fn advance_progress(progress: Option<&ProgressHandle>, bytes_delta: u64, total_s
     }
 }
 
-async fn persist_collection(client: &MemClient, imported: Vec<ImportedSource>) -> Result<Hash> {
-    let tags = imported
-        .iter()
-        .map(|item| item.tag.clone())
-        .collect::<Vec<_>>();
+async fn persist_collection(store: &Store, imported: Vec<ImportedSource>) -> Result<Hash> {
     let collection = imported
         .into_iter()
         .map(|item| (item.name, item.hash))
         .collect::<Collection>();
-    client
-        .create_collection(collection, SetTagOption::Auto, tags)
+    let temp_tag = collection
+        .store(store)
         .await
-        .map(|(hash, _tag)| hash)
-        .map_err(|err| blob_error(&err))
+        .map_err(|err| blob_error(&err))?;
+    Ok(temp_tag.hash())
 }
 
 async fn build_ticket(node: &LightningP2PNode, hash: Hash) -> Result<BlobTicket> {
-    BlobTicket::new(
+    Ok(BlobTicket::new(
         node.ticket_addr().await?,
         hash,
-        iroh_blobs::BlobFormat::HashSeq,
-    )
-    .map_err(|err| blob_error(&err))
+        BlobFormat::HashSeq,
+    ))
 }
 
 fn save_send_record(node: &LightningP2PNode, outcome: &ShareOutcome) -> Result<()> {
@@ -460,27 +457,28 @@ fn effective_mbps(bytes: u64, duration_ms: u64) -> u64 {
 mod tests {
     use super::*;
 
+    fn source(name: &str) -> Source {
+        Source {
+            name: name.into(),
+            path: PathBuf::from(name),
+        }
+    }
+
     #[test]
     fn summarize_single_root() {
-        let sources = vec![DataSource::with_name("a.txt".into(), "folder/a.txt".into())];
+        let sources = vec![source("folder/a.txt")];
         assert_eq!(summarize_sources(&sources), "folder");
     }
 
     #[test]
     fn summarize_multiple_roots() {
-        let sources = vec![
-            DataSource::with_name("a.txt".into(), "one/a.txt".into()),
-            DataSource::with_name("b.txt".into(), "two/b.txt".into()),
-        ];
+        let sources = vec![source("one/a.txt"), source("two/b.txt")];
         assert_eq!(summarize_sources(&sources), "2 items");
     }
 
     #[test]
     fn duplicate_names_are_rejected() {
-        let sources = vec![
-            DataSource::with_name("a.txt".into(), "dup.txt".into()),
-            DataSource::with_name("b.txt".into(), "dup.txt".into()),
-        ];
+        let sources = vec![source("dup.txt"), source("dup.txt")];
         let err = ensure_unique_names(&sources).expect_err("duplicates should fail");
         assert!(err.to_string().contains("Duplicate share path name"));
     }

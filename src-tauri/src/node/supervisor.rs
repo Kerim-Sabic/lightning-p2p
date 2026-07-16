@@ -217,6 +217,7 @@ impl NodeSupervisor {
                 let runtime_status = node.runtime_status();
                 let endpoint = node.endpoint().clone();
                 let lan_flag = node.lan_discovery_flag();
+                let mdns = node.mdns_lookup();
                 {
                     let mut guard = self.node.write().await;
                     *guard = Some(Arc::new(node));
@@ -225,7 +226,7 @@ impl NodeSupervisor {
                     let mut runtime = self.runtime_status.write().await;
                     *runtime = runtime_status;
                 }
-                spawn_nearby_discovery_loop(app.clone(), endpoint, nearby_shares, lan_flag);
+                spawn_nearby_discovery_loop(app.clone(), endpoint, nearby_shares, lan_flag, mdns);
                 self.set_status(
                     &app,
                     NodeSupervisorStatus::new(NodeSupervisorPhase::Idle, Some(reason.into()), None),

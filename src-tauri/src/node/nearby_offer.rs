@@ -8,7 +8,7 @@
 //! dial the sender's blob store to pull bytes.
 
 use crate::error::{LightningP2PError, Result};
-use iroh::NodeId;
+use iroh::EndpointId;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
@@ -254,7 +254,7 @@ pub async fn handle_offer_request(
 pub fn emit_offer_resolved(
     app_handle: &AppHandle,
     offer_id: String,
-    receiver_node_id: NodeId,
+    receiver_node_id: EndpointId,
     outcome: OfferDecision,
 ) -> Result<()> {
     app_handle

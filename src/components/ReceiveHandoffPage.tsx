@@ -14,6 +14,8 @@ import {
 import { motion, useReducedMotion } from "framer-motion";
 import { useEffect, useMemo, useState } from "react";
 import siteLogoUrl from "../assets/lightning-p2p-site-logo.png";
+import { BrowserReceivePanel } from "./BrowserReceivePanel";
+import { browserReceiveSupported } from "../lib/webReceiver";
 import {
   ANDROID_APK_DOWNLOAD_URL,
   RELEASE_URL,
@@ -64,6 +66,7 @@ export function ReceiveHandoffPage() {
   const [showRawTicket, setShowRawTicket] = useState(false);
   const [autoOpenedAt, setAutoOpenedAt] = useState<number | null>(null);
   const deepLink = handoff.ticket ? createDeepReceiveLink(handoff.ticket) : null;
+  const showBrowserReceive = Boolean(handoff.ticket) && browserReceiveSupported();
 
   useEffect(() => {
     if (!deepLink) return;
@@ -154,6 +157,12 @@ export function ReceiveHandoffPage() {
                 <span className="inline-flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5 text-[var(--signal-green)]" /> Capability token, never a server upload</span>
               </div>
 
+              {showBrowserReceive && handoff.ticket && (
+                <div className="hero-rise hero-rise--stagger-4 mt-8 max-w-[52ch]">
+                  <BrowserReceivePanel ticket={handoff.ticket} />
+                </div>
+              )}
+
               {deepLink && (
                 <motion.p
                   className="mt-8 inline-flex items-center gap-2 rounded-full border border-white/8 bg-white/[0.03] px-3 py-1.5 text-[11.5px] font-medium text-white/72"
@@ -231,15 +240,16 @@ export function ReceiveHandoffPage() {
               <p className="text-[11px] font-bold uppercase tracking-[0.26em] text-[var(--signal-green)]">How the handoff works</p>
               <h2 className="font-display mt-3 text-[22px] font-bold tracking-[-0.012em] text-white">Receive links keep the ticket out of server logs.</h2>
               <p className="mt-3 text-[13.5px] leading-7 text-[color:var(--soft-copy)]">
-                Lightning P2P receive URLs are <code className="font-mono text-[12px] text-white/82">/receive#t=&lt;ticket&gt;</code>. Browsers don't send the fragment in HTTP requests, so the ticket never reaches a web server. The page opens the native app via the <code className="font-mono text-[12px] text-white/82">lightning-p2p://</code> scheme; the app does the actual transfer.
+                Lightning P2P receive URLs are <code className="font-mono text-[12px] text-white/82">/receive#t=&lt;ticket&gt;</code>. Browsers don't send the fragment in HTTP requests, so the ticket never reaches a web server. From here you can open the native app via the <code className="font-mono text-[12px] text-white/82">lightning-p2p://</code> scheme, or receive right in this tab — the same Rust engine runs as WebAssembly and pulls the files directly from the sender, BLAKE3-verified, no server in the middle.
               </p>
             </article>
             <aside className="rounded-2xl border border-white/8 bg-white/[0.03] p-6">
               <p className="text-[11px] font-bold uppercase tracking-[0.26em] text-[var(--proof-amber)]">Key facts</p>
               <dl className="mt-3 grid gap-2 text-[13px]">
                 <Fact label="Ticket location"   value="URL fragment" />
+                <Fact label="Browser receive"   value="iroh + BLAKE3 in WASM" />
                 <Fact label="Deep link scheme"  value="lightning-p2p://receive" />
-                <Fact label="Transfer engine"   value="Rust + Tauri (iroh QUIC)" />
+                <Fact label="Transfer engine"   value="Rust (iroh QUIC / relay)" />
                 <Fact label="Sender requirement" value="Sender stays online" />
                 <Fact label="Ticket model"      value="Capability token" />
               </dl>

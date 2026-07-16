@@ -209,6 +209,30 @@
     X-Content-Type-Options = "nosniff"
     X-Frame-Options = "DENY"
 
+# The /receive page runs the browser receiver: the same iroh + iroh-blobs Rust
+# engine as WebAssembly, in-page. `'wasm-unsafe-eval'` permits WASM compilation;
+# `connect-src ... wss:` permits the relay WebSockets the receiver dials (the
+# page's only outbound connections — the n0 relay hosts rotate and use FQDN-dot
+# forms that a host allowlist would silently miss, so the scheme is allowed and
+# the host is not narrowed further). Everything else stays same-origin.
+[[headers]]
+  for = "/receive"
+  [headers.values]
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https: wss:; worker-src 'self' blob:; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+
+[[headers]]
+  for = "/receive/*"
+  [headers.values]
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https: wss:; worker-src 'self' blob:; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+
+# The wasm-bindgen glue + engine use stable filenames (not content-hashed), so
+# revalidate rather than caching immutably — a redeploy must not serve a stale
+# engine. An hour balances byte savings against update propagation.
+[[headers]]
+  for = "/webrx/*"
+  [headers.values]
+    Cache-Control = "public, max-age=3600, must-revalidate"
+
 [[headers]]
   for = "/assets/*"
   [headers.values]

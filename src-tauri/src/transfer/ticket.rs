@@ -3,7 +3,7 @@
 use crate::error::{LightningP2PError, Result};
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine as _;
-use iroh::NodeAddr;
+use iroh::EndpointAddr;
 use iroh_blobs::ticket::BlobTicket;
 use iroh_blobs::BlobFormat;
 use serde::{Deserialize, Serialize};
@@ -99,12 +99,12 @@ impl ShareTicket {
         &self.primary
     }
 
-    /// Returns all provider node addresses, preserving ticket order.
+    /// Returns all provider endpoint addresses, preserving ticket order.
     #[must_use]
-    pub fn provider_node_addrs(&self) -> Vec<NodeAddr> {
+    pub fn provider_node_addrs(&self) -> Vec<EndpointAddr> {
         self.providers
             .iter()
-            .map(|ticket| ticket.node_addr().clone())
+            .map(|ticket| ticket.addr().clone())
             .collect()
     }
 
@@ -116,11 +116,11 @@ impl ShareTicket {
             ..ProviderTopology::default()
         };
         for provider in &self.providers {
-            let addr = provider.node_addr();
-            if !addr.direct_addresses.is_empty() {
+            let addr = provider.addr();
+            if addr.addrs.iter().any(iroh::TransportAddr::is_ip) {
                 topology.direct_provider_count += 1;
             }
-            if addr.relay_url().is_some() {
+            if addr.addrs.iter().any(iroh::TransportAddr::is_relay) {
                 topology.relay_provider_count += 1;
             }
         }
@@ -264,12 +264,12 @@ fn validate_provider_consistency(
 }
 
 fn provider_payload(ticket: &BlobTicket) -> LightningP2PProviderV2 {
-    let addr = ticket.node_addr();
+    let addr = ticket.addr();
     LightningP2PProviderV2 {
         ticket: ticket.to_string(),
-        node_id: addr.node_id.to_string(),
-        direct_address_count: addr.direct_addresses.len(),
-        relay: addr.relay_url().is_some(),
+        node_id: addr.id.to_string(),
+        direct_address_count: addr.addrs.iter().filter(|a| a.is_ip()).count(),
+        relay: addr.addrs.iter().any(iroh::TransportAddr::is_relay),
     }
 }
 
@@ -288,7 +288,7 @@ fn format_to_wire(format: BlobFormat) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use iroh::{NodeAddr, PublicKey};
+    use iroh::PublicKey;
     use iroh_blobs::Hash;
 
     fn sample_ticket() -> BlobTicket {
@@ -296,11 +296,10 @@ mod tests {
             PublicKey::from_str("ae58ff8833241ac82d6ff7611046ed67b5072d142c588d0063e942d9a75502b6")
                 .expect("public key should parse");
         BlobTicket::new(
-            NodeAddr::new(node_id),
+            EndpointAddr::from_parts(node_id, []),
             Hash::new(b"hello"),
             BlobFormat::HashSeq,
         )
-        .expect("ticket should build")
     }
 
     #[test]

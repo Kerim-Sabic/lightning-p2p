@@ -12,10 +12,12 @@ use super::nearby_offer::{
     handle_offer_request, OfferDecision, OfferInbox, OfferResponseMessage, OfferShareMessage,
 };
 use crate::error::{LightningP2PError, Result};
-use anyhow::Result as AnyhowResult;
-use iroh::{endpoint::Connection, protocol::ProtocolHandler, Endpoint, NodeAddr};
+use iroh::{
+    endpoint::Connection,
+    protocol::{AcceptError, ProtocolHandler},
+    Endpoint, EndpointAddr,
+};
 use iroh_blobs::{BlobFormat, Hash};
-use n0_future::boxed::BoxFuture;
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::str::FromStr;
@@ -168,17 +170,25 @@ impl NearbyShareProtocol {
 }
 
 impl ProtocolHandler for NearbyShareProtocol {
-    fn accept(&self, connection: Connection) -> BoxFuture<AnyhowResult<()>> {
-        let this = self.clone();
-        Box::pin(async move {
-            let (mut send, mut recv) = connection.accept_bi().await?;
-            let request = recv.read_to_end(MAX_MESSAGE_BYTES).await?;
-            let response = this.response_bytes(request).await?;
-            send.write_all(&response).await?;
-            send.finish()?;
-            connection.closed().await;
-            Ok(())
-        })
+    async fn accept(&self, connection: Connection) -> std::result::Result<(), AcceptError> {
+        let (mut send, mut recv) = connection
+            .accept_bi()
+            .await
+            .map_err(AcceptError::from_err)?;
+        let request = recv
+            .read_to_end(MAX_MESSAGE_BYTES)
+            .await
+            .map_err(AcceptError::from_err)?;
+        let response = self
+            .response_bytes(request)
+            .await
+            .map_err(AcceptError::from_err)?;
+        send.write_all(&response)
+            .await
+            .map_err(AcceptError::from_err)?;
+        send.finish().map_err(AcceptError::from_err)?;
+        connection.closed().await;
+        Ok(())
     }
 }
 
@@ -248,7 +258,7 @@ fn request_version(request: &NearbyRequest) -> u8 {
 /// Returns `LightningP2PError` if the peer cannot be reached or the response is invalid.
 pub(crate) async fn fetch_remote_shares(
     endpoint: &Endpoint,
-    node_addr: NodeAddr,
+    node_addr: EndpointAddr,
 ) -> Result<RemoteShareEnvelope> {
     let response = exchange(
         endpoint,
@@ -288,7 +298,7 @@ pub(crate) async fn fetch_remote_shares(
 /// not a valid offer decision.
 pub async fn send_offer(
     endpoint: &Endpoint,
-    node_addr: NodeAddr,
+    node_addr: EndpointAddr,
     offer: OfferShareMessage,
 ) -> Result<OfferDecision> {
     let response = exchange(
@@ -310,7 +320,7 @@ pub async fn send_offer(
 
 async fn exchange(
     endpoint: &Endpoint,
-    node_addr: NodeAddr,
+    node_addr: EndpointAddr,
     request: NearbyRequest,
 ) -> Result<NearbyResponse> {
     let connection = endpoint

@@ -9,9 +9,16 @@ The public product, Rust package, library crate, and generated executable now us
 ## Architecture Invariants - NEVER VIOLATE
 
 - ALL networking goes through iroh. No raw sockets, no WebRTC, no HTTP file transfer.
+  (The browser receiver is still iroh + iroh-blobs — the same Rust core compiled to
+  WASM — dialing the sender over the iroh relay; browser peers are relay-only and
+  memory-bound.)
 - iroh-blobs handles ALL blob transfer. Do not reinvent chunking, hashing, or resumption.
-- Tauri IPC is the ONLY bridge between frontend and backend. No HTTP servers.
-- Frontend is PURELY presentational. Zero business logic in TypeScript.
+- Tauri IPC is the ONLY bridge between frontend and backend in the desktop/mobile app.
+  The web receiver (`web-receiver/`) has no backend at all: it runs the same Rust engine
+  as WASM in the page — never a server. No HTTP file servers anywhere.
+- Frontend is PURELY presentational. Zero business logic in TypeScript. (The web
+  receiver's TS is a thin lazy-loader + save shim over the WASM engine; all transfer
+  logic stays in Rust.)
 - Every Tauri command returns a typed Result. No unwrap() in command handlers.
 
 ## Rust Conventions

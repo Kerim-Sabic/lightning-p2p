@@ -3,7 +3,7 @@
 //! iroh's built-in discovery (DNS + relay) handles the heavy lifting.
 //! This module provides optional local network discovery utilities.
 
-use iroh::NodeId;
+use iroh::EndpointId;
 use serde::{Deserialize, Serialize};
 use std::time::SystemTime;
 
@@ -11,7 +11,7 @@ use std::time::SystemTime;
 #[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DiscoveredPeer {
-    /// The peer's iroh `NodeId`.
+    /// The peer's iroh `EndpointId`.
     pub node_id: String,
     /// Human-readable display name (if known).
     pub display_name: Option<String>,
@@ -23,7 +23,7 @@ pub struct DiscoveredPeer {
 impl DiscoveredPeer {
     /// Creates a new discovered peer entry.
     #[must_use]
-    pub fn new(node_id: &NodeId, display_name: Option<String>) -> Self {
+    pub fn new(node_id: &EndpointId, display_name: Option<String>) -> Self {
         Self {
             node_id: node_id.to_string(),
             display_name,

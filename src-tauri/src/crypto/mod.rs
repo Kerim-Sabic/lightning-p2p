@@ -64,7 +64,7 @@ pub fn load_or_create_secret_key(data_dir: &Path) -> Result<SecretKey> {
         return secret_key_from_bytes(&bytes);
     }
 
-    let key = SecretKey::generate(rand::rngs::OsRng);
+    let key = SecretKey::generate();
     let bytes = key.to_bytes();
     if let Err(error) = store_secret_key(data_dir, &bytes) {
         tracing::warn!(
