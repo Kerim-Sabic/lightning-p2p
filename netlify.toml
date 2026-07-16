@@ -43,6 +43,18 @@
   force = true
 
 [[redirects]]
+  from = "/send"
+  to = "/send/index.html"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/send/"
+  to = "/send/index.html"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/security"
   to = "/security/index.html"
   status = 200
@@ -222,6 +234,17 @@
 
 [[headers]]
   for = "/receive/*"
+  [headers.values]
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https: wss:; worker-src 'self' blob:; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+
+# /send runs the same WASM engine (browser-side sharing) — same CSP.
+[[headers]]
+  for = "/send"
+  [headers.values]
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https: wss:; worker-src 'self' blob:; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+
+[[headers]]
+  for = "/send/*"
   [headers.values]
     Content-Security-Policy = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https: wss:; worker-src 'self' blob:; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
 

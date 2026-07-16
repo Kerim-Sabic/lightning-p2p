@@ -62,6 +62,7 @@ import {
   canonicalWebPath,
 } from "../lib/shareLinks";
 import { ReceiveHandoffPage } from "./ReceiveHandoffPage";
+import { SendPage } from "./SendPage";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -181,7 +182,7 @@ const defaultFaqs: Faq[] = [
   { q: "Does the sender need to stay online?", a: "Yes. The sender must keep Lightning P2P open and keep the content available until the receiver finishes." },
   { q: "Is there a file size limit?", a: "Lightning P2P does not impose an artificial file-size cap. Disk space, filesystem limits, network stability, and time still matter." },
   { q: "Is it available for macOS or Linux?", a: "Yes. v0.8.0 ships a universal macOS DMG (Intel + Apple Silicon) and Linux AppImage/deb/rpm as unsigned community builds, plus a pipe-friendly CLI. Windows and Android remain the most-tested paths." },
-  { q: "Can I receive without installing anything?", a: "Yes. Open the receive link in any modern browser and the same Rust engine runs in the page as WebAssembly — it pulls the files straight from the sender over the iroh relay, BLAKE3-verifies every chunk, and saves to disk. No server ever holds the bytes. Sending still needs the app or CLI." },
+  { q: "Can I send and receive without installing anything?", a: "Yes, both. Open /send, drop files, and this tab serves them directly to whoever opens your link — or open a receive link and the files arrive in-page. The same Rust engine runs in the browser as WebAssembly, BLAKE3-verifying every chunk. Browser shares are beta, relay-only, memory-bound (~2 GB), and the tab must stay open while sharing; the native app streams from disk without those limits." },
   { q: "Are tickets secret?", a: "Yes. Tickets are capability tokens. Anyone with a valid ticket can request that transfer while the sender is online, so treat tickets like secrets." },
 ];
 
@@ -716,8 +717,8 @@ function Hero({ page }: { page: WebPage }) {
             {page.intro} Built in Rust on <strong className="font-semibold text-white">iroh QUIC</strong> and <strong className="font-semibold text-white">iroh-blobs</strong>. BLAKE3 verifies every chunk. The receiver can even be <strong className="font-semibold text-white">a browser tab</strong> — the same engine runs as WebAssembly, no install. No cloud bucket, no account, no artificial size cap.
           </p>
           <div className="hero-rise hero-rise--stagger-3 flex flex-wrap items-center gap-3">
-            <MagneticWrap><CTA href="/download" variant="primary"><Download className="h-3.5 w-3.5" /> Download for Windows</CTA></MagneticWrap>
-            <MagneticWrap><CTA href={ANDROID_APK_DOWNLOAD_URL} variant="secondary"><Smartphone className="h-3.5 w-3.5" /> Android APK</CTA></MagneticWrap>
+            <MagneticWrap><CTA href="/send" variant="primary" ariaLabel="Send a file from this browser, no install"><Globe className="h-3.5 w-3.5" /> Try it now — send from this browser</CTA></MagneticWrap>
+            <MagneticWrap><CTA href="/download" variant="secondary"><Download className="h-3.5 w-3.5" /> Download the app</CTA></MagneticWrap>
             <MagneticWrap strength={0.18}><CTA href={REPO_URL} variant="ghost"><GitBranch className="h-3.5 w-3.5" /> Source <ExternalLink className="h-3 w-3" /></CTA></MagneticWrap>
           </div>
           <ul className="hero-rise hero-rise--stagger-4 mt-1 flex flex-wrap items-center gap-x-2 gap-y-2 text-[11px]">
@@ -1269,7 +1270,7 @@ function BrowserReceiveShowcase() {
             ))}
           </div>
           <p className="mt-7 font-mono text-[10.5px] uppercase tracking-[0.16em] text-white/36">
-            beta · relay-only in browsers · memory-bound (desktop app for &gt;2 GB) · sending still needs the app
+            beta · relay-only in browsers · memory-bound (desktop app for &gt;2 GB) · <a href="/send" className="text-[var(--signal-green)] underline decoration-dotted underline-offset-2">sending works in the browser too</a>
           </p>
         </Reveal>
         <Reveal delay={0.12}>
@@ -1864,6 +1865,7 @@ export function WebLandingPage() {
   }, [page]);
   const pathname = typeof window !== "undefined" ? window.location.pathname.replace(/\/$/u, "") || "/" : "/";
   if (pathname === "/receive") return <ReceiveHandoffPage />;
+  if (pathname === "/send") return <SendPage />;
   return (
     <div className="relative min-h-screen bg-[var(--lab-black)] text-white">
       <SiteAtmosphere />

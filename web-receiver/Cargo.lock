@@ -3868,6 +3868,7 @@ dependencies = [
  "n0-future",
  "serde",
  "serde_json",
+ "tokio",
  "tracing",
  "wasm-bindgen",
  "wasm-bindgen-futures",

@@ -26,10 +26,16 @@ interface WebReceiverInstance {
   list_collection(rootHex: string): Promise<string>;
   read_blob(hashHex: string): Promise<Uint8Array>;
 }
+interface WebSenderInstance {
+  add_file(name: string, bytes: Uint8Array): Promise<void>;
+  staged_bytes(): number;
+  publish(label: string): Promise<string>;
+}
 interface WasmModule {
   default: (moduleOrPath?: unknown) => Promise<unknown>;
   inspect_ticket: (ticket: string) => string;
   WebReceiver: { spawn: () => Promise<WebReceiverInstance> };
+  WebSender: { spawn: () => Promise<WebSenderInstance> };
 }
 
 const MODULE_URL = `${import.meta.env.BASE_URL}webrx/web_receiver.js`;
@@ -101,6 +107,44 @@ export class BrowserReceiver {
   async readBlob(hashHex: string): Promise<Uint8Array> {
     return this.inner.read_blob(hashHex);
   }
+}
+
+/**
+ * A live browser share: staged files served from this tab over the iroh
+ * relay. The tab must stay open while peers download — same rule as the
+ * native sender.
+ */
+export class BrowserSender {
+  private constructor(private readonly inner: WebSenderInstance) {}
+
+  /** Binds the endpoint and starts accepting iroh-blobs requests. */
+  static async spawn(): Promise<BrowserSender> {
+    const mod = await loadModule();
+    return new BrowserSender(await mod.WebSender.spawn());
+  }
+
+  /** Stages one file's bytes under its name. */
+  async addFile(name: string, bytes: Uint8Array): Promise<void> {
+    await this.inner.add_file(name, bytes);
+  }
+
+  /** Total bytes staged so far, for the size gate. */
+  stagedBytes(): number {
+    return this.inner.staged_bytes();
+  }
+
+  /**
+   * Publishes the staged files and returns the `fd2:` ticket. Waits for
+   * relay reachability, so the ticket dials from anywhere.
+   */
+  async publish(label: string): Promise<string> {
+    return this.inner.publish(label);
+  }
+}
+
+/** Builds the shareable receive link for a ticket. */
+export function receiveLinkForTicket(ticket: string): string {
+  return `${window.location.origin}/receive#t=${ticket}`;
 }
 
 /** True when the browser exposes the File System Access save picker (Chromium). */

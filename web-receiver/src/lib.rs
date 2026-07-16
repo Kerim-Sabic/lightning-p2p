@@ -10,6 +10,7 @@
 //! memory-bound (the blob lives in wasm memory), so the UI enforces a size
 //! gate before fetching. See `docs/browser-receiver-spike.md`.
 
+pub mod sender;
 pub mod ticket;
 
 use iroh::address_lookup::memory::MemoryLookup;
