@@ -7,7 +7,7 @@
     "eyebrow": "Free open-source file transfer",
     "heading": "Move huge files directly between devices.",
     "intro": "Lightning P2P sends files from one device to another with a Rust desktop app, direct QUIC connections when possible, relay fallback when needed, and no cloud storage account in the middle.",
-    "focus": "Windows and Android 10+ sideload builds are available now. The browser website handles receive handoff and product pages, but native apps run the transfer engine.",
+    "focus": "Windows, macOS, Linux, and Android 10+ builds are available now, plus a CLI. Receivers can even skip the install: receive links run the same Rust engine in any browser as WebAssembly (beta).",
     "inNav": true,
     "priority": "1.0",
     "related": [
@@ -36,7 +36,7 @@
       },
       {
         "q": "Can I use Lightning P2P in a mobile browser today?",
-        "a": "The public website works on mobile, but real transfers require a native Lightning P2P app. Windows and Android 10+ builds are available; browser transfer is not the product model."
+        "a": "Receiving works in modern browsers, including mobile: opening a receive link runs the same Rust engine in-page as WebAssembly and BLAKE3-verifies the files as they arrive (beta; relay-only and memory-bound). Sending still needs a native app — Windows, macOS, Linux, and Android 10+ builds are available."
       },
       {
         "q": "Why not promise speed leadership immediately?",
@@ -129,11 +129,11 @@
     "eyebrow": "Receive handoff",
     "heading": "Open a Lightning P2P transfer in the desktop app.",
     "intro": "Lightning P2P receive links use a URL fragment such as /receive#t=... so the ticket stays in the browser and is not sent to Netlify or GitHub.",
-    "focus": "If Lightning P2P is installed, the page tries to open lightning-p2p://receive?t=... automatically. If it is not installed, the page keeps the ticket available while the receiver installs the Windows app or Android APK.",
+    "focus": "If Lightning P2P is installed, the page tries to open lightning-p2p://receive?t=... automatically. Without the app, the receiver can pull the files right in the page: the same Rust engine runs as WebAssembly (beta), or the ticket stays available while they install.",
     "priority": "0.6",
     "related": ["/download", "/how-to-send-large-files", "/security"],
     "body": [
-      "The receive handoff page is the first viral loop in Lightning P2P. Senders can share a normal HTTPS link in chat or email, and receivers get a clear path: open the installed app or install the recommended Windows setup or Android APK first.",
+      "The receive handoff page is the first viral loop in Lightning P2P. Senders share a normal HTTPS link in chat or email, and receivers get two clear paths: open the installed app, or press \"Receive in this browser\" and let the same Rust engine fetch the files in-page as WebAssembly — BLAKE3-verified, no install.",
       "The ticket is placed after the # fragment marker, not in the query string. Browsers do not include fragments in HTTP requests, which keeps the transfer ticket out of ordinary web server access logs.",
       "The raw iroh blob ticket remains available as a fallback for manual paste into the Receive view."
     ],
@@ -144,7 +144,7 @@
       },
       {
         "q": "What happens if the desktop app is not installed?",
-        "a": "The page keeps the ticket in the current browser session and points the receiver to the recommended Windows installer. After installing, the receiver can open the app link again or copy the raw ticket."
+        "a": "The receiver can still get the files: \"Receive in this browser\" runs the transfer engine in-page as WebAssembly (beta; relay-only, memory-bound past ~2 GB). The ticket also stays in the browser session for anyone who prefers to install the native app first."
       }
     ]
   },

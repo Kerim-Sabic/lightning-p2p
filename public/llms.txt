@@ -30,7 +30,7 @@ Important caveats:
 - Tickets are capability tokens and should be treated as secrets.
 - Relay fallback helps connectivity but is not cloud storage.
 - Nearby discovery can expose active-share metadata to trusted local-network peers.
-- Browser website is a receive handoff and marketing surface, not a browser transfer engine.
+- The /receive page can receive fully in-browser (beta): the same Rust engine runs in-page as WASM, relay-only and memory-bound. Sending still needs the native app or CLI.
 - Public speed leadership claims require repeatable benchmark results.
 - Unsigned community Windows builds may show SmartScreen warnings; verify GitHub Releases source and SHA256 checksums before installing.
 

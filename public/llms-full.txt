@@ -154,7 +154,7 @@ Q: Are tickets secret?
 A: Yes. Tickets are capability tokens. Anyone with a valid ticket can request that transfer while the sender is online.
 
 Q: Can Lightning P2P run fully in a browser?
-A: No. The browser site handles marketing and receive handoff only. File transfer requires the native app.
+A: Receiving, yes: opening a receive link in any modern browser runs the same Rust engine in-page as WebAssembly (iroh + iroh-blobs), pulls the files straight from the sender over the iroh relay, and BLAKE3-verifies every chunk. No server holds the bytes; the ticket stays in the URL fragment. Browser receive is beta, relay-only, and memory-bound (use the native app past ~2 GB). Sending still requires the native app or CLI.
 
 Q: Is Lightning P2P open source?
 A: Yes. It is Apache-2.0 licensed and published on GitHub.
