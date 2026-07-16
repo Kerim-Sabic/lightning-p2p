@@ -7,6 +7,7 @@ import {
   EyeOff,
   FileCheck2,
   GitBranch,
+  Globe,
   Link2,
   ShieldCheck,
   Smartphone,
@@ -160,6 +161,29 @@ export function ReceiveHandoffPage() {
               {showBrowserReceive && handoff.ticket && (
                 <div className="hero-rise hero-rise--stagger-4 mt-8 max-w-[52ch]">
                   <BrowserReceivePanel ticket={handoff.ticket} />
+                </div>
+              )}
+
+              {!handoff.ticket && (
+                <div className="hero-rise hero-rise--stagger-4 mt-8 max-w-[52ch]">
+                  <div className="relative overflow-hidden rounded-2xl border border-[color:var(--signal-green)]/22 bg-[color:var(--signal-green)]/[0.05] p-6">
+                    <div className="flex items-start gap-3">
+                      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-[color:var(--signal-green)]/30 bg-[color:var(--signal-green)]/12">
+                        <Globe className="h-5 w-5 text-[var(--signal-green)]" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <p className="text-[13.5px] font-semibold text-white">Receive in this browser — no install</p>
+                          <span className="rounded-full border border-[color:var(--proof-amber)]/30 bg-[color:var(--proof-amber)]/10 px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-[0.18em] text-[var(--proof-amber)]">
+                            Beta
+                          </span>
+                        </div>
+                        <p className="mt-1.5 text-[12.5px] leading-6 text-[color:var(--soft-copy)]">
+                          When someone sends you a Lightning P2P link, a <span className="font-semibold text-white">Receive in this browser</span> button appears right here. The same Rust engine runs in this tab as WebAssembly and pulls the files straight from the sender — BLAKE3-verified, never through a server. Ask the sender for their <code className="font-mono text-[11px] text-white/82">/receive#t=…</code> link to try it.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
 
