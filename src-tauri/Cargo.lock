@@ -3656,7 +3656,7 @@ dependencies = [
 
 [[package]]
 name = "lightning-p2p"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",

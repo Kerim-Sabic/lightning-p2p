@@ -25,3 +25,9 @@ src-tauri/Cargo.lock linguist-generated=true
 *.ico binary linguist-generated=true
 *.bmp binary linguist-generated=true
 *.jar binary linguist-vendored=true
+
+# Browser-receiver WASM engine: a compiled binary + generated wasm-bindgen glue.
+# Mark binary so git never rewrites line endings, and generated so Linguist and
+# diffs don't treat it as hand-written source.
+*.wasm binary linguist-generated=true
+public/webrx/** binary linguist-generated=true

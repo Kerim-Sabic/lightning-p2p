@@ -78,6 +78,61 @@ jobs:
       - run: pnpm test
       - run: node scripts/check-release-state.mjs
 
+  web-receiver:
+    name: Web receiver (WASM engine build + test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install clang (ring's wasm C toolchain)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: web-receiver
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen-cli@0.2.126
+
+      - name: Test engine (ticket + collection logic, native)
+        working-directory: web-receiver
+        run: cargo test
+
+      - name: Build engine to wasm32
+        working-directory: web-receiver
+        run: cargo build --target wasm32-unknown-unknown --release
+
+      - name: Generate wasm-bindgen glue
+        working-directory: web-receiver
+        run: wasm-bindgen --target web --out-dir out --no-typescript target/wasm32-unknown-unknown/release/web_receiver.wasm
+
+      - name: Verify the wasm exports the receiver engine surface
+        working-directory: web-receiver
+        run: |
+          node -e '
+            const fs = require("fs");
+            const buf = fs.readFileSync("out/web_receiver_bg.wasm");
+            WebAssembly.compile(buf).then((mod) => {
+              const have = new Set(WebAssembly.Module.exports(mod).map((e) => e.name));
+              const want = ["webreceiver_fetch","webreceiver_list_collection","webreceiver_read_blob","webreceiver_spawn","inspect_ticket"];
+              const missing = want.filter((w) => !have.has(w));
+              if (missing.length) { console.error("missing wasm exports:", missing.join(", ")); process.exit(1); }
+              console.log("web-receiver wasm OK; engine exports present");
+            }).catch((e) => { console.error("wasm invalid:", e.message); process.exit(1); });
+          '
+
+      - name: Confirm committed public/webrx artifact exists
+        run: |
+          test -s public/webrx/web_receiver.js || (echo "public/webrx/web_receiver.js missing — run scripts/build-web-receiver.sh" && exit 1)
+          test -s public/webrx/web_receiver_bg.wasm || (echo "public/webrx/web_receiver_bg.wasm missing — run scripts/build-web-receiver.sh" && exit 1)
+
   benchmark-local-smoke:
     name: Benchmark (same-machine harness smoke)
     runs-on: ubuntu-latest
