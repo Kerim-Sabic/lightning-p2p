@@ -25,15 +25,21 @@ interface WebReceiverInstance {
   fetch(ticket: string): Promise<string>;
   list_collection(rootHex: string): Promise<string>;
   read_blob(hashHex: string): Promise<Uint8Array>;
+  read_blob_range(hashHex: string, offset: number, len: number): Promise<Uint8Array>;
 }
 interface WebSenderInstance {
-  add_file(name: string, bytes: Uint8Array): Promise<void>;
+  begin_file(name: string): void;
+  push_chunk(chunk: Uint8Array): Promise<void>;
+  finish_file(): Promise<void>;
   staged_bytes(): number;
   publish(label: string): Promise<string>;
+  shutdown(): Promise<void>;
+  free(): void;
 }
 interface WasmModule {
   default: (moduleOrPath?: unknown) => Promise<unknown>;
   inspect_ticket: (ticket: string) => string;
+  render_qr_svg: (text: string) => string;
   WebReceiver: { spawn: () => Promise<WebReceiverInstance> };
   WebSender: { spawn: () => Promise<WebSenderInstance> };
 }
@@ -74,6 +80,15 @@ export async function inspectTicket(ticket: string): Promise<TicketInfo> {
   return { label: parsed.label ?? "", size: Number(parsed.size ?? 0) };
 }
 
+/**
+ * Renders text (a receive link) as an SVG QR code string — same renderer and
+ * styling as the desktop app's ticket QR, running in the wasm engine.
+ */
+export async function renderQrSvg(text: string): Promise<string> {
+  const mod = await loadModule();
+  return mod.render_qr_svg(text);
+}
+
 /** A live browser receiver: a bound iroh endpoint plus an in-memory store. */
 export class BrowserReceiver {
   private constructor(private readonly inner: WebReceiverInstance) {}
@@ -107,6 +122,11 @@ export class BrowserReceiver {
   async readBlob(hashHex: string): Promise<Uint8Array> {
     return this.inner.read_blob(hashHex);
   }
+
+  /** Reads one slice of a fetched file, so big saves stream to disk. */
+  async readBlobRange(hashHex: string, offset: number, len: number): Promise<Uint8Array> {
+    return this.inner.read_blob_range(hashHex, offset, len);
+  }
 }
 
 /**
@@ -123,9 +143,25 @@ export class BrowserSender {
     return new BrowserSender(await mod.WebSender.spawn());
   }
 
-  /** Stages one file's bytes under its name. */
-  async addFile(name: string, bytes: Uint8Array): Promise<void> {
-    await this.inner.add_file(name, bytes);
+  /**
+   * Streams one file into the share chunk by chunk. The engine hashes chunks
+   * as they arrive (with backpressure), so the file is never duplicated
+   * whole in memory — this is what lets big files fit in a tab.
+   */
+  async addFile(name: string, file: Blob): Promise<void> {
+    this.inner.begin_file(name);
+    const reader = file.stream().getReader();
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        await this.inner.push_chunk(value);
+      }
+    } catch (error) {
+      void reader.cancel().catch(() => undefined);
+      throw error;
+    }
+    await this.inner.finish_file();
   }
 
   /** Total bytes staged so far, for the size gate. */
@@ -140,6 +176,19 @@ export class BrowserSender {
   async publish(label: string): Promise<string> {
     return this.inner.publish(label);
   }
+
+  /**
+   * Stops serving for real — shuts down the accept loop, closes the
+   * endpoint, then releases the wasm object. (Freeing alone would leave the
+   * engine's spawned accept task serving in the background.)
+   */
+  async stop(): Promise<void> {
+    try {
+      await this.inner.shutdown();
+    } finally {
+      this.inner.free();
+    }
+  }
 }
 
 /** Builds the shareable receive link for a ticket. */
@@ -150,6 +199,43 @@ export function receiveLinkForTicket(ticket: string): string {
 /** True when the browser exposes the File System Access save picker (Chromium). */
 export function hasSaveFilePicker(): boolean {
   return typeof window !== "undefined" && "showSaveFilePicker" in window;
+}
+
+// Slice size for streamed saves: big enough to keep disk writes efficient,
+// small enough that peak extra memory stays negligible.
+const SAVE_CHUNK_BYTES = 8 * 1024 * 1024;
+
+/**
+ * Saves a fetched blob through the File System Access picker, reading it out
+ * of the store in slices so the file is never duplicated whole in memory.
+ * Returns false when the picker is unavailable — the caller falls back to
+ * [`saveBytes`] with the full contents.
+ */
+export async function saveBlobStreamed(
+  name: string,
+  size: number,
+  read: (offset: number, len: number) => Promise<Uint8Array>,
+): Promise<boolean> {
+  if (!hasSaveFilePicker()) return false;
+  const safeName = name.split(/[\\/]/).pop() || "download";
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handle = await (window as any).showSaveFilePicker({ suggestedName: safeName });
+  const writable = await handle.createWritable();
+  try {
+    for (let offset = 0; offset < size; offset += SAVE_CHUNK_BYTES) {
+      const chunk = await read(offset, Math.min(SAVE_CHUNK_BYTES, size - offset));
+      await writable.write(chunk);
+    }
+    await writable.close();
+  } catch (error) {
+    try {
+      await writable.abort();
+    } catch {
+      // The write already failed; nothing more to clean up.
+    }
+    throw error;
+  }
+  return true;
 }
 
 /**

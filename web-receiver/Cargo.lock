@@ -2622,6 +2622,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "qrcode"
+version = "0.14.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d68782463e408eb1e668cf6152704bd856c78c5b6417adaee3203d8f4c1fc9ec"
+
+[[package]]
 name = "quick-xml"
 version = "0.41.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3860,12 +3866,15 @@ name = "web-receiver"
 version = "0.9.0"
 dependencies = [
  "base64",
+ "bytes",
  "console_error_panic_hook",
+ "futures-channel",
  "getrandom 0.3.4",
  "iroh",
  "iroh-blobs",
  "js-sys",
  "n0-future",
+ "qrcode",
  "serde",
  "serde_json",
  "tokio",

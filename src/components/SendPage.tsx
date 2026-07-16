@@ -9,18 +9,21 @@ import {
   Globe,
   Loader2,
   Radio,
+  Share2,
   ShieldCheck,
+  Square,
   Trash2,
   UploadCloud,
 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import siteLogoUrl from "../assets/lightning-p2p-site-logo.png";
 import { REPO_URL } from "../lib/shareLinks";
 import {
   BrowserSender,
   browserReceiveSupported,
   receiveLinkForTicket,
+  renderQrSvg,
 } from "../lib/webReceiver";
 
 // Shares live in tab memory (MemStore), so gate before importing: soft-warn
@@ -56,14 +59,85 @@ export function SendPage() {
   const [dragOver, setDragOver] = useState(false);
   const [status, setStatus] = useState("");
   const [link, setLink] = useState<string | null>(null);
+  const [qrSvg, setQrSvg] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  // The live share IS this object: dropping it stops serving. It must outlive
+  // startSharing (a local would be GC'd and the wasm endpoint freed while the
+  // UI still says "sharing"), so it lives here for the lifetime of the page.
+  const senderRef = useRef<BrowserSender | null>(null);
+  const senderPromiseRef = useRef<Promise<BrowserSender> | null>(null);
   const supported = browserReceiveSupported();
+  const canWebShare = typeof navigator !== "undefined" && "share" in navigator;
 
   const totalBytes = staged.reduce((sum, f) => sum + f.size, 0);
   const refused = totalBytes > REFUSE_BYTES;
   const heavy = totalBytes > WARN_BYTES && !refused;
+
+  // Spawning binds the endpoint and connects to the relay, so kicking it off
+  // while the user is still picking files makes publish near-instant.
+  const ensureSender = () => {
+    senderPromiseRef.current ??= BrowserSender.spawn().catch((err: unknown) => {
+      senderPromiseRef.current = null;
+      throw err;
+    });
+    return senderPromiseRef.current;
+  };
+
+  const releaseSender = () => {
+    const sender = senderRef.current;
+    senderRef.current = null;
+    senderPromiseRef.current = null;
+    if (sender) void sender.stop().catch(() => undefined);
+  };
+
+  // Navigating away unmounts the page; stop serving instead of leaking the
+  // endpoint.
+  useEffect(() => {
+    return () => {
+      const sender = senderRef.current;
+      senderRef.current = null;
+      senderPromiseRef.current = null;
+      if (sender) void sender.stop().catch(() => undefined);
+    };
+  }, []);
+
+  // While the share is live, this tab IS the server. Three guards:
+  // 1. beforeunload — closing the tab kills the share, so the browser asks.
+  // 2. A held Web Lock — Chromium (Edge sleeping tabs, Chrome memory saver)
+  //    exempts lock-holding tabs from sleep/freeze/discard, which would
+  //    silently kill the share the same way. This is the failure users hit
+  //    in the wild: "it said it uploaded, but nobody could download".
+  // 3. The tab title says the share is live, so it isn't closed as clutter.
+  useEffect(() => {
+    if (phase !== "live") return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      // Older Chromium only honors the legacy returnValue signal.
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+
+    let releaseLock: (() => void) | undefined;
+    if ("locks" in navigator) {
+      const held = new Promise<void>((resolve) => {
+        releaseLock = resolve;
+      });
+      void navigator.locks
+        .request("lightning-p2p-live-share", () => held)
+        .catch(() => undefined);
+    }
+
+    const previousTitle = document.title;
+    document.title = "● Sharing live — keep this tab open · Lightning P2P";
+
+    return () => {
+      window.removeEventListener("beforeunload", warn);
+      releaseLock?.();
+      document.title = previousTitle;
+    };
+  }, [phase]);
 
   const addFiles = (list: FileList | null) => {
     if (!list) return;
@@ -74,6 +148,8 @@ export function SendPage() {
       }
     }
     setStaged(next);
+    // Prewarm the engine + relay connection; errors resurface at publish.
+    void ensureSender().catch(() => undefined);
   };
 
   const removeFile = (name: string) => {
@@ -86,20 +162,36 @@ export function SendPage() {
     setError(null);
     try {
       setStatus("Starting the engine in this tab…");
-      const sender = await BrowserSender.spawn();
+      const sender = await ensureSender();
+      senderRef.current = sender;
       for (const [index, f] of staged.entries()) {
         setStatus(`Importing ${f.name} (${index + 1}/${staged.length})…`);
-        const bytes = new Uint8Array(await f.file.arrayBuffer());
-        await sender.addFile(f.name, bytes);
+        await sender.addFile(f.name, f.file);
       }
       setStatus("Connecting to the relay…");
       const ticket = await sender.publish(shareLabel(staged));
-      setLink(receiveLinkForTicket(ticket));
+      const receiveLink = receiveLinkForTicket(ticket);
+      setLink(receiveLink);
+      try {
+        setQrSvg(await renderQrSvg(receiveLink));
+      } catch {
+        setQrSvg(null); // The QR is a bonus; the link still works without it.
+      }
       setPhase("live");
     } catch (err) {
+      // A half-imported share can't be resumed; drop it so retry starts clean.
+      releaseSender();
       setError(err instanceof Error ? err.message : String(err));
       setPhase("error");
     }
+  };
+
+  const stopSharing = () => {
+    releaseSender();
+    setLink(null);
+    setQrSvg(null);
+    setCopied(false);
+    setPhase("pick");
   };
 
   const copyLink = async () => {
@@ -110,6 +202,19 @@ export function SendPage() {
       window.setTimeout(() => setCopied(false), 1800);
     } catch {
       setCopied(false);
+    }
+  };
+
+  const shareViaSheet = async () => {
+    if (!link) return;
+    try {
+      await navigator.share({
+        title: "Lightning P2P",
+        text: `Receive "${shareLabel(staged)}" straight in your browser:`,
+        url: link,
+      });
+    } catch {
+      // Dismissed the share sheet — nothing to do.
     }
   };
 
@@ -306,11 +411,38 @@ export function SendPage() {
                         {copied ? <ClipboardCheck className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                         {copied ? "Copied" : "Copy link"}
                       </button>
+                      {canWebShare && (
+                        <button
+                          type="button"
+                          onClick={() => void shareViaSheet()}
+                          className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-white/12 bg-white/[0.05] px-4 text-[13px] font-semibold text-white transition hover:bg-white/[0.09]"
+                        >
+                          <Share2 className="h-4 w-4" /> Share
+                        </button>
+                      )}
                     </div>
+                    {qrSvg && (
+                      <div className="mt-5 flex flex-col items-center gap-2.5">
+                        <div
+                          className="qr-code-frame rounded-[20px] border border-white/[0.08] bg-white p-3"
+                          dangerouslySetInnerHTML={{ __html: qrSvg }}
+                        />
+                        <p className="text-[11px] text-[color:var(--muted-copy)]">
+                          Scan with a phone camera — it opens the receive page directly.
+                        </p>
+                      </div>
+                    )}
                     <div className="mt-4 flex flex-wrap gap-x-5 gap-y-1.5 text-[11px] text-[color:var(--muted-copy)]">
                       <span className="inline-flex items-center gap-1.5"><ShieldCheck className="h-3 w-3 text-[var(--signal-green)]" /> BLAKE3-verified on arrival</span>
                       <span className="inline-flex items-center gap-1.5"><Check className="h-3 w-3 text-[var(--signal-green)]" /> No server ever holds the bytes</span>
                     </div>
+                    <button
+                      type="button"
+                      onClick={stopSharing}
+                      className="mt-5 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-full border border-white/12 bg-white/[0.04] px-5 py-2.5 text-[13px] font-semibold text-white/80 transition hover:bg-white/[0.08] hover:text-white"
+                    >
+                      <Square className="h-3.5 w-3.5" /> Stop sharing
+                    </button>
                   </motion.div>
                 )}
 

@@ -10,6 +10,7 @@
 //! memory-bound (the blob lives in wasm memory), so the UI enforces a size
 //! gate before fetching. See `docs/browser-receiver-spike.md`.
 
+pub mod qr;
 pub mod sender;
 pub mod ticket;
 
@@ -141,6 +142,21 @@ impl Receiver {
             .get_bytes(hash)
             .await
             .map(|bytes| bytes.to_vec())
+            .map_err(|e| e.to_string())
+    }
+
+    /// Reads one slice of a fetched blob, so a big save can stream to disk in
+    /// pieces instead of materializing a second full-size copy in memory.
+    ///
+    /// # Errors
+    ///
+    /// Returns a message if the blob is absent or the range is unreadable.
+    pub async fn read_range(&self, hash: Hash, offset: u64, len: u64) -> Result<Vec<u8>, String> {
+        self.store
+            .blobs()
+            .export_ranges(hash, offset..offset.saturating_add(len))
+            .concatenate()
+            .await
             .map_err(|e| e.to_string())
     }
 
