@@ -14,8 +14,7 @@ import {
   type CollectionFile,
   hasSaveFilePicker,
   inspectTicket,
-  saveBlobStreamed,
-  saveBytes,
+  saveReceivedFile,
   type TicketInfo,
 } from "../lib/webReceiver";
 
@@ -82,15 +81,7 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
     if (!receiver) return;
     setSavingHash(file.hash);
     try {
-      // Chromium: stream slices straight to the picked file, so the save
-      // never duplicates the whole blob in memory. Elsewhere: full-bytes
-      // anchor download.
-      const streamed = await saveBlobStreamed(file.name, file.size, (offset, len) =>
-        receiver.readBlobRange(file.hash, offset, len),
-      );
-      if (!streamed) {
-        await saveBytes(file.name, await receiver.readBlob(file.hash));
-      }
+      await saveReceivedFile(receiver, file);
       setSavedHashes((prev) => new Set(prev).add(file.hash));
     } catch (err) {
       if (!(err instanceof DOMException && err.name === "AbortError")) setError(describe(err));

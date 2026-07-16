@@ -7,6 +7,8 @@
 // blob lives in WASM memory), which is why the UI gates on size before calling
 // `fetch`. See docs/browser-receiver-spike.md.
 
+import { WEBRX_VERSION } from "./webrxVersion";
+
 /** Ticket metadata surfaced before any bytes are fetched, for the size gate. */
 export interface TicketInfo {
   label: string;
@@ -21,30 +23,39 @@ export interface CollectionFile {
 }
 
 // Minimal shape of the wasm-bindgen `--target web` module we depend on.
+// Methods added after the first shipped engine are OPTIONAL: the glue is
+// served from a stable URL that browsers cache, so a page can briefly run
+// with an older engine than it was built against. Callers feature-detect
+// and fall back rather than assume ("this.inner.begin_file is not a
+// function" reached production exactly this way).
 interface WebReceiverInstance {
   fetch(ticket: string): Promise<string>;
   list_collection(rootHex: string): Promise<string>;
   read_blob(hashHex: string): Promise<Uint8Array>;
-  read_blob_range(hashHex: string, offset: number, len: number): Promise<Uint8Array>;
+  read_blob_range?(hashHex: string, offset: number, len: number): Promise<Uint8Array>;
 }
 interface WebSenderInstance {
-  begin_file(name: string): void;
-  push_chunk(chunk: Uint8Array): Promise<void>;
-  finish_file(): Promise<void>;
+  add_file(name: string, bytes: Uint8Array): Promise<void>;
+  begin_file?(name: string): void;
+  push_chunk?(chunk: Uint8Array): Promise<void>;
+  finish_file?(): Promise<void>;
   staged_bytes(): number;
   publish(label: string): Promise<string>;
-  shutdown(): Promise<void>;
+  shutdown?(): Promise<void>;
   free(): void;
 }
 interface WasmModule {
-  default: (moduleOrPath?: unknown) => Promise<unknown>;
+  default: (init?: { module_or_path: string }) => Promise<unknown>;
   inspect_ticket: (ticket: string) => string;
-  render_qr_svg: (text: string) => string;
+  render_qr_svg?: (text: string) => string;
   WebReceiver: { spawn: () => Promise<WebReceiverInstance> };
   WebSender: { spawn: () => Promise<WebSenderInstance> };
 }
 
-const MODULE_URL = `${import.meta.env.BASE_URL}webrx/web_receiver.js`;
+// ?v=<content hash> busts HTTP caches whenever the committed engine
+// artifacts change; both the glue and the .wasm it loads must carry it.
+const MODULE_URL = `${import.meta.env.BASE_URL}webrx/web_receiver.js?v=${WEBRX_VERSION}`;
+const WASM_URL = `${import.meta.env.BASE_URL}webrx/web_receiver_bg.wasm?v=${WEBRX_VERSION}`;
 
 let modulePromise: Promise<WasmModule> | null = null;
 
@@ -53,7 +64,7 @@ async function loadModule(): Promise<WasmModule> {
   if (!modulePromise) {
     modulePromise = (async () => {
       const mod = (await import(/* @vite-ignore */ MODULE_URL)) as WasmModule;
-      await mod.default();
+      await mod.default({ module_or_path: WASM_URL });
       return mod;
     })().catch((error) => {
       // Reset so a later retry can re-attempt the download.
@@ -83,9 +94,12 @@ export async function inspectTicket(ticket: string): Promise<TicketInfo> {
 /**
  * Renders text (a receive link) as an SVG QR code string — same renderer and
  * styling as the desktop app's ticket QR, running in the wasm engine.
+ * Rejects on a stale-cached engine without QR support; callers treat the QR
+ * as a bonus and catch.
  */
 export async function renderQrSvg(text: string): Promise<string> {
   const mod = await loadModule();
+  if (!mod.render_qr_svg) throw new Error("engine version without QR support");
   return mod.render_qr_svg(text);
 }
 
@@ -123,9 +137,19 @@ export class BrowserReceiver {
     return this.inner.read_blob(hashHex);
   }
 
-  /** Reads one slice of a fetched file, so big saves stream to disk. */
+  /**
+   * Reads one slice of a fetched file, so big saves stream to disk. Check
+   * [`supportsRangedReads`](BrowserReceiver#supportsRangedReads) first: a
+   * stale-cached engine lacks this and the call throws.
+   */
   async readBlobRange(hashHex: string, offset: number, len: number): Promise<Uint8Array> {
+    if (!this.inner.read_blob_range) throw new Error("engine version without ranged reads");
     return this.inner.read_blob_range(hashHex, offset, len);
+  }
+
+  /** True when the engine supports slice reads for streamed saves. */
+  supportsRangedReads(): boolean {
+    return typeof this.inner.read_blob_range === "function";
   }
 }
 
@@ -147,21 +171,29 @@ export class BrowserSender {
    * Streams one file into the share chunk by chunk. The engine hashes chunks
    * as they arrive (with backpressure), so the file is never duplicated
    * whole in memory — this is what lets big files fit in a tab.
+   *
+   * A stale-cached engine without the streaming API falls back to the
+   * buffered import: more peak memory, identical result.
    */
   async addFile(name: string, file: Blob): Promise<void> {
-    this.inner.begin_file(name);
+    const inner = this.inner;
+    if (!inner.begin_file || !inner.push_chunk || !inner.finish_file) {
+      await inner.add_file(name, new Uint8Array(await file.arrayBuffer()));
+      return;
+    }
+    inner.begin_file(name);
     const reader = file.stream().getReader();
     try {
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
-        await this.inner.push_chunk(value);
+        await inner.push_chunk(value);
       }
     } catch (error) {
       void reader.cancel().catch(() => undefined);
       throw error;
     }
-    await this.inner.finish_file();
+    await inner.finish_file();
   }
 
   /** Total bytes staged so far, for the size gate. */
@@ -180,11 +212,12 @@ export class BrowserSender {
   /**
    * Stops serving for real — shuts down the accept loop, closes the
    * endpoint, then releases the wasm object. (Freeing alone would leave the
-   * engine's spawned accept task serving in the background.)
+   * engine's spawned accept task serving in the background; a stale-cached
+   * engine without `shutdown` can only be freed.)
    */
   async stop(): Promise<void> {
     try {
-      await this.inner.shutdown();
+      if (this.inner.shutdown) await this.inner.shutdown();
     } finally {
       this.inner.free();
     }
@@ -206,12 +239,30 @@ export function hasSaveFilePicker(): boolean {
 const SAVE_CHUNK_BYTES = 8 * 1024 * 1024;
 
 /**
+ * Saves one received file the best way available: streamed out of the store
+ * in slices when both the engine and the browser allow it (never duplicating
+ * the file whole in memory), otherwise as full bytes.
+ */
+export async function saveReceivedFile(
+  receiver: BrowserReceiver,
+  file: CollectionFile,
+): Promise<void> {
+  if (receiver.supportsRangedReads()) {
+    const streamed = await saveBlobStreamed(file.name, file.size, (offset, len) =>
+      receiver.readBlobRange(file.hash, offset, len),
+    );
+    if (streamed) return;
+  }
+  await saveBytes(file.name, await receiver.readBlob(file.hash));
+}
+
+/**
  * Saves a fetched blob through the File System Access picker, reading it out
  * of the store in slices so the file is never duplicated whole in memory.
  * Returns false when the picker is unavailable — the caller falls back to
  * [`saveBytes`] with the full contents.
  */
-export async function saveBlobStreamed(
+async function saveBlobStreamed(
   name: string,
   size: number,
   read: (offset: number, len: number) => Promise<Uint8Array>,
