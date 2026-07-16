@@ -38,31 +38,39 @@ const failures = [];
 const packageJson = JSON.parse(await readText("package.json"));
 const cargoToml = await readText("src-tauri/Cargo.toml");
 const tauriConfig = JSON.parse(await readText("src-tauri/tauri.conf.json"));
-const shareLinks = await readText("src/lib/shareLinks.ts");
+const releaseManifest = JSON.parse(
+  await readText("src/content/release-manifest.json"),
+);
+const benchmarkSummary = JSON.parse(
+  await readText("src/content/local-benchmark-summary.json"),
+);
 
 const cargoVersion = matchRequired(
   cargoToml,
   /^\s*version\s*=\s*"([^"]+)"/m,
   "Cargo package version",
 );
-const stableTag = matchRequired(
-  shareLinks,
-  /STABLE_RELEASE_TAG\s*=\s*"([^"]+)"/,
-  "STABLE_RELEASE_TAG",
-);
-const experimentalTag = matchRequired(
-  shareLinks,
-  /EXPERIMENTAL_RELEASE_TAG\s*=\s*"([^"]+)"/,
-  "EXPERIMENTAL_RELEASE_TAG",
-);
-const lastAndroidReleaseTag = matchRequired(
-  shareLinks,
-  /LAST_ANDROID_RELEASE_TAG\s*=\s*"([^"]+)"/,
-  "LAST_ANDROID_RELEASE_TAG",
-);
+const stableTag = releaseManifest.stableReleaseTag;
+const experimentalTag = releaseManifest.experimentalReleaseTag;
+const lastAndroidReleaseTag = releaseManifest.lastAndroidReleaseTag;
 
 assertEqual(cargoVersion, packageJson.version, "Cargo/package version");
 assertEqual(tauriConfig.version, packageJson.version, "Tauri/package version");
+assertEqual(
+  releaseManifest.currentAppVersion,
+  packageJson.version,
+  "Release manifest/package version",
+);
+assertEqual(
+  releaseManifest.benchmark.appVersion,
+  benchmarkSummary.appVersion,
+  "Release manifest/benchmark app version",
+);
+assertEqual(
+  releaseManifest.benchmark.commitHash,
+  benchmarkSummary.commitHash,
+  "Release manifest/benchmark commit",
+);
 assertEqual(
   experimentalTag,
   `v${packageJson.version}`,
@@ -93,7 +101,6 @@ for (const [path, label] of [
   ["README.md", "README"],
   ["index.html", "source HTML metadata"],
   ["public/llms-full.txt", "LLM context"],
-  ["scripts/build-web-metadata.mjs", "metadata generator"],
   ["scripts/android-physical-acceptance.ps1", "Android acceptance script"],
   ["docs/android-release-runbook.md", "Android release runbook"],
 ]) {

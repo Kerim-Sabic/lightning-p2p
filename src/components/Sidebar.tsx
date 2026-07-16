@@ -1,10 +1,10 @@
 import {
   ArrowDownToLine,
   Clock3,
+  Home,
   Radar,
   Send,
   Settings2,
-  Wifi,
 } from "lucide-react";
 import type { View } from "../App";
 import lightningMark from "../assets/lightning-p2p-mark.png";
@@ -20,7 +20,7 @@ const navItems: Array<{
   label: string;
   icon: typeof Send;
 }> = [
-  { id: "devices", label: "Devices", icon: Wifi },
+  { id: "home", label: "Home", icon: Home },
   { id: "send", label: "Send", icon: Send },
   { id: "receive", label: "Receive", icon: ArrowDownToLine },
   { id: "history", label: "History", icon: Clock3 },

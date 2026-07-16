@@ -34,6 +34,10 @@ function routeLabel(onlineState: string): string {
 
 function viewLabel(view: View): string {
   switch (view) {
+    case "home":
+      return "Home";
+    case "devices":
+      return "Devices";
     case "receive":
       return "Receive";
     case "history":

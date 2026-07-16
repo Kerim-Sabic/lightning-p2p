@@ -16,7 +16,15 @@ const pages = JSON.parse(
   await readFile(join(repoRoot, "src", "content", "web-pages.json"), "utf8"),
 );
 const packageJson = JSON.parse(await readFile(join(repoRoot, "package.json"), "utf8"));
-const appVersion = packageJson.version;
+const releaseManifest = JSON.parse(
+  await readFile(join(repoRoot, "src", "content", "release-manifest.json"), "utf8"),
+);
+const appVersion = releaseManifest.currentAppVersion;
+if (appVersion !== packageJson.version) {
+  throw new Error(
+    `Release manifest version ${appVersion} does not match package version ${packageJson.version}.`,
+  );
+}
 const repoUrl = "https://github.com/Kerim-Sabic/lightning-p2p";
 const releaseUrl = `${repoUrl}/releases/latest`;
 const exeDownloadUrl = `${repoUrl}/releases/latest/download/LightningP2PSetup.exe`;
@@ -24,7 +32,7 @@ const msiDownloadUrl = `${repoUrl}/releases/latest/download/LightningP2P.msi`;
 const velopackDownloadUrl = `${repoUrl}/releases/latest/download/LightningP2P-win-Setup.exe`;
 // Community Windows releases can become `/releases/latest` without shipping
 // Android assets. Keep static metadata on the newest APK-bearing release.
-const lastAndroidReleaseTag = "v0.5.1";
+const lastAndroidReleaseTag = releaseManifest.lastAndroidReleaseTag;
 const androidReleaseUrl = `${repoUrl}/releases/download/${lastAndroidReleaseTag}`;
 const androidApkDownloadUrl = `${androidReleaseUrl}/LightningP2P-android-latest.apk`;
 const androidChecksumsUrl = `${androidReleaseUrl}/SHA256SUMS-android.txt`;
@@ -235,7 +243,7 @@ function softwareApplicationJsonLd(page) {
     "@type": "SoftwareApplication",
     name: "Lightning P2P",
     applicationCategory: "UtilitiesApplication",
-    operatingSystem: "Windows 10, Windows 11, Android 10+",
+    operatingSystem: "Windows, macOS, Linux, Android, Web",
     description: page.description,
     softwareVersion: appVersion,
     isAccessibleForFree: true,
@@ -265,7 +273,7 @@ function softwareApplicationJsonLd(page) {
     },
     audience: {
       "@type": "Audience",
-      audienceType: "Windows and Android users sending large files peer-to-peer",
+      audienceType: "People sending large files across desktop, mobile, browser, and CLI",
     },
     sameAs: [repoUrl],
     offers: {
@@ -284,11 +292,11 @@ function softwareSourceCodeJsonLd() {
     codeRepository: repoUrl,
     license: `${repoUrl}/blob/main/LICENSE`,
     programmingLanguage: ["Rust", "TypeScript"],
-    runtimePlatform: "Windows, Android",
+    runtimePlatform: "Windows, macOS, Linux, Android, Web, CLI",
     targetProduct: {
       "@type": "SoftwareApplication",
       name: "Lightning P2P",
-      operatingSystem: "Windows 10, Windows 11, Android 10+",
+      operatingSystem: "Windows, macOS, Linux, Android, Web",
     },
   });
 }
@@ -520,5 +528,10 @@ Sitemap: ${siteUrl}/sitemap.xml
 
 await writeFile(join(distDir, "sitemap.xml"), sitemap, "utf8");
 await writeFile(join(distDir, "robots.txt"), robots, "utf8");
+await writeFile(
+  join(distDir, "release-manifest.json"),
+  `${JSON.stringify(releaseManifest, null, 2)}\n`,
+  "utf8",
+);
 
 console.log(`Generated SEO route metadata for ${pages.length} pages at ${siteUrl}`);

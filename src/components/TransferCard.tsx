@@ -44,6 +44,9 @@ function statusLabel(transfer: TransferEntry): string {
     case "starting":
       return transfer.direction === "send" ? "Preparing share" : "Connecting";
     case "running":
+      if (transfer.phase === "retrying") {
+        return "Connection interrupted. Retrying";
+      }
       if (transfer.phase === "connecting") {
         return "Connecting";
       }

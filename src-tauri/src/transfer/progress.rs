@@ -32,6 +32,8 @@ pub enum TransferPhase {
     Preparing,
     /// The receiver is trying to contact the sender.
     Connecting,
+    /// A transient failure occurred and the receiver is waiting to retry.
+    Retrying,
     /// File bytes are moving into the local blob store.
     Downloading,
     /// Verified blobs are being exported to the destination folder.
@@ -50,11 +52,12 @@ impl TransferPhase {
     pub fn from_repr(value: u8) -> Self {
         match value {
             1 => Self::Connecting,
-            2 => Self::Downloading,
-            3 => Self::Verifying,
-            4 => Self::Completed,
-            5 => Self::Failed,
-            6 => Self::Cancelled,
+            2 => Self::Retrying,
+            3 => Self::Downloading,
+            4 => Self::Verifying,
+            5 => Self::Completed,
+            6 => Self::Failed,
+            7 => Self::Cancelled,
             _ => Self::Preparing,
         }
     }
@@ -65,11 +68,12 @@ impl TransferPhase {
         match self {
             Self::Preparing => 0,
             Self::Connecting => 1,
-            Self::Downloading => 2,
-            Self::Verifying => 3,
-            Self::Completed => 4,
-            Self::Failed => 5,
-            Self::Cancelled => 6,
+            Self::Retrying => 2,
+            Self::Downloading => 3,
+            Self::Verifying => 4,
+            Self::Completed => 5,
+            Self::Failed => 6,
+            Self::Cancelled => 7,
         }
     }
 }
@@ -819,6 +823,12 @@ fn unix_timestamp() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn retrying_phase_round_trips_through_atomic_representation() {
+        let repr = TransferPhase::Retrying.as_repr();
+        assert_eq!(TransferPhase::from_repr(repr), TransferPhase::Retrying);
+    }
 
     #[test]
     fn progress_event_serializes() {

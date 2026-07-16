@@ -1,22 +1,12 @@
 import {
+  lazy,
   startTransition,
+  Suspense,
   useCallback,
   useEffect,
   useMemo,
   useState,
 } from "react";
-import { DevicesView } from "./components/DevicesView";
-import { FirstRunOverlay } from "./components/FirstRunOverlay";
-import { HistoryView } from "./components/HistoryView";
-import { InlineAlert } from "./components/InlineAlert";
-import { MobileTabBar } from "./components/MobileTabBar";
-import { OfferPrompt } from "./components/OfferPrompt";
-import { ReceiveView } from "./components/ReceiveView";
-import { SendView } from "./components/SendView";
-import { SettingsView } from "./components/SettingsView";
-import { Sidebar } from "./components/Sidebar";
-import { WebLandingPage } from "./components/WebLandingPage";
-import { WindowChrome } from "./components/WindowChrome";
 import { useTransfer } from "./hooks/useTransfer";
 import {
   drainPendingSharedFiles,
@@ -28,7 +18,79 @@ import {
 } from "./lib/tauri";
 import { useTransferStore } from "./stores/transferStore";
 
-export type View = "send" | "devices" | "receive" | "history" | "settings";
+const WebLandingPage = lazy(() =>
+  import("./components/WebLandingPage").then((module) => ({
+    default: module.WebLandingPage,
+  })),
+);
+const DevicesView = lazy(() =>
+  import("./components/DevicesView").then((module) => ({
+    default: module.DevicesView,
+  })),
+);
+const FirstRunOverlay = lazy(() =>
+  import("./components/FirstRunOverlay").then((module) => ({
+    default: module.FirstRunOverlay,
+  })),
+);
+const HistoryView = lazy(() =>
+  import("./components/HistoryView").then((module) => ({
+    default: module.HistoryView,
+  })),
+);
+const HomeView = lazy(() =>
+  import("./components/HomeView").then((module) => ({
+    default: module.HomeView,
+  })),
+);
+const InlineAlert = lazy(() =>
+  import("./components/InlineAlert").then((module) => ({
+    default: module.InlineAlert,
+  })),
+);
+const MobileTabBar = lazy(() =>
+  import("./components/MobileTabBar").then((module) => ({
+    default: module.MobileTabBar,
+  })),
+);
+const OfferPrompt = lazy(() =>
+  import("./components/OfferPrompt").then((module) => ({
+    default: module.OfferPrompt,
+  })),
+);
+const ReceiveView = lazy(() =>
+  import("./components/ReceiveView").then((module) => ({
+    default: module.ReceiveView,
+  })),
+);
+const SendView = lazy(() =>
+  import("./components/SendView").then((module) => ({
+    default: module.SendView,
+  })),
+);
+const SettingsView = lazy(() =>
+  import("./components/SettingsView").then((module) => ({
+    default: module.SettingsView,
+  })),
+);
+const Sidebar = lazy(() =>
+  import("./components/Sidebar").then((module) => ({
+    default: module.Sidebar,
+  })),
+);
+const WindowChrome = lazy(() =>
+  import("./components/WindowChrome").then((module) => ({
+    default: module.WindowChrome,
+  })),
+);
+
+export type View =
+  | "home"
+  | "send"
+  | "devices"
+  | "receive"
+  | "history"
+  | "settings";
 
 export function App() {
   const runtimeKind = getRuntimeKind();
@@ -48,10 +110,27 @@ export function App() {
   }, [runtimeKind]);
 
   if (!nativeRuntime) {
-    return <WebLandingPage />;
+    return (
+      <Suspense fallback={<AppLoader label="Opening Lightning P2P" />}>
+        <WebLandingPage />
+      </Suspense>
+    );
   }
 
-  return <NativeAppShell runtimeKind={runtimeKind} />;
+  return (
+    <Suspense fallback={<AppLoader label="Starting the transfer engine" />}>
+      <NativeAppShell runtimeKind={runtimeKind} />
+    </Suspense>
+  );
+}
+
+function AppLoader({ label }: { label: string }) {
+  return (
+    <main className="app-loader" aria-busy="true" aria-live="polite">
+      <span className="app-loader-mark" aria-hidden="true" />
+      <p>{label}</p>
+    </main>
+  );
 }
 
 interface NativeAppShellProps {
@@ -59,7 +138,7 @@ interface NativeAppShellProps {
 }
 
 function NativeAppShell({ runtimeKind }: NativeAppShellProps) {
-  const [view, setView] = useState<View>("send");
+  const [view, setView] = useState<View>("home");
   const error = useTransferStore((state) => state.error);
   const appError = useTransferStore((state) => state.appError);
   const clearError = useTransferStore((state) => state.clearError);
@@ -156,6 +235,8 @@ function NativeAppShell({ runtimeKind }: NativeAppShellProps) {
 
   const content = useMemo(() => {
     switch (view) {
+      case "home":
+        return <HomeView onNavigate={handleNavigate} />;
       case "devices":
         return <DevicesView />;
       case "receive":
@@ -168,7 +249,7 @@ function NativeAppShell({ runtimeKind }: NativeAppShellProps) {
       default:
         return <SendView />;
     }
-  }, [view, handleNavigateToSend]);
+  }, [view, handleNavigate, handleNavigateToSend]);
 
   return (
     <div className="relative h-screen overflow-hidden bg-[var(--canvas-0)] text-[var(--fg-primary)]">
@@ -177,6 +258,7 @@ function NativeAppShell({ runtimeKind }: NativeAppShellProps) {
           mobileRuntime ? "app-shell-mobile" : "app-shell-desktop"
         }`}
       >
+        <a className="skip-link" href="#main-content">Skip to main content</a>
         <FirstRunOverlay />
         {!mobileRuntime ? <WindowChrome currentView={view} /> : null}
         <div
@@ -185,7 +267,7 @@ function NativeAppShell({ runtimeKind }: NativeAppShellProps) {
           {!mobileRuntime ? (
             <Sidebar currentView={view} onNavigate={handleNavigate} />
           ) : null}
-          <main className="min-h-0 flex-1 overflow-y-auto">
+          <main id="main-content" className="min-h-0 flex-1 overflow-y-auto">
             <div
               className={`mx-auto flex min-h-full max-w-[1040px] flex-col gap-4 px-4 pt-4 ${
                 mobileRuntime

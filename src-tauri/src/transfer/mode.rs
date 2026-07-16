@@ -43,8 +43,12 @@ const JUMBO_MTU_CEILING: u16 = 8952;
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum TransferMode {
-    /// Safe default. Moderate parallelism and conservative QUIC windows.
+    /// Platform-aware default. Uses the conservative desktop profile on
+    /// desktop and the battery-safe profile on Android while keeping a stable
+    /// user-facing setting that can gain measured heuristics over time.
     #[default]
+    SmartAuto,
+    /// Safe default. Moderate parallelism and conservative QUIC windows.
     Standard,
     /// Full parallelism, same windows as Standard. Aimed at typical LAN.
     Fast,
@@ -126,6 +130,7 @@ impl TransferMode {
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
+            Self::SmartAuto => "smart_auto",
             Self::Standard => "standard",
             Self::Fast => "fast",
             Self::Extreme => "extreme",
@@ -139,6 +144,7 @@ impl TransferMode {
     #[must_use]
     pub fn from_wire(name: &str) -> Option<Self> {
         Some(match name {
+            "smart_auto" => Self::SmartAuto,
             "standard" => Self::Standard,
             "fast" => Self::Fast,
             "extreme" => Self::Extreme,
@@ -154,6 +160,7 @@ impl TransferMode {
     #[must_use]
     pub const fn profile(self) -> TransferProfile {
         match self {
+            Self::SmartAuto => Self::smart_auto_profile(),
             Self::Standard => Self::standard_profile(),
             Self::Fast => Self::fast_profile(),
             Self::Extreme => Self::extreme_profile(),
@@ -161,6 +168,16 @@ impl TransferMode {
             Self::Warp => Self::warp_profile(),
             Self::BatterySafe => Self::battery_safe_profile(),
         }
+    }
+
+    const fn smart_auto_profile() -> TransferProfile {
+        let mut profile = if cfg!(target_os = "android") {
+            Self::battery_safe_profile()
+        } else {
+            Self::standard_profile()
+        };
+        profile.mode = Self::SmartAuto;
+        profile
     }
 
     const fn standard_profile() -> TransferProfile {
@@ -277,16 +294,12 @@ impl TransferMode {
         }
     }
 
-    /// Mode that ships as the platform default. Android defaults to
-    /// `BatterySafe` so first-launch transfers stay friendly to thermals and
-    /// RAM; desktops default to `Standard`.
+    /// Mode that ships as the platform default. Smart Auto resolves to
+    /// battery-safe transport values on Android and Standard values on
+    /// desktop without changing the on-disk preference.
     #[must_use]
     pub const fn platform_default() -> Self {
-        if cfg!(target_os = "android") {
-            Self::BatterySafe
-        } else {
-            Self::Standard
-        }
+        Self::SmartAuto
     }
 }
 
@@ -294,7 +307,8 @@ impl TransferMode {
 mod tests {
     use super::*;
 
-    const ALL_MODES: [TransferMode; 6] = [
+    const ALL_MODES: [TransferMode; 7] = [
+        TransferMode::SmartAuto,
         TransferMode::Standard,
         TransferMode::Fast,
         TransferMode::Extreme,
@@ -330,6 +344,19 @@ mod tests {
         for mode in ALL_MODES {
             assert_eq!(mode.profile().mode, mode);
         }
+    }
+
+    #[test]
+    fn smart_auto_uses_platform_safe_profile() {
+        let auto = TransferMode::SmartAuto.profile();
+        let expected = if cfg!(target_os = "android") {
+            TransferMode::BatterySafe.profile()
+        } else {
+            TransferMode::Standard.profile()
+        };
+        assert_eq!(auto.quic_send_window_bytes, expected.quic_send_window_bytes);
+        assert_eq!(auto.import_parallelism, expected.import_parallelism);
+        assert_eq!(auto.mode, TransferMode::SmartAuto);
     }
 
     #[test]
@@ -446,18 +473,13 @@ mod tests {
     }
 
     #[test]
-    fn standard_is_the_default_mode_value() {
+    fn smart_auto_is_the_default_mode_value() {
         let default: TransferMode = TransferMode::default();
-        assert_eq!(default, TransferMode::Standard);
+        assert_eq!(default, TransferMode::SmartAuto);
     }
 
     #[test]
     fn platform_default_matches_target() {
-        let expected = if cfg!(target_os = "android") {
-            TransferMode::BatterySafe
-        } else {
-            TransferMode::Standard
-        };
-        assert_eq!(TransferMode::platform_default(), expected);
+        assert_eq!(TransferMode::platform_default(), TransferMode::SmartAuto);
     }
 }

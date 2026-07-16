@@ -436,6 +436,7 @@ mod tests {
     #[test]
     fn transport_config_builds_for_every_mode() {
         for mode in [
+            TransferMode::SmartAuto,
             TransferMode::Standard,
             TransferMode::Fast,
             TransferMode::Extreme,
