@@ -47,6 +47,7 @@ import {
 } from "react";
 import siteLogoUrl from "../assets/lightning-p2p-site-logo.png";
 import benchmarkSummary from "../content/local-benchmark-summary.json";
+import releaseManifest from "../content/release-manifest.json";
 import pages from "../content/web-pages.json";
 import {
   ANDROID_APK_DOWNLOAD_URL,
@@ -146,13 +147,13 @@ const baseCaveats = [
   "Sender must stay online until the receiver finishes.",
   "Tickets are capability tokens and should be treated as secrets.",
   "Relay fallback helps connectivity, but it is not cloud storage.",
-  "The browser website is receive handoff and marketing, not the transfer engine.",
+  "Browser transfer is beta, relay-only, memory-bound, and requires the tab to stay open.",
   "Public speed leadership claims require repeatable benchmark results.",
 ];
 
 function answerContentForPage(page: WebPage): AnswerContent {
   const byPath: Record<string, string> = {
-    "/": "Lightning P2P is a free open-source peer-to-peer file transfer app made by Horalix. It sends files directly between Windows and Android devices with iroh QUIC, verifies content with BLAKE3, and does not require cloud upload, accounts, or artificial file-size caps.",
+    "/": "Lightning P2P is a free open-source peer-to-peer file transfer app made by Horalix. It sends files across native apps, the CLI, and browsers with iroh QUIC, verifies content with BLAKE3, and does not require cloud upload or accounts.",
     "/download": "Download Lightning P2P from GitHub Releases when you want the stable Windows installer or Android 10+ sideload APK for direct-first P2P file transfer. The recommended Windows asset is the one-click setup; Android users should verify the APK checksum before installing.",
     "/android-p2p-file-transfer": "Lightning P2P supports Android 10+ sideload installs, Android system share-target sends, smart MediaStore receive routing, direct-first iroh transfer, and BLAKE3 verification.",
     "/security": "Lightning P2P avoids cloud file hosting, uses encrypted peer transport through iroh, verifies content with BLAKE3, and treats tickets as capability tokens. It makes specific security claims instead of broad privacy promises.",
@@ -178,7 +179,7 @@ const defaultFaqs: Faq[] = [
   { q: "Does it upload files to the cloud?", a: "No cloud upload is part of the product model. The sender stays online and the receiver pulls the file through iroh connectivity." },
   { q: "Does relay fallback store my files?", a: "No. Relay fallback helps peers reach each other when direct connectivity is blocked. It is not a cloud bucket or hosted retention service." },
   { q: "Do I need an account?", a: "No. There is no login, email capture, or paid account tier required to send or receive." },
-  { q: "Can I use it in a browser?", a: "No. The browser site handles receive handoff and marketing. Real file transfer requires the native Lightning P2P app." },
+  { q: "Can I use it in a browser?", a: "Yes, in public beta. Browser send and receive use the Rust engine compiled to WebAssembly. Browser peers are relay-only, memory-bound, and the tab must stay open during transfer." },
   { q: "Does the sender need to stay online?", a: "Yes. The sender must keep Lightning P2P open and keep the content available until the receiver finishes." },
   { q: "Is there a file size limit?", a: "Lightning P2P does not impose an artificial file-size cap. Disk space, filesystem limits, network stability, and time still matter." },
   { q: "Is it available for macOS or Linux?", a: "Yes. v0.8.0 ships a universal macOS DMG (Intel + Apple Silicon) and Linux AppImage/deb/rpm as unsigned community builds, plus a pipe-friendly CLI. Windows and Android remain the most-tested paths." },
@@ -425,95 +426,6 @@ function DepthLayer({ children, z = 24, className }: { children: ReactNode; z?: 
   );
 }
 
-function MagneticWrap({ children, strength = 0.32, className }: { children: ReactNode; strength?: number; className?: string }) {
-  const reduce = useReducedMotion();
-  const ref = useRef<HTMLDivElement>(null);
-  const x = useMotionValue(0);
-  const y = useMotionValue(0);
-  const sx = useSpring(x, { stiffness: 260, damping: 22 });
-  const sy = useSpring(y, { stiffness: 260, damping: 22 });
-  if (reduce) return <span className={className}>{children}</span>;
-  return (
-    <motion.span
-      ref={ref}
-      className={cx("inline-block", className)}
-      style={{ x: sx, y: sy }}
-      onPointerMove={(e) => {
-        if (!ref.current) return;
-        const r = ref.current.getBoundingClientRect();
-        const dx = (e.clientX - (r.left + r.width / 2)) * strength;
-        const dy = (e.clientY - (r.top + r.height / 2)) * strength;
-        x.set(dx);
-        y.set(dy);
-      }}
-      onPointerLeave={() => {
-        x.set(0);
-        y.set(0);
-      }}
-    >
-      {children}
-    </motion.span>
-  );
-}
-
-function MarqueeRow({ items, slow }: { items: Array<{ icon: LucideIcon; label: string }>; slow?: boolean }) {
-  const doubled = [...items, ...items];
-  return (
-    <div className="relative overflow-hidden">
-      <div className={cx("marquee-track", slow && "marquee-track--slow")}>
-        {doubled.map((item, i) => (
-          <span key={i} className="inline-flex items-center gap-2.5 text-[12px] font-medium uppercase tracking-[0.18em] text-white/56">
-            <item.icon className="h-3.5 w-3.5 text-[var(--signal-green)]" /> {item.label}
-            <span aria-hidden className="text-white/22">◆</span>
-          </span>
-        ))}
-      </div>
-      <span aria-hidden className="pointer-events-none absolute inset-y-0 left-0 w-32 bg-gradient-to-r from-[var(--lab-black)] to-transparent" />
-      <span aria-hidden className="pointer-events-none absolute inset-y-0 right-0 w-32 bg-gradient-to-l from-[var(--lab-black)] to-transparent" />
-    </div>
-  );
-}
-
-// Looping typewriter — cycles through a list of strings letter-by-letter.
-function TypewriterLoop({ phrases, className, pause = 1600, charDelay = 36 }: { phrases: string[]; className?: string; pause?: number; charDelay?: number }) {
-  const reduce = useReducedMotion();
-  const [phraseIndex, setPhraseIndex] = useState(0);
-  const [shown, setShown] = useState(reduce ? phrases[0] ?? "" : "");
-  const [phase, setPhase] = useState<"type" | "hold" | "erase">("type");
-
-  useEffect(() => {
-    if (reduce) return;
-    const current = phrases[phraseIndex] ?? "";
-    let id: number;
-    if (phase === "type") {
-      if (shown.length < current.length) {
-        id = window.setTimeout(() => setShown(current.slice(0, shown.length + 1)), charDelay);
-      } else {
-        id = window.setTimeout(() => setPhase("hold"), pause);
-      }
-    } else if (phase === "hold") {
-      id = window.setTimeout(() => setPhase("erase"), pause);
-    } else {
-      if (shown.length > 0) {
-        id = window.setTimeout(() => setShown(shown.slice(0, -1)), Math.max(16, charDelay / 2));
-      } else {
-        id = window.setTimeout(() => {
-          setPhase("type");
-          setPhraseIndex((i) => (i + 1) % phrases.length);
-        }, 240);
-      }
-    }
-    return () => window.clearTimeout(id);
-  }, [phrases, phraseIndex, shown, phase, reduce, charDelay, pause]);
-
-  return (
-    <span className={className}>
-      <span aria-live="polite">{shown}</span>
-      {!reduce && <span aria-hidden className="typing-caret" />}
-    </span>
-  );
-}
-
 // Marketing button with shine sweep on hover.
 function CTA({ href, children, variant = "primary", className, ariaLabel, target }: { href: string; children: ReactNode; variant?: ButtonVariant; className?: string; ariaLabel?: string; target?: string }) {
   return (
@@ -695,73 +607,42 @@ function Header({ activePath }: { activePath: string }) {
 // ── Hero: drenched lab-black, big display, live route SVG ───────────────────
 
 function Hero({ page }: { page: WebPage }) {
-  const { scrollY } = useScroll();
-  const heroY = useTransform(scrollY, [0, 600], [0, -60]);
-  const reduce = useReducedMotion();
   return (
     <section className="relative isolate overflow-hidden">
       <div className="mx-auto grid max-w-[1320px] gap-10 px-6 pb-16 pt-12 sm:px-10 sm:pt-16 lg:grid-cols-[1.04fr_0.96fr] lg:gap-12 lg:pb-24 lg:pt-24 xl:gap-16">
-        <motion.div style={reduce ? undefined : { y: heroY }} className="relative z-10 flex max-w-[720px] flex-col gap-7">
+        <div className="relative z-10 flex max-w-[720px] flex-col gap-7">
           <div className="hero-rise flex flex-wrap items-center gap-3 text-[11px] font-semibold uppercase tracking-[0.22em]">
             <span className="inline-flex items-center gap-2 rounded-full border border-[color:var(--signal-green)]/22 bg-[color:var(--signal-green)]/10 px-3 py-1.5 text-[var(--signal-green)]">
-              <span className="signal-dot !h-1.5 !w-1.5" /> v{benchmarkSummary.appVersion} · the elegant brook
+              <span className="signal-dot !h-1.5 !w-1.5" /> v{releaseManifest.currentAppVersion} · current beta
             </span>
             <span className="hidden text-[10px] text-white/40 sm:inline">commit {benchmarkSummary.commitHash.slice(0, 8)}</span>
           </div>
           <h1 className="font-display text-balance text-[clamp(3rem,7.6vw,6.2rem)] font-extrabold leading-[0.92] tracking-[-0.028em] text-white">
             <span className="block"><WordReveal text="Direct files." delay={120} /></span>
             <span className="block text-[var(--signal-green)]"><WordReveal text="Verified bytes." delay={520} /></span>
-            <span className="block text-white/82"><WordReveal text="No cloud account." delay={1020} /></span>
           </h1>
           <p className="hero-rise hero-rise--stagger-2 max-w-[56ch] text-pretty text-[17px] leading-[1.6] text-[color:var(--soft-copy)] sm:text-[18px]">
             {page.intro} Built in Rust on <strong className="font-semibold text-white">iroh QUIC</strong> and <strong className="font-semibold text-white">iroh-blobs</strong>. BLAKE3 verifies every chunk. The receiver can even be <strong className="font-semibold text-white">a browser tab</strong> — the same engine runs as WebAssembly, no install. No cloud bucket, no account, no artificial size cap.
           </p>
           <div className="hero-rise hero-rise--stagger-3 flex flex-wrap items-center gap-3">
-            <MagneticWrap><CTA href="/send" variant="primary" ariaLabel="Send a file from this browser, no install"><Globe className="h-3.5 w-3.5" /> Try it now — send from this browser</CTA></MagneticWrap>
-            <MagneticWrap><CTA href="/download" variant="secondary"><Download className="h-3.5 w-3.5" /> Download the app</CTA></MagneticWrap>
-            <MagneticWrap strength={0.18}><CTA href={REPO_URL} variant="ghost"><GitBranch className="h-3.5 w-3.5" /> Source <ExternalLink className="h-3 w-3" /></CTA></MagneticWrap>
+            <CTA href="/send" variant="primary" ariaLabel="Send a file from this browser, no install"><Globe className="h-3.5 w-3.5" /> Send from browser</CTA>
+            <CTA href="/download" variant="secondary"><Download className="h-3.5 w-3.5" /> Download the app</CTA>
+            <CTA href={REPO_URL} variant="ghost"><GitBranch className="h-3.5 w-3.5" /> GitHub <ExternalLink className="h-3 w-3" /></CTA>
           </div>
           <ul className="hero-rise hero-rise--stagger-4 mt-1 flex flex-wrap items-center gap-x-2 gap-y-2 text-[11px]">
-            {trustBadges.slice(0, 6).map(({ icon: Icon, label }) => (
+            {trustBadges.slice(0, 3).map(({ icon: Icon, label }) => (
               <li key={label} className="inline-flex items-center gap-1.5 rounded-full border border-white/8 bg-white/[0.03] px-2.5 py-1 text-white/72">
                 <Icon className="h-3 w-3 text-[var(--signal-green)]" /> {label}
               </li>
             ))}
           </ul>
-          <div className="hero-rise hero-rise--stagger-4 mt-2 inline-flex w-fit max-w-full items-center gap-3 overflow-hidden rounded-lg border border-white/8 bg-[var(--lab-black)]/76 px-3.5 py-2 backdrop-blur">
-            <span aria-hidden className="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-[var(--signal-green)]">$ lightning-p2p</span>
-            <span className="font-mono truncate text-[12.5px] tabular text-white/82">
-              <TypewriterLoop
-                phrases={[
-                  "create-share ./build-artifacts/  → fd2:eyJ2IjoyLCJoYXNoIjoi…",
-                  "route: direct · first-byte 7ms · 100 MB / 1.2s",
-                  "BLAKE3 verified · 200/200 chunks · no cloud upload",
-                  "receiver: browser tab · engine: wasm · install: none",
-                  "mode: standard · streams 1024 · win 256MB",
-                ]}
-              />
-            </span>
-          </div>
-        </motion.div>
+        </div>
         <div className="relative">
-          <CursorGlow className="rounded-[28px]">
-            <TiltCard max={5} float>
-              <HeroInstrument />
-            </TiltCard>
-          </CursorGlow>
+          <HeroInstrument />
         </div>
       </div>
       <HeroProofStrip />
-      <MarqueeStrip />
     </section>
-  );
-}
-
-function MarqueeStrip() {
-  return (
-    <div className="mt-12 border-y border-white/[0.06] bg-[var(--lab-black)]/86 py-5">
-      <MarqueeRow items={trustBadges} />
-    </div>
   );
 }
 
@@ -1084,7 +965,7 @@ function ArchitectureFlow() {
   );
 }
 
-// ── Browser receive showcase (v0.9.0 headline) ──────────────────────────────
+// ── Browser receive showcase ─────────────────────────────────────────────────
 
 type RxStage = "link" | "engine" | "stream" | "verified";
 const RX_STAGES: Array<{ key: RxStage; ms: number }> = [
@@ -1247,7 +1128,7 @@ function BrowserReceiveShowcase() {
     <section className="section-beam relative mx-auto max-w-[1320px] px-6 py-24 sm:px-10 lg:py-32">
       <div className="grid items-center gap-12 lg:grid-cols-[0.94fr_1.06fr] lg:gap-16">
         <Reveal>
-          <p className="text-[12px] font-bold uppercase tracking-[0.28em] text-[var(--signal-green)]">New in v0.9.0</p>
+          <p className="text-[12px] font-bold uppercase tracking-[0.28em] text-[var(--signal-green)]">Public browser beta</p>
           <h2 className="font-display mt-3 max-w-[18ch] text-balance text-[clamp(2.2rem,4.8vw,3.8rem)] font-extrabold leading-[1.02] tracking-[-0.024em] text-white">
             Receive in <span className="text-[var(--signal-green)]">any browser.</span>
           </h2>
@@ -1813,10 +1694,10 @@ function SiteFooter() {
               </div>
             </a>
             <p className="mt-4 max-w-[40ch] text-[13.5px] leading-6 text-[color:var(--soft-copy)]">
-              A free, open-source peer-to-peer file transfer app for Windows and Android. Built by Horalix on iroh QUIC + iroh-blobs. Apache-2.0.
+              A free, open-source peer-to-peer file transfer app for Windows, macOS, Linux, Android, CLI, and browsers. Built by Horalix on iroh QUIC and iroh-blobs. Apache-2.0.
             </p>
             <div className="mt-5 flex flex-wrap gap-2">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/8 bg-white/[0.03] px-3 py-1 text-[11px] font-semibold text-white/82"><span className="signal-dot !h-1.5 !w-1.5" /> v{benchmarkSummary.appVersion}</span>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/8 bg-white/[0.03] px-3 py-1 text-[11px] font-semibold text-white/82"><span className="signal-dot !h-1.5 !w-1.5" /> v{releaseManifest.currentAppVersion}</span>
               <span className="inline-flex items-center gap-1.5 rounded-full border border-white/8 bg-white/[0.03] px-3 py-1 font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-white/64">{benchmarkSummary.commitHash.slice(0, 8)}</span>
             </div>
           </div>
@@ -1868,10 +1749,11 @@ export function WebLandingPage() {
   if (pathname === "/send") return <SendPage />;
   return (
     <div className="relative min-h-screen bg-[var(--lab-black)] text-white">
+      <a className="skip-link" href="#main-content">Skip to main content</a>
       <SiteAtmosphere />
       <ScrollProgress />
       <Header activePath={page.path} />
-      <main>
+      <main id="main-content">
         <Hero page={page} />
         <HowItWorks />
         <ArchitectureFlow />

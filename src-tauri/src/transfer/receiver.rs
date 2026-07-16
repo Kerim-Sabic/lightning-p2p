@@ -365,7 +365,7 @@ async fn download_with_retry(
             "transient receive failure; retrying after backoff"
         );
         if let Some(progress) = progress {
-            progress.set_phase(TransferPhase::Connecting);
+            progress.set_phase(TransferPhase::Retrying);
         }
         tokio::select! {
             () = tokio::time::sleep(backoff) => {}
@@ -374,6 +374,9 @@ async fn download_with_retry(
                     return Err(LightningP2PError::Other("Cancelled".into()));
                 }
             }
+        }
+        if let Some(progress) = progress {
+            progress.set_phase(TransferPhase::Connecting);
         }
         backoff = backoff.saturating_mul(2);
     }

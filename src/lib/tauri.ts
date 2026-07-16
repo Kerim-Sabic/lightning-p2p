@@ -65,6 +65,7 @@ export type TransferStrategy =
 export type TransferPhase =
   | "preparing"
   | "connecting"
+  | "retrying"
   | "downloading"
   | "verifying"
   | "completed"
@@ -169,6 +170,7 @@ export interface SharePathInfo {
 }
 
 export type TransferMode =
+  | "smart_auto"
   | "standard"
   | "fast"
   | "extreme"
@@ -177,6 +179,7 @@ export type TransferMode =
   | "battery_safe";
 
 export const TRANSFER_MODES: TransferMode[] = [
+  "smart_auto",
   "standard",
   "fast",
   "extreme",
@@ -202,6 +205,13 @@ export const TRANSFER_MODE_DESCRIPTORS: Record<
   TransferMode,
   TransferModeDescriptor
 > = {
+  smart_auto: {
+    value: "smart_auto",
+    label: "Smart Auto",
+    description:
+      "Recommended. Uses battery-safe transport values on Android and the balanced Standard profile on desktop. Future tuning stays benchmark-gated.",
+    engine: "cubic",
+  },
   standard: {
     value: "standard",
     label: "Standard",
@@ -508,7 +518,7 @@ const browserSettings: AppSettings = {
   custom_relay_url: null,
   local_discovery_enabled: true,
   bluetooth_discovery_enabled: false,
-  transfer_mode: "standard",
+  transfer_mode: "smart_auto",
   experimental_swarm_receive: false,
 };
 

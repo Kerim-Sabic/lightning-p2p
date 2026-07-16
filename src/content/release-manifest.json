@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "productName": "Lightning P2P",
+  "currentAppVersion": "0.8.0",
+  "stableReleaseTag": "v0.4.6",
+  "experimentalReleaseTag": "v0.8.0",
+  "lastAndroidReleaseTag": "v0.5.1",
+  "browserChannel": "beta",
+  "browserLimits": {
+    "route": "relay_only",
+    "recommendedMaxBytes": 524288000,
+    "hardMaxBytes": 2147483648,
+    "senderMustStayOpen": true
+  },
+  "platforms": {
+    "windows": {
+      "status": "stable_and_beta",
+      "signed": false,
+      "signingNote": "The current v0.8.0 community build is unsigned; v0.4.6 remains the signed stable channel.",
+      "artifact": "LightningP2P-win-Setup.exe"
+    },
+    "android": {
+      "status": "stable_sideload",
+      "signed": true,
+      "artifact": "LightningP2P-android-latest.apk"
+    },
+    "macos": {
+      "status": "beta",
+      "signed": false,
+      "artifact": "LightningP2P-macos-universal.dmg"
+    },
+    "linux": {
+      "status": "beta",
+      "signed": false,
+      "artifact": "LightningP2P-linux-x86_64.AppImage"
+    },
+    "cli": {
+      "status": "beta",
+      "signed": false
+    },
+    "browser": {
+      "status": "beta",
+      "signed": null
+    },
+    "ios": {
+      "status": "not_planned",
+      "signed": null
+    }
+  },
+  "benchmark": {
+    "appVersion": "0.5.1",
+    "commitHash": "ac44230e571e",
+    "scope": "same_machine_loopback"
+  }
+}

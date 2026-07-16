@@ -1,89 +1,70 @@
 # Lightning P2P Roadmap
 
-This roadmap is deliberately conservative. Do not publish speed, platform, security, or interop claims until the release and validation evidence exists.
+This roadmap follows the public release manifest in
+[`src/content/release-manifest.json`](../src/content/release-manifest.json).
+Platform, signing, browser, and benchmark claims must match that file and the
+linked release evidence.
 
-> **v0.5.1 → v0.7 detail**: see [`ROADMAP_v0.5_to_v0.7.md`](ROADMAP_v0.5_to_v0.7.md)
-> for the per-feature breakdown of everything the v0.5.1 audit-pass deferred
-> (explicit resume UI, LAN/WAN bench validation, web receiver, multi-device
-> fan-out, Magic Folder, Universal Clipboard, Offline Hotspot, NFC write,
-> desktop BLE for mac/Linux, Android MediaStore overwrite verification, peak
-> Mbps + CPU/RAM bench instrumentation, B1/B6 flamegraph-gated perf work).
+## Available now
 
-## Stable
+### Stable channel
 
-### v0.4.6 - Current stable release
+- Windows v0.4.6 through Velopack, NSIS, MSI, and published checksums.
+- Android v0.5.1 as a signed sideload APK with share-target sends and public
+  MediaStore destinations.
 
-- Windows public release with Velopack, NSIS, MSI, and checksums.
-- Android 10+ sideload release.
-- Android `content://` file picker and share-sheet sends work through a JNI resolver.
-- Received Android files route into Pictures, Movies, Music, or Downloads through `MediaStore`.
-- Lightning P2P appears as an Android system share target.
-- File bytes still transfer through iroh QUIC and iroh-blobs, not BLE, NFC, HTTP, or WebRTC.
+### v0.8.0 beta channel
 
-## Experimental
+- Windows, universal macOS DMG, Linux AppImage/deb/rpm, and CLI artifacts.
+- BBR-backed Fast, Extreme, LAN Beast, and Warp profiles.
+- Experimental swarm receive and ticket pre-warming.
+- Browser send and receive beta using the Rust/WASM transfer engine. Browser
+  peers are relay-only, memory-bound, and must remain open during transfer.
+- Windows and Android remain the best-tested native paths. macOS and Linux
+  artifacts are unsigned community builds until publisher credentials exist.
 
-### v0.5.0 - BLE and NFC pre-release
+## Current work
 
-- Bluetooth LE proximity discovery is experimental.
-- NFC tap-to-transfer is experimental.
-- Android and Windows BLE scan/advertise plumbing is wired, but hardware validation is required.
-- BLE only carries discovery beacons.
-- NFC receive handling only carries ticket material.
-- Physical-device validation is required before these features move into a stable release.
+### Reliability and recovery
 
-### v0.8.0 - Everywhere release
+- Make automatic retry state visible and keep verified iroh-blobs data across
+  transient failures.
+- Add explicit pause and restart-safe resume without storing raw capability
+  tickets in plaintext.
+- Complete Android folder publishing and collision tests on physical devices.
+- Expand firewall, mDNS, relay, destination, and sender-offline diagnostics.
 
-- macOS (universal DMG) and Linux (AppImage/deb/rpm) community builds, unsigned with documented Gatekeeper steps.
-- `lightning-p2p-cli`: send/receive from the terminal; tickets byte-identical to app tickets, stdout stays pipe-clean.
-- Signed Android APK returns, carrying the v0.7.x startup-crash fix.
-- macOS/Linux hardware validation of transfers is community-assisted until maintainer hardware exists.
+### Product experience
 
-### v0.7.0 - Speed engine pre-release
+- Keep Send and Receive as the first two actions, with diagnostics and expert
+  tuning available through progressive disclosure.
+- Grow Smart Auto from platform-safe defaults only when LAN, WAN, relay, and
+  mobile thermal benchmarks justify a change.
+- Add Windows Explorer integration and improve QR, paste, nearby, picker, and
+  share-sheet entry paths.
+- Maintain reduced-motion, keyboard, screen-reader, 200 percent zoom, and
+  narrow-phone acceptance coverage.
 
-- BBR congestion control on Fast, Extreme, LAN Beast, and the new Warp mode (evidence: upstream iroh measured CUBIC far below BBR on real paths).
-- Per-mode initial congestion window and jumbo-frame MTU probing.
-- Experimental swarm receive: parallel child-blob fetches for folder transfers, with automatic fallback to the standard path.
-- Ticket pre-warming: pre-dial the sender while the ticket is still in the input field.
-- LAN/WAN throughput validation for these changes is still owed before any speed-delta claim.
+### Evidence and distribution
 
-## Next
+- Publish Windows-to-Windows, Windows-to-Android, WAN-direct, relay,
+  many-small-file, browser, and 10 GB benchmark reports with raw receipts.
+- Complete Winget, Homebrew cask, and AUR packaging after release assets are
+  stable and verified.
+- Add macOS notarization and broader signing only when publisher credentials
+  are available.
+- Replace preview artwork with recordings and screenshots from real transfers.
 
-### v0.5.1 - Stabilize proximity features
+## Explicitly out of scope
 
-- Validate BLE discovery on Windows-to-Android and Android-to-Android hardware.
-- Add macOS/Linux BLE backends before claiming cross-desktop BLE support.
-- Validate NFC ticket receive on physical Android hardware and add a tested writer/HCE path before claiming phone-to-phone tap.
-- Add clear runtime permission states and diagnostics.
-- Keep manual ticket sharing as the reliable fallback.
+- Native iOS during the current 90-day cycle. iPhone users can use the browser
+  receiver within the published beta limits.
+- Cloud file storage, accounts, chat, media playback, custom chunking, or a
+  second networking protocol.
+- “Fastest” claims without repeatable cross-device evidence.
 
-### v0.5.2 - Quality and breadth
+## Release gates
 
-- Accessibility audit: screen-reader labels, focus order, touch target verification, color contrast.
-- Multi-file queue UX with per-file progress.
-- Folder-transfer smart routing for Android `MediaStore`.
-- Pause/resume transfer UX.
-- Richer transfer timeline for direct vs relay paths.
-- Light theme only after the core transfer UX is stable.
-
-## Platform Expansion
-
-- macOS packaging spike.
-- Linux packaging spike.
-- iOS feasibility after signing, file picker, multicast entitlement, and Tauri iOS constraints are clear.
-- Microsoft Store readiness after publisher identity and signing are settled.
-- Winget resubmission after the latest stable release assets are verified.
-
-## Reliability
-
-- Expand node-supervisor tests around active-transfer restart deferral.
-- Add deterministic nearby registry/protocol tests.
-- Add IPC contract tests for command and event payloads.
-- Improve nearby discovery diagnostics in Settings.
-- Move flaky LAN/multicast tests into explicit manual test suites.
-
-## Growth
-
-- Keep README first screen proof-oriented and installation-focused.
-- Publish real benchmark reports before speed claims.
-- Keep comparison pages honest and specific.
-- Encourage good-first issues around packaging, diagnostics, accessibility, and benchmark reports.
+A feature moves from beta to stable only after automated checks pass, its
+artifacts and links are verified on a clean install, public copy matches the
+release manifest, and required hardware evidence is published.

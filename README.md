@@ -70,7 +70,7 @@ lightning-p2p-cli receive "fd2:…" -o .   # → BLAKE3-verified into ./
 
 ---
 
-## ◆ Receive in any browser <sub>· new in v0.9.0</sub>
+## ◆ Receive in any browser <sub>· public beta</sub>
 
 The oldest objection to P2P transfer: *"but they'd have to install it too."* Not anymore.
 
@@ -115,7 +115,7 @@ Stable: **v0.4.6**. Experimental: **v0.8.0** (BBR congestion control, Warp mode,
 | **Linux** | [`LightningP2P-linux-x86_64.AppImage`](https://github.com/Kerim-Sabic/lightning-p2p/releases/download/v0.8.0/LightningP2P-linux-x86_64.AppImage) | Beta v0.8.0 | Portable AppImage · `.deb` / `.rpm` also published |
 | **Android** | [`LightningP2P-android-latest.apk`](https://github.com/Kerim-Sabic/lightning-p2p/releases/download/v0.5.1/LightningP2P-android-latest.apk) | Stable v0.5.1 | Android 10+ sideload (signed) · new APK ships with v0.8.0 |
 | **CLI** | [`lightning-p2p-cli`](https://github.com/Kerim-Sabic/lightning-p2p/releases/tag/v0.8.0) | Beta v0.8.0 | `send <file>` prints a ticket to stdout · Win/mac/Linux tarballs |
-| **Browser** | [lightning-p2p.netlify.app/receive](https://lightning-p2p.netlify.app/receive) | Beta v0.9.0 | Receiving only — nothing to install, the sender's link is enough |
+| **Browser** | [lightning-p2p.netlify.app/receive](https://lightning-p2p.netlify.app/receive) | Public beta | Receiving only — nothing to install, the sender's link is enough |
 | **Experimental** | [Release v0.8.0](https://github.com/Kerim-Sabic/lightning-p2p/releases/tag/v0.8.0) | Pre-release | BBR engine · Warp mode · swarm receive · pre-warm |
 
 ```bash
@@ -305,7 +305,7 @@ Read [`SECURITY.md`](SECURITY.md) · [`docs/security-model.md`](docs/security-mo
 | 🟡 | Swarm receive (parallel fetches, default-on in Extreme+) | **Experimental** v0.8.0 |
 | 🟡 | Ticket pre-warming (pre-dial on paste) | **Experimental** v0.8.0 |
 | 🟡 | BLE proximity discovery + NFC ticket receive | **Experimental** since v0.5.0 |
-| 🟢 | **Receive in any browser** — no install, same Rust engine as WASM, BLAKE3-verified | **Beta** v0.9.0 |
+| 🟢 | **Receive in any browser** — no install, same Rust engine as WASM, BLAKE3-verified | **Public beta** |
 | ⏳ | iOS build, phone-to-phone NFC write, macOS/Linux BLE | Roadmap |
 
 <sub>BLE and NFC **never carry file bytes** — beacons + ticket material only. Bytes always travel through iroh QUIC. Full behavior + hardware test plan: [`docs/proximity.md`](docs/proximity.md).</sub>

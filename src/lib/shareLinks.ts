@@ -1,8 +1,10 @@
+import releaseManifest from "../content/release-manifest.json";
+
 export const SITE_URL = "https://lightning-p2p.netlify.app";
 export const REPO_URL = "https://github.com/Kerim-Sabic/lightning-p2p";
 export const RELEASE_URL = `${REPO_URL}/releases/latest`;
-export const STABLE_RELEASE_TAG = "v0.4.6";
-export const EXPERIMENTAL_RELEASE_TAG = "v0.8.0";
+export const STABLE_RELEASE_TAG = releaseManifest.stableReleaseTag;
+export const EXPERIMENTAL_RELEASE_TAG = releaseManifest.experimentalReleaseTag;
 export const EXPERIMENTAL_RELEASE_URL = `${REPO_URL}/releases/tag/${EXPERIMENTAL_RELEASE_TAG}`;
 export const DEEP_LINK_SCHEME = "lightning-p2p";
 export const RECEIVE_PATH = "/receive";
@@ -17,7 +19,7 @@ export const LINUX_APPIMAGE_DOWNLOAD_URL = `${RELEASE_URL}/download/LightningP2P
  * would 404 for the APK; pin to the newest APK-bearing tag instead and bump
  * this constant whenever a new signed Android release lands.
  */
-export const LAST_ANDROID_RELEASE_TAG = "v0.5.1";
+export const LAST_ANDROID_RELEASE_TAG = releaseManifest.lastAndroidReleaseTag;
 export const ANDROID_APK_DOWNLOAD_URL = `${REPO_URL}/releases/download/${LAST_ANDROID_RELEASE_TAG}/LightningP2P-android-latest.apk`;
 export const ANDROID_CHECKSUMS_URL = `${REPO_URL}/releases/download/${LAST_ANDROID_RELEASE_TAG}/SHA256SUMS-android.txt`;
 

@@ -4,6 +4,15 @@ All notable changes to Lightning P2P are documented here. The project follows se
 
 ## [Unreleased]
 
+### Product and design upgrade
+
+- Native apps now open on two clear Send and Receive actions with a live route stage for progress, speed, Direct or Relay state, and BLAKE3 verification.
+- Smart Auto is the new default transfer mode. It resolves to balanced desktop transport values and battery-safe Android values while preserving every expert mode.
+- A canonical release manifest now checks and publishes version, channel, platform, signing, browser-limit, and benchmark metadata.
+- Transient receive retries expose a dedicated `retrying` phase during exponential backoff.
+- Browser and native product surfaces are lazy-loaded. The initial entry bundle is 65.53 kB gzip and the previous monolithic 670 kB production chunk is gone.
+- The marketing hero keeps one route instrument while removing magnetic buttons, parallax, its typewriter loop, marquee, and hero tilt for a cleaner cinematic presentation.
+
 ### Fixed
 
 - **Stale-cached engine no longer crashes the send page**: the wasm engine (`/webrx/web_receiver.js` + `.wasm`) lives at stable URLs cached for an hour, so right after a deploy that changes the engine's API, returning visitors ran the new page against the old module — `this.inner.begin_file is not a function`. Engine URLs now carry a content-hash query (`?v=<hash>`, generated into `src/lib/webrxVersion.ts` by `scripts/build-web-receiver.sh`), so any engine change busts caches immediately; and the TS bridge feature-detects every post-v1 engine API, falling back gracefully (buffered import, plain save, no QR) instead of throwing. Verified with a stale-engine simulation E2E that serves the old engine to the new frontend.

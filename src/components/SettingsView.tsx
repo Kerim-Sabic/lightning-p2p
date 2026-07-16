@@ -813,7 +813,7 @@ export function SettingsView() {
         <div className="mt-4 flex flex-wrap gap-2">
           {TRANSFER_MODES.map((value) => {
             const descriptor = TRANSFER_MODE_DESCRIPTORS[value];
-            const active = (settings?.transfer_mode ?? "standard") === value;
+            const active = (settings?.transfer_mode ?? "smart_auto") === value;
             return (
               <button
                 key={value}
@@ -851,7 +851,7 @@ export function SettingsView() {
 
         <p className="mt-3 text-[12px] leading-6 text-slate-400">
           {TRANSFER_MODE_DESCRIPTORS[
-            settings?.transfer_mode ?? "standard"
+            settings?.transfer_mode ?? "smart_auto"
           ].description}
         </p>
         <p className="mt-2 text-[11px] leading-6 text-slate-500">
