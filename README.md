@@ -31,12 +31,18 @@ Built on **Rust**, **Tauri 2**, **iroh QUIC**, **iroh-blobs**, and **BLAKE3**.
 
 ---
 
+<div align="center">
+<img src="public/readme-flow.svg" alt="Animated flow: the sender app streams BLAKE3-verified chunks over iroh QUIC — direct first, relay fallback — to any receiver, including a browser tab running the same Rust engine as WebAssembly" width="960" />
+</div>
+
 > **In 30 seconds.** Lightning P2P sends a file by handing the receiver a
 > tiny ticket (NodeId + content hash). The receiver pulls the bytes
-> directly from the sender's device over an encrypted iroh QUIC connection.
-> No upload step. No cloud bucket. **BLAKE3 verifies every chunk as it
-> lands.** When NAT blocks the direct path, iroh relay carries the
-> encrypted frames — still no plaintext on any server.
+> directly from the sender's device over an encrypted iroh QUIC connection —
+> **and the receiver can be a browser tab**: the same Rust engine runs
+> in-page as WebAssembly, so the other side installs nothing. No upload
+> step. No cloud bucket. **BLAKE3 verifies every chunk as it lands.** When
+> NAT blocks the direct path, iroh relay carries the encrypted frames —
+> still no plaintext on any server.
 
 <div align="center">
 <img src="public/demo-lightning-p2p.gif" alt="Lightning P2P demo: drop a file, share the ticket, receiver streams verified bytes" width="720" />
@@ -49,6 +55,7 @@ Built on **Rust**, **Tauri 2**, **iroh QUIC**, **iroh-blobs**, and **BLAKE3**.
 |  |  |
 | --- | --- |
 | 🚀 **Direct, not uploaded** | Bytes stream peer-to-peer over QUIC. No cloud bucket, no upload wait, no retention. |
+| 🌍 **Receive in any browser** | The other side installs **nothing** — your link runs the same Rust engine in their tab as WebAssembly, BLAKE3-verified. |
 | 🔒 **Verified every chunk** | iroh-blobs checks BLAKE3 as data lands. The receiver never has to trust the path. |
 | 🌐 **NAT-traversing** | Direct-first; iroh relay carries encrypted frames when the direct path is blocked. Still no plaintext on any server. |
 | 📦 **No account, no cap** | The ticket is the only credential. No sign-up, no artificial file-size limit, no telemetry. |
@@ -60,6 +67,26 @@ Built on **Rust**, **Tauri 2**, **iroh QUIC**, **iroh-blobs**, and **BLAKE3**.
 lightning-p2p-cli send report.pdf        # → prints a ticket to stdout
 lightning-p2p-cli receive "fd2:…" -o .   # → BLAKE3-verified into ./
 ```
+
+---
+
+## ◆ Receive in any browser <sub>· new in v0.9.0</sub>
+
+The oldest objection to P2P transfer: *"but they'd have to install it too."* Not anymore.
+
+```
+you (app / CLI)                             them (any browser)
+──────────────                              ──────────────────
+drop files → share the /receive link  →     open link → "Receive in this browser"
+                                            ↳ the same Rust engine loads as WASM
+                                            ↳ pulls chunks straight from you
+                                            ↳ BLAKE3-verifies every byte in the tab
+                                            ↳ Save — done. Nothing installed.
+```
+
+- **Not a JS reimplementation** — the identical `iroh` + `iroh-blobs` core, compiled to WebAssembly ([`web-receiver/`](web-receiver/)).
+- **No server in the middle** — the ticket stays in the URL fragment (never sent to the site), the bytes go peer → tab over the iroh relay.
+- **Honest limits** — browsers can't hole-punch (relay-only) and the file lives in tab memory (use the app past ~2 GB). Sending still needs the app or CLI.
 
 ---
 
@@ -88,6 +115,7 @@ Stable: **v0.4.6**. Experimental: **v0.8.0** (BBR congestion control, Warp mode,
 | **Linux** | [`LightningP2P-linux-x86_64.AppImage`](https://github.com/Kerim-Sabic/lightning-p2p/releases/download/v0.8.0/LightningP2P-linux-x86_64.AppImage) | Beta v0.8.0 | Portable AppImage · `.deb` / `.rpm` also published |
 | **Android** | [`LightningP2P-android-latest.apk`](https://github.com/Kerim-Sabic/lightning-p2p/releases/download/v0.5.1/LightningP2P-android-latest.apk) | Stable v0.5.1 | Android 10+ sideload (signed) · new APK ships with v0.8.0 |
 | **CLI** | [`lightning-p2p-cli`](https://github.com/Kerim-Sabic/lightning-p2p/releases/tag/v0.8.0) | Beta v0.8.0 | `send <file>` prints a ticket to stdout · Win/mac/Linux tarballs |
+| **Browser** | [lightning-p2p.netlify.app/receive](https://lightning-p2p.netlify.app/receive) | Beta v0.9.0 | Receiving only — nothing to install, the sender's link is enough |
 | **Experimental** | [Release v0.8.0](https://github.com/Kerim-Sabic/lightning-p2p/releases/tag/v0.8.0) | Pre-release | BBR engine · Warp mode · swarm receive · pre-warm |
 
 ```bash
