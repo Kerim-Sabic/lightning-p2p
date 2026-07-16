@@ -3,11 +3,8 @@
 use super::nearby_protocol::{fetch_remote_shares, RemoteAdvertisedShare};
 use crate::error::{LightningP2PError, Result};
 use futures_util::{stream, StreamExt};
-use iroh::{
-    discovery::{mdns, DiscoveryItem},
-    endpoint::{ConnectionType, RemoteInfo, Source},
-    Endpoint, NodeAddr, NodeId,
-};
+use iroh::{Endpoint, EndpointAddr, EndpointId, TransportAddr};
+use iroh_mdns_address_lookup::{DiscoveryEvent, MdnsAddressLookup};
 use iroh_blobs::{ticket::BlobTicket, BlobFormat, Hash};
 use serde::Serialize;
 use std::{
@@ -164,15 +161,15 @@ impl ActiveShare {
 #[derive(Debug, Clone)]
 struct NearbyShareRecord {
     public: NearbyShare,
-    node_addr: NodeAddr,
+    node_addr: EndpointAddr,
     hash: Hash,
     format: BlobFormat,
 }
 
 #[derive(Debug, Clone)]
 struct RemoteCandidate {
-    node_id: NodeId,
-    node_addr: NodeAddr,
+    node_id: EndpointId,
+    node_addr: EndpointAddr,
     route_hint: NearbyRouteHint,
     direct_address_count: usize,
     last_seen_at: Instant,
@@ -180,7 +177,7 @@ struct RemoteCandidate {
 
 #[derive(Debug)]
 struct CandidateQueryResult {
-    node_id: NodeId,
+    node_id: EndpointId,
     responded: bool,
     device_name: String,
     records: Vec<NearbyShareRecord>,
@@ -193,7 +190,7 @@ pub struct NearbyShareRegistry {
     bluetooth_discovery_enabled: Arc<RwLock<bool>>,
     active_share: Arc<RwLock<Option<ActiveShare>>>,
     discovered_shares: Arc<RwLock<Vec<NearbyShareRecord>>>,
-    devices: Arc<RwLock<BTreeMap<NodeId, NearbyDevice>>>,
+    devices: Arc<RwLock<BTreeMap<EndpointId, NearbyDevice>>>,
 }
 
 impl NearbyShareRegistry {
@@ -300,19 +297,22 @@ impl NearbyShareRegistry {
                 "Nearby share is no longer available. Refresh and try again.".into(),
             ));
         };
-        BlobTicket::new(record.node_addr.clone(), record.hash, record.format)
-            .map_err(|error| LightningP2PError::Blob(error.to_string()))
+        Ok(BlobTicket::new(
+            record.node_addr.clone(),
+            record.hash,
+            record.format,
+        ))
     }
 
-    /// Returns the cached `NodeAddr` for a previously discovered device.
+    /// Returns the cached `EndpointAddr` for a previously discovered device.
     ///
     /// Used by the push-offer flow to dial a peer the user selected in the
     /// Devices view without re-running discovery.
-    pub async fn node_addr_for_device(&self, node_id: &NodeId) -> Option<NodeAddr> {
+    pub async fn node_addr_for_device(&self, node_id: &EndpointId) -> Option<EndpointAddr> {
         let guard = self.discovered_shares.read().await;
         guard
             .iter()
-            .find(|record| record.node_addr.node_id == *node_id)
+            .find(|record| record.node_addr.id == *node_id)
             .map(|record| record.node_addr.clone())
     }
 
@@ -346,7 +346,7 @@ impl NearbyShareRegistry {
     /// the new device shows up instantly — before any per-peer share probe.
     async fn upsert_wifi_device(
         &self,
-        node_id: NodeId,
+        node_id: EndpointId,
         candidate: &RemoteCandidate,
     ) -> Option<Vec<NearbyDevice>> {
         let mut guard = self.devices.write().await;
@@ -380,7 +380,7 @@ impl NearbyShareRegistry {
     /// Upserts a device record discovered via Bluetooth LE.
     pub async fn register_ble_candidate(
         &self,
-        node_id: NodeId,
+        node_id: EndpointId,
         device_name: String,
         has_active_share: bool,
     ) -> Option<Vec<NearbyDevice>> {
@@ -441,7 +441,7 @@ impl NearbyShareRegistry {
     /// snapshot if anything changed.
     pub(crate) async fn set_device_name(
         &self,
-        node_id: NodeId,
+        node_id: EndpointId,
         device_name: String,
     ) -> Option<Vec<NearbyDevice>> {
         if device_name.is_empty() {
@@ -459,7 +459,7 @@ impl NearbyShareRegistry {
     /// Updates the `has_active_share` flag on a device record.
     pub(crate) async fn set_device_has_share(
         &self,
-        node_id: NodeId,
+        node_id: EndpointId,
         has_active_share: bool,
     ) -> Option<Vec<NearbyDevice>> {
         let mut guard = self.devices.write().await;
@@ -494,7 +494,7 @@ fn devices_equal(left: &NearbyDevice, right: &NearbyDevice) -> bool {
 }
 
 fn snapshot_locked(
-    guard: &tokio::sync::RwLockWriteGuard<'_, BTreeMap<NodeId, NearbyDevice>>,
+    guard: &tokio::sync::RwLockWriteGuard<'_, BTreeMap<EndpointId, NearbyDevice>>,
 ) -> Vec<NearbyDevice> {
     let mut snapshot = guard.values().cloned().collect::<Vec<_>>();
     snapshot.sort_by(|left, right| {
@@ -517,34 +517,28 @@ pub fn spawn_nearby_discovery_loop(
     endpoint: Endpoint,
     registry: NearbyShareRegistry,
     lan_discovery_active: Arc<AtomicBool>,
+    mdns: Option<MdnsAddressLookup>,
 ) {
-    let discovery_events = if let Some(service) = endpoint.discovery() {
-        if let Some(stream) = service.subscribe() {
-            tracing::info!("LAN discovery subscription established");
-            lan_discovery_active.store(true, Ordering::Relaxed);
-            Some(stream)
-        } else {
-            tracing::warn!(
-                "LAN discovery unavailable: endpoint discovery service does not support subscription. \
-                 Nearby shares will fall back to polling known peers only."
-            );
-            None
-        }
-    } else {
-        tracing::warn!("LAN discovery unavailable: endpoint has no discovery service configured");
-        None
-    };
-
     tauri::async_runtime::spawn(async move {
         let mut candidates = seed_candidates(&endpoint);
-        let local_node_id = endpoint.node_id();
-        let mut stream_seen: HashSet<NodeId> = HashSet::new();
+        let local_node_id = endpoint.id();
+        let mut stream_seen: HashSet<EndpointId> = HashSet::new();
         let mut interval = tokio::time::interval(REFRESH_INTERVAL);
         interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
 
         seed_devices(&app_handle, &registry, &candidates).await;
 
-        let mut discovery_events = discovery_events;
+        // Subscribe to the mDNS address-lookup discovery stream (iroh 1.0
+        // moved LAN discovery out of the endpoint into the address lookup).
+        let mut discovery_events = if let Some(mdns) = &mdns {
+            tracing::info!("LAN discovery subscription established (mDNS)");
+            lan_discovery_active.store(true, Ordering::Relaxed);
+            Some(mdns.subscribe().await)
+        } else {
+            tracing::warn!("LAN discovery unavailable: mDNS address lookup not configured");
+            None
+        };
+
         let _ = refresh_nearby_shares(
             &app_handle,
             &endpoint,
@@ -568,8 +562,8 @@ pub fn spawn_nearby_discovery_loop(
                         }
                     }
                     maybe_item = events.next() => {
-                        if let Some(item) = maybe_item {
-                            if let Some(candidate) = candidate_from_discovery_item(item, local_node_id) {
+                        if let Some(event) = maybe_item {
+                            if let Some(candidate) = candidate_from_discovery_event(event, local_node_id) {
                                 stream_seen.insert(candidate.node_id);
                                 // Emit device record instantly, before the per-peer
                                 // share RPC fan-out (which may block on up to
@@ -593,12 +587,10 @@ pub fn spawn_nearby_discovery_loop(
             }
 
             interval.tick().await;
-            if let Some(service) = endpoint.discovery() {
-                if let Some(stream) = service.subscribe() {
-                    tracing::info!("LAN discovery subscription re-established");
-                    lan_discovery_active.store(true, Ordering::Relaxed);
-                    discovery_events = Some(stream);
-                }
+            if let Some(mdns) = &mdns {
+                tracing::info!("LAN discovery subscription re-established (mDNS)");
+                lan_discovery_active.store(true, Ordering::Relaxed);
+                discovery_events = Some(mdns.subscribe().await);
             }
             update_diagnostic_state(&app_handle, &registry, started_at, &mut diagnostic_state)
                 .await;
@@ -620,7 +612,7 @@ pub fn spawn_nearby_discovery_loop(
 async fn seed_devices(
     app_handle: &AppHandle,
     registry: &NearbyShareRegistry,
-    candidates: &BTreeMap<NodeId, RemoteCandidate>,
+    candidates: &BTreeMap<EndpointId, RemoteCandidate>,
 ) {
     let mut changed = false;
     for candidate in candidates.values() {
@@ -695,25 +687,15 @@ async fn refresh_candidates(
     app_handle: &AppHandle,
     endpoint: &Endpoint,
     registry: &NearbyShareRegistry,
-    candidates: &mut BTreeMap<NodeId, RemoteCandidate>,
-    stream_seen: &HashSet<NodeId>,
+    candidates: &mut BTreeMap<EndpointId, RemoteCandidate>,
+    stream_seen: &HashSet<EndpointId>,
 ) -> Result<()> {
-    let added = merge_endpoint_candidates(endpoint, candidates, stream_seen);
+    let _ = stream_seen;
     prune_stale_candidates(candidates);
 
-    // Surface any newly merged devices to the UI immediately.
+    // Candidates now arrive via the mDNS discovery stream; here we only prune
+    // and re-query. Surface pruning changes to the UI.
     let mut device_changed = false;
-    for node_id in added {
-        if let Some(candidate) = candidates.get(&node_id) {
-            if registry
-                .upsert_wifi_device(node_id, candidate)
-                .await
-                .is_some()
-            {
-                device_changed = true;
-            }
-        }
-    }
 
     if let Some(_pruned) = registry.prune_stale_devices().await {
         device_changed = true;
@@ -814,32 +796,14 @@ fn emit_if_changed(app_handle: &AppHandle, shares: Option<Vec<NearbyShare>>) -> 
     Ok(())
 }
 
-fn seed_candidates(endpoint: &Endpoint) -> BTreeMap<NodeId, RemoteCandidate> {
-    local_candidates(endpoint, &HashSet::new())
-        .into_iter()
-        .map(|candidate| (candidate.node_id, candidate))
-        .collect()
-}
-
-fn merge_endpoint_candidates(
-    endpoint: &Endpoint,
-    candidates: &mut BTreeMap<NodeId, RemoteCandidate>,
-    stream_seen: &HashSet<NodeId>,
-) -> Vec<NodeId> {
-    let mut added = Vec::new();
-    for candidate in local_candidates(endpoint, stream_seen) {
-        let was_present = candidates.contains_key(&candidate.node_id);
-        let node_id = candidate.node_id;
-        upsert_candidate(candidates, candidate);
-        if !was_present {
-            added.push(node_id);
-        }
-    }
-    added
+fn seed_candidates(_endpoint: &Endpoint) -> BTreeMap<EndpointId, RemoteCandidate> {
+    // iroh 1.0 dropped the remote-info seeding API; candidates now arrive
+    // exclusively via the mDNS discovery stream, so start empty.
+    BTreeMap::new()
 }
 
 fn upsert_candidate(
-    candidates: &mut BTreeMap<NodeId, RemoteCandidate>,
+    candidates: &mut BTreeMap<EndpointId, RemoteCandidate>,
     candidate: RemoteCandidate,
 ) {
     candidates
@@ -847,117 +811,51 @@ fn upsert_candidate(
         .and_modify(|current| {
             current.node_addr = merge_node_addrs(&current.node_addr, &candidate.node_addr);
             current.route_hint = stronger_route_hint(current.route_hint, candidate.route_hint);
-            current.direct_address_count = current.node_addr.direct_addresses.len();
+            current.direct_address_count = direct_address_count(&current.node_addr);
             current.last_seen_at = candidate.last_seen_at;
         })
         .or_insert(candidate);
 }
 
-fn merge_node_addrs(current: &NodeAddr, next: &NodeAddr) -> NodeAddr {
-    let relay_url = next.relay_url.clone().or_else(|| current.relay_url.clone());
-    let direct_addresses = current
-        .direct_addresses
-        .union(&next.direct_addresses)
-        .copied()
-        .collect::<Vec<_>>();
-    NodeAddr::from_parts(current.node_id, relay_url, direct_addresses)
+fn merge_node_addrs(current: &EndpointAddr, next: &EndpointAddr) -> EndpointAddr {
+    let addrs = current.addrs.iter().chain(next.addrs.iter()).cloned();
+    EndpointAddr::from_parts(current.id, addrs)
 }
 
-fn prune_stale_candidates(candidates: &mut BTreeMap<NodeId, RemoteCandidate>) {
+fn direct_address_count(addr: &EndpointAddr) -> usize {
+    addr.addrs.iter().filter(|a| a.is_ip()).count()
+}
+
+fn route_hint_for_addr(addr: &EndpointAddr) -> NearbyRouteHint {
+    let direct = addr.addrs.iter().any(TransportAddr::is_ip);
+    let relay = addr.addrs.iter().any(TransportAddr::is_relay);
+    match (direct, relay) {
+        (true, true) => NearbyRouteHint::Mixed,
+        (true, false) => NearbyRouteHint::Direct,
+        (false, true) => NearbyRouteHint::Relay,
+        (false, false) => NearbyRouteHint::Unknown,
+    }
+}
+
+fn prune_stale_candidates(candidates: &mut BTreeMap<EndpointId, RemoteCandidate>) {
     candidates.retain(|_, candidate| candidate.last_seen_at.elapsed() <= CANDIDATE_STALE_AFTER);
 }
 
-fn local_candidates(endpoint: &Endpoint, stream_seen: &HashSet<NodeId>) -> Vec<RemoteCandidate> {
-    let local_node_id = endpoint.node_id();
-    endpoint
-        .remote_info_iter()
-        .filter(|remote| remote.node_id != local_node_id)
-        .filter(RemoteInfo::has_send_address)
-        .filter(|remote| is_local_network_candidate(remote, stream_seen))
-        .map(remote_candidate)
-        .collect()
-}
-
-/// A remote is considered a local-network candidate if it has EVER been
-/// announced via the local-swarm discovery (source match), or if we have
-/// observed its node id in the current session's discovery stream — some
-/// iroh versions overwrite the source after first contact, which caused
-/// known-LAN peers to be pruned from the candidate pool.
-fn is_local_network_candidate(remote: &RemoteInfo, stream_seen: &HashSet<NodeId>) -> bool {
-    if stream_seen.contains(&remote.node_id) {
-        return true;
-    }
-    remote.sources().into_iter().any(|(source, _age)| {
-        matches!(
-            source,
-            Source::Discovery { name } if name == mdns::NAME
-        )
-    })
-}
-
-fn remote_candidate(remote: RemoteInfo) -> RemoteCandidate {
-    let freshness = remote_freshness(&remote);
-    let route_hint = route_hint(&remote.conn_type);
-    let direct_address_count = remote.addrs.len();
-    let node_id = remote.node_id;
-    let node_addr = NodeAddr::from(remote);
-    RemoteCandidate {
-        node_id,
-        node_addr,
-        route_hint,
-        direct_address_count,
-        last_seen_at: instant_from_freshness(freshness),
-    }
-}
-
-fn remote_freshness(remote: &RemoteInfo) -> Duration {
-    remote
-        .last_received()
-        .or(remote.last_used)
-        .or_else(|| {
-            remote
-                .sources()
-                .into_iter()
-                .filter_map(|(source, age)| match source {
-                    Source::Discovery { name } if name == mdns::NAME => Some(age),
-                    _ => None,
-                })
-                .min()
-        })
-        .unwrap_or_default()
-}
-
-fn instant_from_freshness(freshness: Duration) -> Instant {
-    Instant::now()
-        .checked_sub(freshness)
-        .unwrap_or_else(Instant::now)
-}
-
-fn candidate_from_discovery_item(
-    item: DiscoveryItem,
-    local_node_id: NodeId,
+fn candidate_from_discovery_event(
+    event: DiscoveryEvent,
+    local_node_id: EndpointId,
 ) -> Option<RemoteCandidate> {
-    if item.provenance() != mdns::NAME {
+    let DiscoveryEvent::Discovered { endpoint_info, .. } = event else {
         return None;
-    }
-    let node_addr = item.into_node_addr();
-    if node_addr.node_id == local_node_id {
-        return None;
-    }
-
-    let direct_address_count = node_addr.direct_addresses.len();
-    let route_hint = if direct_address_count > 0 && node_addr.relay_url.is_some() {
-        NearbyRouteHint::Mixed
-    } else if direct_address_count > 0 {
-        NearbyRouteHint::Direct
-    } else if node_addr.relay_url.is_some() {
-        NearbyRouteHint::Relay
-    } else {
-        NearbyRouteHint::Unknown
     };
-
+    let node_addr = endpoint_info.into_endpoint_addr();
+    if node_addr.id == local_node_id {
+        return None;
+    }
+    let route_hint = route_hint_for_addr(&node_addr);
+    let direct_address_count = direct_address_count(&node_addr);
     Some(RemoteCandidate {
-        node_id: node_addr.node_id,
+        node_id: node_addr.id,
         node_addr,
         route_hint,
         direct_address_count,
@@ -1071,15 +969,6 @@ fn route_hint_score(route_hint: NearbyRouteHint) -> u8 {
     }
 }
 
-fn route_hint(connection_type: &ConnectionType) -> NearbyRouteHint {
-    match connection_type {
-        ConnectionType::Direct(_) => NearbyRouteHint::Direct,
-        ConnectionType::Relay(_) => NearbyRouteHint::Relay,
-        ConnectionType::Mixed(_, _) => NearbyRouteHint::Mixed,
-        ConnectionType::None => NearbyRouteHint::Unknown,
-    }
-}
-
 fn unix_timestamp() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -1089,7 +978,7 @@ fn unix_timestamp() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use iroh::{discovery::NodeInfo, NodeAddr, PublicKey, SecretKey};
+    use iroh::{EndpointAddr, PublicKey, SecretKey};
     use std::str::FromStr;
 
     fn sample_record(share_id: &str) -> NearbyShareRecord {
@@ -1106,7 +995,7 @@ mod tests {
                 freshness_seconds: 1,
                 published_at: 10,
             },
-            node_addr: NodeAddr::new(
+            node_addr: EndpointAddr::new(
                 PublicKey::from_str(
                     "ae58ff8833241ac82d6ff7611046ed67b5072d142c588d0063e942d9a75502b6",
                 )
@@ -1164,7 +1053,7 @@ mod tests {
         let node_id = SecretKey::from_bytes(&[6_u8; 32]).public();
         let candidate = RemoteCandidate {
             node_id,
-            node_addr: NodeAddr::new(node_id),
+            node_addr: EndpointAddr::new(node_id),
             route_hint: NearbyRouteHint::Direct,
             direct_address_count: 1,
             last_seen_at: Instant::now(),
@@ -1212,7 +1101,7 @@ mod tests {
             .expect("ble device should be added");
         let candidate = RemoteCandidate {
             node_id,
-            node_addr: NodeAddr::new(node_id),
+            node_addr: EndpointAddr::new(node_id),
             route_hint: NearbyRouteHint::Direct,
             direct_address_count: 1,
             last_seen_at: Instant::now(),
@@ -1238,21 +1127,30 @@ mod tests {
     }
 
     #[test]
-    fn route_hint_maps_all_connection_types() {
+    fn route_hint_for_addr_classifies_transports() {
+        let node_id = SecretKey::from_bytes(&[9_u8; 32]).public();
         let relay_url: iroh::RelayUrl = "https://relay.example.com".parse().expect("relay url");
-        let direct_addr = "127.0.0.1:4433".parse().expect("direct addr");
-        assert_eq!(
-            route_hint(&ConnectionType::Direct(direct_addr)),
-            NearbyRouteHint::Direct
+        let direct_addr: std::net::SocketAddr = "127.0.0.1:4433".parse().expect("direct addr");
+
+        let direct_only =
+            EndpointAddr::from_parts(node_id, [TransportAddr::Ip(direct_addr)]);
+        assert_eq!(route_hint_for_addr(&direct_only), NearbyRouteHint::Direct);
+
+        let relay_only =
+            EndpointAddr::from_parts(node_id, [TransportAddr::Relay(relay_url.clone())]);
+        assert_eq!(route_hint_for_addr(&relay_only), NearbyRouteHint::Relay);
+
+        let mixed = EndpointAddr::from_parts(
+            node_id,
+            [
+                TransportAddr::Ip(direct_addr),
+                TransportAddr::Relay(relay_url),
+            ],
         );
-        assert_eq!(
-            route_hint(&ConnectionType::Relay(relay_url.clone())),
-            NearbyRouteHint::Relay
-        );
-        assert_eq!(
-            route_hint(&ConnectionType::Mixed(direct_addr, relay_url)),
-            NearbyRouteHint::Mixed
-        );
+        assert_eq!(route_hint_for_addr(&mixed), NearbyRouteHint::Mixed);
+
+        let empty = EndpointAddr::new(node_id);
+        assert_eq!(route_hint_for_addr(&empty), NearbyRouteHint::Unknown);
     }
 
     #[test]
@@ -1267,30 +1165,29 @@ mod tests {
         );
     }
 
-    #[test]
-    fn discovery_item_for_local_node_is_ignored() {
-        let local_node_id = SecretKey::from_bytes(&[1_u8; 32]).public();
-        let item = DiscoveryItem::new(
-            NodeInfo::from(NodeAddr::new(local_node_id)),
-            mdns::NAME,
-            None,
-        );
-
-        assert!(candidate_from_discovery_item(item, local_node_id).is_none());
+    fn discovered_event(node_id: EndpointId) -> DiscoveryEvent {
+        DiscoveryEvent::Discovered {
+            endpoint_info: iroh::address_lookup::EndpointInfo::new(node_id),
+            last_updated: None,
+        }
     }
 
     #[test]
-    fn discovery_item_from_other_node_becomes_candidate() {
+    fn discovery_event_for_local_node_is_ignored() {
+        let local_node_id = SecretKey::from_bytes(&[1_u8; 32]).public();
+        let event = discovered_event(local_node_id);
+
+        assert!(candidate_from_discovery_event(event, local_node_id).is_none());
+    }
+
+    #[test]
+    fn discovery_event_from_other_node_becomes_candidate() {
         let local_node_id = SecretKey::from_bytes(&[1_u8; 32]).public();
         let remote_node_id = SecretKey::from_bytes(&[2_u8; 32]).public();
-        let item = DiscoveryItem::new(
-            NodeInfo::from(NodeAddr::new(remote_node_id)),
-            mdns::NAME,
-            None,
-        );
+        let event = discovered_event(remote_node_id);
 
         let candidate =
-            candidate_from_discovery_item(item, local_node_id).expect("remote candidate");
+            candidate_from_discovery_event(event, local_node_id).expect("remote candidate");
 
         assert_eq!(candidate.node_id, remote_node_id);
     }

@@ -97,8 +97,7 @@ pub async fn get_ticket(state: State<'_, AppState>, hash: String) -> CommandResu
     let node_addr = node.ticket_addr().await.map_err(command_error)?;
     let record =
         history::latest_send_by_hash(node.db(), &hash.to_string()).map_err(command_error)?;
-    let ticket = BlobTicket::new(node_addr, hash, BlobFormat::HashSeq)
-        .map_err(|err| command_error(err.to_string()))?;
+    let ticket = BlobTicket::new(node_addr, hash, BlobFormat::HashSeq);
     let label = record
         .as_ref()
         .map_or_else(|| hash.to_string(), |record| record.filename.clone());

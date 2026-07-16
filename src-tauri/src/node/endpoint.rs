@@ -1,7 +1,8 @@
-//! iroh endpoint and iroh-blobs protocol setup.
+//! iroh endpoint and iroh-blobs protocol setup (iroh 1.0 line).
 //!
-//! This module boots the iroh QUIC endpoint with n0 discovery and wires up the
-//! iroh-blobs protocol for content-addressed transfers.
+//! Boots the iroh QUIC endpoint with n0 discovery plus LAN mDNS address
+//! lookup, and wires up the iroh-blobs 0.103 protocol + persistent store for
+//! content-addressed transfers.
 
 use super::status::NodeRuntimeStatus;
 use super::NearbyShareProtocol;
@@ -11,14 +12,18 @@ use crate::storage::db::StorageDb;
 use crate::transfer::metrics::RouteKind;
 use crate::transfer::mode::{CongestionAlgorithm, TransferProfile};
 use crate::transfer::TransferMode;
-use iroh::endpoint::ConnectionType;
-use iroh::endpoint::{ControllerFactory, MtuDiscoveryConfig, TransportConfig};
-use iroh_quinn_proto::congestion::{BbrConfig, CubicConfig};
+use iroh::address_lookup::memory::MemoryLookup;
+use iroh::endpoint::{
+    ControllerFactory, MtuDiscoveryConfig, QuicTransportConfig, VarInt,
+};
 use iroh::protocol::Router;
-use iroh::{Endpoint, NodeAddr, NodeId, RelayMap, RelayMode, RelayUrl};
-use iroh_blobs::net_protocol::Blobs;
-use iroh_blobs::rpc::client::blobs::MemClient;
-use iroh_blobs::store::fs::Store as BlobStore;
+use iroh::{Endpoint, EndpointAddr, EndpointId, RelayMap, RelayMode, RelayUrl, TransportAddr};
+use iroh_blobs::api::Store;
+use iroh_blobs::store::fs::FsStore;
+use iroh_blobs::BlobsProtocol;
+#[cfg(not(target_os = "ios"))]
+use iroh_mdns_address_lookup::MdnsAddressLookup;
+use noq_proto::congestion::{Bbr3Config, CubicConfig};
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 use socket2::{Domain, Protocol, Socket, Type};
 use std::net::SocketAddr;
@@ -29,7 +34,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-const RELAY_WAIT_TIMEOUT: Duration = Duration::from_secs(6);
+const ONLINE_WAIT_TIMEOUT: Duration = Duration::from_secs(6);
 const DB_FILE_NAME: &str = "lightning-p2p.db";
 const DEPRECATED_DB_FILE_NAME: &str = "fastdrop.db";
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
@@ -40,8 +45,15 @@ const MDNS_PORT: u16 = 5353;
 /// The running iroh node with blob transfer capability.
 pub struct LightningP2PNode {
     endpoint: Endpoint,
-    blobs: Blobs<BlobStore>,
+    /// Persistent iroh-blobs store. Derefs to [`iroh_blobs::api::Store`].
+    store: FsStore,
     router: Router,
+    /// Out-of-band address lookup used to teach the endpoint how to reach the
+    /// peers named in a received ticket (relay + direct addresses).
+    lookup: MemoryLookup,
+    /// LAN mDNS address lookup, subscribed by the nearby-discovery loop.
+    /// `None` on platforms without mDNS (iOS).
+    mdns: Option<iroh_mdns_address_lookup::MdnsAddressLookup>,
     /// Shared flag toggled by the LAN discovery loop when the subscription is live.
     lan_discovery_active: Arc<AtomicBool>,
     /// Local sled database.
@@ -50,11 +62,6 @@ pub struct LightningP2PNode {
 
 impl LightningP2PNode {
     /// Starts the iroh node using explicit directories.
-    ///
-    /// Used by integration tests and benches that need isolated in-process
-    /// nodes without a full Tauri runtime. No nearby protocol is registered in
-    /// this variant since it requires a `tauri::AppHandle` for event emission.
-    /// Uses the platform-default [`TransferProfile`] for QUIC transport tuning.
     ///
     /// # Errors
     ///
@@ -73,13 +80,6 @@ impl LightningP2PNode {
 
     /// Starts the iroh node with an optional custom relay URL.
     ///
-    /// When `nearby_protocol` is `Some`, the nearby ALPN is registered on the
-    /// router so peers can probe identity, list shares, and push offers.
-    ///
-    /// The provided [`TransferProfile`] supplies the QUIC transport tuning
-    /// (windows, stream caps, keepalive) baked at endpoint bind time. Changing
-    /// the mode after startup requires a node restart via the Supervisor.
-    ///
     /// # Errors
     ///
     /// Returns `LightningP2PError` if endpoint binding, storage creation, or
@@ -96,17 +96,19 @@ impl LightningP2PNode {
 
         probe_mdns_socket();
 
-        let endpoint = bind_endpoint(relay_url, &data_dir, profile).await?;
+        let lookup = MemoryLookup::new();
+        let endpoint = bind_endpoint(relay_url, &data_dir, profile, &lookup).await?;
+        let mdns = setup_mdns(&endpoint);
         tracing::info!(
-            node_id = %endpoint.node_id(),
+            endpoint_id = %endpoint.id(),
             local_network_discovery = local_network_discovery_label(),
-            "iroh endpoint bound (n0-discovery=on)"
+            "iroh endpoint bound (n0-discovery + mDNS)"
         );
 
-        let blob_store = load_blob_store(&data_dir).await?;
-        let blobs = Blobs::builder(blob_store).build(&endpoint);
+        let store = load_blob_store(&data_dir).await?;
+        let blobs = BlobsProtocol::new(&store, None);
         let mut router_builder =
-            Router::builder(endpoint.clone()).accept(iroh_blobs::ALPN, blobs.clone());
+            Router::builder(endpoint.clone()).accept(iroh_blobs::ALPN, blobs);
         if let Some(protocol) = nearby_protocol {
             router_builder =
                 router_builder.accept(super::nearby_protocol::NEARBY_PROTOCOL_ALPN, protocol);
@@ -116,67 +118,74 @@ impl LightningP2PNode {
 
         Ok(Self {
             endpoint,
-            blobs,
+            store,
             router,
+            lookup,
+            mdns,
             lan_discovery_active: Arc::new(AtomicBool::new(false)),
             db,
         })
     }
 
+    /// Teaches the endpoint how to reach the given peers (relay + direct
+    /// addresses from a received ticket), so the downloader can dial them.
+    pub fn register_ticket_addrs(&self, addrs: impl IntoIterator<Item = EndpointAddr>) {
+        for addr in addrs {
+            self.lookup.add_endpoint_info(addr);
+        }
+    }
+
+    /// Returns a clone of the LAN mDNS address lookup for the discovery loop
+    /// to subscribe to, if mDNS is available on this platform.
+    #[must_use]
+    pub fn mdns_lookup(&self) -> Option<iroh_mdns_address_lookup::MdnsAddressLookup> {
+        self.mdns.clone()
+    }
+
     /// Returns the shared LAN-discovery activity flag.
-    ///
-    /// The flag is flipped to `true` by the nearby-discovery loop once the
-    /// local-network discovery subscription is established, and back to `false`
-    /// if the stream ends.
     #[must_use]
     pub fn lan_discovery_flag(&self) -> Arc<AtomicBool> {
         self.lan_discovery_active.clone()
     }
 
-    /// Returns this node's unique `NodeId`.
+    /// Returns this node's unique `EndpointId`.
     #[must_use]
-    pub fn node_id(&self) -> NodeId {
-        self.endpoint.node_id()
+    pub fn node_id(&self) -> EndpointId {
+        self.endpoint.id()
     }
 
-    /// Returns a reachable `NodeAddr` suitable for share tickets.
+    /// Returns a reachable `EndpointAddr` suitable for share tickets.
     ///
     /// # Errors
     ///
-    /// Returns `LightningP2PError` if neither direct addresses nor a home relay
-    /// are ready in time.
-    pub async fn ticket_addr(&self) -> Result<NodeAddr> {
-        let direct_addresses = wait_for_ticket_direct_addresses(&self.endpoint).await;
-        let relay_url = wait_for_optional_home_relay(&self.endpoint).await;
-        if direct_addresses.is_empty() && relay_url.is_none() {
+    /// Returns `LightningP2PError` if no route is ready in time.
+    pub async fn ticket_addr(&self) -> Result<EndpointAddr> {
+        let _ = tokio::time::timeout(ONLINE_WAIT_TIMEOUT, self.endpoint.online()).await;
+        let addr = self.endpoint.addr();
+        if addr.addrs.is_empty() {
             return Err(LightningP2PError::Other(
                 "No peer route is ready yet. Keep the app open and try again in a moment.".into(),
             ));
         }
-        Ok(NodeAddr::from_parts(
-            self.node_id(),
-            relay_url,
-            direct_addresses,
-        ))
+        Ok(addr)
     }
 
     /// Returns a snapshot of the node's current reachability status.
     #[must_use]
     pub fn runtime_status(&self) -> NodeRuntimeStatus {
-        let relay_url = self
-            .endpoint
-            .home_relay()
-            .get()
-            .ok()
-            .flatten()
-            .map(|url| url.to_string());
-        let direct_address_count = self
-            .endpoint
-            .direct_addresses()
-            .get()
-            .ok()
-            .flatten()
-            .map_or(0, |addresses| addresses.len());
+        let addr = self.endpoint.addr();
+        let relay_url = addr
+            .addrs
+            .iter()
+            .find_map(|a| match a {
+                TransportAddr::Relay(url) => Some(url.to_string()),
+                _ => None,
+            });
+        let direct_address_count = addr
+            .addrs
+            .iter()
+            .filter(|a| a.is_ip())
+            .count();
         let lan_discovery_active = self.lan_discovery_active.load(Ordering::Relaxed);
 
         NodeRuntimeStatus::from_network(
@@ -188,15 +197,13 @@ impl LightningP2PNode {
     }
 
     /// Returns the best-known route kind for a remote peer.
+    ///
+    /// iroh 1.0 uses multipath connections without a stable per-remote
+    /// direct/relay classification, so this returns `Unknown` and callers fall
+    /// back to inferring the route from the ticket's provider addresses.
     #[must_use]
-    pub fn route_kind(&self, node_id: NodeId) -> RouteKind {
-        self.endpoint
-            .conn_type(node_id)
-            .ok()
-            .and_then(|watcher| watcher.get().ok())
-            .map_or(RouteKind::Unknown, |connection_type| {
-                map_connection_type(&connection_type)
-            })
+    pub fn route_kind(&self, _endpoint_id: EndpointId) -> RouteKind {
+        RouteKind::Unknown
     }
 
     /// Returns a reference to the iroh endpoint.
@@ -205,16 +212,10 @@ impl LightningP2PNode {
         &self.endpoint
     }
 
-    /// Returns a reference to the blobs protocol handle.
+    /// Returns the iroh-blobs store handle used for local blob operations.
     #[must_use]
-    pub fn blobs(&self) -> &Blobs<BlobStore> {
-        &self.blobs
-    }
-
-    /// Returns the RPC-style blobs client used for local store operations.
-    #[must_use]
-    pub fn blobs_client(&self) -> &MemClient {
-        self.blobs.client()
+    pub fn blobs_client(&self) -> &Store {
+        &self.store
     }
 
     /// Returns the local storage database handle.
@@ -232,7 +233,7 @@ impl LightningP2PNode {
         self.router
             .shutdown()
             .await
-            .map_err(LightningP2PError::Network)
+            .map_err(|error| LightningP2PError::Network(error.into()))
     }
 }
 
@@ -240,28 +241,56 @@ async fn bind_endpoint(
     relay_url: Option<RelayUrl>,
     data_dir: &Path,
     profile: TransferProfile,
+    lookup: &MemoryLookup,
 ) -> Result<Endpoint> {
-    let relay_mode = relay_url
-        .map(RelayMap::from)
-        .map_or(RelayMode::Default, RelayMode::Custom);
     let secret_key = load_or_create_secret_key(data_dir)?;
 
-    let builder = Endpoint::builder().secret_key(secret_key).discovery_n0();
+    let mut builder = Endpoint::builder(iroh::endpoint::presets::N0)
+        .secret_key(secret_key)
+        .address_lookup(lookup.clone())
+        .transport_config(tuned_transport_config(profile));
 
-    #[cfg(not(target_os = "ios"))]
-    let builder = builder.discovery_local_network();
+    // Custom relay overrides the n0 default relay mode from the preset.
+    if let Some(url) = relay_url {
+        builder = builder.relay_mode(RelayMode::Custom(RelayMap::from(url)));
+    }
 
-    #[cfg(target_os = "ios")]
+    builder
+        .bind()
+        .await
+        .map_err(|error| LightningP2PError::Network(error.into()))
+}
+
+/// Builds a LAN mDNS address lookup and registers it on the bound endpoint,
+/// returning a handle the nearby-discovery loop subscribes to. Skipped on iOS
+/// pending the multicast entitlement.
+#[cfg(not(target_os = "ios"))]
+fn setup_mdns(endpoint: &Endpoint) -> Option<MdnsAddressLookup> {
+    let mdns = match MdnsAddressLookup::builder().build(endpoint.id()) {
+        Ok(mdns) => mdns,
+        Err(error) => {
+            tracing::warn!(%error, "could not start mDNS LAN discovery");
+            return None;
+        }
+    };
+    match endpoint.address_lookup() {
+        Ok(services) => {
+            services.add(mdns.clone());
+            Some(mdns)
+        }
+        Err(error) => {
+            tracing::warn!(%error, "endpoint has no address-lookup registry for mDNS");
+            None
+        }
+    }
+}
+
+#[cfg(target_os = "ios")]
+fn setup_mdns(_endpoint: &Endpoint) -> Option<iroh_mdns_address_lookup::MdnsAddressLookup> {
     tracing::warn!(
         "local-network discovery disabled on iOS until the multicast entitlement is granted"
     );
-
-    builder
-        .relay_mode(relay_mode)
-        .transport_config(tuned_transport_config(profile))
-        .bind()
-        .await
-        .map_err(LightningP2PError::Network)
+    None
 }
 
 fn local_network_discovery_label() -> &'static str {
@@ -273,9 +302,7 @@ fn local_network_discovery_label() -> &'static str {
 }
 
 /// Best-effort probe that binds a UDP socket on the mDNS port and joins the
-/// multicast group. If this fails (commonly: Windows Firewall, another mDNS
-/// responder, or insufficient privileges), LAN discovery will silently stop
-/// working — so we log a loud warning that explains exactly what to fix.
+/// multicast group, logging a loud warning when it fails.
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 fn probe_mdns_socket() {
     let socket = match Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP)) {
@@ -328,22 +355,21 @@ fn probe_mdns_socket() {
     tracing::debug!("mDNS socket probe skipped on mobile");
 }
 
-fn tuned_transport_config(profile: TransferProfile) -> TransportConfig {
-    let mut config = TransportConfig::default();
-    config.keep_alive_interval(Some(profile.keep_alive_interval));
-    config.max_concurrent_bidi_streams(profile.max_concurrent_streams.into());
-    config.max_concurrent_uni_streams(profile.max_concurrent_streams.into());
-    config.send_window(profile.quic_send_window_bytes);
-    config.receive_window(profile.quic_recv_window_bytes.into());
-    config.stream_receive_window(profile.quic_stream_recv_window_bytes.into());
-    config.congestion_controller_factory(congestion_factory(profile));
-    config.mtu_discovery_config(Some(mtu_discovery(profile)));
-    config
+fn tuned_transport_config(profile: TransferProfile) -> QuicTransportConfig {
+    let streams = VarInt::from_u32(profile.max_concurrent_streams);
+    QuicTransportConfig::builder()
+        .keep_alive_interval(profile.keep_alive_interval)
+        .max_concurrent_bidi_streams(streams)
+        .max_concurrent_uni_streams(streams)
+        .send_window(profile.quic_send_window_bytes)
+        .receive_window(VarInt::from_u32(profile.quic_recv_window_bytes))
+        .stream_receive_window(VarInt::from_u32(profile.quic_stream_recv_window_bytes))
+        .congestion_controller_factory(congestion_factory(profile))
+        .mtu_discovery_config(Some(mtu_discovery(profile)))
+        .build()
 }
 
-/// Builds the congestion controller factory for the profile. BBR keeps the
-/// pipe full through stray loss on real networks; CUBIC remains for the
-/// conservative tiers (see `transfer::mode` honesty note for the evidence).
+/// Builds the congestion controller factory for the profile.
 fn congestion_factory(profile: TransferProfile) -> Arc<dyn ControllerFactory + Send + Sync> {
     match profile.congestion {
         CongestionAlgorithm::Cubic => {
@@ -352,24 +378,22 @@ fn congestion_factory(profile: TransferProfile) -> Arc<dyn ControllerFactory + S
             Arc::new(cubic)
         }
         CongestionAlgorithm::Bbr => {
-            let mut bbr = BbrConfig::default();
+            let mut bbr = Bbr3Config::default();
             bbr.initial_window(profile.initial_congestion_window);
             Arc::new(bbr)
         }
     }
 }
 
-/// MTU discovery bounded by the profile's ceiling. quinn binary-searches the
-/// path MTU and black-hole detection recovers if the network drops large
-/// datagrams, so probing beyond the 1452-byte default is safe.
+/// MTU discovery bounded by the profile's ceiling.
 fn mtu_discovery(profile: TransferProfile) -> MtuDiscoveryConfig {
     let mut mtud = MtuDiscoveryConfig::default();
     mtud.upper_bound(profile.mtu_upper_bound);
     mtud
 }
 
-async fn load_blob_store(data_dir: &std::path::Path) -> Result<BlobStore> {
-    BlobStore::load(data_dir.join("blobs"))
+async fn load_blob_store(data_dir: &Path) -> Result<FsStore> {
+    FsStore::load(data_dir.join("blobs"))
         .await
         .map_err(|err| LightningP2PError::Blob(err.to_string()))
 }
@@ -383,45 +407,6 @@ fn open_storage_db(data_dir: &Path) -> Result<StorageDb> {
     }
 
     StorageDb::open(&db_path)
-}
-
-async fn wait_for_ticket_direct_addresses(endpoint: &Endpoint) -> Vec<SocketAddr> {
-    let mut watcher = endpoint.direct_addresses();
-    match tokio::time::timeout(RELAY_WAIT_TIMEOUT, watcher.initialized()).await {
-        Ok(Ok(addresses)) => addresses.into_iter().map(|addr| addr.addr).collect(),
-        Ok(Err(error)) => {
-            tracing::debug!(error = %error, "direct addresses not ready for ticket");
-            Vec::new()
-        }
-        Err(_) => {
-            tracing::debug!("timed out waiting for direct addresses for ticket");
-            Vec::new()
-        }
-    }
-}
-
-async fn wait_for_optional_home_relay(endpoint: &Endpoint) -> Option<iroh::RelayUrl> {
-    let mut watcher = endpoint.home_relay();
-    match tokio::time::timeout(RELAY_WAIT_TIMEOUT, watcher.initialized()).await {
-        Ok(Ok(relay_url)) => Some(relay_url),
-        Ok(Err(error)) => {
-            tracing::debug!(error = %error, "home relay not ready for ticket");
-            None
-        }
-        Err(_) => {
-            tracing::debug!("timed out waiting for home relay for ticket");
-            None
-        }
-    }
-}
-
-fn map_connection_type(connection_type: &ConnectionType) -> RouteKind {
-    match connection_type {
-        ConnectionType::Direct(_) => RouteKind::Direct,
-        ConnectionType::Relay(_) => RouteKind::Relay,
-        ConnectionType::Mixed(_, _) => RouteKind::Mixed,
-        ConnectionType::None => RouteKind::Unknown,
-    }
 }
 
 #[cfg(test)]
@@ -450,19 +435,6 @@ mod tests {
     }
 
     #[test]
-    fn transport_config_for_standard_uses_high_bandwidth_windows() {
-        // Sanity-check that Standard mode keeps the historical pre-v0.5.1 tuning
-        // so existing deployments observe no behavior change after upgrade.
-        let standard = TransferMode::Standard.profile();
-        assert_eq!(standard.quic_recv_window_bytes, 268_435_456); // 256 MB
-        assert_eq!(standard.quic_stream_recv_window_bytes, 67_108_864); // 64 MB
-        assert_eq!(standard.max_concurrent_streams, 1024);
-
-        // tuned_transport_config builds with these values without panicking.
-        let _config = tuned_transport_config(standard);
-    }
-
-    #[test]
     fn transport_config_builds_for_every_mode() {
         for mode in [
             TransferMode::Standard,
@@ -472,27 +444,7 @@ mod tests {
             TransferMode::Warp,
             TransferMode::BatterySafe,
         ] {
-            // Exercises window/stream VarInt conversions, the congestion
-            // factory, and MTU discovery bounds for each tier.
             let _config = tuned_transport_config(mode.profile());
         }
-    }
-
-    #[test]
-    fn connection_type_maps_to_route_kind() {
-        let relay_url: RelayUrl = "https://relay.example.com".parse().expect("relay url");
-        let direct_addr = "127.0.0.1:4433".parse().expect("direct addr");
-        assert_eq!(
-            map_connection_type(&ConnectionType::Direct(direct_addr)),
-            RouteKind::Direct
-        );
-        assert_eq!(
-            map_connection_type(&ConnectionType::Relay(relay_url.clone())),
-            RouteKind::Relay
-        );
-        assert_eq!(
-            map_connection_type(&ConnectionType::Mixed(direct_addr, relay_url)),
-            RouteKind::Mixed
-        );
     }
 }

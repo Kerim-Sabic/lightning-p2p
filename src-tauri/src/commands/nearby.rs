@@ -6,7 +6,7 @@ use crate::node::nearby_protocol::{local_device_name, send_offer, WireBlobFormat
 use crate::node::{ActiveShare, NearbyDevice};
 use crate::storage::peers;
 use crate::AppState;
-use iroh::{NodeAddr, NodeId};
+use iroh::{EndpointAddr, EndpointId};
 use iroh_blobs::BlobFormat;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -75,7 +75,7 @@ pub async fn offer_share_to_peer(
 
     let node = state.get_node().await.map_err(String::from)?;
     let target_node_id =
-        NodeId::from_str(&node_id).map_err(|err| format!("Invalid target node id: {err}"))?;
+        EndpointId::from_str(&node_id).map_err(|err| format!("Invalid target node id: {err}"))?;
 
     let profile = state.settings.snapshot().await.transfer_mode.profile();
     let path_bufs = paths.into_iter().map(PathBuf::from).collect::<Vec<_>>();
@@ -102,7 +102,7 @@ pub async fn offer_share_to_peer(
         .nearby_shares
         .node_addr_for_device(&target_node_id)
         .await
-        .unwrap_or_else(|| NodeAddr::new(target_node_id));
+        .unwrap_or_else(|| EndpointAddr::new(target_node_id));
 
     let message = OfferShareMessage {
         offer_id: offer_id.clone(),
@@ -171,7 +171,7 @@ pub async fn respond_to_offer(
         return Ok(None);
     }
 
-    let sender_node_id = NodeId::from_str(&offer.sender_node_id)
+    let sender_node_id = EndpointId::from_str(&offer.sender_node_id)
         .map_err(|err| command_error(format!("Invalid sender node id: {err}")))?;
     let hash = iroh_blobs::Hash::from_str(&offer.blob_hash)
         .map_err(|err| command_error(format!("Invalid blob hash: {err}")))?;
@@ -182,10 +182,9 @@ pub async fn respond_to_offer(
         .nearby_shares
         .node_addr_for_device(&sender_node_id)
         .await
-        .unwrap_or_else(|| NodeAddr::new(sender_node_id));
+        .unwrap_or_else(|| EndpointAddr::new(sender_node_id));
 
-    let ticket = iroh_blobs::ticket::BlobTicket::new(node_addr, hash, blob_format)
-        .map_err(|err| command_error(format!("Could not build ticket from offer: {err}")))?;
+    let ticket = iroh_blobs::ticket::BlobTicket::new(node_addr, hash, blob_format);
 
     let transfer_id =
         crate::commands::transfer::start_receive_from_offer(state, window, node, ticket).await?;

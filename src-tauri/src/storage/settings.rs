@@ -524,7 +524,7 @@ mod tests {
         assert_eq!(snapshot.relay_mode, RelayModeSetting::Custom);
         assert_eq!(
             snapshot.custom_relay_url,
-            Some("https://relay.example.com./".into())
+            Some("https://relay.example.com/".into())
         );
         assert!(snapshot.local_discovery_enabled);
         assert!(!snapshot.bluetooth_discovery_enabled);

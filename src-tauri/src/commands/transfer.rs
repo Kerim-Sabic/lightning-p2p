@@ -79,7 +79,7 @@ fn spawn_prewarm(
 ) -> bool {
     let mut started = false;
     for addr in ticket.provider_node_addrs() {
-        let node_id = addr.node_id.to_string();
+        let node_id = addr.id.to_string();
         {
             let mut inflight = PREWARM_INFLIGHT
                 .lock()
@@ -240,7 +240,7 @@ async fn start_receive_ticket(
                 name: ticket
                     .label()
                     .map_or_else(|| ticket.primary().hash().to_string(), str::to_string),
-                peer: Some(ticket.primary().node_addr().node_id.to_string()),
+                peer: Some(ticket.primary().addr().id.to_string()),
                 bytes: 0,
                 total: ticket.size().unwrap_or(0),
                 speed_bps: 0,

@@ -13,14 +13,10 @@ use crate::transfer::progress::{
 };
 use crate::transfer::queue::TransferQueue;
 use crate::transfer::ticket::ShareTicket;
-use futures_util::StreamExt;
-use iroh_blobs::get::db::DownloadProgress;
-use iroh_blobs::get::progress::{BlobProgress, BlobState, TransferState};
-use iroh_blobs::rpc::client::blobs::{
-    DownloadMode, DownloadOptions, DownloadProgress as ClientDownloadProgress,
-};
+use futures_util::{Stream, StreamExt};
+use iroh_blobs::api::downloader::DownloadProgressItem;
+#[cfg(test)]
 use iroh_blobs::ticket::BlobTicket;
-use iroh_blobs::util::SetTagOption;
 use std::path::PathBuf;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::Window;
@@ -136,7 +132,7 @@ pub async fn receive_blob(
         mut cancel_rx,
         swarm_enabled,
     } = ctx;
-    let peer = ticket.primary().node_addr().node_id.to_string();
+    let peer = ticket.primary().addr().id.to_string();
     let initial_metrics = metrics_for_ticket(&ticket);
     let reporter = EventReporter::new(
         window,
@@ -300,7 +296,7 @@ async fn receive_core(
         hash: primary.hash().to_string(),
         label: export_summary.label,
         size: export_summary.size,
-        peer: primary.node_addr().node_id.to_string(),
+        peer: primary.addr().id.to_string(),
         metrics,
         output_path: export_summary.output_path,
     })
@@ -395,12 +391,7 @@ async fn swarm_download(
     let observations =
         crate::transfer::swarm::download_collection(node, ticket, cancel_rx, progress, profile)
             .await?;
-    let live_route = node.route_kind(ticket.primary().node_addr().node_id);
-    let route_kind = if live_route == RouteKind::Unknown {
-        infer_route_kind(ticket)
-    } else {
-        live_route
-    };
+    let route_kind = infer_route_kind(ticket);
     if let Some(progress) = progress {
         progress.set_route_kind(route_kind);
     }
@@ -432,66 +423,79 @@ async fn download_to_store(
     progress: Option<&ProgressHandle>,
     profile: TransferProfile,
 ) -> Result<DownloadSummary> {
-    let mut stream = start_download(node, ticket).await?;
-    let mut state = TransferState::new(ticket.primary().hash());
-    let mut lifecycle = DownloadLifecycle::default();
+    // Teach the endpoint how to reach the sender, then dial via the downloader.
+    node.register_ticket_addrs(ticket.provider_node_addrs());
+    let providers: Vec<iroh::EndpointId> = ticket
+        .provider_node_addrs()
+        .iter()
+        .map(|addr| addr.id)
+        .collect();
+    let downloader = node.blobs_client().downloader(node.endpoint());
+    let mut stream = downloader
+        .download(ticket.primary().hash_and_format(), providers)
+        .stream()
+        .await
+        .map_err(|error| blob_error(&error))?;
+
+    let route_kind = infer_route_kind(ticket);
+    let total = ticket.size().unwrap_or(0);
     let started_at = Instant::now();
     let idle_timeout = profile.idle_timeout.max(MIN_DOWNLOAD_IDLE_TIMEOUT);
+    let mut lifecycle = DownloadLifecycle {
+        route_kind,
+        ..DownloadLifecycle::default()
+    };
 
     loop {
-        let event = next_event(
+        let Some(item) = next_event(
             &mut stream,
             cancel_rx,
             lifecycle.contacted_peer,
             idle_timeout,
         )
-        .await?;
-        let Some(event) = event else {
-            return stream_end_error();
-        };
-        let done =
-            handle_download_event(node, ticket, &mut state, &mut lifecycle, event, started_at)?;
-        update_progress(progress, ticket, &state, lifecycle);
-        if done {
-            drain_download_stream(&mut stream).await?;
+        .await?
+        else {
+            // The stream ending cleanly means the download completed.
+            publish_progress(progress, total, total, &lifecycle);
             return Ok(DownloadSummary {
                 metrics: TransferMetrics {
                     route_kind: lifecycle.route_kind,
                     connect_ms: lifecycle.connect_ms,
-                    download_ms: 0,
-                    export_ms: 0,
                     first_byte_ms: lifecycle.first_byte_ms,
                     ..metrics_for_ticket(ticket)
                 },
             });
+        };
+        match item {
+            DownloadProgressItem::TryProvider { .. } => {
+                mark_contacted(&mut lifecycle, started_at);
+                publish_progress(progress, 0, total, &lifecycle);
+            }
+            DownloadProgressItem::Progress(offset) => {
+                mark_contacted(&mut lifecycle, started_at);
+                if offset > 0 {
+                    mark_first_byte(&mut lifecycle, started_at);
+                }
+                publish_progress(progress, offset, total, &lifecycle);
+            }
+            DownloadProgressItem::ProviderFailed { .. }
+            | DownloadProgressItem::PartComplete { .. } => {}
+            DownloadProgressItem::Error(error) => {
+                return Err(download_error(&error.to_string(), lifecycle))
+            }
+            DownloadProgressItem::DownloadError => {
+                return Err(download_error("download failed", lifecycle))
+            }
         }
     }
 }
 
-async fn start_download(
-    node: &LightningP2PNode,
-    ticket: &ShareTicket,
-) -> Result<ClientDownloadProgress> {
-    node.blobs_client()
-        .download_with_opts(
-            ticket.primary().hash(),
-            DownloadOptions {
-                format: ticket.primary().format(),
-                nodes: ticket.provider_node_addrs(),
-                tag: SetTagOption::Auto,
-                mode: DownloadMode::Queued,
-            },
-        )
-        .await
-        .map_err(|error| blob_error(&error))
-}
-
 async fn next_event(
-    stream: &mut ClientDownloadProgress,
+    stream: &mut (impl Stream<Item = DownloadProgressItem> + Unpin),
     cancel_rx: &mut watch::Receiver<bool>,
     contacted_peer: bool,
     idle_timeout: Duration,
-) -> Result<Option<DownloadProgress>> {
+) -> Result<Option<DownloadProgressItem>> {
     loop {
         tokio::select! {
             changed = cancel_rx.changed() => {
@@ -501,8 +505,7 @@ async fn next_event(
             }
             item = tokio::time::timeout(idle_timeout, stream.next()) => {
                 return match item {
-                    Ok(Some(event)) => event.map(Some).map_err(|error| blob_error(&error)),
-                    Ok(None) => Ok(None),
+                    Ok(event) => Ok(event),
                     Err(_) => Err(timeout_error(contacted_peer)),
                 };
             }
@@ -510,46 +513,14 @@ async fn next_event(
     }
 }
 
-fn handle_download_event(
-    node: &LightningP2PNode,
-    ticket: &ShareTicket,
-    state: &mut TransferState,
-    lifecycle: &mut DownloadLifecycle,
-    event: DownloadProgress,
-    started_at: Instant,
-) -> Result<bool> {
-    match &event {
-        DownloadProgress::Connected
-        | DownloadProgress::Found { .. }
-        | DownloadProgress::FoundHashSeq { .. }
-        | DownloadProgress::Progress { .. }
-        | DownloadProgress::Done { .. } => mark_contacted(node, ticket, lifecycle, started_at),
-        DownloadProgress::Abort(error) => {
-            return Err(download_abort_error(error.to_string(), *lifecycle));
-        }
-        DownloadProgress::AllDone(_) => return Ok(true),
-        DownloadProgress::InitialState(_) | DownloadProgress::FoundLocal { .. } => {}
-    }
-
-    state.on_progress(event);
-    if transferred_bytes(ticket.primary(), state) > 0 {
-        mark_first_byte(lifecycle, started_at);
-        mark_contacted(node, ticket, lifecycle, started_at);
-    }
-    Ok(false)
-}
-
-fn update_progress(
+fn publish_progress(
     progress: Option<&ProgressHandle>,
-    ticket: &ShareTicket,
-    state: &TransferState,
-    lifecycle: DownloadLifecycle,
+    bytes: u64,
+    total: u64,
+    lifecycle: &DownloadLifecycle,
 ) {
     if let Some(progress) = progress {
-        progress.set(
-            transferred_bytes(ticket.primary(), state),
-            total_bytes(ticket.primary(), state),
-        );
+        progress.set(bytes, total);
         progress.set_route_kind(lifecycle.route_kind);
         progress.set_connect_ms(lifecycle.connect_ms);
         progress.set_first_byte_ms(lifecycle.first_byte_ms);
@@ -561,28 +532,24 @@ fn update_progress(
     }
 }
 
-fn mark_contacted(
-    node: &LightningP2PNode,
-    ticket: &ShareTicket,
-    lifecycle: &mut DownloadLifecycle,
-    started_at: Instant,
-) {
+fn mark_contacted(lifecycle: &mut DownloadLifecycle, started_at: Instant) {
     lifecycle.contacted_peer = true;
     if lifecycle.connect_ms == 0 {
         lifecycle.connect_ms = elapsed_ms(started_at.elapsed());
     }
-
-    let route_kind = node.route_kind(ticket.primary().node_addr().node_id);
-    lifecycle.route_kind = if route_kind == RouteKind::Unknown {
-        infer_route_kind(ticket)
-    } else {
-        route_kind
-    };
 }
 
 fn mark_first_byte(lifecycle: &mut DownloadLifecycle, started_at: Instant) {
     if lifecycle.first_byte_ms == 0 {
         lifecycle.first_byte_ms = elapsed_ms(started_at.elapsed());
+    }
+}
+
+fn download_error(message: &str, lifecycle: DownloadLifecycle) -> LightningP2PError {
+    if lifecycle.contacted_peer {
+        LightningP2PError::Blob(message.to_string())
+    } else {
+        LightningP2PError::Other("Peer not reachable".into())
     }
 }
 
@@ -601,13 +568,12 @@ fn infer_route_kind(ticket: &ShareTicket) -> RouteKind {
 
 #[cfg(test)]
 fn legacy_ticket_route_kind(ticket: &BlobTicket) -> RouteKind {
-    let node_addr = ticket.node_addr();
-    match (
-        node_addr.direct_addresses.is_empty(),
-        node_addr.relay_url().is_some(),
-    ) {
-        (false, false) => RouteKind::Direct,
-        (true, true) => RouteKind::Relay,
+    let addr = ticket.addr();
+    let has_direct = addr.addrs.iter().any(iroh::TransportAddr::is_ip);
+    let has_relay = addr.addrs.iter().any(iroh::TransportAddr::is_relay);
+    match (has_direct, has_relay) {
+        (true, false) => RouteKind::Direct,
+        (false, true) => RouteKind::Relay,
         _ => RouteKind::Unknown,
     }
 }
@@ -636,30 +602,9 @@ fn effective_mbps(bytes: u64, duration_ms: u64) -> u64 {
     u64::try_from(megabits_per_second).unwrap_or(u64::MAX)
 }
 
-async fn drain_download_stream(stream: &mut ClientDownloadProgress) -> Result<()> {
-    while let Some(event) = stream.next().await {
-        let _event = event.map_err(|error| blob_error(&error))?;
-    }
-    Ok(())
-}
-
 fn timeout_error(contacted_peer: bool) -> LightningP2PError {
     if contacted_peer {
         LightningP2PError::Other("Transfer interrupted".into())
-    } else {
-        LightningP2PError::Other("Peer not reachable".into())
-    }
-}
-
-fn stream_end_error() -> Result<DownloadSummary> {
-    Err(LightningP2PError::Blob(
-        "Download stream closed unexpectedly".into(),
-    ))
-}
-
-fn download_abort_error(message: String, lifecycle: DownloadLifecycle) -> LightningP2PError {
-    if lifecycle.contacted_peer {
-        LightningP2PError::Blob(message)
     } else {
         LightningP2PError::Other("Peer not reachable".into())
     }
@@ -723,41 +668,6 @@ fn failure_category_from_payload(
     }
 }
 
-fn transferred_bytes(ticket: &BlobTicket, state: &TransferState) -> u64 {
-    if ticket.recursive() {
-        state.children.values().map(blob_progress_bytes).sum()
-    } else {
-        blob_progress_bytes(state.root())
-    }
-}
-
-fn total_bytes(ticket: &BlobTicket, state: &TransferState) -> u64 {
-    if ticket.recursive() {
-        state.children.values().map(blob_total_bytes).sum()
-    } else {
-        blob_total_bytes(state.root())
-    }
-}
-
-fn blob_total_bytes(blob: &BlobState) -> u64 {
-    blob.size.map_or(0, |size| size.value())
-}
-
-fn blob_progress_bytes(blob: &BlobState) -> u64 {
-    let size = blob_total_bytes(blob);
-    match blob.progress {
-        BlobProgress::Pending => 0,
-        BlobProgress::Progressing(offset) => {
-            if size == 0 {
-                offset
-            } else {
-                offset.min(size)
-            }
-        }
-        BlobProgress::Done => size,
-    }
-}
-
 fn save_peer_no_flush(node: &LightningP2PNode, peer: &str) -> Result<()> {
     peers::save_peer_no_flush(
         node.db(),
@@ -800,7 +710,7 @@ fn unix_timestamp() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use iroh::{NodeAddr, PublicKey};
+    use iroh::{EndpointAddr, PublicKey, TransportAddr};
     use iroh_blobs::BlobFormat;
     use std::str::FromStr;
 
@@ -840,19 +750,15 @@ mod tests {
         let relay_url = "https://relay.example.com"
             .parse()
             .expect("relay url should parse");
+        let node_id = PublicKey::from_str(
+            "ae58ff8833241ac82d6ff7611046ed67b5072d142c588d0063e942d9a75502b6",
+        )
+        .expect("public key should parse");
         let ticket = BlobTicket::new(
-            NodeAddr::from_parts(
-                PublicKey::from_str(
-                    "ae58ff8833241ac82d6ff7611046ed67b5072d142c588d0063e942d9a75502b6",
-                )
-                .expect("public key should parse"),
-                Some(relay_url),
-                [],
-            ),
+            EndpointAddr::from_parts(node_id, [TransportAddr::Relay(relay_url)]),
             iroh_blobs::Hash::new(b"hello"),
             BlobFormat::Raw,
-        )
-        .expect("ticket should build");
+        );
 
         assert_eq!(legacy_ticket_route_kind(&ticket), RouteKind::Relay);
     }

@@ -754,7 +754,7 @@ fn spawn_ble_poll_loop(
     app_handle: AppHandle,
     registry: crate::node::NearbyShareRegistry,
     settings: crate::storage::settings::SettingsState,
-    local_node_id: Option<iroh::NodeId>,
+    local_node_id: Option<iroh::EndpointId>,
     active: std::sync::Arc<std::sync::atomic::AtomicBool>,
     drain_discoveries: BleDiscoveryDrain,
 ) {
@@ -795,7 +795,7 @@ fn spawn_ble_poll_loop(
 
             let mut changed = false;
             for (node_id_hex, _) in discoveries {
-                let Ok(node_id) = iroh::NodeId::from_str(&node_id_hex) else {
+                let Ok(node_id) = iroh::EndpointId::from_str(&node_id_hex) else {
                     tracing::debug!(node_id_hex, "ignoring invalid BLE NodeId");
                     continue;
                 };
