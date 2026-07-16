@@ -17,11 +17,6 @@ struct BridgeContext {
 
 static CONTEXT: OnceLock<BridgeContext> = OnceLock::new();
 
-/// True once the process-wide JNI bridge is ready.
-pub(crate) fn context_ready() -> bool {
-    CONTEXT.get().is_some()
-}
-
 /// Returns the process `JavaVM`, or a fail-soft error before bootstrap.
 pub(crate) fn java_vm() -> Result<JavaVM, String> {
     CONTEXT
@@ -76,17 +71,37 @@ fn install_context(env: &mut Env<'_>, application: &JObject<'_>) -> Result<(), S
             .map_err(|error| error.to_string())?,
     };
     let _ = CONTEXT.set(candidate);
-    context_ready()
-        .then_some(())
-        .ok_or_else(|| "Android JNI context could not be stored".to_owned())
+    let installed = CONTEXT
+        .get()
+        .ok_or_else(|| "Android JNI context could not be stored".to_owned())?;
+    install_ndk_context(installed);
+    Ok(())
+}
+
+/// Publishes the (`JavaVM`, `Context`) pair into the `ndk-context` global that
+/// ecosystem crates read directly — on the iroh 1.0 tree, `netdev`,
+/// `hickory-resolver`, and `iroh-dns` all call `ndk_context::android_context()`
+/// from node worker threads and abort the process if it was never installed.
+/// tao 0.35+ / wry no longer initialize it, so this is the only writer.
+fn install_ndk_context(context: &BridgeContext) {
+    static NDK_CONTEXT: std::sync::Once = std::sync::Once::new();
+    NDK_CONTEXT.call_once(|| {
+        // SAFETY: the pointers come from a live JavaVM and a JNI global
+        // reference held in the process-lifetime `CONTEXT` static (never
+        // dropped), and the `Once` guarantees the exactly-once contract.
+        unsafe {
+            ndk_context::initialize_android_context(
+                context.vm.get_raw().cast(),
+                context.application.as_obj().as_raw().cast(),
+            );
+        }
+    });
 }
 
 #[cfg(test)]
 mod tests {
-    use super::context_ready;
-
     #[test]
     fn context_starts_uninitialized() {
-        assert!(!context_ready());
+        assert!(super::CONTEXT.get().is_none());
     }
 }

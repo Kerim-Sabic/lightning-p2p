@@ -3672,6 +3672,7 @@ dependencies = [
  "keyring",
  "mime_guess",
  "n0-future",
+ "ndk-context",
  "noq-proto",
  "qrcode",
  "rand 0.8.6",

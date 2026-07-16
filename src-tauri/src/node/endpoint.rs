@@ -26,9 +26,8 @@ use iroh_mdns_address_lookup::MdnsAddressLookup;
 use noq_proto::congestion::{Bbr3Config, CubicConfig};
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 use socket2::{Domain, Protocol, Socket, Type};
-use std::net::SocketAddr;
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
-use std::net::{Ipv4Addr, SocketAddrV4};
+use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
