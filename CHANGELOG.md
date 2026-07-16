@@ -4,9 +4,21 @@ All notable changes to Lightning P2P are documented here. The project follows se
 
 ## [Unreleased]
 
+### Fixed
+
+- **Browser receive buttons no longer swallowed by the app auto-launch**: the `/receive` page fired a `lightning-p2p://` deep link 700ms after load, and the browser's external-protocol prompt then ate every click on "Receive in this browser" / "Receive here" — the receive flow looked dead (reproduced live with a headless-browser E2E; a share published fine but could not be received through the UI). The page now auto-launches the app only when browser receive is unavailable, cancels on first interaction, and the panel buttons work.
+- **"Stop sharing" on `/send` now actually stops serving**: dropping the wasm `Sharer` left iroh's router accept-task running with its own endpoint + store clones, so a "stopped" share kept answering downloads. `Sharer::shutdown` (router shutdown + endpoint close) is now wired through `WebSender.shutdown()` and verified end-to-end: after stop, a fresh receiver can no longer fetch.
+- The browser sender is now explicitly owned by the page for the life of the share (previously it was a dangling local kept alive only by a leaked task), is stopped on navigation, and the tab warns before closing while a share is live.
+
+### Added
+
+- **QR code on browser send**: publishing a share from `/send` now renders the receive link as a QR code — same `qrcode`-crate SVG styling as the desktop app, rendered by the wasm engine — so a phone can scan and receive without typing anything. A Web Share button appears on platforms with a native share sheet.
+- **Anti tab-sleep guard while sharing**: a live `/send` tab holds a Web Lock and marks its title, so Chromium (Edge sleeping tabs, Chrome memory saver) doesn't silently put the serving tab to sleep — previously the most likely way a "sent" share died in the background.
+- `scripts/e2e-browser-send.mjs`: headless-browser E2E (playwright-core + installed Edge/Chrome) proving share → QR → receive → stop across real tabs against the production bundle.
+
 ### Changed
 
-- Nothing yet.
+- **Streaming imports and saves in the browser**: `/send` now streams files into the engine chunk-by-chunk with backpressure (`add_stream`) instead of buffering the whole file twice, and Chromium saves stream out of the store in 8 MB slices via the save picker (`read_blob_range`). Peak memory per file drops from ~2–3× its size to ~1×, so large shares actually fit inside the browser's ~2 GB gate; the stated limits are unchanged pending real large-file measurements. Prewarming the endpoint while files are picked makes publish near-instant.
 
 ## [0.8.0] - 2026-07-15 ("everywhere")
 

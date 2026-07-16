@@ -69,14 +69,24 @@ export function ReceiveHandoffPage() {
   const deepLink = handoff.ticket ? createDeepReceiveLink(handoff.ticket) : null;
   const showBrowserReceive = Boolean(handoff.ticket) && browserReceiveSupported();
 
+  // Auto-launching the app fires the browser's external-protocol prompt,
+  // which swallows every click on the page while it is up — including the
+  // browser-receive buttons ("it said it uploaded but I couldn't download").
+  // So only auto-open when browser receive is unavailable, and cancel on the
+  // first interaction: a user who is clicking has chosen their own path.
   useEffect(() => {
-    if (!deepLink) return;
+    if (!deepLink || showBrowserReceive) return;
     const timer = window.setTimeout(() => {
       setAutoOpenedAt(Date.now());
       window.location.href = deepLink;
     }, AUTO_OPEN_DELAY_MS);
-    return () => window.clearTimeout(timer);
-  }, [deepLink]);
+    const cancel = () => window.clearTimeout(timer);
+    window.addEventListener("pointerdown", cancel, { once: true });
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("pointerdown", cancel);
+    };
+  }, [deepLink, showBrowserReceive]);
 
   const handleOpenApp = () => { if (deepLink) window.location.href = deepLink; };
   const handleCopyTicket = async () => {
@@ -187,7 +197,7 @@ export function ReceiveHandoffPage() {
                 </div>
               )}
 
-              {deepLink && (
+              {deepLink && !showBrowserReceive && (
                 <motion.p
                   className="mt-8 inline-flex items-center gap-2 rounded-full border border-white/8 bg-white/[0.03] px-3 py-1.5 text-[11.5px] font-medium text-white/72"
                   initial={reduce ? false : { opacity: 0 }}
