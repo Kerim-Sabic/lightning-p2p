@@ -102,6 +102,46 @@ fn extract_fd2_payload(input: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use iroh::{EndpointAddr, RelayUrl, SecretKey, TransportAddr};
+    use iroh_blobs::{BlobFormat, Hash};
+
+    /// Builds an `fd2:` envelope with the *exact* field set the desktop/CLI app
+    /// emits (version, hash, format, providers[{ticket,node_id,
+    /// direct_address_count,relay}], label, size, features) so this test fails
+    /// if the decoder ever stops tolerating the app's real schema.
+    fn app_style_ticket(label: &str, size: u64) -> (String, Hash) {
+        let node_id = SecretKey::from_bytes(&[7_u8; 32]).public();
+        let relay: RelayUrl = "https://relay.example.com".parse().expect("relay url");
+        let addr = EndpointAddr::from_parts(node_id, [TransportAddr::Relay(relay)]);
+        let hash = Hash::new(b"lightning-p2p-payload");
+        let blob = BlobTicket::new(addr, hash, BlobFormat::HashSeq);
+        let json = format!(
+            r#"{{"version":2,"hash":"{hash}","format":"hash_seq","providers":[{{"ticket":"{blob}","node_id":"{node_id}","direct_address_count":0,"relay":true}}],"label":{label},"size":{size},"features":["swarm","fd2"]}}"#,
+            label = serde_json::to_string(label).unwrap(),
+        );
+        let envelope = format!("fd2:{}", URL_SAFE_NO_PAD.encode(json.as_bytes()));
+        (envelope, hash)
+    }
+
+    #[test]
+    fn parses_app_emitted_envelope() {
+        let (envelope, hash) = app_style_ticket("photos.zip", 1_048_576);
+        let parsed = parse(&envelope).expect("app ticket should parse");
+        assert_eq!(parsed.label, "photos.zip");
+        assert_eq!(parsed.size, 1_048_576);
+        assert_eq!(parsed.providers.len(), 1);
+        assert_eq!(parsed.primary().hash(), hash);
+        assert_eq!(parsed.primary().format(), BlobFormat::HashSeq);
+    }
+
+    #[test]
+    fn parses_app_envelope_from_receive_url_fragment() {
+        let (envelope, hash) = app_style_ticket("clip.mov", 42);
+        let url = format!("https://lightning-p2p.netlify.app/receive#t={envelope}&x=1");
+        let parsed = parse(&url).expect("receive-url ticket should parse");
+        assert_eq!(parsed.primary().hash(), hash);
+        assert_eq!(parsed.label, "clip.mov");
+    }
 
     #[test]
     fn rejects_non_fd2() {

@@ -43,11 +43,37 @@ impl WebReceiver {
     }
 
     /// Downloads the ticket's content (BLAKE3-verified) and returns the root
-    /// hash as a hex string to pass back into [`read_blob`](Self::read_blob).
+    /// collection hash as a hex string. Pass it to
+    /// [`list_collection`](Self::list_collection) to enumerate the files.
     #[wasm_bindgen]
     pub async fn fetch(&self, ticket: String) -> Result<String, JsError> {
         let hash = self.inner.fetch(&ticket).await.map_err(|e| JsError::new(&e))?;
         Ok(hash.to_string())
+    }
+
+    /// Lists the files inside a fetched collection as a JSON string:
+    /// `[{"name":...,"hash":...,"size":...}, ...]`. A single-file share is a
+    /// one-entry collection.
+    #[wasm_bindgen]
+    pub async fn list_collection(&self, root_hex: String) -> Result<String, JsError> {
+        let root = Hash::from_str(&root_hex).map_err(|e| JsError::new(&e.to_string()))?;
+        let entries = self
+            .inner
+            .list_collection(root)
+            .await
+            .map_err(|e| JsError::new(&e))?;
+        let json: Vec<String> = entries
+            .iter()
+            .map(|entry| {
+                format!(
+                    "{{\"name\":{},\"hash\":\"{}\",\"size\":{}}}",
+                    serde_json::to_string(&entry.name).unwrap_or_else(|_| "\"\"".into()),
+                    entry.hash,
+                    entry.size
+                )
+            })
+            .collect();
+        Ok(format!("[{}]", json.join(",")))
     }
 
     /// Reads a fetched blob's bytes for saving to disk.
