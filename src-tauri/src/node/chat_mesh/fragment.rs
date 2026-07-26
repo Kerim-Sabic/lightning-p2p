@@ -293,7 +293,7 @@ mod tests {
             timestamp_ms: 1_720_000_000,
             sender_id: [1; 8],
             recipient_id: Some([2; 8]),
-            payload: (0..payload_len).map(|value| value as u8).collect(),
+            payload: (0_u8..=u8::MAX).cycle().take(payload_len).collect(),
             signature: None,
         }
     }

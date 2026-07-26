@@ -177,7 +177,7 @@ impl ChatMeshRuntime {
                 noise_ready: self.transports.contains_key(id),
             })
             .collect::<Vec<_>>();
-        peers.sort_by(|left, right| right.last_seen_ms.cmp(&left.last_seen_ms));
+        peers.sort_by_key(|peer| std::cmp::Reverse(peer.last_seen_ms));
         let mut groups = self
             .groups
             .values()
