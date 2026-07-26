@@ -453,12 +453,14 @@ async fn execute_scenario(scenario: &Scenario, mode: TransferMode) -> BenchResul
         root.path().join("sender-downloads"),
         None,
         None,
+        None,
         profile,
     )
     .await?;
     let receiver_node = LightningP2PNode::start_with_dirs_and_relay(
         root.path().join("receiver-data"),
         root.path().join("receiver-downloads"),
+        None,
         None,
         None,
         profile,

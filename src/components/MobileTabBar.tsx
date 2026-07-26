@@ -1,4 +1,11 @@
-import { ArrowDownToLine, Clock3, Home, Send, Settings2 } from "lucide-react";
+import {
+  ArrowDownToLine,
+  Clock3,
+  Home,
+  MessageCircle,
+  Send,
+  Settings2,
+} from "lucide-react";
 import type { View } from "../App";
 import { useNavigationSnapshot } from "../stores/transferSelectors";
 
@@ -15,6 +22,7 @@ const tabItems: Array<{
   { id: "home", label: "Home", icon: Home },
   { id: "send", label: "Send", icon: Send },
   { id: "receive", label: "Receive", icon: ArrowDownToLine },
+  { id: "chat", label: "L. Chat", icon: MessageCircle },
   { id: "history", label: "History", icon: Clock3 },
   { id: "settings", label: "Settings", icon: Settings2 },
 ];

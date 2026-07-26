@@ -186,6 +186,10 @@ pub fn run() {
     if let Err(error) = app_builder()
         .manage(app_state)
         .invoke_handler(tauri::generate_handler![
+            commands::chat::send_chat_message,
+            commands::chat::load_lightning_chat_secret,
+            commands::chat::store_lightning_chat_secret,
+            commands::chat::panic_wipe_lightning_chat,
             commands::share::create_share,
             commands::share::describe_share_paths,
             commands::share::get_ticket,

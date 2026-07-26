@@ -17,6 +17,8 @@ const SERVICE_NAME: &str = "com.lightningp2p.app";
 const APP_IDENTIFIER: &str = "com.lightningp2p.app";
 const KEY_NAME: &str = "iroh-secret-key";
 const FALLBACK_KEY_FILE_NAME: &str = "iroh-secret-key.hex";
+const CHAT_KEY_NAME: &str = "lightning-chat-nsec";
+const CHAT_FALLBACK_KEY_FILE_NAME: &str = "lightning-chat-nsec";
 
 /// Loads the persisted iroh identity key, or creates and persists one.
 ///
@@ -114,6 +116,63 @@ pub fn load_secret_key(data_dir: &Path) -> Result<Option<Vec<u8>>> {
     }
 }
 
+/// Loads the Nostr secret used by the isolated Lightning Chat feature.
+///
+/// # Errors
+///
+/// Returns `LightningP2PError::Key` when neither the OS keychain nor the
+/// profile-scoped fallback can be read.
+pub fn load_chat_secret(data_dir: &Path) -> Result<Option<String>> {
+    let entry = chat_keyring_entry(data_dir)?;
+    match entry.get_password() {
+        Ok(secret) => Ok(Some(secret)),
+        Err(keyring::Error::NoEntry) => load_chat_fallback(data_dir),
+        Err(error) => {
+            tracing::warn!(%error, "Lightning Chat keychain lookup failed; trying fallback");
+            load_chat_fallback(data_dir)
+        }
+    }
+}
+
+/// Persists the Lightning Chat Nostr secret in the OS keychain, with an
+/// app-private fallback for runtimes that do not expose a compatible keychain.
+///
+/// # Errors
+///
+/// Returns an error if the secret is malformed or no storage path succeeds.
+pub fn store_chat_secret(data_dir: &Path, secret: &str) -> Result<()> {
+    if !valid_chat_secret(secret) {
+        return Err(LightningP2PError::Key(
+            "Lightning Chat secret must be a valid nsec value".into(),
+        ));
+    }
+    match chat_keyring_entry(data_dir)?.set_password(secret) {
+        Ok(()) => {
+            remove_chat_fallback(data_dir)?;
+            Ok(())
+        }
+        Err(error) => {
+            tracing::warn!(%error, "Lightning Chat keychain write failed; using fallback");
+            store_chat_fallback(data_dir, secret)
+        }
+    }
+}
+
+/// Removes the Lightning Chat identity from all local storage locations.
+///
+/// # Errors
+///
+/// Returns an error if a stored fallback cannot be removed.
+pub fn delete_chat_secret(data_dir: &Path) -> Result<()> {
+    match chat_keyring_entry(data_dir)?.delete_credential() {
+        Ok(()) | Err(keyring::Error::NoEntry) => {}
+        Err(error) => {
+            tracing::warn!(%error, "Lightning Chat keychain delete failed");
+        }
+    }
+    remove_chat_fallback(data_dir)
+}
+
 fn load_legacy_secret_key_for_default_profile(data_dir: &Path) -> Option<Vec<u8>> {
     if !is_default_data_dir(data_dir) {
         return None;
@@ -143,6 +202,63 @@ fn load_legacy_secret_key_for_default_profile(data_dir: &Path) -> Option<Vec<u8>
 
 fn keyring_account(data_dir: &Path) -> String {
     format!("{KEY_NAME}:{}", data_dir_fingerprint(data_dir))
+}
+
+fn chat_keyring_entry(data_dir: &Path) -> Result<keyring::Entry> {
+    let account = format!("{CHAT_KEY_NAME}:{}", data_dir_fingerprint(data_dir));
+    keyring::Entry::new(SERVICE_NAME, &account)
+        .map_err(|error| LightningP2PError::Key(error.to_string()))
+}
+
+fn chat_fallback_path(data_dir: &Path) -> PathBuf {
+    data_dir.join(CHAT_FALLBACK_KEY_FILE_NAME)
+}
+
+fn load_chat_fallback(data_dir: &Path) -> Result<Option<String>> {
+    let path = chat_fallback_path(data_dir);
+    if !path.exists() {
+        return Ok(None);
+    }
+    let secret = std::fs::read_to_string(path)?.trim().to_string();
+    if !valid_chat_secret(&secret) {
+        return Err(LightningP2PError::Key(
+            "stored Lightning Chat identity is malformed".into(),
+        ));
+    }
+    Ok(Some(secret))
+}
+
+fn store_chat_fallback(data_dir: &Path, secret: &str) -> Result<()> {
+    std::fs::create_dir_all(data_dir)?;
+    let path = chat_fallback_path(data_dir);
+    let mut options = std::fs::OpenOptions::new();
+    options.create(true).truncate(true).write(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut file = options.open(path)?;
+    file.write_all(secret.as_bytes())?;
+    file.sync_all()?;
+    Ok(())
+}
+
+fn remove_chat_fallback(data_dir: &Path) -> Result<()> {
+    let path = chat_fallback_path(data_dir);
+    match std::fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn valid_chat_secret(secret: &str) -> bool {
+    secret.starts_with("nsec1")
+        && (50..=80).contains(&secret.len())
+        && secret
+            .chars()
+            .all(|character| character.is_ascii_lowercase() || character.is_ascii_digit())
 }
 
 fn data_dir_fingerprint(data_dir: &Path) -> String {
@@ -262,5 +378,33 @@ mod tests {
             keyring_account(first.path()),
             keyring_account(second.path())
         );
+    }
+
+    #[test]
+    fn chat_fallback_round_trips_and_deletes() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let secret = format!("nsec1{}", "q".repeat(58));
+
+        store_chat_fallback(dir.path(), &secret).expect("store chat fallback");
+        assert_eq!(
+            load_chat_fallback(dir.path()).expect("load chat fallback"),
+            Some(secret)
+        );
+        remove_chat_fallback(dir.path()).expect("remove chat fallback");
+        assert_eq!(
+            load_chat_fallback(dir.path()).expect("load removed fallback"),
+            None
+        );
+    }
+
+    #[test]
+    fn rejects_malformed_chat_fallback() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        std::fs::write(chat_fallback_path(dir.path()), "not-a-secret")
+            .expect("write malformed fallback");
+
+        let error = load_chat_fallback(dir.path()).expect_err("reject malformed fallback");
+
+        assert!(error.to_string().contains("malformed"));
     }
 }

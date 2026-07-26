@@ -28,6 +28,11 @@ const DevicesView = lazy(() =>
     default: module.DevicesView,
   })),
 );
+const ChatView = lazy(() =>
+  import("./components/ChatView").then((module) => ({
+    default: module.ChatView,
+  })),
+);
 const FirstRunOverlay = lazy(() =>
   import("./components/FirstRunOverlay").then((module) => ({
     default: module.FirstRunOverlay,
@@ -85,12 +90,7 @@ const WindowChrome = lazy(() =>
 );
 
 export type View =
-  | "home"
-  | "send"
-  | "devices"
-  | "receive"
-  | "history"
-  | "settings";
+  "home" | "send" | "devices" | "chat" | "receive" | "history" | "settings";
 
 export function App() {
   const runtimeKind = getRuntimeKind();
@@ -239,6 +239,8 @@ function NativeAppShell({ runtimeKind }: NativeAppShellProps) {
         return <HomeView onNavigate={handleNavigate} />;
       case "devices":
         return <DevicesView />;
+      case "chat":
+        return <ChatView />;
       case "receive":
         return <ReceiveView onNavigateSend={handleNavigateToSend} />;
       case "history":
@@ -258,7 +260,9 @@ function NativeAppShell({ runtimeKind }: NativeAppShellProps) {
           mobileRuntime ? "app-shell-mobile" : "app-shell-desktop"
         }`}
       >
-        <a className="skip-link" href="#main-content">Skip to main content</a>
+        <a className="skip-link" href="#main-content">
+          Skip to main content
+        </a>
         <FirstRunOverlay />
         {!mobileRuntime ? <WindowChrome currentView={view} /> : null}
         <div

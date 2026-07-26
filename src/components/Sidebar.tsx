@@ -2,6 +2,7 @@ import {
   ArrowDownToLine,
   Clock3,
   Home,
+  MessageCircle,
   Radar,
   Send,
   Settings2,
@@ -23,6 +24,7 @@ const navItems: Array<{
   { id: "home", label: "Home", icon: Home },
   { id: "send", label: "Send", icon: Send },
   { id: "receive", label: "Receive", icon: ArrowDownToLine },
+  { id: "chat", label: "Lightning Chat", icon: MessageCircle },
   { id: "history", label: "History", icon: Clock3 },
   { id: "settings", label: "Settings", icon: Settings2 },
 ];

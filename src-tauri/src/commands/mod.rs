@@ -14,6 +14,7 @@ pub fn command_error(error: impl Into<AppErrorPayload>) -> Box<AppErrorPayload> 
     Box::new(error.into())
 }
 
+pub mod chat;
 pub mod diagnostics;
 pub mod mobile;
 #[cfg(target_os = "android")]
