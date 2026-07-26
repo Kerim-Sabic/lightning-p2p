@@ -21,6 +21,12 @@ export interface LightningChatMessage {
   direction: "incoming" | "outgoing";
   delivery: LightningChatDelivery;
   transport: LightningChatTransport;
+  media?: {
+    kind: "image" | "audio" | "file";
+    file_name?: string;
+    mime_type?: string;
+    data_base64: string;
+  };
 }
 
 export interface LightningChatChannel {
@@ -38,6 +44,16 @@ export interface LightningChatPeer {
   is_favorite: boolean;
   is_blocked: boolean;
   is_nearby: boolean;
+  mesh_id?: string;
+  fingerprint?: string;
+  noise_ready?: boolean;
+}
+
+export interface LightningChatGroup {
+  id: string;
+  name: string;
+  epoch: number;
+  members: string[];
 }
 
 export interface LightningChatSnapshot {
@@ -48,6 +64,9 @@ export interface LightningChatSnapshot {
   connected_relays: number;
   messages: LightningChatMessage[];
   peers: LightningChatPeer[];
+  groups: LightningChatGroup[];
+  mesh_peer_id: string | null;
+  mesh_links: number;
   error: string | null;
 }
 
@@ -55,5 +74,12 @@ export const DEFAULT_LIGHTNING_CHAT_CHANNEL: LightningChatChannel = {
   id: "global",
   label: "Nearby mesh",
   geohash: "",
+  scope: "region",
+};
+
+export const WEB_LIGHTNING_CHAT_CHANNEL: LightningChatChannel = {
+  id: "web-lounge",
+  label: "Web lounge",
+  geohash: "lightning-web",
   scope: "region",
 };

@@ -7,7 +7,10 @@ import {
   KeyRound,
   MapPin,
   MessageCircle,
+  Mic,
+  Paperclip,
   Plus,
+  QrCode,
   Radio,
   Send,
   ShieldCheck,
@@ -20,7 +23,8 @@ import {
   Zap,
 } from "lucide-react";
 import { nip19 } from "nostr-tools";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { isNativeRuntime } from "../../lib/tauri";
 import { lightningChatService } from "./service";
 import {
   DEFAULT_LIGHTNING_CHAT_CHANNEL,
@@ -33,23 +37,35 @@ import { useLightningChat } from "./use-lightning-chat";
 type Conversation =
   | { kind: "channel"; channel: LightningChatChannel }
   | { kind: "nearby"; peer: LightningChatPeer }
+  | { kind: "group"; groupId: string; name: string }
   | { kind: "nostr"; pubkey: string };
 
 export function LightningChatView() {
+  const nativeRuntime = isNativeRuntime();
   const snapshot = useLightningChat();
+  const initialChannel = lightningChatService.getSnapshot().active_channel;
   const [conversation, setConversation] = useState<Conversation>({
     kind: "channel",
-    channel: DEFAULT_LIGHTNING_CHAT_CHANNEL,
+    channel: initialChannel,
   });
-  const [rooms, setRooms] = useState<LightningChatChannel[]>([]);
+  const [rooms, setRooms] = useState<LightningChatChannel[]>(
+    initialChannel.id === DEFAULT_LIGHTNING_CHAT_CHANNEL.id
+      ? []
+      : [initialChannel],
+  );
   const [draft, setDraft] = useState("");
   const [dialog, setDialog] = useState<
-    "join" | "dm" | "identity" | "panic" | null
+    "join" | "dm" | "group" | "trust" | "verify" | "identity" | "panic" | null
   >(null);
   const [dialogValue, setDialogValue] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [trustSvg, setTrustSvg] = useState("");
+  const [verifiedIdentity, setVerifiedIdentity] = useState<string | null>(null);
+  const [recording, setRecording] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const recorder = useRef<MediaRecorder | null>(null);
   const conversationId = getConversationId(conversation);
   const messages = useMemo(
     () =>
@@ -93,6 +109,34 @@ export function LightningChatView() {
         selectChannel(channel);
       } else if (dialog === "dm") {
         setConversation({ kind: "nostr", pubkey: resolvePubkey(dialogValue) });
+      } else if (dialog === "group") {
+        const members = snapshot.peers
+          .filter((peer) => peer.mesh_id && !peer.is_blocked)
+          .map((peer) => peer.id);
+        if (members.length === 0)
+          throw new Error(
+            "Discover a nearby mesh peer before creating a group.",
+          );
+        void lightningChatService
+          .createGroup(dialogValue, members)
+          .then((groupId) => {
+            setConversation({
+              kind: "group",
+              groupId,
+              name: dialogValue.trim(),
+            });
+          })
+          .catch((cause) => setError(messageFrom(cause)));
+      } else if (dialog === "verify") {
+        setVerifiedIdentity(null);
+        void lightningChatService
+          .verifyTrust(dialogValue)
+          .then((verified) => {
+            setError(null);
+            setVerifiedIdentity(verified);
+          })
+          .catch((cause) => setError(messageFrom(cause)));
+        return;
       }
       setDialog(null);
       setDialogValue("");
@@ -117,6 +161,8 @@ export function LightningChatView() {
           conversation.peer.id,
           body,
         );
+      } else if (conversation.kind === "group") {
+        await lightningChatService.sendGroupMessage(conversation.groupId, body);
       } else {
         await lightningChatService.sendPrivateMessage(
           conversation.pubkey,
@@ -128,6 +174,67 @@ export function LightningChatView() {
       setError(messageFrom(cause));
     } finally {
       setBusy(false);
+    }
+  };
+
+  const selectMedia = async (file: File): Promise<void> => {
+    if (conversation.kind === "group") {
+      throw new Error(
+        "Group rooms carry encrypted text. Send this attachment directly to a group member, or use Lightning Transfer for larger files.",
+      );
+    }
+    await lightningChatService.sendMedia(
+      conversation.kind === "nearby" ? conversation.peer.id : undefined,
+      file,
+    );
+  };
+
+  const toggleRecording = async (): Promise<void> => {
+    if (recording) {
+      recorder.current?.stop();
+      return;
+    }
+    if (conversation.kind === "group") {
+      setError("Voice notes currently target nearby rooms or direct peers.");
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const chunks: Blob[] = [];
+      const mediaRecorder = new MediaRecorder(stream);
+      recorder.current = mediaRecorder;
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size) chunks.push(event.data);
+      };
+      mediaRecorder.onstop = () => {
+        setRecording(false);
+        stream.getTracks().forEach((track) => track.stop());
+        const mime = mediaRecorder.mimeType || "audio/webm";
+        const file = new File(chunks, `voice_${crypto.randomUUID()}.webm`, {
+          type: mime,
+        });
+        void lightningChatService
+          .sendMedia(
+            conversation.kind === "nearby" ? conversation.peer.id : undefined,
+            file,
+            true,
+          )
+          .catch((cause) => setError(messageFrom(cause)));
+      };
+      mediaRecorder.start();
+      setRecording(true);
+    } catch (cause) {
+      setError(messageFrom(cause));
+    }
+  };
+
+  const openTrust = async (): Promise<void> => {
+    try {
+      const trust = await lightningChatService.createTrustQr();
+      setTrustSvg(trust.svg);
+      setDialog("trust");
+    } catch (cause) {
+      setError(messageFrom(cause));
     }
   };
 
@@ -160,14 +267,16 @@ export function LightningChatView() {
 
         <div className="flex-1 overflow-y-auto p-3">
           <SectionLabel label="Channels" onAdd={() => setDialog("join")} />
-          <ChannelRow
-            channel={DEFAULT_LIGHTNING_CHAT_CHANNEL}
-            active={
-              conversation.kind === "channel" &&
-              conversation.channel.id === "global"
-            }
-            onSelect={selectChannel}
-          />
+          {nativeRuntime ? (
+            <ChannelRow
+              channel={DEFAULT_LIGHTNING_CHAT_CHANNEL}
+              active={
+                conversation.kind === "channel" &&
+                conversation.channel.id === "global"
+              }
+              onSelect={selectChannel}
+            />
+          ) : null}
           {rooms.map((room) => (
             <ChannelRow
               key={room.id}
@@ -179,6 +288,38 @@ export function LightningChatView() {
               onSelect={selectChannel}
             />
           ))}
+
+          {nativeRuntime ? <div className="mt-6">
+            <SectionLabel
+              label="Private groups"
+              onAdd={() => setDialog("group")}
+            />
+            {snapshot.groups.map((group) => (
+              <button
+                key={group.id}
+                type="button"
+                onClick={() =>
+                  setConversation({
+                    kind: "group",
+                    groupId: group.id,
+                    name: group.name,
+                  })
+                }
+                className={`mb-1 flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-xs transition ${
+                  conversation.kind === "group" &&
+                  conversation.groupId === group.id
+                    ? "bg-emerald-300/10 text-emerald-100"
+                    : "text-slate-400 hover:bg-white/[0.035]"
+                }`}
+              >
+                <ShieldCheck className="h-4 w-4" />
+                <span className="min-w-0 flex-1 truncate">{group.name}</span>
+                <span className="text-[9px] text-slate-600">
+                  {group.members.length}
+                </span>
+              </button>
+            ))}
+          </div> : null}
 
           <div className="mt-6">
             <SectionLabel label="People" onAdd={() => setDialog("dm")} />
@@ -253,6 +394,44 @@ export function LightningChatView() {
             </div>
           ) : null}
           <div className="flex items-end gap-2 rounded-[20px] border border-white/[0.09] bg-white/[0.035] p-2 focus-within:border-sky-300/25">
+            {nativeRuntime ? (
+              <>
+                <input
+                  ref={fileInput}
+                  type="file"
+                  className="hidden"
+                  accept="image/*,audio/*,video/*,.pdf,.txt,.zip"
+                  onChange={(event) => {
+                    const file = event.currentTarget.files?.[0];
+                    event.currentTarget.value = "";
+                    if (file)
+                      void selectMedia(file).catch((cause) =>
+                        setError(messageFrom(cause)),
+                      );
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInput.current?.click()}
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-slate-500 transition hover:bg-white/[0.06] hover:text-sky-200"
+                  aria-label="Attach media"
+                >
+                  <Paperclip className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void toggleRecording()}
+                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl transition ${
+                    recording
+                      ? "animate-pulse bg-rose-500/20 text-rose-200"
+                      : "text-slate-500 hover:bg-white/[0.06] hover:text-sky-200"
+                  }`}
+                  aria-label={recording ? "Stop voice note" : "Record voice note"}
+                >
+                  <Mic className="h-4 w-4" />
+                </button>
+              </>
+            ) : null}
             <textarea
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
@@ -266,7 +445,9 @@ export function LightningChatView() {
               placeholder={
                 conversation.kind === "channel"
                   ? `Message ${conversation.channel.label}`
-                  : "Write an encrypted message"
+                  : conversation.kind === "group"
+                    ? `Message ${conversation.name}`
+                    : "Write an encrypted message"
               }
               className="max-h-28 min-h-10 min-w-0 flex-1 resize-none bg-transparent px-2 py-2 text-sm text-white outline-none placeholder:text-slate-600"
             />
@@ -290,11 +471,13 @@ export function LightningChatView() {
         <p className="px-2 pt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-600">
           Privacy route
         </p>
-        <Route
-          icon={<Radio className="h-3.5 w-3.5" />}
-          title="Nearby"
-          detail={`${snapshot.peers.length} reachable`}
-        />
+        {nativeRuntime ? (
+          <Route
+            icon={<Radio className="h-3.5 w-3.5" />}
+            title="Bluetooth mesh"
+            detail={`${snapshot.mesh_links} links · ${snapshot.peers.length} peers`}
+          />
+        ) : null}
         <Route
           icon={<ShieldCheck className="h-3.5 w-3.5" />}
           title="Nostr"
@@ -304,9 +487,21 @@ export function LightningChatView() {
           <KeyRound className="h-4 w-4 text-emerald-200" />
           <p className="mt-2 text-xs font-medium text-slate-200">No account</p>
           <p className="mt-1 text-[10px] leading-4 text-slate-500">
-            Your identity is generated on-device and held in protected storage.
+            {nativeRuntime
+              ? "Your identity is generated on-device and held in protected storage."
+              : "Your identity stays in this browser. Messages use encrypted relay transport."}
           </p>
         </div>
+        {nativeRuntime ? (
+          <button
+            type="button"
+            onClick={() => void openTrust()}
+            className="mt-3 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs text-sky-200/80 hover:bg-sky-500/10"
+          >
+            <QrCode className="h-3.5 w-3.5" />
+            Verify in person
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={() => setDialog("panic")}
@@ -346,6 +541,67 @@ export function LightningChatView() {
           <ModalAction label="Open encrypted chat" onClick={submitDialog} />
         </Modal>
       ) : null}
+      {dialog === "group" ? (
+        <Modal title="Create private group" onClose={() => setDialog(null)}>
+          <p className="mb-4 text-xs leading-5 text-slate-400">
+            Every currently reachable mesh peer will receive a creator-signed,
+            end-to-end encrypted invite. Membership changes rotate the group
+            key.
+          </p>
+          <ModalInput
+            value={dialogValue}
+            onChange={setDialogValue}
+            placeholder="Weekend crew"
+            onSubmit={submitDialog}
+          />
+          <ModalAction label="Create encrypted group" onClick={submitDialog} />
+        </Modal>
+      ) : null}
+      {dialog === "trust" ? (
+        <Modal title="Verify in person" onClose={() => setDialog(null)}>
+          <p className="mb-4 text-xs leading-5 text-slate-400">
+            Let the other person scan this short-lived signed code, then compare
+            the fingerprint shown on both devices.
+          </p>
+          <div
+            className="mx-auto w-full max-w-[280px] overflow-hidden rounded-2xl bg-white p-3"
+            dangerouslySetInnerHTML={{ __html: trustSvg }}
+          />
+          <button
+            type="button"
+            onClick={() => {
+              setDialogValue("");
+              setDialog("verify");
+            }}
+            className="mt-4 w-full rounded-xl border border-white/[0.08] px-4 py-2.5 text-sm text-sky-100 hover:bg-white/[0.04]"
+          >
+            Verify someone else
+          </button>
+        </Modal>
+      ) : null}
+      {dialog === "verify" ? (
+        <Modal title="Verify a trust code" onClose={() => setDialog(null)}>
+          <p className="mb-4 text-xs leading-5 text-slate-400">
+            Paste the scanned verification link. Its signature and five-minute
+            freshness window are checked locally.
+          </p>
+          <ModalInput
+            value={dialogValue}
+            onChange={(value) => {
+              setDialogValue(value);
+              setVerifiedIdentity(null);
+            }}
+            placeholder="Paste verification link"
+            onSubmit={submitDialog}
+          />
+          {verifiedIdentity ? (
+            <p className="mt-3 rounded-xl border border-emerald-400/20 bg-emerald-400/[0.08] px-3 py-2.5 text-xs text-emerald-200">
+              Verified locally · {verifiedIdentity}
+            </p>
+          ) : null}
+          <ModalAction label="Verify signature" onClick={submitDialog} />
+        </Modal>
+      ) : null}
       {dialog === "identity" ? (
         <Modal title="Lightning Chat identity" onClose={() => setDialog(null)}>
           <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
@@ -372,6 +628,16 @@ export function LightningChatView() {
               <Copy className="h-4 w-4 text-slate-500" />
             )}
           </button>
+          {nativeRuntime ? (
+            <button
+              type="button"
+              onClick={() => void openTrust()}
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-300 px-3 py-2.5 text-sm font-semibold text-slate-950"
+            >
+              <QrCode className="h-4 w-4" />
+              Show trust QR
+            </button>
+          ) : null}
         </Modal>
       ) : null}
       {dialog === "panic" ? (
@@ -409,15 +675,21 @@ function ChatHeader({
       ? conversation.channel.label
       : conversation.kind === "nearby"
         ? conversation.peer.label
-        : compact(conversation.pubkey);
+        : conversation.kind === "group"
+          ? conversation.name
+          : compact(conversation.pubkey);
   const detail =
     conversation.kind === "channel"
       ? conversation.channel.geohash
         ? `${conversation.channel.scope} location channel`
         : "local-first nearby channel"
       : conversation.kind === "nearby"
-        ? "direct over Lightning P2P"
-        : "Authenticated private envelope";
+        ? conversation.peer.mesh_id
+          ? "Noise XX over the Bluetooth mesh"
+          : "direct over Lightning P2P"
+        : conversation.kind === "group"
+          ? "Encrypted group · signed roster · rotating epoch key"
+          : "Authenticated private envelope";
   return (
     <header className="flex h-[68px] shrink-0 items-center gap-3 border-b border-white/[0.06] px-4">
       <span className="flex h-9 w-9 items-center justify-center rounded-2xl bg-white/[0.04] text-sky-200">
@@ -427,6 +699,8 @@ function ChatHeader({
           ) : (
             <Radio className="h-4 w-4" />
           )
+        ) : conversation.kind === "group" ? (
+          <ShieldCheck className="h-4 w-4" />
         ) : (
           <MessageCircle className="h-4 w-4" />
         )}
@@ -484,12 +758,16 @@ function Timeline({
           <h3 className="mt-4 text-sm font-semibold text-white">
             {conversation.kind === "channel"
               ? "The room is quiet"
-              : "Private by design"}
+              : conversation.kind === "group"
+                ? "Your encrypted group is ready"
+                : "Private by design"}
           </h3>
           <p className="mt-2 text-xs leading-5 text-slate-500">
             {conversation.kind === "channel"
               ? "Send the first message. Nearby stays local; location rooms use decentralized relays."
-              : "Authenticated private envelopes use a fresh outer key for every message."}
+              : conversation.kind === "group"
+                ? "Only members in the creator-signed roster can authenticate and decrypt messages."
+                : "Authenticated private envelopes use a fresh outer key for every message."}
           </p>
         </div>
       </div>
@@ -520,6 +798,7 @@ function Bubble({ message }: { message: LightningChatMessage }) {
         <div
           className={`rounded-[18px] px-3.5 py-2.5 text-[13px] leading-5 ${outgoing ? "rounded-br-md bg-sky-300 text-slate-950" : "rounded-bl-md border border-white/[0.06] bg-white/[0.055] text-slate-100"}`}
         >
+          {message.media ? <MessageMedia message={message} /> : null}
           <p className="whitespace-pre-wrap break-words">{message.content}</p>
         </div>
         <p
@@ -819,7 +1098,36 @@ function getConversationId(conversation: Conversation): string {
   if (conversation.kind === "channel")
     return `channel:${conversation.channel.id}`;
   if (conversation.kind === "nearby") return `nearby:${conversation.peer.id}`;
+  if (conversation.kind === "group") return `group:${conversation.groupId}`;
   return `private:${conversation.pubkey}`;
+}
+
+function MessageMedia({ message }: { message: LightningChatMessage }) {
+  const media = message.media;
+  if (!media) return null;
+  const source = `data:${media.mime_type ?? "application/octet-stream"};base64,${media.data_base64}`;
+  if (media.kind === "image") {
+    return (
+      <img
+        src={source}
+        alt={media.file_name ?? "Shared image"}
+        className="mb-2 max-h-72 w-full rounded-xl object-cover"
+      />
+    );
+  }
+  if (media.kind === "audio") {
+    return <audio src={source} controls className="mb-2 max-w-full" />;
+  }
+  return (
+    <a
+      href={source}
+      download={media.file_name ?? "lightning-chat-file"}
+      className="mb-2 flex items-center gap-2 rounded-xl border border-current/15 px-3 py-2 text-xs underline-offset-2 hover:underline"
+    >
+      <Paperclip className="h-3.5 w-3.5" />
+      {media.file_name ?? "Download shared file"}
+    </a>
+  );
 }
 
 function compact(value: string): string {

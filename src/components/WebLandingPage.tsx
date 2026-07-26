@@ -62,6 +62,7 @@ import {
   VELOPACK_DOWNLOAD_URL,
   canonicalWebPath,
 } from "../lib/shareLinks";
+import { ProductHome } from "../features/product-site/ProductHome";
 import { ReceiveHandoffPage } from "./ReceiveHandoffPage";
 import { SendPage } from "./SendPage";
 
@@ -530,8 +531,8 @@ function Header({ activePath }: { activePath: string }) {
   }, []);
   const navLinks: Array<{ href: string; label: string }> = [
     { href: "/", label: "Overview" },
+    { href: "/chat", label: "Lightning Chat" },
     { href: "/security", label: "Security" },
-    { href: "/benchmarks", label: "Benchmarks" },
     { href: "/download", label: "Download" },
   ];
   return (
@@ -1754,17 +1755,23 @@ export function WebLandingPage() {
       <ScrollProgress />
       <Header activePath={page.path} />
       <main id="main-content">
-        <Hero page={page} />
-        <HowItWorks />
-        <ArchitectureFlow />
-        <BrowserReceiveShowcase />
-        <SpeedModesShowcase />
-        <BenchEvidence />
-        <SecurityModel />
-        <CapabilityRows />
-        <Comparison />
-        <DownloadSection />
-        <AnswerBlocks page={page} />
+        {page.path === "/" ? (
+          <ProductHome />
+        ) : (
+          <>
+            <Hero page={page} />
+            <HowItWorks />
+            <ArchitectureFlow />
+            <BrowserReceiveShowcase />
+            <SpeedModesShowcase />
+            <BenchEvidence />
+            <SecurityModel />
+            <CapabilityRows />
+            <Comparison />
+            <DownloadSection />
+            <AnswerBlocks page={page} />
+          </>
+        )}
       </main>
       <SiteFooter />
     </div>

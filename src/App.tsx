@@ -110,9 +110,13 @@ export function App() {
   }, [runtimeKind]);
 
   if (!nativeRuntime) {
+    const pathname =
+      typeof window === "undefined"
+        ? "/"
+        : window.location.pathname.replace(/\/$/u, "") || "/";
     return (
       <Suspense fallback={<AppLoader label="Opening Lightning P2P" />}>
-        <WebLandingPage />
+        {pathname === "/chat" ? <BrowserChatPage /> : <WebLandingPage />}
       </Suspense>
     );
   }
@@ -121,6 +125,27 @@ export function App() {
     <Suspense fallback={<AppLoader label="Starting the transfer engine" />}>
       <NativeAppShell runtimeKind={runtimeKind} />
     </Suspense>
+  );
+}
+
+function BrowserChatPage() {
+  return (
+    <div className="flex min-h-screen flex-col bg-[var(--lab-black)] p-3 text-white sm:p-5">
+      <header className="mx-auto flex w-full max-w-[1440px] items-center justify-between gap-4 px-1 pb-3">
+        <a
+          href="/"
+          className="text-sm font-semibold text-white/72 transition hover:text-white"
+        >
+          ← Lightning P2P
+        </a>
+        <p className="text-right text-[11px] text-white/44">
+          Browser relay chat · Bluetooth mesh is available in the Windows app
+        </p>
+      </header>
+      <div className="mx-auto flex w-full max-w-[1440px] flex-1">
+        <ChatView />
+      </div>
+    </div>
   );
 }
 

@@ -1437,6 +1437,25 @@ body.app-hydrated .static-seo-fallback {
   animation: ambient-grid-drift 28s linear infinite;
 }
 
+.product-hero {
+  background:
+    linear-gradient(180deg, oklch(12.5% 0.01 162 / 0.2), oklch(13.8% 0.016 162 / 0.92)),
+    radial-gradient(circle at 75% 24%, oklch(82% 0.15 150 / 0.08), transparent 34%);
+}
+
+.product-window {
+  transform: perspective(1400px) rotateY(-2deg) rotateX(1deg);
+  transform-origin: center;
+  transition:
+    transform 500ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 200ms ease;
+}
+
+.product-window:hover {
+  transform: perspective(1400px) rotateY(0deg) rotateX(0deg) translateY(-4px);
+  border-color: oklch(100% 0 0 / 0.18);
+}
+
 .cinematic-orb {
   position: absolute;
   pointer-events: none;
@@ -1546,6 +1565,11 @@ body.app-hydrated .static-seo-fallback {
   .telemetry-blip {
     animation: none !important;
     opacity: 0 !important;
+  }
+
+  .product-window,
+  .product-window:hover {
+    transform: none !important;
   }
 
   .route-trace {

@@ -683,7 +683,7 @@ pub async fn start_ble_discovery(
         if started {
             let local_node_id = state.node.read().await.as_ref().map(|node| node.node_id());
             spawn_ble_poll_loop(
-                app_handle,
+                app_handle.clone(),
                 state.nearby_shares.clone(),
                 state.settings.clone(),
                 local_node_id,
@@ -699,12 +699,17 @@ pub async fn start_ble_discovery(
         if started {
             let local_node_id = state.node.read().await.as_ref().map(|node| node.node_id());
             spawn_ble_poll_loop(
-                app_handle,
+                app_handle.clone(),
                 state.nearby_shares.clone(),
                 state.settings.clone(),
                 local_node_id,
                 state.ble_polling_active.clone(),
                 crate::proximity::ble::drain_discoveries,
+            );
+            spawn_chat_mesh_poll_loop(
+                app_handle,
+                state.chat_mesh.clone(),
+                state.chat_mesh_polling_active.clone(),
             );
         }
         Ok(started)
@@ -737,6 +742,9 @@ pub async fn stop_ble_discovery(state: State<'_, AppState>) -> Result<(), String
         state
             .ble_polling_active
             .store(false, std::sync::atomic::Ordering::SeqCst);
+        state
+            .chat_mesh_polling_active
+            .store(false, std::sync::atomic::Ordering::SeqCst);
         crate::proximity::ble::stop()
     }
     #[cfg(not(any(target_os = "android", windows)))]
@@ -744,6 +752,75 @@ pub async fn stop_ble_discovery(state: State<'_, AppState>) -> Result<(), String
         let _ = state;
         Ok(())
     }
+}
+
+#[cfg(windows)]
+fn spawn_chat_mesh_poll_loop(
+    app_handle: AppHandle,
+    mesh: std::sync::Arc<tokio::sync::Mutex<crate::node::chat_mesh::ChatMeshRuntime>>,
+    active: std::sync::Arc<std::sync::atomic::AtomicBool>,
+) {
+    use std::sync::atomic::Ordering;
+    use std::time::Duration;
+    use tauri::Emitter;
+    use tokio::time::MissedTickBehavior;
+
+    if active.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    tauri::async_runtime::spawn(async move {
+        let mut tick = tokio::time::interval(Duration::from_millis(250));
+        tick.set_missed_tick_behavior(MissedTickBehavior::Skip);
+        let mut announce_ticks = 79_u16;
+        let mut sync_ticks = 0_u16;
+        while active.load(Ordering::SeqCst) {
+            tick.tick().await;
+            match crate::proximity::chat_ble::drain_packets() {
+                Ok(packets) => {
+                    for (_, bytes) in packets {
+                        let result = mesh.lock().await.ingest_frame(&bytes);
+                        match result {
+                            Ok(ingress) => {
+                                for frame in ingress.outbound_frames {
+                                    let _ = crate::proximity::chat_ble::send_packet(&frame);
+                                }
+                                for event in ingress.events {
+                                    if let Err(error) =
+                                        app_handle.emit("lightning-chat-mesh-event", event)
+                                    {
+                                        tracing::debug!(%error, "could not emit chat mesh event");
+                                    }
+                                }
+                            }
+                            Err(error) => {
+                                tracing::debug!(%error, "rejected inbound chat mesh frame");
+                            }
+                        }
+                    }
+                }
+                Err(error) => tracing::debug!(%error, "chat mesh receive queue unavailable"),
+            }
+
+            announce_ticks = announce_ticks.saturating_add(1);
+            sync_ticks = sync_ticks.saturating_add(1);
+            if announce_ticks >= 80 {
+                announce_ticks = 0;
+                if let Ok(frames) = mesh.lock().await.announce_frames() {
+                    for frame in frames {
+                        let _ = crate::proximity::chat_ble::send_packet(&frame);
+                    }
+                }
+            }
+            if sync_ticks >= 240 {
+                sync_ticks = 0;
+                if let Ok(frames) = mesh.lock().await.sync_request_frames() {
+                    for frame in frames {
+                        let _ = crate::proximity::chat_ble::send_packet(&frame);
+                    }
+                }
+            }
+        }
+    });
 }
 
 #[cfg(any(target_os = "android", windows))]

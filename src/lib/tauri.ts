@@ -118,6 +118,59 @@ export interface ChatMessage {
   sent_at: number;
 }
 
+export interface ChatMeshEvent {
+  kind:
+    | "message"
+    | "private_message"
+    | "group_message"
+    | "group_update"
+    | "peer"
+    | "media"
+    | "voice"
+    | "private_media"
+    | "private_voice"
+    | "delivered"
+    | "read";
+  id: string;
+  sender_id: string;
+  sender_name: string;
+  content: string | null;
+  timestamp_ms: number;
+  group_id: string | null;
+  file_name: string | null;
+  mime_type: string | null;
+  data_base64: string | null;
+}
+
+export interface ChatMeshPeer {
+  id: string;
+  nickname: string;
+  fingerprint: string;
+  capabilities: number;
+  last_seen_ms: number;
+  noise_ready: boolean;
+}
+
+export interface ChatMeshGroup {
+  id: string;
+  name: string;
+  epoch: number;
+  members: string[];
+}
+
+export interface ChatMeshStatus {
+  peer_id: string;
+  fingerprint: string;
+  connected_links: number;
+  peers: ChatMeshPeer[];
+  groups: ChatMeshGroup[];
+}
+
+export interface ChatTrustQr {
+  url: string;
+  svg: string;
+}
+
 export interface ActiveTransfer {
   transfer_id: string;
   direction: TransferDirection;
@@ -802,18 +855,116 @@ export async function sendChatMessage(
 }
 
 export async function loadLightningChatSecret(): Promise<string | null> {
+  if (!isNativeRuntime()) {
+    return localStorage.getItem("lightning-chat.browser-secret");
+  }
   requireNativeRuntime("Loading the Lightning Chat identity");
   return invoke<string | null>("load_lightning_chat_secret");
 }
 
 export async function storeLightningChatSecret(secret: string): Promise<void> {
+  if (!isNativeRuntime()) {
+    localStorage.setItem("lightning-chat.browser-secret", secret);
+    return;
+  }
   requireNativeRuntime("Saving the Lightning Chat identity");
   await invoke("store_lightning_chat_secret", { secret });
 }
 
 export async function panicWipeLightningChat(): Promise<void> {
+  if (!isNativeRuntime()) {
+    localStorage.removeItem("lightning-chat.browser-secret");
+    return;
+  }
   requireNativeRuntime("Erasing Lightning Chat");
   await invoke("panic_wipe_lightning_chat");
+}
+
+export async function getChatMeshStatus(): Promise<ChatMeshStatus | null> {
+  if (!isDesktopRuntime()) return null;
+  return invoke<ChatMeshStatus>("get_chat_mesh_status");
+}
+
+export async function setChatMeshNickname(nickname: string): Promise<void> {
+  if (!isDesktopRuntime()) return;
+  await invoke("set_chat_mesh_nickname", { nickname });
+}
+
+export async function sendChatMeshMessage(
+  body: string,
+): Promise<ChatMeshEvent> {
+  requireNativeRuntime("Sending a nearby mesh message");
+  return invoke<ChatMeshEvent>("send_chat_mesh_message", { body });
+}
+
+export async function sendChatMeshPrivateMessage(
+  peerId: string,
+  body: string,
+  messageId: string,
+): Promise<void> {
+  requireNativeRuntime("Sending a private mesh message");
+  await invoke("send_chat_mesh_private_message", {
+    peerId,
+    body,
+    messageId,
+  });
+}
+
+export async function sendChatMeshMedia(input: {
+  peerId?: string;
+  fileName?: string;
+  mimeType?: string;
+  dataBase64: string;
+  voice: boolean;
+}): Promise<void> {
+  requireNativeRuntime("Sending mesh media");
+  await invoke("send_chat_mesh_media", input);
+}
+
+export async function createChatMeshGroup(
+  name: string,
+  memberIds: string[],
+): Promise<ChatMeshGroup> {
+  requireNativeRuntime("Creating a private mesh group");
+  return invoke<ChatMeshGroup>("create_chat_mesh_group", {
+    name,
+    memberIds,
+  });
+}
+
+export async function sendChatMeshGroupMessage(
+  groupId: string,
+  body: string,
+  messageId: string,
+): Promise<ChatMeshEvent> {
+  requireNativeRuntime("Sending a private group message");
+  return invoke<ChatMeshEvent>("send_chat_mesh_group_message", {
+    groupId,
+    body,
+    messageId,
+  });
+}
+
+export async function renderChatTrustQr(
+  nickname: string,
+  npub?: string,
+): Promise<ChatTrustQr> {
+  requireNativeRuntime("Creating a Lightning Chat trust code");
+  return invoke<ChatTrustQr>("render_chat_trust_qr", { nickname, npub });
+}
+
+export async function verifyChatTrustQr(value: string): Promise<ChatMeshPeer> {
+  requireNativeRuntime("Verifying a Lightning Chat trust code");
+  return invoke<ChatMeshPeer>("verify_chat_trust_qr", { value });
+}
+
+export function onChatMeshEvent(
+  callback: (event: ChatMeshEvent) => void,
+): Promise<UnlistenFn> {
+  if (!isDesktopRuntime()) return Promise.resolve(() => {});
+  return listen<ChatMeshEvent>("lightning-chat-mesh-event", ({ payload }) =>
+    callback(payload),
+  );
 }
 
 export function onChatMessage(

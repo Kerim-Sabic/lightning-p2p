@@ -19,6 +19,8 @@ const KEY_NAME: &str = "iroh-secret-key";
 const FALLBACK_KEY_FILE_NAME: &str = "iroh-secret-key.hex";
 const CHAT_KEY_NAME: &str = "lightning-chat-nsec";
 const CHAT_FALLBACK_KEY_FILE_NAME: &str = "lightning-chat-nsec";
+const CHAT_MESH_KEY_NAME: &str = "lightning-chat-mesh-identity";
+const CHAT_MESH_FALLBACK_KEY_FILE_NAME: &str = "lightning-chat-mesh-identity";
 
 /// Loads the persisted iroh identity key, or creates and persists one.
 ///
@@ -173,6 +175,56 @@ pub fn delete_chat_secret(data_dir: &Path) -> Result<()> {
     remove_chat_fallback(data_dir)
 }
 
+/// Loads or creates the independent Noise and signing identity used by the
+/// local Bluetooth mesh.
+///
+/// # Errors
+///
+/// Returns an error when neither the OS credential store nor the
+/// profile-scoped fallback can be read or written.
+pub fn load_or_create_chat_mesh_identity(
+    data_dir: &Path,
+) -> Result<crate::node::chat_mesh::MeshIdentity> {
+    let entry = chat_mesh_keyring_entry(data_dir)?;
+    let stored = match entry.get_password() {
+        Ok(value) => Some(value),
+        Err(keyring::Error::NoEntry) => load_chat_mesh_fallback(data_dir)?,
+        Err(error) => {
+            tracing::warn!(%error, "Lightning Chat mesh keychain lookup failed; trying fallback");
+            load_chat_mesh_fallback(data_dir)?
+        }
+    };
+    if let Some(value) = stored {
+        return crate::node::chat_mesh::MeshIdentity::decode_secret(&value)
+            .map_err(LightningP2PError::Key);
+    }
+
+    let identity =
+        crate::node::chat_mesh::MeshIdentity::generate().map_err(LightningP2PError::Key)?;
+    let encoded = identity.encode_secret().map_err(LightningP2PError::Key)?;
+    match entry.set_password(&encoded) {
+        Ok(()) => remove_file_if_present(&chat_mesh_fallback_path(data_dir))?,
+        Err(error) => {
+            tracing::warn!(%error, "Lightning Chat mesh keychain write failed; using fallback");
+            store_private_fallback(&chat_mesh_fallback_path(data_dir), &encoded)?;
+        }
+    }
+    Ok(identity)
+}
+
+/// Removes the local Bluetooth mesh identity.
+///
+/// # Errors
+///
+/// Returns an error if the profile-scoped fallback cannot be removed.
+pub fn delete_chat_mesh_identity(data_dir: &Path) -> Result<()> {
+    match chat_mesh_keyring_entry(data_dir)?.delete_credential() {
+        Ok(()) | Err(keyring::Error::NoEntry) => {}
+        Err(error) => tracing::warn!(%error, "Lightning Chat mesh keychain delete failed"),
+    }
+    remove_file_if_present(&chat_mesh_fallback_path(data_dir))
+}
+
 fn load_legacy_secret_key_for_default_profile(data_dir: &Path) -> Option<Vec<u8>> {
     if !is_default_data_dir(data_dir) {
         return None;
@@ -210,8 +262,29 @@ fn chat_keyring_entry(data_dir: &Path) -> Result<keyring::Entry> {
         .map_err(|error| LightningP2PError::Key(error.to_string()))
 }
 
+fn chat_mesh_keyring_entry(data_dir: &Path) -> Result<keyring::Entry> {
+    let account = format!("{CHAT_MESH_KEY_NAME}:{}", data_dir_fingerprint(data_dir));
+    keyring::Entry::new(SERVICE_NAME, &account)
+        .map_err(|error| LightningP2PError::Key(error.to_string()))
+}
+
 fn chat_fallback_path(data_dir: &Path) -> PathBuf {
     data_dir.join(CHAT_FALLBACK_KEY_FILE_NAME)
+}
+
+fn chat_mesh_fallback_path(data_dir: &Path) -> PathBuf {
+    data_dir.join(CHAT_MESH_FALLBACK_KEY_FILE_NAME)
+}
+
+fn load_chat_mesh_fallback(data_dir: &Path) -> Result<Option<String>> {
+    let path = chat_mesh_fallback_path(data_dir);
+    if !path.exists() {
+        return Ok(None);
+    }
+    let encoded = std::fs::read_to_string(path)?.trim().to_string();
+    crate::node::chat_mesh::MeshIdentity::decode_secret(&encoded)
+        .map_err(LightningP2PError::Key)?;
+    Ok(Some(encoded))
 }
 
 fn load_chat_fallback(data_dir: &Path) -> Result<Option<String>> {
@@ -244,8 +317,28 @@ fn store_chat_fallback(data_dir: &Path, secret: &str) -> Result<()> {
     Ok(())
 }
 
+fn store_private_fallback(path: &Path, value: &str) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let mut options = std::fs::OpenOptions::new();
+    options.create(true).truncate(true).write(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut file = options.open(path)?;
+    file.write_all(value.as_bytes())?;
+    file.sync_all()?;
+    Ok(())
+}
+
 fn remove_chat_fallback(data_dir: &Path) -> Result<()> {
-    let path = chat_fallback_path(data_dir);
+    remove_file_if_present(&chat_fallback_path(data_dir))
+}
+
+fn remove_file_if_present(path: &Path) -> Result<()> {
     match std::fs::remove_file(path) {
         Ok(()) => Ok(()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),

@@ -100,6 +100,9 @@ pub fn start(node_id_hex: &str) -> Result<bool, String> {
         },
         |()| true,
     );
+    if let Err(error) = super::chat_ble::start() {
+        set_last_error(Some(format!("Lightning Chat BLE: {error}")));
+    }
 
     Ok(scanning || advertising)
 }
@@ -110,6 +113,7 @@ pub fn start(node_id_hex: &str) -> Result<bool, String> {
 ///
 /// Returns an error if the session lock is poisoned.
 pub fn stop() -> Result<(), String> {
+    let _ = super::chat_ble::stop();
     let mut session = lock(session(), "BLE session")?;
     if let Some(signal) = session.advertise_signal.take() {
         signal.store(false, Ordering::SeqCst);
@@ -258,6 +262,7 @@ fn publish_payload(payload: &[u8]) -> Result<BluetoothLEAdvertisementPublisher, 
 fn handle_received(args: &BluetoothLEAdvertisementReceivedEventArgs) -> Result<(), String> {
     let address = args.BluetoothAddress().map_err(windows_error)?;
     let advertisement = args.Advertisement().map_err(windows_error)?;
+    super::chat_ble::observe_advertisement(address, &advertisement);
     for payload in service_payloads(&advertisement)? {
         ingest_payload(address, &payload)?;
     }
@@ -351,13 +356,13 @@ fn service_uuid_ble_bytes() -> [u8; 16] {
     SERVICE_UUID.to_u128().to_le_bytes()
 }
 
-fn bytes_to_buffer(bytes: &[u8]) -> Result<IBuffer, String> {
+pub(super) fn bytes_to_buffer(bytes: &[u8]) -> Result<IBuffer, String> {
     let writer = DataWriter::new().map_err(windows_error)?;
     writer.WriteBytes(bytes).map_err(windows_error)?;
     writer.DetachBuffer().map_err(windows_error)
 }
 
-fn buffer_to_bytes(buffer: &IBuffer) -> Result<Vec<u8>, String> {
+pub(super) fn buffer_to_bytes(buffer: &IBuffer) -> Result<Vec<u8>, String> {
     let len = buffer.Length().map_err(windows_error)?;
     let reader = DataReader::FromBuffer(buffer).map_err(windows_error)?;
     let out_len = usize::try_from(len).map_err(|error| error.to_string())?;
