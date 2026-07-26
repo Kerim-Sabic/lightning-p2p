@@ -9,15 +9,31 @@ import {
 import type { SubCloser } from "nostr-tools/abstract-pool";
 import {
   getNearbyDevices,
+  getChatMeshStatus,
+  getNodeId,
+  isNativeRuntime,
   loadLightningChatSecret,
   onChatMessage,
+  onChatMeshEvent,
   panicWipeLightningChat,
+  createChatMeshGroup,
+  renderChatTrustQr,
+  sendChatMeshGroupMessage,
+  sendChatMeshMedia,
+  sendChatMeshMessage,
+  sendChatMeshPrivateMessage,
   sendChatMessage,
+  setChatMeshNickname,
+  startBleDiscovery,
   storeLightningChatSecret,
+  verifyChatTrustQr,
+  type ChatMeshEvent,
   type ChatMessage,
+  type ChatTrustQr,
 } from "../../lib/tauri";
 import {
   DEFAULT_LIGHTNING_CHAT_CHANNEL,
+  WEB_LIGHTNING_CHAT_CHANNEL,
   type LightningChatChannel,
   type LightningChatIdentity,
   type LightningChatMessage,
@@ -42,6 +58,7 @@ const DEFAULT_RELAYS = [
 ] as const;
 const HISTORY_SECONDS = 6 * 60 * 60;
 const NICKNAME_KEY = "lightning-chat.nickname";
+const MAX_MESH_MEDIA_BYTES = 512 * 1024;
 const FAVORITES_KEY = "lightning-chat.favorites";
 const BLOCKED_KEY = "lightning-chat.blocked";
 const PRESENCE_INTERVAL_MS = 30_000;
@@ -59,14 +76,20 @@ export class LightningChatService {
   private nearbyTimer: number | null = null;
   private presenceTimer: number | null = null;
   private stopNearbyMessages: (() => void) | null = null;
+  private stopMeshMessages: (() => void) | null = null;
   private snapshot: LightningChatSnapshot = {
     status: "starting",
     identity: null,
-    active_channel: DEFAULT_LIGHTNING_CHAT_CHANNEL,
+    active_channel: isNativeRuntime()
+      ? DEFAULT_LIGHTNING_CHAT_CHANNEL
+      : WEB_LIGHTNING_CHAT_CHANNEL,
     relays: [...DEFAULT_RELAYS],
     connected_relays: 0,
     messages: [],
     peers: [],
+    groups: [],
+    mesh_peer_id: null,
+    mesh_links: 0,
     error: null,
   };
 
@@ -99,11 +122,17 @@ export class LightningChatService {
         status: "online",
         connected_relays: connectedRelayCount(pool),
       });
+      await setChatMeshNickname(identity.nickname).catch(() => undefined);
       this.subscribeToPrivateMessages(identity.pubkey);
-      try {
-        await this.startNearbyChat();
-      } catch {
-        // Nostr chat remains available while the local iroh node is warming.
+      if (this.snapshot.active_channel.geohash) {
+        this.joinChannel(this.snapshot.active_channel);
+      }
+      if (isNativeRuntime()) {
+        try {
+          await this.startNearbyChat();
+        } catch {
+          // Relay chat remains available while the local node is warming.
+        }
       }
     } catch (cause) {
       this.update({
@@ -121,6 +150,7 @@ export class LightningChatService {
         identity: { ...this.snapshot.identity, nickname: normalized },
       });
     }
+    void setChatMeshNickname(normalized).catch(() => undefined);
   }
 
   joinChannel(channel: LightningChatChannel): void {
@@ -215,8 +245,114 @@ export class LightningChatService {
   }
 
   async sendNearbyMessage(nodeId: string, content: string): Promise<void> {
+    const peer = this.snapshot.peers.find((item) => item.id === nodeId);
+    if (peer?.mesh_id) {
+      const messageId = crypto.randomUUID();
+      const body = normalizedMessage(content);
+      const optimistic: LightningChatMessage = {
+        id: messageId,
+        conversation_id: `nearby:${peer.id}`,
+        author_id: this.snapshot.mesh_peer_id ?? "local",
+        author_name: this.snapshot.identity?.nickname ?? "me",
+        content: body,
+        created_at: Math.floor(Date.now() / 1_000),
+        direction: "outgoing",
+        delivery: "sending",
+        transport: "ble_mesh",
+      };
+      this.appendMessage(optimistic);
+      try {
+        await sendChatMeshPrivateMessage(peer.mesh_id, body, messageId);
+        this.replaceDelivery(messageId, "sent");
+      } catch (cause) {
+        this.replaceDelivery(messageId, "failed");
+        throw cause;
+      }
+      return;
+    }
     const sent = await sendChatMessage(nodeId, normalizedMessage(content));
     this.appendMessage(irohMessage(sent, nodeId, true));
+  }
+
+  async sendMedia(
+    peerId: string | undefined,
+    file: File,
+    voice = false,
+  ): Promise<void> {
+    if (file.size > MAX_MESH_MEDIA_BYTES) {
+      throw new Error(
+        "Nearby chat attachments are limited to 512 KiB. Use Lightning Transfer for larger files.",
+      );
+    }
+    const peer = peerId
+      ? this.snapshot.peers.find((item) => item.id === peerId)
+      : undefined;
+    const dataBase64 = await fileToBase64(file);
+    await sendChatMeshMedia({
+      ...(peer?.mesh_id ? { peerId: peer.mesh_id } : {}),
+      fileName: file.name,
+      mimeType: file.type || "application/octet-stream",
+      dataBase64,
+      voice,
+    });
+    this.appendMessage({
+      id: crypto.randomUUID(),
+      conversation_id: peer
+        ? `nearby:${peer.id}`
+        : "channel:global",
+      author_id: this.snapshot.mesh_peer_id ?? "local",
+      author_name: this.snapshot.identity?.nickname ?? "me",
+      content: voice ? "Voice note" : `Shared ${file.name}`,
+      created_at: Math.floor(Date.now() / 1_000),
+      direction: "outgoing",
+      delivery: "sent",
+      transport: "ble_mesh",
+      media: {
+        kind: file.type.startsWith("image/")
+          ? "image"
+          : file.type.startsWith("audio/") || voice
+            ? "audio"
+            : "file",
+        file_name: file.name,
+        mime_type: file.type || "application/octet-stream",
+        data_base64: dataBase64,
+      },
+    });
+  }
+
+  async createGroup(name: string, peerIds: string[]): Promise<string> {
+    const meshIds = peerIds
+      .map((id) => this.snapshot.peers.find((peer) => peer.id === id)?.mesh_id)
+      .filter((id): id is string => Boolean(id));
+    const group = await createChatMeshGroup(name, meshIds);
+    this.update({
+      groups: [
+        ...this.snapshot.groups.filter((item) => item.id !== group.id),
+        group,
+      ],
+    });
+    return group.id;
+  }
+
+  async sendGroupMessage(groupId: string, content: string): Promise<void> {
+    const event = await sendChatMeshGroupMessage(
+      groupId,
+      normalizedMessage(content),
+      crypto.randomUUID(),
+    );
+    this.appendMessage(meshEventToMessage(event, this.snapshot.mesh_peer_id));
+  }
+
+  async createTrustQr(): Promise<ChatTrustQr> {
+    return renderChatTrustQr(
+      this.snapshot.identity?.nickname ?? "anonymous",
+      this.snapshot.identity?.npub,
+    );
+  }
+
+  async verifyTrust(value: string): Promise<string> {
+    const peer = await verifyChatTrustQr(value);
+    return `${peer.nickname} · ${peer.fingerprint.slice(0, 16)}…`;
   }
 
   toggleFavorite(peerId: string): void {
@@ -279,6 +415,8 @@ export class LightningChatService {
     this.stopPresence();
     this.stopNearbyMessages?.();
     this.stopNearbyMessages = null;
+    this.stopMeshMessages?.();
+    this.stopMeshMessages = null;
     this.seenMessageIds.clear();
     this.readAcknowledgedIds.clear();
     localStorage.removeItem(NICKNAME_KEY);
@@ -291,6 +429,9 @@ export class LightningChatService {
       identity: null,
       messages: [],
       peers: [],
+      groups: [],
+      mesh_peer_id: null,
+      mesh_links: 0,
       connected_relays: 0,
       error: null,
     };
@@ -306,6 +447,10 @@ export class LightningChatService {
   }
 
   private async startNearbyChat(): Promise<void> {
+    const nodeId = await getNodeId();
+    if (nodeId !== "desktop-runtime-required") {
+      await startBleDiscovery(nodeId);
+    }
     await this.refreshNearbyPeers();
     this.nearbyTimer = window.setInterval(() => {
       void this.refreshNearbyPeers();
@@ -321,16 +466,22 @@ export class LightningChatService {
       }
     });
     this.stopNearbyMessages = await subscription;
+    this.stopMeshMessages = await onChatMeshEvent((event) => {
+      this.receiveMeshEvent(event);
+    });
   }
 
   private async refreshNearbyPeers(): Promise<void> {
-    const devices = await getNearbyDevices();
+    const [devices, meshStatus] = await Promise.all([
+      getNearbyDevices(),
+      getChatMeshStatus().catch(() => null),
+    ]);
     const existing = new Map(
       this.snapshot.peers.map((peer) => [peer.id, peer]),
     );
     const favorites = loadPeerSet(FAVORITES_KEY);
     const blocked = loadPeerSet(BLOCKED_KEY);
-    const peers = devices.map((device) => {
+    const irohPeers = devices.map((device) => {
       const known = existing.get(device.node_id);
       return {
         id: device.node_id,
@@ -341,11 +492,44 @@ export class LightningChatService {
         is_nearby: true,
       };
     });
-    this.update({ peers });
+    const meshPeers = (meshStatus?.peers ?? []).map((peer) => {
+      const id = `mesh:${peer.id}`;
+      const known = existing.get(id);
+      return {
+        id,
+        label: peer.nickname,
+        mesh_id: peer.id,
+        fingerprint: peer.fingerprint,
+        noise_ready: peer.noise_ready,
+        is_favorite: known?.is_favorite ?? favorites.has(id),
+        is_blocked: known?.is_blocked ?? blocked.has(id),
+        is_nearby: true,
+      };
+    });
+    const irohNodeIds = new Set(irohPeers.map((peer) => peer.node_id));
+    const peers = [
+      ...irohPeers,
+      ...meshPeers.filter((peer) => !irohNodeIds.has(peer.mesh_id)),
+    ];
+    this.update({
+      peers,
+      groups: meshStatus?.groups ?? this.snapshot.groups,
+      mesh_peer_id: meshStatus?.peer_id ?? null,
+      mesh_links: meshStatus?.connected_links ?? 0,
+    });
   }
 
   private async sendNearbyBroadcast(content: string): Promise<void> {
     const body = normalizedMessage(content);
+    try {
+      const event = await sendChatMeshMessage(body);
+      this.appendMessage(
+        meshEventToMessage(event, this.snapshot.mesh_peer_id, true),
+      );
+      return;
+    } catch {
+      // Fall through to direct iroh fan-out when the radio mesh has no link.
+    }
     const targets = this.snapshot.peers.filter((peer) => !peer.is_blocked);
     if (targets.length === 0) {
       throw new Error("No nearby Lightning Chat peers are connected.");
@@ -372,6 +556,23 @@ export class LightningChatService {
         ? "sent"
         : "failed",
     );
+  }
+
+  private receiveMeshEvent(event: ChatMeshEvent): void {
+    if (event.kind === "peer" || event.kind === "group_update") {
+      void this.refreshNearbyPeers();
+      return;
+    }
+    if (event.kind === "delivered" || event.kind === "read") {
+      this.replaceDelivery(event.id, event.kind);
+      return;
+    }
+    const blocked = this.snapshot.peers.some(
+      (peer) => peer.mesh_id === event.sender_id && peer.is_blocked,
+    );
+    if (!blocked) {
+      this.appendMessage(meshEventToMessage(event, this.snapshot.mesh_peer_id));
+    }
   }
 
   private createIdentity(secretKey: Uint8Array): LightningChatIdentity {
@@ -684,3 +885,62 @@ function persistPeerSet(key: string, values: string[]): void {
 }
 
 export const lightningChatService = new LightningChatService();
+
+function meshEventToMessage(
+  event: ChatMeshEvent,
+  localPeerId: string | null,
+  forceOutgoing = false,
+): LightningChatMessage {
+  const direction =
+    forceOutgoing || event.sender_id === localPeerId ? "outgoing" : "incoming";
+  const conversationId = event.group_id
+    ? `group:${event.group_id}`
+    : event.kind === "private_message" ||
+        event.kind === "private_media" ||
+        event.kind === "private_voice"
+      ? `nearby:mesh:${event.sender_id}`
+      : "channel:global";
+  const mimeType = event.mime_type ?? "application/octet-stream";
+  const media = event.data_base64
+    ? {
+        kind: (mimeType.startsWith("image/")
+          ? "image"
+          : mimeType.startsWith("audio/") || event.kind === "voice"
+            ? "audio"
+            : "file") as "image" | "audio" | "file",
+        ...(event.file_name ? { file_name: event.file_name } : {}),
+        ...(event.mime_type ? { mime_type: event.mime_type } : {}),
+        data_base64: event.data_base64,
+      }
+    : undefined;
+  return {
+    id: event.id,
+    conversation_id: conversationId,
+    author_id: event.sender_id,
+    author_name: event.sender_name,
+    content:
+      event.content ??
+      (event.kind === "voice"
+        ? "Voice note"
+        : event.file_name
+          ? `Shared ${event.file_name}`
+          : "Shared media"),
+    created_at: Math.floor(event.timestamp_ms / 1_000),
+    direction,
+    delivery: direction === "outgoing" ? "sent" : "delivered",
+    transport: "ble_mesh",
+    ...(media ? { media } : {}),
+  };
+}
+
+async function fileToBase64(file: Blob): Promise<string> {
+  const buffer = new Uint8Array(await file.arrayBuffer());
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < buffer.length; offset += chunkSize) {
+    binary += String.fromCharCode(
+      ...buffer.subarray(offset, offset + chunkSize),
+    );
+  }
+  return btoa(binary);
+}

@@ -18,11 +18,14 @@ pub mod telemetry;
 pub mod transfer;
 
 use error::{LightningP2PError, Result};
-use node::{LightningP2PNode, NearbyShareRegistry, NodeRuntimeStatus, NodeSupervisor, OfferInbox};
+use node::{
+    chat_mesh::ChatMeshRuntime, LightningP2PNode, NearbyShareRegistry, NodeRuntimeStatus,
+    NodeSupervisor, OfferInbox,
+};
 use std::sync::{atomic::AtomicBool, Arc};
 use storage::settings::{resolve_app_data_dir, SettingsState};
 use tauri::Manager;
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 use transfer::queue::TransferQueue;
 
 /// Shared application state accessible from Tauri commands.
@@ -45,16 +48,49 @@ pub struct AppState {
     pub offer_inbox: OfferInbox,
     /// Guards the BLE discovery drain loop so only one poller runs.
     pub ble_polling_active: Arc<AtomicBool>,
+    /// Isolated native encrypted chat-mesh state.
+    pub chat_mesh: Arc<Mutex<ChatMeshRuntime>>,
+    /// Guards the Windows GATT chat drain loop.
+    pub chat_mesh_polling_active: Arc<AtomicBool>,
 }
 
 impl AppState {
     /// Creates a new `AppState` with no node initialized yet.
+    ///
+    /// # Panics
+    ///
+    /// Panics only if the operating system cannot provide cryptographic
+    /// randomness for the session identity or a temporary recovery runtime
+    /// cannot be initialized.
     #[must_use]
     pub fn new(data_dir: std::path::PathBuf, settings: SettingsState) -> Self {
         let node = Arc::new(RwLock::new(None));
         let node_runtime = Arc::new(RwLock::new(NodeRuntimeStatus::starting()));
         let node_supervisor =
             NodeSupervisor::new(data_dir.clone(), node.clone(), node_runtime.clone());
+        let mesh_identity = crypto::load_or_create_chat_mesh_identity(&data_dir).unwrap_or_else(
+            |error| {
+                tracing::error!(%error, "could not load persisted chat mesh identity; using a session identity");
+                node::chat_mesh::MeshIdentity::generate()
+                    .expect("operating system randomness is required for chat identity")
+            },
+        );
+        let chat_mesh = ChatMeshRuntime::load(
+            &data_dir,
+            mesh_identity,
+            node::nearby_protocol::local_device_name(),
+        )
+        .unwrap_or_else(|error| {
+            tracing::error!(%error, "could not load chat mesh stores; using clean bounded stores");
+            let fallback = std::env::temp_dir().join("lightning-chat-recovery");
+            ChatMeshRuntime::load(
+                &fallback,
+                node::chat_mesh::MeshIdentity::generate()
+                    .expect("operating system randomness is required for chat identity"),
+                node::nearby_protocol::local_device_name(),
+            )
+            .expect("temporary chat mesh runtime must initialize")
+        });
         Self {
             data_dir,
             node,
@@ -65,6 +101,8 @@ impl AppState {
             nearby_shares: NearbyShareRegistry::new(true),
             offer_inbox: OfferInbox::new(),
             ble_polling_active: Arc::new(AtomicBool::new(false)),
+            chat_mesh: Arc::new(Mutex::new(chat_mesh)),
+            chat_mesh_polling_active: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -190,6 +228,15 @@ pub fn run() {
             commands::chat::load_lightning_chat_secret,
             commands::chat::store_lightning_chat_secret,
             commands::chat::panic_wipe_lightning_chat,
+            commands::chat::get_chat_mesh_status,
+            commands::chat::set_chat_mesh_nickname,
+            commands::chat::send_chat_mesh_message,
+            commands::chat::send_chat_mesh_private_message,
+            commands::chat::send_chat_mesh_media,
+            commands::chat::create_chat_mesh_group,
+            commands::chat::send_chat_mesh_group_message,
+            commands::chat::render_chat_trust_qr,
+            commands::chat::verify_chat_trust_qr,
             commands::share::create_share,
             commands::share::describe_share_paths,
             commands::share::get_ticket,
