@@ -4,6 +4,7 @@
 //! lookup, and wires up the iroh-blobs 0.103 protocol + persistent store for
 //! content-addressed transfers.
 
+use super::chat_protocol::ChatProtocol;
 use super::status::NodeRuntimeStatus;
 use super::NearbyShareProtocol;
 use crate::crypto::load_or_create_secret_key;
@@ -13,9 +14,7 @@ use crate::transfer::metrics::RouteKind;
 use crate::transfer::mode::{CongestionAlgorithm, TransferProfile};
 use crate::transfer::TransferMode;
 use iroh::address_lookup::memory::MemoryLookup;
-use iroh::endpoint::{
-    ControllerFactory, MtuDiscoveryConfig, QuicTransportConfig, VarInt,
-};
+use iroh::endpoint::{ControllerFactory, MtuDiscoveryConfig, QuicTransportConfig, VarInt};
 use iroh::protocol::Router;
 use iroh::{Endpoint, EndpointAddr, EndpointId, RelayMap, RelayMode, RelayUrl, TransportAddr};
 use iroh_blobs::api::Store;
@@ -72,6 +71,7 @@ impl LightningP2PNode {
             download_dir,
             None,
             None,
+            None,
             TransferMode::platform_default().profile(),
         )
         .await
@@ -88,6 +88,7 @@ impl LightningP2PNode {
         download_dir: PathBuf,
         relay_url: Option<RelayUrl>,
         nearby_protocol: Option<Arc<NearbyShareProtocol>>,
+        chat_protocol: Option<Arc<ChatProtocol>>,
         profile: TransferProfile,
     ) -> Result<Self> {
         std::fs::create_dir_all(&data_dir)?;
@@ -106,11 +107,14 @@ impl LightningP2PNode {
 
         let store = load_blob_store(&data_dir).await?;
         let blobs = BlobsProtocol::new(&store, None);
-        let mut router_builder =
-            Router::builder(endpoint.clone()).accept(iroh_blobs::ALPN, blobs);
+        let mut router_builder = Router::builder(endpoint.clone()).accept(iroh_blobs::ALPN, blobs);
         if let Some(protocol) = nearby_protocol {
             router_builder =
                 router_builder.accept(super::nearby_protocol::NEARBY_PROTOCOL_ALPN, protocol);
+        }
+        if let Some(protocol) = chat_protocol {
+            router_builder =
+                router_builder.accept(super::chat_protocol::CHAT_PROTOCOL_ALPN, protocol);
         }
         let router = router_builder.spawn();
         let db = open_storage_db(&data_dir)?;
@@ -173,18 +177,11 @@ impl LightningP2PNode {
     #[must_use]
     pub fn runtime_status(&self) -> NodeRuntimeStatus {
         let addr = self.endpoint.addr();
-        let relay_url = addr
-            .addrs
-            .iter()
-            .find_map(|a| match a {
-                TransportAddr::Relay(url) => Some(url.to_string()),
-                _ => None,
-            });
-        let direct_address_count = addr
-            .addrs
-            .iter()
-            .filter(|a| a.is_ip())
-            .count();
+        let relay_url = addr.addrs.iter().find_map(|a| match a {
+            TransportAddr::Relay(url) => Some(url.to_string()),
+            _ => None,
+        });
+        let direct_address_count = addr.addrs.iter().filter(|a| a.is_ip()).count();
         let lan_discovery_active = self.lan_discovery_active.load(Ordering::Relaxed);
 
         NodeRuntimeStatus::from_network(

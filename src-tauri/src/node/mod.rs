@@ -1,5 +1,6 @@
 //! iroh node management — endpoint setup, blob protocol, and discovery.
 
+pub mod chat_protocol;
 mod discovery;
 mod endpoint;
 mod nearby;

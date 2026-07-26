@@ -33,12 +33,7 @@ export type {
 
 export type RuntimeKind = "desktop" | "android" | "ios" | "browser";
 export type NativePlatformKind =
-  | "windows"
-  | "macos"
-  | "linux"
-  | "android"
-  | "ios"
-  | "unknown";
+  "windows" | "macos" | "linux" | "android" | "ios" | "unknown";
 export type PlatformKind = NativePlatformKind | "browser";
 export type RuntimeFamily = "desktop" | "android" | "ios" | "browser";
 export type StorageModel = "user_selected" | "app_private" | "handoff_only";
@@ -51,11 +46,7 @@ export type ReleaseSupport =
   | "web_handoff_only";
 export type TransferDirection = "send" | "receive";
 export type NodeOnlineState =
-  | "starting"
-  | "direct_ready"
-  | "relay_ready"
-  | "degraded"
-  | "offline";
+  "starting" | "direct_ready" | "relay_ready" | "degraded" | "offline";
 export type RouteKind = "unknown" | "direct" | "relay" | "mixed";
 export type TransferStrategy =
   | "unknown"
@@ -86,22 +77,11 @@ export type OfferDecision = "accepted" | "rejected" | "expired";
 export type WireBlobFormat = "raw" | "hash_seq";
 export type RelayMode = "public" | "custom";
 export type NodeSupervisorPhase =
-  | "idle"
-  | "starting"
-  | "restarting"
-  | "blocked_active_transfers"
-  | "failed";
+  "idle" | "starting" | "restarting" | "blocked_active_transfers" | "failed";
 export type BlePermissionState =
-  | "unsupported"
-  | "not_requested"
-  | "granted"
-  | "denied"
-  | "unknown";
+  "unsupported" | "not_requested" | "granted" | "denied" | "unknown";
 export type BleAdapterState =
-  | "unsupported"
-  | "unknown"
-  | "unavailable"
-  | "available";
+  "unsupported" | "unknown" | "unavailable" | "available";
 
 export interface NodeStatus {
   online: boolean;
@@ -128,6 +108,14 @@ export interface BleDiscoveryStatus {
   scanning: boolean;
   advertising: boolean;
   last_error: string | null;
+}
+
+export interface ChatMessage {
+  id: string;
+  sender_node_id: string;
+  sender_name: string;
+  body: string;
+  sent_at: number;
 }
 
 export interface ActiveTransfer {
@@ -365,9 +353,7 @@ export interface NearbyDevice {
 }
 
 export type NearbyDiagnosticState =
-  | "searching"
-  | "devices_visible"
-  | "likely_blocked";
+  "searching" | "devices_visible" | "likely_blocked";
 
 export interface IncomingOffer {
   offer_id: string;
@@ -807,6 +793,38 @@ export async function getNearbyDevices(): Promise<NearbyDevice[]> {
   return invoke<NearbyDevice[]>("get_nearby_devices");
 }
 
+export async function sendChatMessage(
+  nodeId: string,
+  body: string,
+): Promise<ChatMessage> {
+  requireNativeRuntime("Sending chat messages");
+  return invoke<ChatMessage>("send_chat_message", { nodeId, body });
+}
+
+export async function loadLightningChatSecret(): Promise<string | null> {
+  requireNativeRuntime("Loading the Lightning Chat identity");
+  return invoke<string | null>("load_lightning_chat_secret");
+}
+
+export async function storeLightningChatSecret(secret: string): Promise<void> {
+  requireNativeRuntime("Saving the Lightning Chat identity");
+  await invoke("store_lightning_chat_secret", { secret });
+}
+
+export async function panicWipeLightningChat(): Promise<void> {
+  requireNativeRuntime("Erasing Lightning Chat");
+  await invoke("panic_wipe_lightning_chat");
+}
+
+export function onChatMessage(
+  callback: (message: ChatMessage) => void,
+): Promise<UnlistenFn> {
+  if (!isDesktopRuntime()) return Promise.resolve(() => {});
+  return listen<ChatMessage>("chat-message-received", ({ payload }) =>
+    callback(payload),
+  );
+}
+
 export async function offerShareToPeer(
   nodeId: string,
   paths: string[],
@@ -950,7 +968,9 @@ export async function setBluetoothDiscoveryEnabled(
   return invoke<AppSettings>("set_bluetooth_discovery_enabled", { enabled });
 }
 
-export async function setTransferMode(mode: TransferMode): Promise<AppSettings> {
+export async function setTransferMode(
+  mode: TransferMode,
+): Promise<AppSettings> {
   requireNativeRuntime("Changing transfer mode");
   return invoke<AppSettings>("set_transfer_mode", { mode });
 }
@@ -1077,9 +1097,12 @@ export async function resolveAndroidUris(paths: string[]): Promise<string[]> {
     if (appError.source !== "unknown") {
       throw appError;
     }
-    throw new Error("Could not read the selected file from the system picker.", {
-      cause: error,
-    });
+    throw new Error(
+      "Could not read the selected file from the system picker.",
+      {
+        cause: error,
+      },
+    );
   }
 }
 

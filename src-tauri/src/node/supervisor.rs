@@ -1,7 +1,8 @@
 //! Runtime supervisor for the iroh node lifecycle.
 
 use super::{
-    spawn_nearby_discovery_loop, LightningP2PNode, NearbyShareProtocol, NodeRuntimeStatus,
+    chat_protocol::ChatProtocol, spawn_nearby_discovery_loop, LightningP2PNode,
+    NearbyShareProtocol, NodeRuntimeStatus,
 };
 use crate::error::{LightningP2PError, Result};
 use crate::node::{NearbyShareRegistry, OfferInbox};
@@ -256,11 +257,13 @@ impl NodeSupervisor {
             offer_inbox,
             app.clone(),
         ));
+        let chat_protocol = Arc::new(ChatProtocol::new(app.clone()));
         let start = LightningP2PNode::start_with_dirs_and_relay(
             self.data_dir.clone(),
             settings.download_dir,
             relay_url,
             Some(nearby_protocol),
+            Some(chat_protocol),
             profile,
         );
         tokio::time::timeout(NODE_START_TIMEOUT, start)
