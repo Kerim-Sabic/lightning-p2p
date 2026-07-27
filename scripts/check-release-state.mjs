@@ -84,14 +84,23 @@ if (stableTag === experimentalTag) {
 for (const [path, label] of [
   ["README.md", "README"],
   ["src/content/web-pages.json", "website page metadata"],
-  ["src/components/WebLandingPage.tsx", "website landing page"],
-  ["scripts/build-web-metadata.mjs", "metadata generator"],
   ["docs/ROADMAP.md", "roadmap"],
 ]) {
   const text = await readText(path);
   assertIncludes(text, stableTag, label);
   assertIncludes(text, experimentalTag, label);
 }
+
+assertIncludes(
+  await readText("src/components/WebLandingPage.tsx"),
+  "releaseManifest.currentAppVersion",
+  "website landing page dynamic release version",
+);
+assertIncludes(
+  await readText("scripts/build-web-metadata.mjs"),
+  "const appVersion = releaseManifest.currentAppVersion",
+  "metadata generator dynamic release version",
+);
 
 const staleAndroidApkUrl =
   "releases/latest/download/LightningP2P-android-latest.apk";

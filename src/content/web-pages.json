@@ -113,7 +113,7 @@
       },
       {
         "q": "Does Android transfer through Bluetooth or NFC?",
-        "a": "No stable release transfers file bytes through Bluetooth or NFC. File bytes use iroh QUIC and iroh-blobs. BLE and NFC are experimental discovery and ticket-handoff features carried from v0.5.0 into v0.8.0."
+        "a": "No stable release transfers file bytes through Bluetooth or NFC. File bytes use iroh QUIC and iroh-blobs. BLE and NFC are experimental discovery and ticket-handoff features carried into v0.9.8."
       },
       {
         "q": "Why does Android require sideloading?",
@@ -150,6 +150,38 @@
       {
         "q": "Can I close the tab after sharing the link?",
         "a": "No - the tab is the sender. Keep it open until the receiver finishes, exactly like keeping the desktop app running during a transfer."
+      }
+    ]
+  },
+  {
+    "path": "/chat",
+    "label": "Lightning Chat",
+    "title": "Lightning Chat - Private Web and Nearby Messaging",
+    "description": "Open Lightning Chat in your browser or use the native Windows and Android apps for account-free public rooms, encrypted direct messages, and nearby peer chat.",
+    "eyebrow": "Account-free messaging",
+    "heading": "Chat across the web or directly with nearby peers.",
+    "intro": "Lightning Chat gives every browser and native app an on-device identity for public relay rooms and encrypted direct messages, without creating an account or handing a phone number to a central service.",
+    "focus": "The web room works through multiple public relays. Native Windows and Android builds add direct iroh messaging and nearby peer discovery, while the Windows build also supports the local Bluetooth mesh.",
+    "inNav": true,
+    "priority": "0.9",
+    "related": ["/", "/download", "/security", "/send"],
+    "body": [
+      "Open the Web lounge and start chatting immediately. Lightning Chat generates an identity in your browser, reconnects across several independent relays, and keeps the private key in local browser storage. Clearing site data removes that browser identity.",
+      "Public room messages are signed by their sender. Direct messages use encrypted Nostr gift wraps, and the native apps can also deliver messages directly over iroh to discovered peers without depending on the web room.",
+      "The native Windows and Android packages contain the same Lightning Chat interface. Windows additionally supports the encrypted Bluetooth multi-hop mesh, private nearby messages, groups, voice notes, small attachments, delivery receipts, identity QR verification, blocking, favorites, and emergency local wipe."
+    ],
+    "faqs": [
+      {
+        "q": "Do I need an account to use Lightning Chat?",
+        "a": "No. The app generates a cryptographic identity on your device or in your browser. You can copy its npub when you want another person to contact you privately."
+      },
+      {
+        "q": "Does web chat work without Bluetooth?",
+        "a": "Yes. The Web lounge and encrypted direct messages use internet relays over secure WebSockets. Bluetooth is an additional nearby mesh transport in the Windows app."
+      },
+      {
+        "q": "Is Lightning Chat included in the Windows and Android downloads?",
+        "a": "Yes. Lightning Chat is part of both native packages. They also support direct iroh messages between discovered peers; the Windows package adds the Bluetooth mesh transport."
       }
     ]
   },

@@ -64,10 +64,10 @@ function findPage(path) {
 
 const baseKeyFacts = [
   ["Product", "Lightning P2P"],
-  ["Category", "peer-to-peer file transfer app"],
+  ["Category", "peer-to-peer file transfer and account-free chat app"],
   ["Platform", "Windows stable release, Android 10+ sideload release"],
   ["Stable release", "v0.4.6"],
-  ["Experimental release", "v0.8.0 BBR congestion control + Warp mode + swarm receive (carries v0.5.x BLE/NFC)"],
+  ["Experimental release", `v${appVersion} with Lightning Chat, BBR congestion control, Warp mode, and swarm receive`],
   ["License", "Apache-2.0"],
   ["Account required", "no"],
   ["Cloud upload", "no"],
@@ -83,7 +83,7 @@ const baseCaveats = [
   "Sender must stay online until the receiver finishes.",
   "Tickets are capability tokens and should be treated as secrets.",
   "Relay fallback helps connectivity, but it is not cloud storage.",
-  "Browser website is receive handoff and marketing, not the transfer engine.",
+  "Browser chat uses internet relays; nearby Bluetooth mesh and media are native-only.",
   "Public speed leadership claims require repeatable benchmark results.",
 ];
 
@@ -93,6 +93,8 @@ function answerForPath(page) {
       "Lightning P2P is a free open-source peer-to-peer file transfer app for Windows and Android. It sends files directly between devices using iroh and QUIC, verifies content with BLAKE3, and does not require cloud upload, accounts, or artificial file-size caps.",
     "/download":
       "Download Lightning P2P from GitHub Releases when you want the stable Windows installer or Android 10+ sideload APK for direct-first P2P file transfer.",
+    "/chat":
+      "Lightning Chat provides an account-free Web lounge, signed public rooms, encrypted direct messages, and native nearby peer chat in the Windows and Android apps.",
     "/android-p2p-file-transfer":
       "Lightning P2P v0.4.6 supports Android 10+ sideload installs, Android system share-target sends, smart MediaStore receive routing, direct-first iroh transfer, and BLAKE3 verification.",
     "/security":
