@@ -4,6 +4,20 @@ All notable changes to Lightning P2P are documented here. The project follows se
 
 ## [Unreleased]
 
+## [0.9.8] - 2026-07-26 ("Lightning Chat")
+
+### Added
+
+- Lightning Chat is included in the Windows and Android apps with an isolated chat identity, public rooms, encrypted direct messages, native iroh peer chat, slash commands, blocking, favorites, delivery state, and emergency local wipe.
+- Windows adds an encrypted Bluetooth multi-hop mesh with nearby public and private messages, private groups, small attachments, voice notes, identity QR verification, fragmentation, store-and-forward, deduplication, and bounded synchronization.
+- `/chat` provides the redesigned Web lounge with relay-backed public chat and encrypted direct messages from any modern browser.
+
+### Fixed
+
+- `/chat` now deploys as a first-class static route instead of returning a production 404.
+- Web chat now permits secure relay WebSockets in its content security policy.
+- Relay health is reported truthfully, automatically monitored, and recoverable with an explicit retry instead of getting stuck in a false online state.
+
 ### Product and design upgrade
 
 - Native apps now open on two clear Send and Receive actions with a live route stage for progress, speed, Direct or Relay state, and BLAKE3 verification.

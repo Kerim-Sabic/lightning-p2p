@@ -62,6 +62,7 @@ const MAX_MESH_MEDIA_BYTES = 512 * 1024;
 const FAVORITES_KEY = "lightning-chat.favorites";
 const BLOCKED_KEY = "lightning-chat.blocked";
 const PRESENCE_INTERVAL_MS = 30_000;
+const RELAY_HEALTH_INTERVAL_MS = 5_000;
 
 type SnapshotListener = (snapshot: LightningChatSnapshot) => void;
 
@@ -75,6 +76,7 @@ export class LightningChatService {
   private readAcknowledgedIds = new Set<string>();
   private nearbyTimer: number | null = null;
   private presenceTimer: number | null = null;
+  private relayHealthTimer: number | null = null;
   private stopNearbyMessages: (() => void) | null = null;
   private stopMeshMessages: (() => void) | null = null;
   private snapshot: LightningChatSnapshot = {
@@ -111,17 +113,26 @@ export class LightningChatService {
       const pool = new SimplePool({ enableReconnect: true });
       this.pool = pool;
       this.secretKey = secretKey;
-      await Promise.allSettled(
+      const relayResults = await Promise.allSettled(
         DEFAULT_RELAYS.map((relay) =>
           pool.ensureRelay(relay, { connectionTimeout: 6_000 }),
         ),
       );
+      const connectedRelays = Math.max(
+        connectedRelayCount(pool),
+        relayResults.filter((result) => result.status === "fulfilled").length,
+      );
       const identity = this.createIdentity(secretKey);
       this.update({
         identity,
-        status: "online",
-        connected_relays: connectedRelayCount(pool),
+        status: connectedRelays > 0 ? "online" : "degraded",
+        connected_relays: connectedRelays,
+        error:
+          connectedRelays > 0
+            ? null
+            : "Relay connections are warming up. Lightning Chat will keep retrying.",
       });
+      this.startRelayHealthMonitor();
       await setChatMeshNickname(identity.nickname).catch(() => undefined);
       this.subscribeToPrivateMessages(identity.pubkey);
       if (this.snapshot.active_channel.geohash) {
@@ -135,11 +146,26 @@ export class LightningChatService {
         }
       }
     } catch (cause) {
+      this.stopRelayTransport();
       this.update({
         status: "offline",
         error: errorMessage(cause, "Lightning Chat could not connect."),
       });
     }
+  }
+
+  async reconnect(): Promise<void> {
+    this.stopRelayTransport();
+    this.update({
+      status: "connecting",
+      connected_relays: 0,
+      error: null,
+    });
+    await this.start();
+  }
+
+  dismissError(): void {
+    this.update({ error: null });
   }
 
   setNickname(nickname: string): void {
@@ -190,8 +216,10 @@ export class LightningChatService {
     try {
       await publishToAnyRelay(pool, event);
       this.replaceDelivery(optimistic.id, "sent");
+      this.refreshRelayHealth();
     } catch (cause) {
       this.replaceDelivery(optimistic.id, "failed");
+      this.refreshRelayHealth("No relay accepted the message. Reconnecting…");
       throw new Error(errorMessage(cause, "No relay accepted the message."), {
         cause,
       });
@@ -234,8 +262,10 @@ export class LightningChatService {
         senderSecretKey: secretKey,
       });
       this.replaceDelivery(messageId, "sent");
+      this.refreshRelayHealth();
     } catch (cause) {
       this.replaceDelivery(messageId, "failed");
+      this.refreshRelayHealth("Private message delivery failed. Reconnecting…");
       throw new Error(
         errorMessage(cause, "Private message was not accepted."),
         { cause },
@@ -403,12 +433,7 @@ export class LightningChatService {
   }
 
   async panicWipe(): Promise<void> {
-    this.channelSubscription?.close();
-    this.channelSubscription = null;
-    this.privateSubscription?.close();
-    this.privateSubscription = null;
-    this.pool?.destroy();
-    this.pool = null;
+    this.stopRelayTransport();
     this.secretKey = null;
     if (this.nearbyTimer !== null) window.clearInterval(this.nearbyTimer);
     this.nearbyTimer = null;
@@ -469,6 +494,44 @@ export class LightningChatService {
     this.stopMeshMessages = await onChatMeshEvent((event) => {
       this.receiveMeshEvent(event);
     });
+  }
+
+  private startRelayHealthMonitor(): void {
+    if (this.relayHealthTimer !== null) {
+      window.clearInterval(this.relayHealthTimer);
+    }
+    this.relayHealthTimer = window.setInterval(() => {
+      this.refreshRelayHealth();
+    }, RELAY_HEALTH_INTERVAL_MS);
+  }
+
+  private refreshRelayHealth(disconnectedMessage?: string): void {
+    if (!this.pool) return;
+    const connectedRelays = connectedRelayCount(this.pool);
+    this.update({
+      connected_relays: connectedRelays,
+      status: connectedRelays > 0 ? "online" : "degraded",
+      error:
+        connectedRelays > 0
+          ? null
+          : (disconnectedMessage ??
+            this.snapshot.error ??
+            "Relay connections are warming up. Lightning Chat will keep retrying."),
+    });
+  }
+
+  private stopRelayTransport(): void {
+    this.channelSubscription?.close();
+    this.channelSubscription = null;
+    this.privateSubscription?.close();
+    this.privateSubscription = null;
+    this.pool?.destroy();
+    this.pool = null;
+    if (this.relayHealthTimer !== null) {
+      window.clearInterval(this.relayHealthTimer);
+    }
+    this.relayHealthTimer = null;
+    this.stopPresence();
   }
 
   private async refreshNearbyPeers(): Promise<void> {

@@ -13,9 +13,11 @@ linked release evidence.
 - Android v0.5.1 as a signed sideload APK with share-target sends and public
   MediaStore destinations.
 
-### v0.8.0 beta channel
+### v0.9.8 beta channel
 
 - Windows, universal macOS DMG, Linux AppImage/deb/rpm, and CLI artifacts.
+- Lightning Chat in the Windows and Android apps plus the `/chat` Web lounge.
+- Encrypted direct messages, nearby iroh chat, and a Windows Bluetooth mesh.
 - BBR-backed Fast, Extreme, LAN Beast, and Warp profiles.
 - Experimental swarm receive and ticket pre-warming.
 - Browser send and receive beta using the Rust/WASM transfer engine. Browser
@@ -59,8 +61,8 @@ linked release evidence.
 
 - Native iOS during the current 90-day cycle. iPhone users can use the browser
   receiver within the published beta limits.
-- Cloud file storage, accounts, chat, media playback, custom chunking, or a
-  second networking protocol.
+- Cloud file storage, accounts, hosted message history, media playback, custom
+  transfer chunking, or a second file-transfer protocol.
 - “Fastest” claims without repeatable cross-device evidence.
 
 ## Release gates

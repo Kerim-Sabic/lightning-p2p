@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
   "productName": "Lightning P2P",
-  "currentAppVersion": "0.8.0",
+  "currentAppVersion": "0.9.8",
   "stableReleaseTag": "v0.4.6",
-  "experimentalReleaseTag": "v0.8.0",
-  "lastAndroidReleaseTag": "v0.5.1",
+  "experimentalReleaseTag": "v0.9.8",
+  "lastAndroidReleaseTag": "v0.9.8",
   "browserChannel": "beta",
   "browserLimits": {
     "route": "relay_only",
@@ -16,7 +16,7 @@
     "windows": {
       "status": "stable_and_beta",
       "signed": false,
-      "signingNote": "The current v0.8.0 community build is unsigned; v0.4.6 remains the signed stable channel.",
+      "signingNote": "The current v0.9.8 community build is unsigned; v0.4.6 remains the signed stable channel.",
       "artifact": "LightningP2P-win-Setup.exe"
     },
     "android": {

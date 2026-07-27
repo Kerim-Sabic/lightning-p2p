@@ -384,9 +384,25 @@ export function LightningChatView() {
             <div className="mb-3 flex items-start gap-2 rounded-xl border border-rose-400/15 bg-rose-500/[0.08] px-3 py-2 text-xs text-rose-100">
               <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
               <span className="flex-1">{error ?? snapshot.error}</span>
+              {snapshot.status === "degraded" ||
+              snapshot.status === "offline" ? (
+                <button
+                  type="button"
+                  className="font-semibold text-sky-200 hover:text-sky-100"
+                  onClick={() => {
+                    setError(null);
+                    void lightningChatService.reconnect();
+                  }}
+                >
+                  Retry
+                </button>
+              ) : null}
               <button
                 type="button"
-                onClick={() => setError(null)}
+                onClick={() => {
+                  setError(null);
+                  lightningChatService.dismissError();
+                }}
                 aria-label="Dismiss"
               >
                 <X className="h-3.5 w-3.5" />
@@ -935,12 +951,24 @@ function Avatar({ label, small = false }: { label: string; small?: boolean }) {
 
 function Status({ status, relays }: { status: string; relays: number }) {
   const online = status === "online";
+  const degraded = status === "degraded";
+  const label = online
+    ? `${relays} relay${relays === 1 ? "" : "s"} · connected`
+    : degraded
+      ? "Relay reconnecting…"
+      : status;
   return (
     <p
-      className={`flex items-center gap-1 text-[10px] ${online ? "text-emerald-200/80" : "text-slate-500"}`}
+      className={`flex items-center gap-1 text-[10px] ${
+        online
+          ? "text-emerald-200/80"
+          : degraded
+            ? "text-amber-200/80"
+            : "text-slate-500"
+      }`}
     >
       {online ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
-      {online ? `${relays} relays · nearby` : status}
+      {label}
     </p>
   );
 }

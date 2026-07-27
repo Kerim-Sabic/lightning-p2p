@@ -131,10 +131,10 @@ const benchmarkManySmall = benchmarkSummary.scenarios.find((s) => s.scenario ===
 const baseKeyFacts: KeyFact[] = [
   { label: "Product", value: "Lightning P2P" },
   { label: "Maker", value: "Horalix" },
-  { label: "Category", value: "Peer-to-peer file transfer app" },
+  { label: "Category", value: "Peer-to-peer transfer and chat app" },
   { label: "Platform", value: "Windows stable, Android 10+ sideload" },
   { label: "Stable release", value: "v0.4.6" },
-  { label: "Experimental release", value: "v0.8.0 BBR + Warp + swarm receive" },
+  { label: "Experimental release", value: `v${releaseManifest.currentAppVersion} · Lightning Chat + BBR + Warp` },
   { label: "License", value: "Apache-2.0" },
   { label: "Account required", value: "No" },
   { label: "Cloud upload", value: "No" },
@@ -156,6 +156,7 @@ function answerContentForPage(page: WebPage): AnswerContent {
   const byPath: Record<string, string> = {
     "/": "Lightning P2P is a free open-source peer-to-peer file transfer app made by Horalix. It sends files across native apps, the CLI, and browsers with iroh QUIC, verifies content with BLAKE3, and does not require cloud upload or accounts.",
     "/download": "Download Lightning P2P from GitHub Releases when you want the stable Windows installer or Android 10+ sideload APK for direct-first P2P file transfer. The recommended Windows asset is the one-click setup; Android users should verify the APK checksum before installing.",
+    "/chat": "Lightning Chat provides an account-free Web lounge, signed public rooms, encrypted direct messages, and native nearby peer chat in the Windows and Android apps.",
     "/android-p2p-file-transfer": "Lightning P2P supports Android 10+ sideload installs, Android system share-target sends, smart MediaStore receive routing, direct-first iroh transfer, and BLAKE3 verification.",
     "/security": "Lightning P2P avoids cloud file hosting, uses encrypted peer transport through iroh, verifies content with BLAKE3, and treats tickets as capability tokens. It makes specific security claims instead of broad privacy promises.",
     "/benchmarks": "Lightning P2P is designed for high-throughput direct transfer, but public speed claims should be tied to repeatable benchmark reports covering LAN direct, WAN direct, relay fallback, many small files, and large single files.",
@@ -183,7 +184,7 @@ const defaultFaqs: Faq[] = [
   { q: "Can I use it in a browser?", a: "Yes, in public beta. Browser send and receive use the Rust engine compiled to WebAssembly. Browser peers are relay-only, memory-bound, and the tab must stay open during transfer." },
   { q: "Does the sender need to stay online?", a: "Yes. The sender must keep Lightning P2P open and keep the content available until the receiver finishes." },
   { q: "Is there a file size limit?", a: "Lightning P2P does not impose an artificial file-size cap. Disk space, filesystem limits, network stability, and time still matter." },
-  { q: "Is it available for macOS or Linux?", a: "Yes. v0.8.0 ships a universal macOS DMG (Intel + Apple Silicon) and Linux AppImage/deb/rpm as unsigned community builds, plus a pipe-friendly CLI. Windows and Android remain the most-tested paths." },
+  { q: "Is it available for macOS or Linux?", a: `Yes. v${releaseManifest.currentAppVersion} ships a universal macOS DMG (Intel + Apple Silicon) and Linux AppImage/deb/rpm as unsigned community builds, plus a pipe-friendly CLI. Windows and Android remain the most-tested paths.` },
   { q: "Can I send and receive without installing anything?", a: "Yes, both. Open /send, drop files, and this tab serves them directly to whoever opens your link — or open a receive link and the files arrive in-page. The same Rust engine runs in the browser as WebAssembly, BLAKE3-verifying every chunk. Browser shares are beta, relay-only, memory-bound (~2 GB), and the tab must stay open while sharing; the native app streams from disk without those limits." },
   { q: "Are tickets secret?", a: "Yes. Tickets are capability tokens. Anyone with a valid ticket can request that transfer while the sender is online, so treat tickets like secrets." },
 ];
@@ -235,14 +236,14 @@ const comparisonRows: ComparisonRow[] = [
 const downloadOptions: Array<{ icon: LucideIcon; title: string; subtitle: string; copy: string; href: string; action: string; tone: StatusTone }> = [
   { icon: MonitorDown,  title: "Windows setup",  subtitle: "Stable v0.4.6",          copy: "One-click Velopack installer. Installs under your user profile and opens the native send + receive app.",                href: VELOPACK_DOWNLOAD_URL,        action: "Download for Windows", tone: "signal" },
   { icon: Smartphone,   title: "Android APK",    subtitle: "Android 10+ sideload",   copy: "Stable signed APK from GitHub Releases. Verify the SHA256 file before allowing sideload install.",                       href: ANDROID_APK_DOWNLOAD_URL,    action: "Download APK",         tone: "signal" },
-  { icon: Code2,        title: "macOS DMG",      subtitle: "Beta v0.8.0 · universal", copy: "Universal build for Intel + Apple Silicon. Unsigned community build — right-click → Open on first launch.",             href: MACOS_DMG_DOWNLOAD_URL,      action: "Download DMG",         tone: "signal" },
-  { icon: PackageCheck, title: "Linux AppImage", subtitle: "Beta v0.8.0 · x86_64",   copy: "Portable AppImage; deb and rpm packages ship in the same release with SHA256 checksums.",                               href: LINUX_APPIMAGE_DOWNLOAD_URL, action: "Download AppImage",    tone: "signal" },
+  { icon: Code2,        title: "macOS DMG",      subtitle: `Beta v${releaseManifest.currentAppVersion} · universal`, copy: "Universal build for Intel + Apple Silicon. Unsigned community build — right-click → Open on first launch.",             href: MACOS_DMG_DOWNLOAD_URL,      action: "Download DMG",         tone: "signal" },
+  { icon: PackageCheck, title: "Linux AppImage", subtitle: `Beta v${releaseManifest.currentAppVersion} · x86_64`,   copy: "Portable AppImage; deb and rpm packages ship in the same release with SHA256 checksums.",                               href: LINUX_APPIMAGE_DOWNLOAD_URL, action: "Download AppImage",    tone: "signal" },
 ];
 
 const platformStatus = [
   { label: "Windows",        value: "Stable release",        tone: "signal" as StatusTone },
   { label: "Android",        value: "Stable sideload",       tone: "signal" as StatusTone },
-  { label: "macOS / Linux",  value: "Beta v0.8.0",           tone: "signal" as StatusTone },
+  { label: "macOS / Linux",  value: `Beta v${releaseManifest.currentAppVersion}`, tone: "signal" as StatusTone },
   { label: "Browser",        value: "Receive in-page (beta)", tone: "signal" as StatusTone },
   { label: "iOS",            value: "Not shipped",           tone: "muted"  as StatusTone },
 ];
