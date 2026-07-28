@@ -4,9 +4,9 @@
 
 # Lightning P2P
 
-### **Direct files. Verified bytes. No cloud account.**
+### **Private chat. Direct files. One account-free app.**
 
-A free, open-source peer-to-peer file transfer app for **Windows, macOS, Linux + Android** — with a **CLI** for scripts and servers.
+A free, open-source chat and peer-to-peer file transfer app for **Windows, macOS, Linux + Android** — with working **web chat**, browser transfer, and a **CLI** for scripts and servers.
 Built on **Rust**, **Tauri 2**, **iroh QUIC**, **iroh-blobs**, and **BLAKE3**.
 
 <sub>◆ no upload step ◆ no account ◆ no artificial file-size cap ◆ no telemetry ◆ no cloud bucket ◆</sub>
@@ -14,7 +14,7 @@ Built on **Rust**, **Tauri 2**, **iroh QUIC**, **iroh-blobs**, and **BLAKE3**.
 [![Stars](https://img.shields.io/github/stars/Kerim-Sabic/lightning-p2p?style=flat-square&color=f0c76b&logo=github)](https://github.com/Kerim-Sabic/lightning-p2p/stargazers)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-7ddf9c?style=flat-square)](LICENSE)
 [![Platforms](https://img.shields.io/badge/platforms-Windows_·_macOS_·_Linux_·_Android_·_CLI-7ddf9c?style=flat-square)](#-install)
-[![Experimental](https://img.shields.io/badge/latest-v0.9.8_Lightning_Chat-f0c76b?style=flat-square)](https://github.com/Kerim-Sabic/lightning-p2p/releases/tag/v0.9.8)
+[![Experimental](https://img.shields.io/badge/latest-v0.9.9_Lightning_Chat-f0c76b?style=flat-square)](https://github.com/Kerim-Sabic/lightning-p2p/releases/tag/v0.9.9)
 [![Rust](https://img.shields.io/badge/Rust-1.88+-f0c76b?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![Tauri 2](https://img.shields.io/badge/Tauri-2-7ddf9c?style=flat-square&logo=tauri&logoColor=white)](https://tauri.app/)
 [![iroh QUIC](https://img.shields.io/badge/iroh-QUIC_+_relay-7ddf9c?style=flat-square)](https://iroh.computer/)
@@ -62,13 +62,35 @@ Built on **Rust**, **Tauri 2**, **iroh QUIC**, **iroh-blobs**, and **BLAKE3**.
 | 📦 **No account, no cap** | The ticket is the only credential. No sign-up, no artificial file-size limit, no telemetry. |
 | 🖥️ **Everywhere** | Windows, macOS, Linux, Android — plus a scriptable CLI. One Rust engine behind all of them. |
 | ⚡ **Tuned for throughput** | Six speed modes with BBR congestion control, jumbo-frame probing, and parallel swarm receive. |
-| 💬 **Lightning Chat** | Account-free web rooms, encrypted direct messages, native nearby chat, and a Windows Bluetooth mesh. |
+| 💬 **Lightning Chat** | Account-free signed rooms, encrypted direct messages, private groups, media, voice notes, trust QR, and native Bluetooth mesh on Windows and Android. |
 
 ```bash
 # The whole thing, from a terminal:
 lightning-p2p-cli send report.pdf        # → prints a ticket to stdout
 lightning-p2p-cli receive "fd2:…" -o .   # → BLAKE3-verified into ./
 ```
+
+---
+
+## ◆ Lightning Chat
+
+Lightning Chat is a complete communication surface inside Lightning P2P, with
+its identity and message state isolated from the file-transfer engine. Open the
+[web app](https://lightning-p2p.netlify.app/chat) immediately, or install the
+native app for nearby Bluetooth mesh conversations.
+
+| Experience | What works |
+| --- | --- |
+| **Web** | Signed location rooms, encrypted direct messages, nickname identity, reconnect handling, favorites, blocking, and emergency wipe |
+| **Windows + Android** | Everything on web, plus nearby public chat, authenticated private chat, multi-hop forwarding, private groups, media, voice notes, file attachments, delivery state, and trust QR verification |
+| **Network resilience** | Decentralized relay rooms for internet reach; Bluetooth mesh for nearby links; direct Lightning P2P conversations when peers are reachable |
+| **Privacy controls** | Separate chat identity, trust-on-first-use pinning, per-message authenticated encryption, local storage, block/favorite controls, and one-action local wipe |
+
+The nearby wire format follows the deployed mesh protocol: signed announcements
+and public messages, Noise XX private sessions, bounded fragmentation, gossip
+synchronization, courier envelopes, group epoch rotation, and replay-safe
+transport nonces. Chat attachments are intentionally capped; use Lightning
+Transfer for large files.
 
 ---
 
@@ -106,20 +128,20 @@ drop files → share the /receive link  →     open link → "Receive in this b
 
 ## ◆ Install
 
-Stable: **v0.4.6**. Experimental: **v0.9.8** (Lightning Chat on web and native apps, plus BBR congestion control, Warp mode, swarm receive, and ticket pre-warming).
+Stable: **v0.4.6**. Experimental: **v0.9.9** (Lightning Chat on web and native apps, plus BBR congestion control, Warp mode, swarm receive, and ticket pre-warming).
 
 | Platform | Asset | Channel | Best for |
 | --- | --- | --- | --- |
 | **Windows** | [`LightningP2P-win-Setup.exe`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P-win-Setup.exe) | Stable | Most users · one-click Velopack |
 | **Windows** | [`LightningP2PSetup.exe`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2PSetup.exe) | Stable | Classic NSIS |
 | **Windows** | [`LightningP2P.msi`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P.msi) | Stable | Policy-managed deployments |
-| **macOS** | [`LightningP2P-macos-universal.dmg`](https://github.com/Kerim-Sabic/lightning-p2p/releases/download/v0.9.8/LightningP2P-macos-universal.dmg) | Beta v0.9.8 | 10.15+ · Intel + Apple Silicon · unsigned: right-click → Open |
-| **Linux** | [`LightningP2P-linux-x86_64.AppImage`](https://github.com/Kerim-Sabic/lightning-p2p/releases/download/v0.9.8/LightningP2P-linux-x86_64.AppImage) | Beta v0.9.8 | Portable AppImage · `.deb` / `.rpm` also published |
-| **Android** | [`LightningP2P-android-latest.apk`](https://github.com/Kerim-Sabic/lightning-p2p/releases/download/v0.9.8/LightningP2P-android-latest.apk) | Beta v0.9.8 | Android 10+ sideload · Lightning Chat included |
-| **CLI** | [`lightning-p2p-cli`](https://github.com/Kerim-Sabic/lightning-p2p/releases/tag/v0.9.8) | Beta v0.9.8 | `send <file>` prints a ticket to stdout · Win/mac/Linux tarballs |
+| **macOS** | [`LightningP2P-macos-universal.dmg`](https://github.com/Kerim-Sabic/lightning-p2p/releases/download/v0.9.9/LightningP2P-macos-universal.dmg) | Beta v0.9.9 | 10.15+ · Intel + Apple Silicon · unsigned: right-click → Open |
+| **Linux** | [`LightningP2P-linux-x86_64.AppImage`](https://github.com/Kerim-Sabic/lightning-p2p/releases/download/v0.9.9/LightningP2P-linux-x86_64.AppImage) | Beta v0.9.9 | Portable AppImage · `.deb` / `.rpm` also published |
+| **Android** | [`LightningP2P-android-latest.apk`](https://github.com/Kerim-Sabic/lightning-p2p/releases/download/v0.9.9/LightningP2P-android-latest.apk) | Beta v0.9.9 | Android 10+ sideload · Lightning Chat + Bluetooth mesh included |
+| **CLI** | [`lightning-p2p-cli`](https://github.com/Kerim-Sabic/lightning-p2p/releases/tag/v0.9.9) | Beta v0.9.9 | `send <file>` prints a ticket to stdout · Win/mac/Linux tarballs |
 | **Browser** | [lightning-p2p.netlify.app/receive](https://lightning-p2p.netlify.app/receive) | Public beta | Receiving only — nothing to install, the sender's link is enough |
-| **Lightning Chat** | [Open web chat](https://lightning-p2p.netlify.app/chat) | Beta v0.9.8 | Web room · encrypted DMs · native nearby chat |
-| **Experimental** | [Release v0.9.8](https://github.com/Kerim-Sabic/lightning-p2p/releases/tag/v0.9.8) | Pre-release | Lightning Chat · BBR · Warp · swarm receive |
+| **Lightning Chat** | [Open web chat](https://lightning-p2p.netlify.app/chat) | Beta v0.9.9 | Signed web rooms · encrypted DMs · native nearby chat |
+| **Experimental** | [Release v0.9.9](https://github.com/Kerim-Sabic/lightning-p2p/releases/tag/v0.9.9) | Pre-release | Lightning Chat · BBR · Warp · swarm receive |
 
 ```bash
 # The CLI in one breath: share a file, pipe the ticket anywhere.
@@ -295,13 +317,13 @@ Read [`SECURITY.md`](SECURITY.md) · [`docs/security-model.md`](docs/security-mo
 | | Capability | Status |
 |:-:|---|---|
 | 🟢 | Windows send + receive (Tauri 2 desktop) | **Stable** |
-| 🟢 | **macOS** send + receive (universal DMG, Intel + Apple Silicon) | **Beta** v0.9.8 |
-| 🟢 | **Linux** send + receive (AppImage / deb / rpm) | **Beta** v0.9.8 |
+| 🟢 | **macOS** send + receive (universal DMG, Intel + Apple Silicon) | **Beta** v0.9.9 |
+| 🟢 | **Linux** send + receive (AppImage / deb / rpm) | **Beta** v0.9.9 |
 | 🟢 | Android send + receive (sideload APK) | **Stable** |
-| 🟢 | **CLI** (`lightning-p2p-cli send`/`receive`, pipe-friendly) | **Beta** v0.9.8 |
-| 🟢 | Lightning Chat Web lounge + encrypted direct messages | **Beta** v0.9.8 |
-| 🟢 | Lightning Chat in Windows and Android native apps | **Beta** v0.9.8 |
-| 🟡 | Encrypted nearby Bluetooth multi-hop chat | **Windows beta** v0.9.8 |
+| 🟢 | **CLI** (`lightning-p2p-cli send`/`receive`, pipe-friendly) | **Beta** v0.9.9 |
+| 🟢 | Lightning Chat Web lounge + encrypted direct messages | **Beta** v0.9.9 |
+| 🟢 | Lightning Chat in Windows and Android native apps | **Beta** v0.9.9 |
+| 🟡 | Encrypted nearby Bluetooth multi-hop chat | **Windows + Android beta** v0.9.9 |
 | 🟢 | Android system share-target + MediaStore routing | **Stable** v0.4.6 |
 | 🟢 | QR + handoff link + raw ticket | **Stable** |
 | 🟢 | Nearby Wi-Fi / LAN discovery (mDNS) | **Stable** |

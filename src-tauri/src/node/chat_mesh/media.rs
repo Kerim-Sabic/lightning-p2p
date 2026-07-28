@@ -3,6 +3,10 @@ use sha2::{Digest, Sha256};
 const MAX_MEDIA_BYTES: usize = 100 * 1024 * 1024;
 const MAX_NAME_BYTES: usize = 255;
 const MAX_MIME_BYTES: usize = 127;
+const PRIVATE_MEDIA_ID_DOMAIN: [u8; 32] = [
+    98, 105, 116, 99, 104, 97, 116, 45, 112, 114, 105, 118, 97, 116, 101, 45, 109, 101, 100, 105,
+    97, 45, 109, 101, 115, 115, 97, 103, 101, 45, 118, 49,
+];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MediaPacket {
@@ -118,20 +122,32 @@ impl MediaPacket {
         if file_name.contains('/') || file_name.contains('\\') {
             return None;
         }
-        let lower = file_name.to_ascii_lowercase();
-        let extension = std::path::Path::new(&lower)
+        let path = std::path::Path::new(file_name);
+        let stem = path.file_stem()?.to_str()?;
+        let extension = path
             .extension()
-            .and_then(|value| value.to_str());
-        let is_supported = (lower.starts_with("img_")
-            && extension.is_some_and(|value| value == "jpg" || value == "jpeg"))
-            || (lower.starts_with("voice_") && extension == Some("m4a"));
-        if !is_supported {
+            .and_then(|value| value.to_str())?
+            .to_ascii_lowercase();
+        let entropy = stem.rsplit('_').next()?;
+        let has_uuid_entropy = is_uuid(entropy);
+        let voice_entropy = stem.strip_prefix("voice_").is_some_and(|value| {
+            value.len() == 16 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
+        });
+        let supported_name = (stem.starts_with("img_")
+            && matches!(extension.as_str(), "jpg" | "jpeg")
+            && has_uuid_entropy)
+            || (stem.starts_with("voice_")
+                && extension == "m4a"
+                && (has_uuid_entropy || voice_entropy));
+        if !supported_name {
             return None;
         }
-        let mut input = b"lightning-chat-private-media-v1".to_vec();
+        let sender = hex::encode(sender_id);
+        let recipient = hex::encode(recipient_id);
+        let mut input = PRIVATE_MEDIA_ID_DOMAIN.to_vec();
         for field in [
-            sender_id.as_slice(),
-            recipient_id.as_slice(),
+            sender.as_bytes(),
+            recipient.as_bytes(),
             file_name.as_bytes(),
         ] {
             input.extend(u32::try_from(field.len()).ok()?.to_be_bytes());
@@ -169,6 +185,17 @@ fn put_u16_tlv(out: &mut Vec<u8>, field_type: u8, value: &[u8]) -> Result<(), St
     out.extend(length.to_be_bytes());
     out.extend(value);
     Ok(())
+}
+
+fn is_uuid(value: &str) -> bool {
+    value.len() == 36
+        && value.bytes().enumerate().all(|(index, byte)| {
+            if matches!(index, 8 | 13 | 18 | 23) {
+                byte == b'-'
+            } else {
+                byte.is_ascii_hexdigit()
+            }
+        })
 }
 
 fn read_content_length(data: &[u8], offset: &mut usize) -> Result<usize, String> {
@@ -218,6 +245,31 @@ mod tests {
 
         assert_eq!(decoded, packet);
         assert!(packet.stable_message_id(&[1; 8], &[2; 8]).is_some());
+    }
+
+    #[test]
+    fn stable_media_identity_matches_the_deployed_fixture() {
+        let packet = MediaPacket {
+            file_name: Some("img_123e4567-e89b-12d3-a456-426614174000.jpg".into()),
+            mime_type: Some("image/jpeg".into()),
+            content: vec![1, 2, 3],
+        };
+
+        assert_eq!(
+            packet.stable_message_id(&[0x01; 8], &[0x02; 8]),
+            Some("media-efcd94ea37dd207573cee9a9e9837187".into())
+        );
+    }
+
+    #[test]
+    fn stable_media_identity_requires_filename_entropy() {
+        let packet = MediaPacket {
+            file_name: Some("img_20260728_031500.jpg".into()),
+            mime_type: Some("image/jpeg".into()),
+            content: vec![1],
+        };
+
+        assert_eq!(packet.stable_message_id(&[1; 8], &[2; 8]), None);
     }
 
     #[test]

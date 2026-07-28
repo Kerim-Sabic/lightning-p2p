@@ -10,16 +10,15 @@ use sha2::{Digest, Sha256};
 
 const GROUP_ID_BYTES: usize = 16;
 const GROUP_KEY_BYTES: usize = 32;
-const MAX_GROUP_MEMBERS: usize = 64;
+const MAX_GROUP_MEMBERS: usize = 16;
 const MAX_GROUP_NAME_BYTES: usize = 64;
 const MAX_NICKNAME_BYTES: usize = 64;
 const MAX_MESSAGE_BYTES: usize = 8_000;
-const STATE_SIGNING_DOMAIN: [u8; 18] = [
-    108, 105, 103, 104, 116, 110, 105, 110, 103, 45, 103, 114, 111, 117, 112, 45, 118, 49,
+const STATE_SIGNING_DOMAIN: [u8; 16] = [
+    98, 105, 116, 99, 104, 97, 116, 45, 103, 114, 111, 117, 112, 45, 118, 49,
 ];
-const MESSAGE_SIGNING_DOMAIN: [u8; 22] = [
-    108, 105, 103, 104, 116, 110, 105, 110, 103, 45, 103, 114, 111, 117, 112, 45, 109, 115,
-    103, 45, 118, 49,
+const MESSAGE_SIGNING_DOMAIN: [u8; 20] = [
+    98, 105, 116, 99, 104, 97, 116, 45, 103, 114, 111, 117, 112, 45, 109, 115, 103, 45, 118, 49,
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -545,5 +544,26 @@ mod tests {
         envelope.ciphertext[0] ^= 1;
 
         assert!(group.open_message(&envelope).is_err());
+    }
+
+    #[test]
+    fn group_rosters_enforce_the_deployed_member_limit() {
+        let creator = SigningKey::generate(&mut rand::rngs::OsRng);
+        let signing_key = creator.verifying_key().to_bytes();
+        let fingerprint: [u8; 32] = Sha256::digest(signing_key).into();
+        let members = (0..=MAX_GROUP_MEMBERS)
+            .map(|index| GroupMember {
+                fingerprint: Sha256::digest(index.to_be_bytes()).into(),
+                signing_key,
+                nickname: format!("member-{index}"),
+            })
+            .chain(std::iter::once(GroupMember {
+                fingerprint,
+                signing_key,
+                nickname: "creator".into(),
+            }))
+            .collect::<Vec<_>>();
+
+        assert!(PrivateGroup::create("Too large".into(), members, fingerprint).is_err());
     }
 }

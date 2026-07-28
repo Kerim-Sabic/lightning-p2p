@@ -289,7 +289,17 @@ fn send_mesh_frames(frames: &[Vec<u8>]) -> Result<(), String> {
     Ok(())
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "android")]
+fn send_mesh_frames(frames: &[Vec<u8>]) -> Result<(), String> {
+    for frame in frames {
+        if !super::mobile::android::chat_mesh_send(frame)? {
+            return Err("The Android Bluetooth chat transport is not active.".into());
+        }
+    }
+    Ok(())
+}
+
+#[cfg(not(any(windows, target_os = "android")))]
 fn send_mesh_frames(_frames: &[Vec<u8>]) -> Result<(), String> {
-    Err("The native Bluetooth chat mesh is currently available on Windows.".into())
+    Err("The native Bluetooth chat mesh is available on Windows and Android.".into())
 }

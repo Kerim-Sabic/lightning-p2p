@@ -67,9 +67,9 @@ const transferProof = [
 ] as const;
 
 const chatProof = [
-  "Nearby and internet conversations",
-  "Encrypted direct messages and read state",
-  "Separate identity and emergency wipe",
+  "Signed web rooms and encrypted direct messages",
+  "Multi-hop Bluetooth mesh on Windows and Android",
+  "Private groups, media, voice notes, trust QR, and emergency wipe",
 ] as const;
 
 export function ProductHome() {
@@ -104,10 +104,10 @@ function ProductHero() {
             </span>
           </h1>
           <p className="hero-rise hero-rise--stagger-2 mt-7 max-w-[58ch] text-pretty text-[clamp(1rem,1.3vw,1.18rem)] leading-[1.65] text-[var(--soft-copy)]">
-            One private desktop app for fast peer-to-peer file transfer and
-            secure Lightning Chat. Your files stay out of cloud storage, your
-            conversations keep a separate identity, and both work from the same
-            calm, native workspace.
+            One private app for fast peer-to-peer file transfer and secure
+            Lightning Chat — plus a web experience that needs no install. Your
+            files stay out of cloud storage, conversations keep a separate
+            identity, and both live in one calm workspace.
           </p>
           <div className="hero-rise hero-rise--stagger-3 mt-8 flex flex-wrap gap-3">
             <a
@@ -514,12 +514,13 @@ function DownloadDeck() {
               Download the desktop app
             </p>
             <h2 className="font-display mt-4 text-balance text-[clamp(2.5rem,5.4vw,4.8rem)] font-extrabold leading-[0.96] tracking-[-0.04em]">
-              The complete experience starts on Windows.
+              The complete experience is ready on Windows and Android.
             </h2>
             <p className="mt-5 max-w-[52ch] text-[15.5px] leading-[1.7] text-[var(--paper-copy)]">
               Install Lightning P2P once and get high-speed transfer plus
-              Lightning Chat in one native app. The community beta is unsigned,
-              so Windows may show a publisher warning during installation.
+              Lightning Chat in one native app. Windows and Android include
+              nearby Bluetooth mesh chat; web rooms and encrypted DMs work
+              without installing anything.
             </p>
           </div>
           <div className="rounded-[30px] border border-[color:var(--border-light)] bg-white p-6 shadow-[0_28px_80px_oklch(19%_0.018_154/0.1)] sm:p-8">

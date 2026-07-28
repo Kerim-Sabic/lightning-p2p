@@ -4,6 +4,31 @@ All notable changes to Lightning P2P are documented here. The project follows se
 
 ## [Unreleased]
 
+## [0.9.9] - 2026-07-28 ("Lightning Chat interoperability")
+
+### Added
+
+- Android now runs the native connectable GATT chat transport alongside nearby
+  transfer discovery, including service advertising, scanning, peer
+  connections, notifications, writes, and the Rust mesh receive loop.
+- Mobile chat now has a fast horizontal conversation rail for rooms, private
+  groups, nearby peers, and new direct messages.
+
+### Fixed
+
+- Noise transport now carries explicit big-endian nonces, accepts bounded
+  out-of-order delivery, and rejects replayed ciphertext.
+- Gossip synchronization now uses canonical packet IDs and the deployed TLV
+  request shape while continuing to decode v0.9.8 peers during upgrade.
+- Group signing domains, roster limits, private-media stable IDs, and courier
+  recipient tags now match compatible deployed mesh peers.
+
+### Changed
+
+- The website and README now present chat and transfer as equal product
+  pillars, document the complete Lightning Chat surface, and link directly to
+  the web chat and current installers.
+
 ## [0.9.8] - 2026-07-26 ("Lightning Chat")
 
 ### Added

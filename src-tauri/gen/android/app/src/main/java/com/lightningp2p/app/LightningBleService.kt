@@ -3,7 +3,16 @@ package com.lightningp2p.app
 import android.Manifest
 import android.app.Activity
 import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothGatt
+import android.bluetooth.BluetoothGattCallback
+import android.bluetooth.BluetoothGattCharacteristic
+import android.bluetooth.BluetoothGattDescriptor
+import android.bluetooth.BluetoothGattServer
+import android.bluetooth.BluetoothGattServerCallback
+import android.bluetooth.BluetoothGattService
 import android.bluetooth.BluetoothManager
+import android.bluetooth.BluetoothProfile
 import android.bluetooth.le.AdvertiseCallback
 import android.bluetooth.le.AdvertiseData
 import android.bluetooth.le.AdvertiseSettings
@@ -25,6 +34,7 @@ import androidx.core.content.ContextCompat
 import java.io.ByteArrayOutputStream
 import java.lang.ref.WeakReference
 import java.util.UUID
+import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -44,6 +54,12 @@ object LightningBleService {
     private const val PARTIAL_STALE_MS = 20_000L
 
     val SERVICE_UUID: UUID = UUID.fromString("4c50324c-7032-7032-7032-4c6967687431")
+    private val CHAT_SERVICE_UUID: UUID =
+        UUID.fromString("f47b5e2d-4a9e-4c5a-9b3f-8e1d2c3a4b5c")
+    private val CHAT_CHARACTERISTIC_UUID: UUID =
+        UUID.fromString("a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d")
+    private val CLIENT_CONFIGURATION_UUID: UUID =
+        UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
 
     private val serviceParcelUuid = ParcelUuid(SERVICE_UUID)
     private val advertiseHandler = Handler(Looper.getMainLooper())
@@ -57,6 +73,16 @@ object LightningBleService {
     private var scanner: BluetoothLeScanner? = null
     private var scanCallback: ScanCallback? = null
     private var scanning = false
+
+    private var chatGattServer: BluetoothGattServer? = null
+    private var chatLocalCharacteristic: BluetoothGattCharacteristic? = null
+    private var chatAdvertiser: BluetoothLeAdvertiser? = null
+    private var chatAdvertiseCallback: AdvertiseCallback? = null
+    private var chatMeshRunning = false
+    private val chatServerPeers = ConcurrentHashMap<String, BluetoothDevice>()
+    private val chatRemoteGatts = ConcurrentHashMap<String, BluetoothGatt>()
+    private val chatConnecting = ConcurrentHashMap.newKeySet<String>()
+    private val chatPackets = ConcurrentLinkedQueue<String>()
 
     @Volatile
     private var permissionRequestIssued = false
@@ -202,6 +228,138 @@ object LightningBleService {
         return out.toTypedArray()
     }
 
+    /** Starts the connectable GATT transport used by native Lightning Chat. */
+    @JvmStatic
+    @Synchronized
+    fun startChatMesh(context: Context): Boolean {
+        if (!ensureRuntimePermissions(context)) return false
+        val manager = context.getSystemService(Context.BLUETOOTH_SERVICE)
+            as? BluetoothManager ?: return fail("Bluetooth manager unavailable")
+        val adapter = manager.adapter ?: return fail("BLE adapter unavailable")
+        if (!isAdapterEnabled(adapter)) return fail("BLE adapter is off")
+
+        stopChatMesh()
+        val characteristic = BluetoothGattCharacteristic(
+            CHAT_CHARACTERISTIC_UUID,
+            BluetoothGattCharacteristic.PROPERTY_READ or
+                BluetoothGattCharacteristic.PROPERTY_WRITE or
+                BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE or
+                BluetoothGattCharacteristic.PROPERTY_NOTIFY,
+            BluetoothGattCharacteristic.PERMISSION_READ or
+                BluetoothGattCharacteristic.PERMISSION_WRITE,
+        )
+        characteristic.addDescriptor(
+            BluetoothGattDescriptor(
+                CLIENT_CONFIGURATION_UUID,
+                BluetoothGattDescriptor.PERMISSION_READ or
+                    BluetoothGattDescriptor.PERMISSION_WRITE,
+            ),
+        )
+        val service = BluetoothGattService(
+            CHAT_SERVICE_UUID,
+            BluetoothGattService.SERVICE_TYPE_PRIMARY,
+        )
+        service.addCharacteristic(characteristic)
+
+        return try {
+            val server = manager.openGattServer(context, chatServerCallback)
+                ?: return fail("Could not open the chat GATT server")
+            if (!server.addService(service)) {
+                server.close()
+                return fail("Could not publish the chat GATT service")
+            }
+            chatGattServer = server
+            chatLocalCharacteristic = characteristic
+            chatMeshRunning = true
+            startChatAdvertisement(adapter)
+            lastError = null
+            true
+        } catch (error: SecurityException) {
+            fail("Chat Bluetooth permission rejected: ${error.message}")
+        } catch (error: Throwable) {
+            fail("Chat Bluetooth startup failed: ${error.message}")
+        }
+    }
+
+    @JvmStatic
+    @Synchronized
+    fun stopChatMesh() {
+        val ad = chatAdvertiser
+        val callback = chatAdvertiseCallback
+        if (ad != null && callback != null) {
+            try {
+                ad.stopAdvertising(callback)
+            } catch (_: Throwable) {
+                // The adapter may already be stopping.
+            }
+        }
+        chatAdvertiseCallback = null
+        chatAdvertiser = null
+        chatRemoteGatts.values.forEach { gatt ->
+            try {
+                gatt.disconnect()
+                gatt.close()
+            } catch (_: Throwable) {
+                // Best-effort teardown.
+            }
+        }
+        chatRemoteGatts.clear()
+        chatConnecting.clear()
+        chatServerPeers.clear()
+        try {
+            chatGattServer?.close()
+        } catch (_: Throwable) {
+            // Best-effort teardown.
+        }
+        chatGattServer = null
+        chatLocalCharacteristic = null
+        chatMeshRunning = false
+    }
+
+    /** Broadcasts one hex-encoded mesh frame over every available GATT path. */
+    @JvmStatic
+    fun sendChatMeshPacket(frameHex: String): Boolean {
+        val bytes = hexToBytes(frameHex) ?: return fail("Invalid chat mesh frame")
+        if (bytes.isEmpty() || bytes.size > 2048) {
+            return fail("Chat mesh frame is outside size limits")
+        }
+        var attempted = false
+        val server = chatGattServer
+        val local = chatLocalCharacteristic
+        if (server != null && local != null) {
+            local.value = bytes
+            chatServerPeers.values.forEach { device ->
+                try {
+                    attempted = server.notifyCharacteristicChanged(device, local, false) || attempted
+                } catch (_: Throwable) {
+                    // Keep the other links alive.
+                }
+            }
+        }
+        chatRemoteGatts.values.forEach { gatt ->
+            val remote = gatt.getService(CHAT_SERVICE_UUID)
+                ?.getCharacteristic(CHAT_CHARACTERISTIC_UUID) ?: return@forEach
+            try {
+                remote.writeType = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+                remote.value = bytes
+                attempted = gatt.writeCharacteristic(remote) || attempted
+            } catch (_: Throwable) {
+                // Keep the other links alive.
+            }
+        }
+        return chatMeshRunning || attempted
+    }
+
+    @JvmStatic
+    fun drainChatMeshPackets(): Array<String> {
+        val out = ArrayList<String>()
+        while (true) {
+            val packet = chatPackets.poll() ?: break
+            out.add(packet)
+        }
+        return out.toTypedArray()
+    }
+
     @JvmStatic
     fun permissionState(context: Context): String {
         val required = requiredBlePermissions()
@@ -301,6 +459,9 @@ object LightningBleService {
     private fun handleResult(result: ScanResult?) {
         if (result == null) return
         val record = result.scanRecord ?: return
+        if (record.serviceUuids?.any { it.uuid == CHAT_SERVICE_UUID } == true) {
+            connectChatPeer(result.device)
+        }
         val payload = record.serviceData?.get(serviceParcelUuid) ?: return
         if (payload.size < 3 || payload[0] != PROTOCOL_VERSION) return
 
@@ -323,6 +484,183 @@ object LightningBleService {
             partialDiscoveries.remove(address)
         }
         prunePartialDiscoveries(now)
+    }
+
+    private fun connectChatPeer(device: BluetoothDevice?) {
+        if (!chatMeshRunning || device == null) return
+        val address = try {
+            device.address
+        } catch (_: SecurityException) {
+            return
+        }
+        if (chatRemoteGatts.containsKey(address) || !chatConnecting.add(address)) return
+        val context = activityRef?.get()?.applicationContext ?: run {
+            chatConnecting.remove(address)
+            return
+        }
+        try {
+            val gatt = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                device.connectGatt(context, false, chatGattCallback, BluetoothDevice.TRANSPORT_LE)
+            } else {
+                device.connectGatt(context, false, chatGattCallback)
+            }
+            if (gatt == null) chatConnecting.remove(address)
+        } catch (_: Throwable) {
+            chatConnecting.remove(address)
+        }
+    }
+
+    private fun startChatAdvertisement(adapter: BluetoothAdapter) {
+        val ad = adapter.bluetoothLeAdvertiser ?: return
+        val callback = object : AdvertiseCallback() {
+            override fun onStartFailure(errorCode: Int) {
+                Log.w(TAG, "Chat BLE advertise failed: $errorCode")
+            }
+        }
+        val settings = AdvertiseSettings.Builder()
+            .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_BALANCED)
+            .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM)
+            .setConnectable(true)
+            .build()
+        val data = AdvertiseData.Builder()
+            .addServiceUuid(ParcelUuid(CHAT_SERVICE_UUID))
+            .setIncludeDeviceName(false)
+            .setIncludeTxPowerLevel(false)
+            .build()
+        ad.startAdvertising(settings, data, callback)
+        chatAdvertiser = ad
+        chatAdvertiseCallback = callback
+    }
+
+    private val chatServerCallback = object : BluetoothGattServerCallback() {
+        override fun onConnectionStateChange(
+            device: BluetoothDevice?,
+            status: Int,
+            newState: Int,
+        ) {
+            val peer = device ?: return
+            val address = try {
+                peer.address
+            } catch (_: SecurityException) {
+                return
+            }
+            if (newState == BluetoothProfile.STATE_CONNECTED) {
+                chatServerPeers[address] = peer
+            } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+                chatServerPeers.remove(address)
+            }
+        }
+
+        override fun onCharacteristicReadRequest(
+            device: BluetoothDevice?,
+            requestId: Int,
+            offset: Int,
+            characteristic: BluetoothGattCharacteristic?,
+        ) {
+            if (characteristic?.uuid != CHAT_CHARACTERISTIC_UUID || device == null) return
+            val value = characteristic.value ?: ByteArray(0)
+            val slice = if (offset in 0..value.size) value.copyOfRange(offset, value.size)
+                else ByteArray(0)
+            chatGattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, slice)
+        }
+
+        override fun onCharacteristicWriteRequest(
+            device: BluetoothDevice?,
+            requestId: Int,
+            characteristic: BluetoothGattCharacteristic?,
+            preparedWrite: Boolean,
+            responseNeeded: Boolean,
+            offset: Int,
+            value: ByteArray?,
+        ) {
+            if (characteristic?.uuid == CHAT_CHARACTERISTIC_UUID && offset == 0 && value != null) {
+                chatPackets.add(bytesToHex(value))
+            }
+            if (responseNeeded && device != null) {
+                chatGattServer?.sendResponse(
+                    device,
+                    requestId,
+                    BluetoothGatt.GATT_SUCCESS,
+                    0,
+                    null,
+                )
+            }
+        }
+
+        override fun onDescriptorWriteRequest(
+            device: BluetoothDevice?,
+            requestId: Int,
+            descriptor: BluetoothGattDescriptor?,
+            preparedWrite: Boolean,
+            responseNeeded: Boolean,
+            offset: Int,
+            value: ByteArray?,
+        ) {
+            if (descriptor?.uuid == CLIENT_CONFIGURATION_UUID) descriptor.value = value
+            if (responseNeeded && device != null) {
+                chatGattServer?.sendResponse(
+                    device,
+                    requestId,
+                    BluetoothGatt.GATT_SUCCESS,
+                    0,
+                    null,
+                )
+            }
+        }
+    }
+
+    private val chatGattCallback = object : BluetoothGattCallback() {
+        override fun onConnectionStateChange(gatt: BluetoothGatt?, status: Int, newState: Int) {
+            val connection = gatt ?: return
+            val address = try {
+                connection.device.address
+            } catch (_: SecurityException) {
+                connection.close()
+                return
+            }
+            if (status == BluetoothGatt.GATT_SUCCESS &&
+                newState == BluetoothProfile.STATE_CONNECTED
+            ) {
+                chatConnecting.remove(address)
+                chatRemoteGatts[address] = connection
+                try {
+                    connection.requestMtu(247)
+                    connection.discoverServices()
+                } catch (_: Throwable) {
+                    chatRemoteGatts.remove(address)
+                    connection.close()
+                }
+            } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+                chatConnecting.remove(address)
+                chatRemoteGatts.remove(address)
+                connection.close()
+            }
+        }
+
+        override fun onServicesDiscovered(gatt: BluetoothGatt?, status: Int) {
+            if (status != BluetoothGatt.GATT_SUCCESS || gatt == null) return
+            val characteristic = gatt.getService(CHAT_SERVICE_UUID)
+                ?.getCharacteristic(CHAT_CHARACTERISTIC_UUID) ?: return
+            try {
+                gatt.setCharacteristicNotification(characteristic, true)
+                val descriptor = characteristic.getDescriptor(CLIENT_CONFIGURATION_UUID)
+                descriptor?.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+                if (descriptor != null) gatt.writeDescriptor(descriptor)
+            } catch (_: Throwable) {
+                // Writes can still work when notifications are unavailable.
+            }
+        }
+
+        @Deprecated("Used on Android API levels below 33")
+        override fun onCharacteristicChanged(
+            gatt: BluetoothGatt?,
+            characteristic: BluetoothGattCharacteristic?,
+        ) {
+            val value = characteristic?.value ?: return
+            if (characteristic.uuid == CHAT_CHARACTERISTIC_UUID) {
+                chatPackets.add(bytesToHex(value))
+            }
+        }
     }
 
     private fun prunePartialDiscoveries(now: Long) {
