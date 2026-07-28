@@ -246,7 +246,7 @@ export function LightningChatView() {
   };
 
   return (
-    <section className="relative flex min-h-[620px] flex-1 overflow-hidden rounded-[28px] border border-white/[0.07] bg-[#07101b]/95 shadow-2xl shadow-black/20">
+    <section className="relative flex min-h-[680px] flex-1 overflow-hidden rounded-[26px] border border-white/[0.08] bg-[radial-gradient(circle_at_65%_-10%,rgba(56,189,248,0.09),transparent_34%),#07101b] shadow-2xl shadow-black/25">
       <aside className="hidden w-[230px] shrink-0 flex-col border-r border-white/[0.06] bg-white/[0.018] md:flex">
         <div className="border-b border-white/[0.06] p-4">
           <div className="flex items-center gap-3">
@@ -372,6 +372,98 @@ export function LightningChatView() {
       </aside>
 
       <main className="flex min-w-0 flex-1 flex-col">
+        <div className="border-b border-white/[0.06] bg-black/10 px-3 py-2.5 md:hidden">
+          <div className="flex items-center gap-2 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {nativeRuntime ? (
+              <button
+                type="button"
+                onClick={() => selectChannel(DEFAULT_LIGHTNING_CHAT_CHANNEL)}
+                className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-2 text-[11px] font-medium transition ${
+                  conversation.kind === "channel" &&
+                  conversation.channel.id ===
+                    DEFAULT_LIGHTNING_CHAT_CHANNEL.id
+                    ? "bg-sky-300 text-slate-950"
+                    : "border border-white/[0.07] bg-white/[0.035] text-slate-300"
+                }`}
+              >
+                <Radio className="h-3.5 w-3.5" />
+                Nearby
+              </button>
+            ) : null}
+            {rooms.map((room) => (
+              <button
+                key={room.id}
+                type="button"
+                onClick={() => selectChannel(room)}
+                className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-2 text-[11px] font-medium transition ${
+                  conversation.kind === "channel" &&
+                  conversation.channel.id === room.id
+                    ? "bg-sky-300 text-slate-950"
+                    : "border border-white/[0.07] bg-white/[0.035] text-slate-300"
+                }`}
+              >
+                <MapPin className="h-3.5 w-3.5" />
+                {room.label}
+              </button>
+            ))}
+            {snapshot.groups.map((group) => (
+              <button
+                key={group.id}
+                type="button"
+                onClick={() =>
+                  setConversation({
+                    kind: "group",
+                    groupId: group.id,
+                    name: group.name,
+                  })
+                }
+                className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-2 text-[11px] font-medium transition ${
+                  conversation.kind === "group" &&
+                  conversation.groupId === group.id
+                    ? "bg-emerald-300 text-slate-950"
+                    : "border border-white/[0.07] bg-white/[0.035] text-slate-300"
+                }`}
+              >
+                <ShieldCheck className="h-3.5 w-3.5" />
+                {group.name}
+              </button>
+            ))}
+            {snapshot.peers
+              .filter((peer) => !peer.is_blocked)
+              .map((peer) => (
+                <button
+                  key={peer.id}
+                  type="button"
+                  onClick={() => setConversation({ kind: "nearby", peer })}
+                  className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-2 text-[11px] font-medium transition ${
+                    conversation.kind === "nearby" &&
+                    conversation.peer.id === peer.id
+                      ? "bg-indigo-300 text-slate-950"
+                      : "border border-white/[0.07] bg-white/[0.035] text-slate-300"
+                  }`}
+                >
+                  <MessageCircle className="h-3.5 w-3.5" />
+                  {peer.label}
+                </button>
+              ))}
+            <button
+              type="button"
+              onClick={() => setDialog("join")}
+              className="flex shrink-0 items-center gap-1.5 rounded-full border border-dashed border-sky-300/25 px-3 py-2 text-[11px] font-medium text-sky-200"
+            >
+              <Hash className="h-3.5 w-3.5" />
+              New room
+            </button>
+            <button
+              type="button"
+              onClick={() => setDialog("dm")}
+              className="flex shrink-0 items-center gap-1.5 rounded-full border border-dashed border-sky-300/25 px-3 py-2 text-[11px] font-medium text-sky-200"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              New DM
+            </button>
+          </div>
+        </div>
         <ChatHeader
           conversation={conversation}
           onJoin={() => setDialog("join")}

@@ -1,6 +1,8 @@
 const NOISE_PATTERN: &str = "Noise_XX_25519_ChaChaPoly_SHA256";
 const MAX_HANDSHAKE_BYTES: usize = 65_535;
 const MAX_TRANSPORT_PLAINTEXT: usize = 65_519;
+const TRANSPORT_NONCE_BYTES: usize = 4;
+const REPLAY_WINDOW_SIZE: u64 = 1_024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NoiseRole {
@@ -103,18 +105,47 @@ impl NoiseHandshake {
             .ok_or_else(|| "Noise peer did not authenticate a static key".to_string())?;
         let state = self
             .state
-            .into_transport_mode()
+            .into_stateless_transport_mode()
             .map_err(|error| error.to_string())?;
         Ok(NoiseTransport {
             state,
             remote_static_key,
+            send_nonce: 0,
+            replay_window: ReplayWindow::default(),
         })
     }
 }
 
 pub struct NoiseTransport {
-    state: snow::TransportState,
+    state: snow::StatelessTransportState,
     remote_static_key: [u8; 32],
+    send_nonce: u64,
+    replay_window: ReplayWindow,
+}
+
+#[derive(Default)]
+struct ReplayWindow {
+    highest: Option<u64>,
+    seen: std::collections::BTreeSet<u64>,
+}
+
+impl ReplayWindow {
+    fn accepts(&self, nonce: u64) -> bool {
+        if self.seen.contains(&nonce) {
+            return false;
+        }
+        self.highest
+            .is_none_or(|highest| nonce > highest || highest - nonce < REPLAY_WINDOW_SIZE)
+    }
+
+    fn record(&mut self, nonce: u64) {
+        self.highest = Some(self.highest.map_or(nonce, |highest| highest.max(nonce)));
+        self.seen.insert(nonce);
+        if let Some(highest) = self.highest {
+            let oldest = highest.saturating_sub(REPLAY_WINDOW_SIZE - 1);
+            self.seen = self.seen.split_off(&oldest);
+        }
+    }
 }
 
 impl NoiseTransport {
@@ -133,12 +164,23 @@ impl NoiseTransport {
         if plaintext.len() > MAX_TRANSPORT_PLAINTEXT {
             return Err("Noise transport plaintext exceeds its limit".into());
         }
-        let mut out = vec![0_u8; plaintext.len() + 16];
+        if self.send_nonce >= u64::from(u32::MAX) {
+            return Err("Noise transport nonce is exhausted".into());
+        }
+        let wire_nonce = u32::try_from(self.send_nonce)
+            .map_err(|_| "Noise transport nonce is exhausted".to_string())?;
+        let mut out = vec![0_u8; TRANSPORT_NONCE_BYTES + plaintext.len() + 16];
+        out[..TRANSPORT_NONCE_BYTES].copy_from_slice(&wire_nonce.to_be_bytes());
         let written = self
             .state
-            .write_message(plaintext, &mut out)
+            .write_message(
+                self.send_nonce,
+                plaintext,
+                &mut out[TRANSPORT_NONCE_BYTES..],
+            )
             .map_err(|error| error.to_string())?;
-        out.truncate(written);
+        self.send_nonce += 1;
+        out.truncate(TRANSPORT_NONCE_BYTES + written);
         Ok(out)
     }
 
@@ -148,14 +190,27 @@ impl NoiseTransport {
     ///
     /// Returns an error for oversized or unauthenticated ciphertext.
     pub fn decrypt(&mut self, ciphertext: &[u8]) -> Result<Vec<u8>, String> {
-        if ciphertext.len() > MAX_HANDSHAKE_BYTES {
+        if ciphertext.len() > MAX_HANDSHAKE_BYTES + TRANSPORT_NONCE_BYTES {
             return Err("Noise transport ciphertext exceeds its limit".into());
         }
-        let mut out = vec![0_u8; ciphertext.len()];
+        if ciphertext.len() < TRANSPORT_NONCE_BYTES + 16 {
+            return Err("Noise transport ciphertext is truncated".into());
+        }
+        let nonce = u64::from(u32::from_be_bytes(
+            ciphertext[..TRANSPORT_NONCE_BYTES]
+                .try_into()
+                .map_err(|_| "Noise transport nonce is truncated")?,
+        ));
+        if !self.replay_window.accepts(nonce) {
+            return Err("Noise transport replay was rejected".into());
+        }
+        let encrypted = &ciphertext[TRANSPORT_NONCE_BYTES..];
+        let mut out = vec![0_u8; encrypted.len()];
         let read = self
             .state
-            .read_message(ciphertext, &mut out)
+            .read_message(nonce, encrypted, &mut out)
             .map_err(|error| error.to_string())?;
+        self.replay_window.record(nonce);
         out.truncate(read);
         Ok(out)
     }
@@ -214,8 +269,21 @@ mod tests {
     fn modified_transport_ciphertext_is_rejected() {
         let (mut initiator, mut responder) = transport_pair();
         let mut encrypted = initiator.encrypt(b"authenticated").expect("encrypt");
-        encrypted[0] ^= 1;
+        encrypted[TRANSPORT_NONCE_BYTES] ^= 1;
 
         assert!(responder.decrypt(&encrypted).is_err());
+    }
+
+    #[test]
+    fn transport_uses_explicit_big_endian_nonces() {
+        let (mut initiator, mut responder) = transport_pair();
+        let first = initiator.encrypt(b"zero").expect("first");
+        let second = initiator.encrypt(b"one").expect("second");
+
+        assert_eq!(&first[..TRANSPORT_NONCE_BYTES], &[0, 0, 0, 0]);
+        assert_eq!(&second[..TRANSPORT_NONCE_BYTES], &[0, 0, 0, 1]);
+        assert_eq!(responder.decrypt(&second).expect("second first"), b"one");
+        assert_eq!(responder.decrypt(&first).expect("first second"), b"zero");
+        assert!(responder.decrypt(&first).is_err());
     }
 }

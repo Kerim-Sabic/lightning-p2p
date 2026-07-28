@@ -8,6 +8,7 @@
     clippy::unused_self
 )]
 
+use super::sync::mesh_packet_id;
 use super::{
     CourierDepositTier, CourierEnvelope, CourierStore, FragmentAssembler, FragmentResult,
     Fragmenter, GossipFilter, GossipStore, GroupEnvelope, GroupMember, MediaPacket, MeshIdentity,
@@ -250,7 +251,7 @@ impl ChatMeshRuntime {
         })?;
         let bytes = packet.encode(true)?;
         let id = stable_message_id(&packet);
-        self.seen.insert(packet_id(&bytes));
+        self.seen.insert(mesh_packet_id(&packet));
         self.gossip.insert(bytes, timestamp_ms);
         self.persist_gossip()?;
         let event = MeshChatEvent {
@@ -494,7 +495,7 @@ impl ChatMeshRuntime {
             return self.forward_only(packet);
         }
         let encoded = packet.encode(true)?;
-        let id = packet_id(&encoded);
+        let id = mesh_packet_id(&packet);
         if !self.seen.insert(id) {
             return Ok(MeshIngress {
                 events: Vec::new(),
@@ -937,7 +938,7 @@ impl ChatMeshRuntime {
                 &sender,
                 &recipient.unwrap_or_else(|| self.identity.peer_id()),
             )
-            .unwrap_or_else(|| format!("media-{}", hex::encode(packet_id(payload))));
+            .unwrap_or_else(|| format!("media-{}", hex::encode(digest_id(payload))));
         Ok(Some(MeshChatEvent {
             kind: match (voice, recipient.is_some()) {
                 (true, true) => "private_voice",
@@ -1130,7 +1131,7 @@ fn stable_message_id(packet: &MeshPacket) -> String {
     format!("mesh-{}", &encoded[..32])
 }
 
-fn packet_id(bytes: &[u8]) -> [u8; 16] {
+fn digest_id(bytes: &[u8]) -> [u8; 16] {
     Sha256::digest(bytes)[..16]
         .try_into()
         .expect("SHA-256 always contains 16 bytes")

@@ -214,9 +214,9 @@ Run this from PowerShell with one Android phone connected over USB debugging. It
 ```powershell
 $ErrorActionPreference = "Stop"
 $adb = "$env:LocalAppData\Android\Sdk\platform-tools\adb.exe"
-# v0.9.8 is the current release carrying the Lightning Chat Android build.
-$apkUrl = "https://github.com/Kerim-Sabic/lightning-p2p/releases/download/v0.9.8/LightningP2P-android-latest.apk"
-$sumUrl = "https://github.com/Kerim-Sabic/lightning-p2p/releases/download/v0.9.8/SHA256SUMS-android.txt"
+# v0.9.9 is the current release carrying the Lightning Chat Android build.
+$apkUrl = "https://github.com/Kerim-Sabic/lightning-p2p/releases/download/v0.9.9/LightningP2P-android-latest.apk"
+$sumUrl = "https://github.com/Kerim-Sabic/lightning-p2p/releases/download/v0.9.9/SHA256SUMS-android.txt"
 $apk = ".\LightningP2P-android-latest.apk"
 $sums = ".\SHA256SUMS-android.txt"
 $logcat = ".\lightning-p2p-launch-logcat.txt"

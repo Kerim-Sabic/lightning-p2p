@@ -8,11 +8,17 @@ use sha2::{Digest, Sha256};
 use std::collections::VecDeque;
 use std::path::Path;
 
+use super::MeshPacket;
+
 const MAX_FILTER_P: u8 = 32;
 const DEFAULT_FILTER_BYTES: usize = 384;
 const DEFAULT_FALSE_POSITIVE_RATE: f64 = 0.001;
 const MAX_ARCHIVE_PACKETS: usize = 2_048;
 const ARCHIVE_RETENTION_MS: u64 = 24 * 60 * 60 * 1_000;
+const TLV_P: u8 = 0x01;
+const TLV_MODULUS: u8 = 0x02;
+const TLV_DATA: u8 = 0x03;
+const MAX_FILTER_DATA_BYTES: usize = 1_024;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GossipFilter {
@@ -85,10 +91,10 @@ impl GossipFilter {
 
     #[must_use]
     pub fn encode(&self) -> Vec<u8> {
-        let mut out = Vec::with_capacity(5 + self.data.len());
-        out.push(self.p);
-        out.extend(self.modulus.to_be_bytes());
-        out.extend(&self.data);
+        let mut out = Vec::with_capacity(14 + self.data.len());
+        put_tlv(&mut out, TLV_P, &[self.p]);
+        put_tlv(&mut out, TLV_MODULUS, &self.modulus.to_be_bytes());
+        put_tlv(&mut out, TLV_DATA, &self.data);
         out
     }
 
@@ -98,22 +104,70 @@ impl GossipFilter {
     ///
     /// Returns an error when parameters exceed protocol bounds.
     pub fn decode(data: &[u8]) -> Result<Self, String> {
+        if data.first().copied() != Some(TLV_P) {
+            return Self::decode_legacy(data);
+        }
+
+        let mut offset = 0;
+        let mut p = None;
+        let mut modulus = None;
+        let mut filter_data = None;
+        while offset < data.len() {
+            let kind = *data
+                .get(offset)
+                .ok_or_else(|| "gossip filter TLV is truncated".to_string())?;
+            offset += 1;
+            let length = usize::from(u16::from_be_bytes(
+                take(data, &mut offset, 2)?
+                    .try_into()
+                    .map_err(|_| "invalid gossip TLV length")?,
+            ));
+            let value = take(data, &mut offset, length)?;
+            match kind {
+                TLV_P if value.len() == 1 => p = value.first().copied(),
+                TLV_MODULUS if value.len() == 4 => {
+                    modulus = Some(u32::from_be_bytes(
+                        value.try_into().map_err(|_| "invalid gossip modulus")?,
+                    ));
+                }
+                TLV_DATA if value.len() <= MAX_FILTER_DATA_BYTES => {
+                    filter_data = Some(value.to_vec());
+                }
+                TLV_DATA => return Err("gossip filter data exceeds its safety limit".into()),
+                _ => {}
+            }
+        }
+
+        Self::from_parts(
+            p.ok_or_else(|| "gossip filter is missing P".to_string())?,
+            modulus.ok_or_else(|| "gossip filter is missing its modulus".to_string())?,
+            filter_data.ok_or_else(|| "gossip filter is missing its bitstream".to_string())?,
+        )
+    }
+
+    fn decode_legacy(data: &[u8]) -> Result<Self, String> {
         if data.len() < 5 {
             return Err("gossip filter is truncated".into());
         }
-        let p = data[0];
-        let modulus = u32::from_be_bytes(
-            data[1..5]
-                .try_into()
-                .map_err(|_| "invalid gossip modulus")?,
-        );
-        if p == 0 || p > MAX_FILTER_P || modulus <= 1 {
+        Self::from_parts(
+            data[0],
+            u32::from_be_bytes(
+                data[1..5]
+                    .try_into()
+                    .map_err(|_| "invalid gossip modulus")?,
+            ),
+            data[5..].to_vec(),
+        )
+    }
+
+    fn from_parts(p: u8, modulus: u32, data: Vec<u8>) -> Result<Self, String> {
+        if p == 0 || p > MAX_FILTER_P || modulus == 0 {
             return Err("gossip filter parameters are invalid".into());
         }
         Ok(Self {
             p,
             modulus,
-            data: data[5..].to_vec(),
+            data,
             included_count: 0,
         })
     }
@@ -134,7 +188,7 @@ pub struct GossipStore {
 impl GossipStore {
     pub fn insert(&mut self, bytes: Vec<u8>, received_at_ms: u64) -> [u8; 16] {
         self.prune(received_at_ms);
-        let id = packet_id(&bytes);
+        let id = packet_id_from_bytes(&bytes);
         if self.packets.iter().any(|packet| packet.id == id) {
             return id;
         }
@@ -215,10 +269,47 @@ impl GossipStore {
     }
 }
 
-fn packet_id(bytes: &[u8]) -> [u8; 16] {
-    Sha256::digest(bytes)[..16]
+pub(crate) fn mesh_packet_id(packet: &MeshPacket) -> [u8; 16] {
+    let mut digest = Sha256::new();
+    digest.update([packet.message_type as u8]);
+    digest.update(packet.sender_id);
+    digest.update(packet.timestamp_ms.to_be_bytes());
+    digest.update(&packet.payload);
+    digest.finalize()[..16]
         .try_into()
         .expect("SHA-256 always contains 16 bytes")
+}
+
+fn packet_id_from_bytes(bytes: &[u8]) -> [u8; 16] {
+    MeshPacket::decode(bytes).map_or_else(
+        |_| {
+            Sha256::digest(bytes)[..16]
+                .try_into()
+                .expect("SHA-256 always contains 16 bytes")
+        },
+        |packet| mesh_packet_id(&packet),
+    )
+}
+
+fn put_tlv(out: &mut Vec<u8>, kind: u8, value: &[u8]) {
+    out.push(kind);
+    out.extend(
+        u16::try_from(value.len())
+            .expect("sync filters are bounded below u16::MAX")
+            .to_be_bytes(),
+    );
+    out.extend(value);
+}
+
+fn take<'a>(data: &'a [u8], offset: &mut usize, length: usize) -> Result<&'a [u8], String> {
+    let end = offset
+        .checked_add(length)
+        .ok_or_else(|| "gossip filter length overflow".to_string())?;
+    let value = data
+        .get(*offset..end)
+        .ok_or_else(|| "gossip filter TLV is truncated".to_string())?;
+    *offset = end;
+    Ok(value)
 }
 
 fn derive_p(target_fpr: f64) -> u8 {
@@ -417,9 +508,73 @@ mod tests {
     fn filter_wire_round_trips() {
         let ids = [[7_u8; 16], [8_u8; 16], [9_u8; 16]];
         let filter = GossipFilter::build(&ids);
-        let decoded = GossipFilter::decode(&filter.encode()).expect("decode");
+        let encoded = filter.encode();
+        let decoded = GossipFilter::decode(&encoded).expect("decode");
+
+        assert_eq!(encoded[0..4], [TLV_P, 0, 1, filter.p]);
+        assert_eq!(encoded[4..7], [TLV_MODULUS, 0, 4]);
+        assert!(ids.iter().all(|id| decoded.contains(id)));
+    }
+
+    #[test]
+    fn accepts_legacy_filter_bodies_during_upgrade() {
+        let ids = [[7_u8; 16], [8_u8; 16], [9_u8; 16]];
+        let filter = GossipFilter::build(&ids);
+        let mut legacy = vec![filter.p];
+        legacy.extend(filter.modulus.to_be_bytes());
+        legacy.extend(&filter.data);
+
+        let decoded = GossipFilter::decode(&legacy).expect("legacy decode");
 
         assert!(ids.iter().all(|id| decoded.contains(id)));
+    }
+
+    #[test]
+    fn empty_filter_uses_the_deployed_tlv_shape() {
+        let encoded = GossipFilter::build(&[]).encode();
+
+        assert_eq!(
+            encoded,
+            vec![
+                TLV_P,
+                0,
+                1,
+                derive_p(DEFAULT_FALSE_POSITIVE_RATE),
+                TLV_MODULUS,
+                0,
+                4,
+                0,
+                0,
+                0,
+                1,
+                TLV_DATA,
+                0,
+                0,
+            ]
+        );
+        GossipFilter::decode(&encoded).expect("empty decode");
+    }
+
+    #[test]
+    fn packet_ids_ignore_relay_mutable_fields() {
+        let packet = MeshPacket {
+            message_type: super::super::MeshMessageType::Message,
+            ttl: 7,
+            timestamp_ms: 1_720_000_000_123,
+            sender_id: [0x11; 8],
+            recipient_id: None,
+            payload: b"hello".to_vec(),
+            signature: Some([0x22; 64]),
+        };
+        let mut relayed = packet.clone();
+        relayed.ttl = 3;
+        relayed.signature = Some([0x33; 64]);
+
+        assert_eq!(mesh_packet_id(&packet), mesh_packet_id(&relayed));
+        assert_eq!(
+            hex::encode(mesh_packet_id(&packet)),
+            "1a3b842827a64109b425bbf90017ce9b"
+        );
     }
 
     #[test]

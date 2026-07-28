@@ -408,6 +408,80 @@ pub(crate) mod android {
         .map_err(|e| e.to_string())
     }
 
+    pub fn chat_mesh_start() -> Result<bool, String> {
+        let vm = jvm()?;
+        vm.attach_current_thread(|env| -> BridgeResult<bool> {
+            let context = context_obj(env)?;
+            let class = load_app_class(env, BLE_CLASS_DOTTED)?;
+            let raw = env.call_static_method(
+                class,
+                jni_str!("startChatMesh"),
+                jni_sig!("(Landroid/content/Context;)Z"),
+                &[JValue::Object(&context)],
+            );
+            match raw {
+                Ok(result) => result.z().map_err(BridgeError::from),
+                Err(error) => Err(drain_exception(env, &error)),
+            }
+        })
+        .map_err(|error| error.to_string())
+    }
+
+    pub fn chat_mesh_stop() -> Result<(), String> {
+        let vm = jvm()?;
+        vm.attach_current_thread(|env| -> BridgeResult<()> {
+            let class = load_app_class(env, BLE_CLASS_DOTTED)?;
+            env.call_static_method(class, jni_str!("stopChatMesh"), jni_sig!("()V"), &[])
+                .map_err(|error| drain_exception(env, &error))?;
+            Ok(())
+        })
+        .map_err(|error| error.to_string())
+    }
+
+    pub fn chat_mesh_send(frame: &[u8]) -> Result<bool, String> {
+        let vm = jvm()?;
+        vm.attach_current_thread(|env| -> BridgeResult<bool> {
+            let encoded = env.new_string(hex::encode(frame))?;
+            let class = load_app_class(env, BLE_CLASS_DOTTED)?;
+            let raw = env.call_static_method(
+                class,
+                jni_str!("sendChatMeshPacket"),
+                jni_sig!("(Ljava/lang/String;)Z"),
+                &[JValue::Object(&encoded)],
+            );
+            match raw {
+                Ok(result) => result.z().map_err(BridgeError::from),
+                Err(error) => Err(drain_exception(env, &error)),
+            }
+        })
+        .map_err(|error| error.to_string())
+    }
+
+    pub fn chat_mesh_drain() -> Result<Vec<Vec<u8>>, String> {
+        let vm = jvm()?;
+        vm.attach_current_thread(|env| -> BridgeResult<Vec<Vec<u8>>> {
+            let class = load_app_class(env, BLE_CLASS_DOTTED)?;
+            let raw = env.call_static_method(
+                class,
+                jni_str!("drainChatMeshPackets"),
+                jni_sig!("()[Ljava/lang/String;"),
+                &[],
+            );
+            let result = match raw {
+                Ok(result) => result,
+                Err(error) => return Err(drain_exception(env, &error)),
+            };
+            let object = result.l().map_err(BridgeError::from)?;
+            let array: JObjectArray<'_, JString<'_>> =
+                env.cast_local::<JObjectArray<JString>>(object)?;
+            jstring_array_to_vec(env, &array)?
+                .into_iter()
+                .map(|encoded| hex::decode(encoded).map_err(|error| BridgeError(error.to_string())))
+                .collect()
+        })
+        .map_err(|error| error.to_string())
+    }
+
     pub fn ble_permission_state() -> Result<String, String> {
         call_ble_string_with_context(
             "permissionState",
@@ -679,7 +753,8 @@ pub async fn start_ble_discovery(
     {
         let advertising = android::ble_start_advertise(&node_id_prefix_hex)?;
         let scanning = android::ble_start_scan()?;
-        let started = advertising || scanning;
+        let chat = android::chat_mesh_start()?;
+        let started = advertising || scanning || chat;
         if started {
             let local_node_id = state.node.read().await.as_ref().map(|node| node.node_id());
             spawn_ble_poll_loop(
@@ -690,6 +765,13 @@ pub async fn start_ble_discovery(
                 state.ble_polling_active.clone(),
                 android::ble_drain_discoveries,
             );
+            if chat {
+                spawn_chat_mesh_poll_loop(
+                    app_handle,
+                    state.chat_mesh.clone(),
+                    state.chat_mesh_polling_active.clone(),
+                );
+            }
         }
         Ok(started)
     }
@@ -733,7 +815,11 @@ pub async fn stop_ble_discovery(state: State<'_, AppState>) -> Result<(), String
         state
             .ble_polling_active
             .store(false, std::sync::atomic::Ordering::SeqCst);
+        state
+            .chat_mesh_polling_active
+            .store(false, std::sync::atomic::Ordering::SeqCst);
         let _ = android::ble_stop_scan();
+        let _ = android::chat_mesh_stop();
         android::ble_stop_advertise()?;
         Ok(())
     }
@@ -754,7 +840,7 @@ pub async fn stop_ble_discovery(state: State<'_, AppState>) -> Result<(), String
     }
 }
 
-#[cfg(windows)]
+#[cfg(any(target_os = "android", windows))]
 fn spawn_chat_mesh_poll_loop(
     app_handle: AppHandle,
     mesh: std::sync::Arc<tokio::sync::Mutex<crate::node::chat_mesh::ChatMeshRuntime>>,
@@ -775,14 +861,14 @@ fn spawn_chat_mesh_poll_loop(
         let mut sync_ticks = 0_u16;
         while active.load(Ordering::SeqCst) {
             tick.tick().await;
-            match crate::proximity::chat_ble::drain_packets() {
+            match chat_transport_drain() {
                 Ok(packets) => {
-                    for (_, bytes) in packets {
+                    for bytes in packets {
                         let result = mesh.lock().await.ingest_frame(&bytes);
                         match result {
                             Ok(ingress) => {
                                 for frame in ingress.outbound_frames {
-                                    let _ = crate::proximity::chat_ble::send_packet(&frame);
+                                    let _ = chat_transport_send(&frame);
                                 }
                                 for event in ingress.events {
                                     if let Err(error) =
@@ -807,7 +893,7 @@ fn spawn_chat_mesh_poll_loop(
                 announce_ticks = 0;
                 if let Ok(frames) = mesh.lock().await.announce_frames() {
                     for frame in frames {
-                        let _ = crate::proximity::chat_ble::send_packet(&frame);
+                        let _ = chat_transport_send(&frame);
                     }
                 }
             }
@@ -815,12 +901,33 @@ fn spawn_chat_mesh_poll_loop(
                 sync_ticks = 0;
                 if let Ok(frames) = mesh.lock().await.sync_request_frames() {
                     for frame in frames {
-                        let _ = crate::proximity::chat_ble::send_packet(&frame);
+                        let _ = chat_transport_send(&frame);
                     }
                 }
             }
         }
     });
+}
+
+#[cfg(windows)]
+fn chat_transport_drain() -> Result<Vec<Vec<u8>>, String> {
+    crate::proximity::chat_ble::drain_packets()
+        .map(|packets| packets.into_iter().map(|(_, bytes)| bytes).collect())
+}
+
+#[cfg(target_os = "android")]
+fn chat_transport_drain() -> Result<Vec<Vec<u8>>, String> {
+    android::chat_mesh_drain()
+}
+
+#[cfg(windows)]
+fn chat_transport_send(frame: &[u8]) -> Result<bool, String> {
+    crate::proximity::chat_ble::send_packet(frame).map(|_| true)
+}
+
+#[cfg(target_os = "android")]
+fn chat_transport_send(frame: &[u8]) -> Result<bool, String> {
+    android::chat_mesh_send(frame)
 }
 
 #[cfg(any(target_os = "android", windows))]

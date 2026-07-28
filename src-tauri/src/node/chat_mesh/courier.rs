@@ -15,6 +15,10 @@ const MAX_ENVELOPES: usize = 40;
 const MAX_VERIFIED_ENVELOPES: usize = 20;
 const MAX_FAVORITE_PER_DEPOSITOR: usize = 5;
 const MAX_VERIFIED_PER_DEPOSITOR: usize = 2;
+const RECIPIENT_TAG_CONTEXT: [u8; 22] = [
+    98, 105, 116, 99, 104, 97, 116, 45, 99, 111, 117, 114, 105, 101, 114, 45, 116, 97, 103, 45,
+    118, 49,
+];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CourierEnvelope {
@@ -31,10 +35,10 @@ impl CourierEnvelope {
     /// # Errors
     ///
     /// Returns an error only if the HMAC key cannot be initialized.
-    pub fn recipient_tag(static_public_key: &[u8], epoch_day: u64) -> Result<[u8; 16], String> {
+    pub fn recipient_tag(static_public_key: &[u8], epoch_day: u32) -> Result<[u8; 16], String> {
         let mut mac =
             Hmac::<Sha256>::new_from_slice(static_public_key).map_err(|error| error.to_string())?;
-        mac.update(b"lightning-chat-courier-v1");
+        mac.update(&RECIPIENT_TAG_CONTEXT);
         mac.update(&epoch_day.to_be_bytes());
         mac.finalize().into_bytes()[..TAG_BYTES]
             .try_into()
@@ -52,7 +56,9 @@ impl CourierEnvelope {
         put_tlv(&mut out, 0x01, &self.recipient_tag)?;
         put_tlv(&mut out, 0x02, &self.expiry_ms.to_be_bytes())?;
         put_tlv(&mut out, 0x03, &self.ciphertext)?;
-        put_tlv(&mut out, 0x04, &[self.copies])?;
+        if self.copies > 1 {
+            put_tlv(&mut out, 0x04, &[self.copies])?;
+        }
         if let Some(prekey_id) = self.prekey_id {
             put_tlv(&mut out, 0x05, &prekey_id.to_be_bytes())?;
         }
@@ -444,5 +450,23 @@ mod tests {
             CourierDepositTier::Verified,
             1_002,
         ));
+    }
+
+    #[test]
+    fn recipient_tag_matches_the_deployed_fixture() {
+        assert_eq!(
+            hex::encode(CourierEnvelope::recipient_tag(&[0x11; 32], 20_000).expect("tag")),
+            "173d54ec4ce3de7b45d355eea6500dde"
+        );
+    }
+
+    #[test]
+    fn carry_only_envelopes_omit_the_copy_extension() {
+        let encoded = envelope(1_720_000_000_000, 7, 1).encode().expect("encode");
+
+        assert!(!encoded
+            .windows(4)
+            .any(|window| window == [0x04, 0x00, 0x01, 0x01]));
+        assert_eq!(CourierEnvelope::decode(&encoded).expect("decode").copies, 1);
     }
 }
