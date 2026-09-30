@@ -2,13 +2,15 @@
 //!
 //! Runs the same Rust engine as the desktop/mobile app — iroh for transport,
 //! iroh-blobs for content-addressed, BLAKE3-verified transfer — compiled to
-//! WebAssembly and executed in the page. There is no server backend: the
-//! browser dials the sender directly over iroh's relay-over-WebSocket
-//! transport and pulls verified bytes into an in-memory store.
+//! WebAssembly and executed in the page. There is no file-serving backend:
+//! browser peers use iroh's relay-over-WebSocket transport, which may forward
+//! encrypted traffic. The compatibility receive path stores verified payloads
+//! in memory; the streaming path sends Bao-verified chunks to a caller sink.
 //!
-//! Browser peers are relay-only (no hole punching in a browser) and
-//! memory-bound (the blob lives in wasm memory), so the UI enforces a size
-//! gate before fetching. See `docs/browser-receiver-spike.md`.
+//! Browser peers are relay-only (no hole punching in a browser). The UI caps
+//! the in-memory path at 128 MiB; browsers with the File System Access API can
+//! receive larger files through the streaming sink. See
+//! `docs/browser-receiver-spike.md` for the original compatibility spike.
 
 pub mod qr;
 pub mod sender;

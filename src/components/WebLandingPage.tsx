@@ -148,7 +148,7 @@ const baseCaveats = [
   "Sender must stay online until the receiver finishes.",
   "Tickets are capability tokens and should be treated as secrets.",
   "Relay fallback helps connectivity, but it is not cloud storage.",
-  "Browser transfer is beta, relay-only, memory-bound, and requires the tab to stay open.",
+  "Browser transfer is beta and relay-only. Sending is memory-bound; receiving streams verified chunks to disk in supported browsers and otherwise has a 128 MiB aggregate memory limit. Keep the tab open during transfer.",
   "Public speed leadership claims require repeatable benchmark results.",
 ];
 
@@ -181,11 +181,11 @@ const defaultFaqs: Faq[] = [
   { q: "Does it upload files to the cloud?", a: "No cloud upload is part of the product model. The sender stays online and the receiver pulls the file through iroh connectivity." },
   { q: "Does relay fallback store my files?", a: "No. Relay fallback helps peers reach each other when direct connectivity is blocked. It is not a cloud bucket or hosted retention service." },
   { q: "Do I need an account?", a: "No. There is no login, email capture, or paid account tier required to send or receive." },
-  { q: "Can I use it in a browser?", a: "Yes, in public beta. Browser send and receive use the Rust engine compiled to WebAssembly. Browser peers are relay-only, memory-bound, and the tab must stay open during transfer." },
+  { q: "Can I use it in a browser?", a: "Yes, in public beta. Browser send and receive use the Rust engine compiled to WebAssembly. Browser peers are relay-only and the tab must stay open during transfer. Sending is memory-bound with a 2 GiB limit. Receiving streams verified chunks to a chosen file in supported browsers; other browsers use a memory-backed path limited to 128 MiB aggregate." },
   { q: "Does the sender need to stay online?", a: "Yes. The sender must keep Lightning P2P open and keep the content available until the receiver finishes." },
   { q: "Is there a file size limit?", a: "Lightning P2P does not impose an artificial file-size cap. Disk space, filesystem limits, network stability, and time still matter." },
   { q: "Is it available for macOS or Linux?", a: `Yes. v${releaseManifest.currentAppVersion} ships a universal macOS DMG (Intel + Apple Silicon) and Linux AppImage/deb/rpm as unsigned community builds, plus a pipe-friendly CLI. Windows and Android remain the most-tested paths.` },
-  { q: "Can I send and receive without installing anything?", a: "Yes, both. Open /send, drop files, and this tab serves them to whoever opens your link — or open a receive link and receive in-page. The same Rust engine runs in the browser as WebAssembly and verifies received content with BLAKE3. Browser transfers are beta and relay-only; browser sending is memory-bound with a 2 GiB limit, while browser receiving has a conservative 128 MiB limit because received data is held in tab memory. The tab must stay open while sharing or receiving." },
+  { q: "Can I send and receive without installing anything?", a: "Yes, both. Open /send, drop files, and this tab serves them to whoever opens your link — or open a receive link and receive in-page. The same Rust engine runs in the browser as WebAssembly and verifies received content with BLAKE3. Browser transfers are beta and relay-only. Sending is memory-bound with a 2 GiB limit. Receiving streams verified chunks to a chosen file in supported browsers; other browsers use a memory-backed path limited to 128 MiB aggregate. The tab must stay open while sharing or receiving." },
   { q: "Are tickets secret?", a: "Yes. Tickets are capability tokens. Anyone with a valid ticket can request that transfer while the sender is online, so treat tickets like secrets." },
 ];
 
@@ -220,7 +220,7 @@ const capabilityRows: Array<{ index: string; label: string; headline: string; bo
   { index: "01", label: "Transport",      headline: "Direct-first iroh QUIC with relay fallback.",                        body: "Peers dial directly when possible. Behind NAT or firewall, iroh relay assistance keeps the path reachable without becoming hosted storage.", proof: { text: "Architecture docs", href: `${REPO_URL}/blob/main/docs/ARCHITECTURE.md` } },
   { index: "02", label: "Blob transfer",  headline: "iroh-blobs handles content addressing, not custom chunking.",         body: "The Rust engine imports content into iroh-blobs, creates a ticket, and streams content-addressed bytes to the receiver.",          proof: { text: "Sender source",    href: `${REPO_URL}/blob/main/src-tauri/src/transfer/sender.rs` } },
   { index: "03", label: "Verification",   headline: "BLAKE3 ties output to the expected content hash.",                    body: "Receiver verifies bytes as they land. Mismatches surface as structured transfer errors, never silent corruption.",                 proof: { text: "Receiver source",  href: `${REPO_URL}/blob/main/src-tauri/src/transfer/receiver.rs` } },
-  { index: "04", label: "Browser receive", headline: "The same Rust engine runs in the page as WebAssembly.",              body: "Browsers omit the ticket fragment from the HTTP page request, though scripts on the page can read it. Open a receive link in a supported browser and the iroh + BLAKE3 engine fetches files in-page: no install or cloud file hosting, relay-only, with a 128 MiB aggregate memory limit.", proof: { text: "Engine source", href: `${REPO_URL}/blob/main/web-receiver/src/lib.rs` } },
+  { index: "04", label: "Browser receive", headline: "The same Rust engine runs in the page as WebAssembly.",              body: "Browsers omit the ticket fragment from the HTTP page request, though scripts on the page can read it. Open a receive link in a supported browser and the iroh + BLAKE3 engine fetches files in-page. The File System Access API streams verified chunks to a chosen file; browsers without it use a 128 MiB aggregate memory limit. Browser peers use encrypted relay transport, not cloud file hosting.", proof: { text: "Engine source", href: `${REPO_URL}/blob/main/web-receiver/src/lib.rs` } },
   { index: "05", label: "Release trust",  headline: "Installers, checksums, signing status, release notes attached.",      body: "Windows and Android artifacts publish through GitHub Releases with checksum material and documented installer behavior.",        proof: { text: "Release evidence", href: `${REPO_URL}/blob/main/docs/release-evidence.md` } },
   { index: "06", label: "Diagnostics",    headline: "Support data is designed to redact tickets and local paths.",         body: "Diagnostics are gathered locally, redacted, and copied by the user. Transfer secrets are not posted by the frontend automatically.", proof: { text: "Diagnostics source", href: `${REPO_URL}/blob/main/src-tauri/src/commands/diagnostics.rs` } },
 ];
@@ -1124,7 +1124,7 @@ function BrowserReceiveShowcase() {
   const guarantees = [
     { icon: Download, title: "Zero install", copy: "The receive link is the whole product. Open it, the engine loads lazily, the files arrive." },
     { icon: Code2, title: "Same Rust engine", copy: "Not a JavaScript reimplementation — the identical iroh + iroh-blobs core, compiled to WebAssembly." },
-    { icon: ShieldCheck, title: "Same guarantees", copy: "BLAKE3 verifies every chunk in the tab, exactly like the desktop app. No server ever holds the bytes." },
+    { icon: ShieldCheck, title: "Same guarantees", copy: "BLAKE3 verifies every chunk in the tab. An encrypted relay may forward traffic; Lightning does not use it as hosted file storage." },
   ];
   return (
     <section className="section-beam relative mx-auto max-w-[1320px] px-6 py-24 sm:px-10 lg:py-32">
@@ -1153,7 +1153,7 @@ function BrowserReceiveShowcase() {
             ))}
           </div>
           <p className="mt-7 font-mono text-[10.5px] uppercase tracking-[0.16em] text-white/36">
-            beta · relay-only in browsers · memory-bound (desktop app for &gt;2 GB) · <a href="/send" className="text-[var(--signal-green)] underline decoration-dotted underline-offset-2">sending works in the browser too</a>
+            beta · relay-only in browsers · sending uses tab memory · receiving streams to disk in supported browsers · <a href="/send" className="text-[var(--signal-green)] underline decoration-dotted underline-offset-2">sending works in the browser too</a>
           </p>
         </Reveal>
         <Reveal delay={0.12}>

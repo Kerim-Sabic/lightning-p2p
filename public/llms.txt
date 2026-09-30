@@ -30,7 +30,7 @@ Important caveats:
 - Tickets are capability tokens and should be treated as secrets.
 - Relay fallback helps connectivity but is not cloud storage.
 - Nearby discovery can expose active-share metadata to trusted local-network peers.
-- The website can send AND receive fully in-browser (beta): /send serves files from the tab, receive links pull them in-page. The same Rust engine runs as WASM; relay-only, memory-bound (~2 GB), tab must stay open while sharing.
+- The website can send AND receive in-browser (beta): /send serves files from tab memory (warns past 500 MiB, 2 GiB limit); supported browsers stream verified receive chunks to a chosen file, while others have a 128 MiB aggregate memory limit. Browser peers use encrypted relay transport; keep the tab open during transfer.
 - Public speed leadership claims require repeatable benchmark results.
 - Unsigned community Windows builds may show SmartScreen warnings; verify GitHub Releases source and SHA256 checksums before installing.
 

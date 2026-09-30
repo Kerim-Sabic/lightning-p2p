@@ -10,12 +10,16 @@ The public product, Rust package, library crate, and generated executable now us
 
 - ALL networking goes through iroh. No raw sockets, no WebRTC, no HTTP file transfer.
   (The browser receiver is still iroh + iroh-blobs — the same Rust core compiled to
-  WASM — dialing the sender over the iroh relay; browser peers are relay-only and
-  memory-bound.)
+  WASM — dialing the sender over the iroh relay; browser peers are relay-only.
+  Browser sends are memory-bound (2 GiB cap); supported receive browsers stream
+  verified chunks to a chosen file, with a 128 MiB aggregate cap on the in-memory
+  compatibility path.)
 - iroh-blobs handles ALL blob transfer. Do not reinvent chunking, hashing, or resumption.
 - Tauri IPC is the ONLY bridge between frontend and backend in the desktop/mobile app.
   The web receiver (`web-receiver/`) has no backend at all: it runs the same Rust engine
-  as WASM in the page — never a server. No HTTP file servers anywhere.
+  as WASM in the page — never a file server. An encrypted iroh relay may forward
+  transfer traffic; Lightning does not use it as hosted file storage. No HTTP
+  file servers anywhere.
 - Frontend is PURELY presentational. Zero business logic in TypeScript. (The web
   receiver's TS is a thin lazy-loader + save shim over the WASM engine; all transfer
   logic stays in Rust.)

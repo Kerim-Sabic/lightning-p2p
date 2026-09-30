@@ -110,7 +110,7 @@ drop files → share the /receive link  →     open link → "Receive in this b
 
 - **Not a JS reimplementation** — the identical `iroh` + `iroh-blobs` core, compiled to WebAssembly ([`web-receiver/`](web-receiver/)).
 - **No cloud file hosting** — the ticket stays in the URL fragment and is not included in the page request. Browser peers use an encrypted iroh relay because browsers cannot hole-punch; the relay forwards traffic but does not host files.
-- **Honest limits** — browser sending is memory-backed, warns past 500 MiB, and refuses past 2 GiB. Browser receiving currently has a 128 MiB aggregate memory limit. Keep the tab open while sharing or receiving; use the native app for larger transfers.
+- **Honest limits** — browser sending is memory-backed, warns past 500 MiB, and refuses past 2 GiB. Browser receiving streams verified chunks to a chosen file in browsers with the File System Access API; other browsers use a 128 MiB aggregate memory limit. Browser peers use encrypted relay transport, and the tab must stay open while sharing or receiving.
 
 ---
 
@@ -118,7 +118,7 @@ drop files → share the /receive link  →     open link → "Receive in this b
 
 | ✓ Best fit | ✗ Not for |
 | --- | --- |
-| Moving large builds, databases, media between desktops | Browser send shares beyond 2 GiB or browser receives beyond 128 MiB (both browser paths are memory-backed; use the native app for large transfers) |
+| Moving large builds, databases, media between desktops | Browser send shares beyond 2 GiB or memory-backed browser receives beyond 128 MiB (use a supported browser sink or the native app for larger receives) |
 | Desktop ↔ Android sideload testing | iOS (planned, not shipped) |
 | Sharing without cloud accounts, upload caps, or hosted retention | AirDrop protocol compatibility |
 | Open-source workflows that need inspectable artifacts + checksums | Phone-to-phone NFC writing (NFC receive only) |

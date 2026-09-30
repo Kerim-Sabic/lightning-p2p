@@ -434,7 +434,7 @@ export function SendPage() {
                     )}
                     <div className="mt-4 flex flex-wrap gap-x-5 gap-y-1.5 text-[11px] text-[color:var(--muted-copy)]">
                       <span className="inline-flex items-center gap-1.5"><ShieldCheck className="h-3 w-3 text-[var(--signal-green)]" /> BLAKE3-verified on arrival</span>
-                      <span className="inline-flex items-center gap-1.5"><Check className="h-3 w-3 text-[var(--signal-green)]" /> No server ever holds the bytes</span>
+                      <span className="inline-flex items-center gap-1.5"><Check className="h-3 w-3 text-[var(--signal-green)]" /> No cloud file storage</span>
                     </div>
                     <button
                       type="button"

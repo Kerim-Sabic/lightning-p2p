@@ -36,7 +36,7 @@
       },
       {
         "q": "Can I use Lightning P2P in a mobile browser today?",
-        "a": "Receiving works in modern browsers, including mobile: opening a receive link runs the same Rust engine in-page as WebAssembly and BLAKE3-verifies the files as they arrive (beta; relay-only and memory-bound). Sending works from the browser too at /send (same beta limits). Native apps for Windows, macOS, Linux, and Android 10+ stream from disk without the memory cap."
+        "a": "Receiving works in modern browsers, including mobile: opening a receive link runs the same Rust engine in-page as WebAssembly and BLAKE3-verifies the files as they arrive (beta; relay-only). Browsers with the File System Access API stream verified chunks to a chosen file; other browsers use a 128 MiB aggregate memory limit. Sending works from the browser too at /send and is memory-bound up to 2 GiB. Native apps for Windows, macOS, Linux, and Android 10+ stream from disk."
       },
       {
         "q": "Why not promise speed leadership immediately?",
@@ -129,7 +129,7 @@
     "eyebrow": "Send from this browser",
     "heading": "Share files straight from this tab.",
     "intro": "Drop files on the page and this tab serves them to whoever opens your link - their browser, desktop app, or terminal. Content is not uploaded to cloud storage; encrypted relay traffic may carry the connection.",
-    "focus": "Browser sending is beta: files live in tab memory (best under 500 MiB, hard limit 2 GiB), the connection is relay-assisted, and the tab must stay open while peers download. Browser receiving has a separate 128 MiB aggregate memory limit. The native app streams from disk.",
+    "focus": "Browser sending is beta: files live in tab memory (best under 500 MiB, hard limit 2 GiB), browser peers use encrypted relay transport, and the tab must stay open while peers download. Browser receiving streams verified chunks to disk when the File System Access API is available; otherwise it has a 128 MiB aggregate memory limit. The native app streams from disk.",
     "inNav": true,
     "priority": "0.8",
     "related": ["/receive", "/download", "/security"],
@@ -145,7 +145,7 @@
       },
       {
         "q": "How big can a browser share be?",
-        "a": "Browser sending stores files in tab memory, warns past 500 MiB, and refuses past 2 GiB. Browser receiving currently has a separate 128 MiB aggregate limit because its verified receive store is memory-backed. Use the native app for larger transfers."
+        "a": "Browser sending stores files in tab memory, warns past 500 MiB, and refuses past 2 GiB. Browser receiving streams verified chunks to a chosen file in supported browsers; otherwise it has a separate 128 MiB aggregate memory limit. Use the native app for larger sends or when the browser cannot stream to disk."
       },
       {
         "q": "Can I close the tab after sharing the link?",
@@ -208,7 +208,7 @@
       },
       {
         "q": "What happens if the desktop app is not installed?",
-        "a": "The receiver can still get the files: \"Receive in this browser\" runs the transfer engine in-page as WebAssembly (beta; relay-only, with a 128 MiB aggregate receive limit because its store is memory-backed). The ticket also stays in the browser session for anyone who prefers to install the native app first."
+        "a": "The receiver can still get the files: \"Receive in this browser\" runs the transfer engine in-page as WebAssembly (beta; relay-only). Supported browsers stream verified chunks to a chosen file; otherwise browser receive has a 128 MiB aggregate memory limit. The ticket also stays in the browser session for anyone who prefers to install the native app first."
       }
     ]
   },

@@ -21,7 +21,9 @@ linked release evidence.
 - BBR-backed Fast, Extreme, LAN Beast, and Warp profiles.
 - Experimental swarm receive and ticket pre-warming.
 - Browser send and receive beta using the Rust/WASM transfer engine. Browser
-  peers are relay-only, memory-bound, and must remain open during transfer.
+  peers are relay-only and must remain open during transfer. Sending is
+  memory-bound with a 2 GiB cap; receive streams to disk where the File System
+  Access API is available and otherwise has a 128 MiB aggregate memory cap.
 - Windows and Android remain the best-tested native paths. macOS and Linux
   artifacts are unsigned community builds until publisher credentials exist.
 
