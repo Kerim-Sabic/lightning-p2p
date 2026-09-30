@@ -35,6 +35,33 @@ const MAX_DOWNLOAD_ATTEMPTS: u32 = 3;
 /// Initial backoff between transient-failure retries. Doubles each attempt.
 const INITIAL_RETRY_BACKOFF: Duration = Duration::from_secs(1);
 
+/// Optional guards applied to incoming data before it can be exported.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ReceiveLimits {
+    /// Maximum cumulative downloaded bytes.
+    pub max_total_bytes: Option<u64>,
+    /// Maximum number of files in a received collection.
+    pub max_file_count: Option<usize>,
+}
+
+impl ReceiveLimits {
+    /// Bounded receive policy for the automatic single-file handoff.
+    #[must_use]
+    pub const fn ready_to_catch() -> Self {
+        Self {
+            max_total_bytes: Some(100 * 1024 * 1024),
+            max_file_count: Some(1),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ReceiveOptions {
+    profile: TransferProfile,
+    swarm_enabled: bool,
+    limits: ReceiveLimits,
+}
+
 #[derive(Debug, Clone)]
 struct ReceiveSummary {
     hash: String,
@@ -108,6 +135,8 @@ pub struct ReceiveContext {
     /// concurrently over parallel direct connections. Falls back to the
     /// standard sequential path on any non-cancel failure.
     pub swarm_enabled: bool,
+    /// Optional transfer guards; regular user-accepted receives are unlimited.
+    pub limits: ReceiveLimits,
 }
 
 /// Downloads the content addressed by a ticket using the supplied profile and
@@ -131,6 +160,7 @@ pub async fn receive_blob(
         transfer_id,
         mut cancel_rx,
         swarm_enabled,
+        limits,
     } = ctx;
     let peer = ticket.primary().addr().id.to_string();
     let initial_metrics = metrics_for_ticket(&ticket);
@@ -159,8 +189,11 @@ pub async fn receive_blob(
         destination,
         &mut cancel_rx,
         Some(&progress),
-        profile,
-        swarm_enabled,
+        ReceiveOptions {
+            profile,
+            swarm_enabled,
+            limits,
+        },
     )
     .await;
 
@@ -226,8 +259,11 @@ pub async fn receive_ticket(
         destination,
         &mut cancel_rx,
         None,
-        profile,
-        false,
+        ReceiveOptions {
+            profile,
+            swarm_enabled: false,
+            limits: ReceiveLimits::default(),
+        },
     )
     .await?;
     Ok(ReceiveOutcome {
@@ -250,12 +286,24 @@ async fn receive_core(
     destination: PathBuf,
     cancel_rx: &mut watch::Receiver<bool>,
     progress: Option<&ProgressHandle>,
-    profile: TransferProfile,
-    swarm_enabled: bool,
+    options: ReceiveOptions,
 ) -> Result<ReceiveSummary> {
+    let ReceiveOptions {
+        profile,
+        swarm_enabled,
+        limits,
+    } = options;
     let download_started_at = Instant::now();
-    let download =
-        download_with_retry(node, ticket, cancel_rx, progress, profile, swarm_enabled).await?;
+    let download = download_with_retry(
+        node,
+        ticket,
+        cancel_rx,
+        progress,
+        profile,
+        swarm_enabled,
+        limits,
+    )
+    .await?;
     let download_ms = elapsed_ms(download_started_at.elapsed());
 
     // The download just completed but the user may have flipped the cancel
@@ -270,6 +318,9 @@ async fn receive_core(
     // The ticket's size is only a sender-provided estimate. Recompute from
     // the fully verified local blobs before disk preflight and final progress.
     let verified_size = export::ticket_size(node.blobs_client(), ticket.primary()).await?;
+    let verified_file_count =
+        export::ticket_file_count(node.blobs_client(), ticket.primary()).await?;
+    validate_received_limits(verified_size, verified_file_count, limits)?;
     if let Some(progress) = progress {
         progress.set(verified_size, verified_size);
         progress.set_phase(TransferPhase::Verifying);
@@ -334,15 +385,21 @@ async fn download_with_retry(
     progress: Option<&ProgressHandle>,
     profile: TransferProfile,
     swarm_enabled: bool,
+    limits: ReceiveLimits,
 ) -> Result<DownloadSummary> {
-    let mut use_swarm = swarm_enabled && crate::transfer::swarm::eligible(ticket);
+    // The sequential downloader exposes one cumulative progress counter. The
+    // experimental swarm path reports concurrent child progress and cannot
+    // enforce a reliable aggregate limit while data is arriving.
+    let mut use_swarm = limits.max_total_bytes.is_none()
+        && swarm_enabled
+        && crate::transfer::swarm::eligible(ticket);
     let mut backoff = INITIAL_RETRY_BACKOFF;
     let mut attempt = 0u32;
     loop {
         let result = if use_swarm {
             swarm_download(node, ticket, cancel_rx, progress, profile).await
         } else {
-            download_to_store(node, ticket, cancel_rx, progress, profile).await
+            download_to_store(node, ticket, cancel_rx, progress, profile, limits).await
         };
         let error = match result {
             Ok(summary) => return Ok(summary),
@@ -434,6 +491,7 @@ async fn download_to_store(
     cancel_rx: &mut watch::Receiver<bool>,
     progress: Option<&ProgressHandle>,
     profile: TransferProfile,
+    limits: ReceiveLimits,
 ) -> Result<DownloadSummary> {
     // Teach the endpoint how to reach the sender, then dial via the downloader.
     node.register_ticket_addrs(ticket.provider_node_addrs());
@@ -487,6 +545,7 @@ async fn download_to_store(
             }
             DownloadProgressItem::Progress(offset) => {
                 mark_contacted(&mut lifecycle, started_at);
+                validate_download_progress(offset, limits)?;
                 if offset > 0 {
                     mark_first_byte(&mut lifecycle, started_at);
                 }
@@ -712,6 +771,36 @@ fn blob_error(err: &impl ToString) -> LightningP2PError {
     LightningP2PError::Blob(err.to_string())
 }
 
+fn validate_received_limits(size: u64, file_count: usize, limits: ReceiveLimits) -> Result<()> {
+    if limits.max_total_bytes.is_some_and(|limit| size > limit) {
+        return Err(LightningP2PError::Other(receive_limit_error(limits)));
+    }
+    if limits
+        .max_file_count
+        .is_some_and(|limit| file_count > limit)
+    {
+        return Err(LightningP2PError::Other(
+            "Automatic receive included more files than allowed.".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_download_progress(offset: u64, limits: ReceiveLimits) -> Result<()> {
+    if limits.max_total_bytes.is_some_and(|limit| offset > limit) {
+        return Err(LightningP2PError::Other(receive_limit_error(limits)));
+    }
+    Ok(())
+}
+
+fn receive_limit_error(limits: ReceiveLimits) -> String {
+    if limits.max_total_bytes == ReceiveLimits::ready_to_catch().max_total_bytes {
+        "Automatic receive exceeded its 100 MiB limit.".into()
+    } else {
+        "Received content exceeded the configured size limit.".into()
+    }
+}
+
 fn elapsed_ms(duration: std::time::Duration) -> u64 {
     u64::try_from(duration.as_millis()).unwrap_or(u64::MAX)
 }
@@ -728,6 +817,17 @@ mod tests {
     use iroh::{EndpointAddr, PublicKey, TransportAddr};
     use iroh_blobs::BlobFormat;
     use std::str::FromStr;
+
+    #[test]
+    fn ready_to_catch_receive_limits_enforce_actual_size_and_file_count() {
+        let limits = ReceiveLimits::ready_to_catch();
+        assert!(validate_received_limits(100 * 1024 * 1024, 1, limits).is_ok());
+        assert!(validate_received_limits(100 * 1024 * 1024 + 1, 1, limits).is_err());
+        assert!(validate_received_limits(1, 2, limits).is_err());
+        assert!(validate_download_progress(100 * 1024 * 1024, limits).is_ok());
+        assert!(validate_download_progress(100 * 1024 * 1024 + 1, limits).is_err());
+        assert!(validate_received_limits(u64::MAX, usize::MAX, ReceiveLimits::default()).is_ok());
+    }
 
     #[test]
     fn timeout_error_is_user_friendly() {

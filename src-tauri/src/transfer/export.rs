@@ -410,6 +410,18 @@ pub(crate) async fn ticket_size(store: &Store, ticket: &BlobTicket) -> Result<u6
     Ok(total)
 }
 
+/// Returns the number of files represented by a verified ticket.
+pub(crate) async fn ticket_file_count(store: &Store, ticket: &BlobTicket) -> Result<usize> {
+    if !ticket.recursive() {
+        return Ok(1);
+    }
+
+    let collection = Collection::load(ticket.hash(), store)
+        .await
+        .map_err(|error| blob_error(&error))?;
+    Ok(collection.iter().count())
+}
+
 async fn move_staged_collection(
     staging_dir: &Path,
     destination: &Path,

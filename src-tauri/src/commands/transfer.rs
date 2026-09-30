@@ -44,7 +44,13 @@ pub async fn start_receive(
 ) -> CommandResult<String> {
     let ticket = ShareTicket::parse(&ticket)
         .map_err(|_err| command_error(AppErrorPayload::invalid_ticket()))?;
-    start_receive_ticket(state, window, ticket).await
+    start_receive_ticket(
+        state,
+        window,
+        ticket,
+        crate::transfer::receiver::ReceiveLimits::default(),
+    )
+    .await
 }
 
 /// Pre-dials the providers named in a ticket so discovery, NAT holepunching,
@@ -141,7 +147,13 @@ pub async fn start_receive_discovered_share(
         .ticket_for_share(&share_id)
         .await
         .map_err(command_error)?;
-    start_receive_ticket(state, window, ShareTicket::from_blob_ticket(ticket)).await
+    start_receive_ticket(
+        state,
+        window,
+        ShareTicket::from_blob_ticket(ticket),
+        crate::transfer::receiver::ReceiveLimits::default(),
+    )
+    .await
 }
 
 /// Cancels an in-progress transfer.
@@ -204,14 +216,21 @@ pub(crate) async fn start_receive_from_offer(
     state: State<'_, AppState>,
     window: tauri::Window,
     ticket: BlobTicket,
+    auto_catch: bool,
 ) -> CommandResult<String> {
-    start_receive_ticket(state, window, ShareTicket::from_blob_ticket(ticket)).await
+    let limits = if auto_catch {
+        crate::transfer::receiver::ReceiveLimits::ready_to_catch()
+    } else {
+        crate::transfer::receiver::ReceiveLimits::default()
+    };
+    start_receive_ticket(state, window, ShareTicket::from_blob_ticket(ticket), limits).await
 }
 
 async fn start_receive_ticket(
     state: State<'_, AppState>,
     window: tauri::Window,
     ticket: ShareTicket,
+    limits: crate::transfer::receiver::ReceiveLimits,
 ) -> CommandResult<String> {
     let activity = state.node_supervisor.begin_transfer_activity().await;
     let node = state.get_node().await.map_err(command_error)?;
@@ -275,6 +294,7 @@ async fn start_receive_ticket(
         // default on the performance tiers (Extreme, LAN Beast, Warp). The
         // swarm path auto-falls-back to the sequential download on failure.
         swarm_enabled: settings.experimental_swarm_receive || profile.swarm_receive_default,
+        limits,
     };
 
     tauri::async_runtime::spawn(async move {
