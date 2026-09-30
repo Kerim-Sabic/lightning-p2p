@@ -8,7 +8,13 @@ import {
   Send,
   WifiOff,
 } from "lucide-react";
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from "react";
 import { attachAsyncUnlisten } from "../hooks/asyncSubscription";
 import {
   getLocalDeviceIdentity,
@@ -47,6 +53,62 @@ function networkLabel(onlineState: string): string {
     default:
       return "Starting";
   }
+}
+
+interface ReadyToCatchNoticeProps {
+  deviceName: string;
+  expiresAtMs: number;
+  onCancel: () => void;
+  onExpire: () => void;
+}
+
+function ReadyToCatchNotice({
+  deviceName,
+  expiresAtMs,
+  onCancel,
+  onExpire,
+}: ReadyToCatchNoticeProps) {
+  const [secondsRemaining, setSecondsRemaining] = useState(() =>
+    Math.max(0, Math.ceil((expiresAtMs - Date.now()) / 1000)),
+  );
+
+  useEffect(() => {
+    const tick = (): void => {
+      const remaining = Math.max(
+        0,
+        Math.ceil((expiresAtMs - Date.now()) / 1000),
+      );
+      setSecondsRemaining(remaining);
+      if (remaining === 0) onExpire();
+    };
+    const interval = window.setInterval(tick, 1000);
+    const expiry = window.setTimeout(
+      tick,
+      Math.max(0, expiresAtMs - Date.now()),
+    );
+    return () => {
+      window.clearInterval(interval);
+      window.clearTimeout(expiry);
+    };
+  }, [expiresAtMs, onExpire]);
+
+  return (
+    <div className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl border border-sky-300/20 bg-sky-400/[0.07] px-4 py-3">
+      <Clock3 className="h-4 w-4 text-sky-200" />
+      <p className="min-w-0 flex-1 text-xs leading-5 text-sky-50/85">
+        Ready to Catch from <strong>{deviceName}</strong> for {secondsRemaining}
+        s. One supported file up to 100 MiB. Received files never open
+        automatically.
+      </p>
+      <button
+        type="button"
+        className="glass-button min-h-9 px-3 py-1.5 text-xs"
+        onClick={onCancel}
+      >
+        Cancel
+      </button>
+    </div>
+  );
 }
 
 export function DevicesView() {
@@ -91,7 +153,6 @@ export function DevicesView() {
     nodeId: string;
     expiresAtMs: number;
   } | null>(null);
-  const [clockMs, setClockMs] = useState(() => Date.now());
   const pairingNameRef = useRef<HTMLInputElement>(null);
   const previousPairingFocusRef = useRef<HTMLElement | null>(null);
 
@@ -112,30 +173,12 @@ export function DevicesView() {
 
   useEffect(() => {
     if (!readySession) return;
-    const tick = (): void => setClockMs(Date.now());
-    const interval = window.setInterval(tick, 1000);
-    const expiry = window.setTimeout(
-      tick,
-      Math.max(0, readySession.expiresAtMs - Date.now()),
-    );
-    return () => {
-      window.clearInterval(interval);
-      window.clearTimeout(expiry);
-    };
-  }, [readySession]);
-
-  useEffect(() => {
-    if (readySession && readySession.expiresAtMs <= clockMs) {
-      setReadySession(null);
-    }
-  }, [clockMs, readySession]);
-
-  useEffect(() => {
-    if (!readySession) return;
     return () => {
       void setReadyToCatch(readySession.nodeId, false).catch(() => undefined);
     };
   }, [readySession]);
+
+  const expireReadySession = useCallback(() => setReadySession(null), []);
 
   useEffect(() => {
     const clearConsumedSession = (event: Event): void => {
@@ -520,31 +563,16 @@ export function DevicesView() {
           session for one verified device.
         </p>
         {readySession ? (
-          <div className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl border border-sky-300/20 bg-sky-400/[0.07] px-4 py-3">
-            <Clock3 className="h-4 w-4 text-sky-200" />
-            <p className="min-w-0 flex-1 text-xs leading-5 text-sky-50/85">
-              Ready to Catch from{" "}
-              <strong>
-                {pairedDevices.find(
-                  (device) => device.node_id === readySession.nodeId,
-                )?.name ?? "verified device"}
-              </strong>{" "}
-              for{" "}
-              {Math.max(
-                0,
-                Math.ceil((readySession.expiresAtMs - clockMs) / 1000),
-              )}
-              s. One supported file up to 100 MiB. Received files never open
-              automatically.
-            </p>
-            <button
-              type="button"
-              className="glass-button min-h-9 px-3 py-1.5 text-xs"
-              onClick={() => void toggleReadyToCatch(readySession.nodeId)}
-            >
-              Cancel
-            </button>
-          </div>
+          <ReadyToCatchNotice
+            deviceName={
+              pairedDevices.find(
+                (device) => device.node_id === readySession.nodeId,
+              )?.name ?? "verified device"
+            }
+            expiresAtMs={readySession.expiresAtMs}
+            onCancel={() => void toggleReadyToCatch(readySession.nodeId)}
+            onExpire={expireReadySession}
+          />
         ) : null}
         {pairedDevices.length === 0 ? (
           <p className="mt-4 rounded-2xl border border-white/[0.08] bg-white/[0.025] px-4 py-4 text-sm text-slate-400">
