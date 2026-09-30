@@ -37,6 +37,18 @@ const MAX_COLLECTION_ENTRIES: usize = 10_000;
 const MAX_HASH_SEQUENCE_BYTES: u64 = (MAX_COLLECTION_ENTRIES as u64 + 1) * 32;
 const MAX_COLLECTION_METADATA_BYTES: u64 = 8 * 1024 * 1024;
 
+struct StreamAttemptError {
+    message: String,
+    retryable: bool,
+}
+
+fn provider_stream_failure(message: String, delivered_bytes: u64) -> StreamAttemptError {
+    StreamAttemptError {
+        message,
+        retryable: delivered_bytes == 0,
+    }
+}
+
 /// A running browser receiver: an iroh endpoint plus an in-memory blob store.
 pub struct Receiver {
     endpoint: Endpoint,
@@ -219,7 +231,11 @@ impl Receiver {
                     continue;
                 }
             };
-            return stream_verified_blob(connection, hash, expected_size, &mut on_chunk).await;
+            match stream_verified_blob(connection, hash, expected_size, &mut on_chunk).await {
+                Ok(size) => return Ok(size),
+                Err(error) if error.retryable => last_error = error.message,
+                Err(error) => return Err(error.message),
+            }
         }
         Err(last_error)
     }
@@ -412,7 +428,7 @@ async fn stream_verified_blob<F, Fut>(
     hash: Hash,
     expected_size: u64,
     on_chunk: &mut F,
-) -> Result<u64, String>
+) -> Result<u64, StreamAttemptError>
 where
     F: FnMut(Vec<u8>) -> Fut,
     Fut: Future<Output = Result<bool, String>>,
@@ -422,32 +438,68 @@ where
     while let Some(item) = stream.next().await {
         match item {
             iroh_blobs::get::request::GetBlobItem::Item(BaoContentItem::Leaf(leaf)) => {
-                received = received
-                    .checked_add(leaf.data.len() as u64)
-                    .ok_or("received file size overflow")?;
-                if received > expected_size {
-                    return Err("Received bytes exceed the authenticated file size.".into());
+                let next_received =
+                    received
+                        .checked_add(leaf.data.len() as u64)
+                        .ok_or_else(|| StreamAttemptError {
+                            message: "received file size overflow".into(),
+                            retryable: false,
+                        })?;
+                if next_received > expected_size {
+                    return Err(StreamAttemptError {
+                        message: "Received bytes exceed the authenticated file size.".into(),
+                        retryable: false,
+                    });
                 }
-                if !on_chunk(leaf.data.to_vec()).await? {
-                    return Err("Browser receive cancelled.".into());
+                match on_chunk(leaf.data.to_vec()).await {
+                    Ok(true) => received = next_received,
+                    Ok(false) => {
+                        return Err(StreamAttemptError {
+                            message: "Browser receive cancelled.".into(),
+                            retryable: false,
+                        });
+                    }
+                    Err(message) => {
+                        return Err(StreamAttemptError {
+                            message,
+                            retryable: false,
+                        });
+                    }
                 }
             }
             iroh_blobs::get::request::GetBlobItem::Item(_) => {}
             iroh_blobs::get::request::GetBlobItem::Done(_) => {
                 if received != expected_size {
-                    return Err("The verified file length does not match its manifest.".into());
+                    return Err(StreamAttemptError {
+                        message: "The verified file length does not match its manifest.".into(),
+                        retryable: false,
+                    });
                 }
                 return Ok(received);
             }
             iroh_blobs::get::request::GetBlobItem::Error(error) => {
-                return Err(error.to_string());
+                return Err(provider_stream_failure(error.to_string(), received));
             }
         }
     }
-    Err("The sender stopped before the file was fully verified.".into())
+    Err(provider_stream_failure(
+        "The sender stopped before the file was fully verified.".into(),
+        received,
+    ))
 }
 
 /// Provider endpoint ids the downloader may dial for the content.
 fn provider_ids(parsed: &ParsedTicket) -> Vec<iroh::EndpointId> {
     parsed.providers.iter().map(|t| t.addr().id).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::provider_stream_failure;
+
+    #[test]
+    fn only_provider_failures_before_any_output_can_fall_back() {
+        assert!(provider_stream_failure("unavailable".into(), 0).retryable);
+        assert!(!provider_stream_failure("disconnected".into(), 1).retryable);
+    }
 }
