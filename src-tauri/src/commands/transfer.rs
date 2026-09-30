@@ -192,7 +192,10 @@ pub async fn get_transfer_history(
     state: State<'_, AppState>,
 ) -> Result<Vec<TransferRecord>, String> {
     let node = state.get_node().await.map_err(String::from)?;
-    history::load_all(node.db()).map_err(String::from)
+    tokio::task::spawn_blocking(move || history::load_all(node.db()))
+        .await
+        .map_err(|error| error.to_string())?
+        .map_err(String::from)
 }
 
 /// Clears persisted transfer history.
@@ -203,7 +206,10 @@ pub async fn get_transfer_history(
 #[tauri::command]
 pub async fn clear_transfer_history(state: State<'_, AppState>) -> Result<(), String> {
     let node = state.get_node().await.map_err(String::from)?;
-    history::clear_all(node.db()).map_err(String::from)
+    tokio::task::spawn_blocking(move || history::clear_all(node.db()))
+        .await
+        .map_err(|error| error.to_string())?
+        .map_err(String::from)
 }
 
 /// Shared helper that powers both the regular ticket-receive path and the
