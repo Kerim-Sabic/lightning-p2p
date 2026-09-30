@@ -186,10 +186,7 @@ export function OfferPrompt() {
               <br />
               Save to {folderName || "your configured receive folder"}
               <br />
-              {pairedSender
-                ? "Name verified by your saved device pairing"
-                : "Sender name is self-reported and may be spoofed"}
-              · Peer{" "}
+              Offer details are supplied by sender · Peer{" "}
               <span className="font-mono">
                 {offer.sender_node_id.slice(0, 12)}…
               </span>
