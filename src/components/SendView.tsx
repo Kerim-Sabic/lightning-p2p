@@ -22,8 +22,6 @@ import {
   useRef,
   useState,
   type DragEvent,
-  type KeyboardEvent,
-  type MouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { formatBytes } from "../lib/format";
@@ -306,14 +304,6 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
     }
   };
 
-  const handlePrimaryStageAction = async (): Promise<void> => {
-    if (!nativeRuntime) {
-      return;
-    }
-
-    await pickShareFiles();
-  };
-
   const handleSendToDevice = async (device: NearbyDevice): Promise<void> => {
     let paths = shareSelection.map((item) => item.path);
     if (paths.length === 0) {
@@ -494,39 +484,6 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
     event.dataTransfer.setData("application/x-lightning-selection", "files");
   };
 
-  const handleDropZoneClick = (event: MouseEvent<HTMLDivElement>): void => {
-    const target = event.target;
-    if (!(target instanceof HTMLElement)) {
-      return;
-    }
-
-    if (target.closest("[data-stage-action='true']")) {
-      return;
-    }
-
-    void handlePrimaryStageAction();
-  };
-
-  const handleDropZoneKeyDown = (
-    event: KeyboardEvent<HTMLDivElement>,
-  ): void => {
-    if (event.key !== "Enter" && event.key !== " ") {
-      return;
-    }
-
-    const target = event.target;
-    if (!(target instanceof HTMLElement)) {
-      return;
-    }
-
-    if (target.closest("[data-stage-action='true']")) {
-      return;
-    }
-
-    event.preventDefault();
-    void handlePrimaryStageAction();
-  };
-
   return (
     <div className="space-y-4">
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.08fr)_minmax(320px,0.92fr)]">
@@ -540,15 +497,6 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
               ? "border-sky-400/45 bg-sky-500/[0.06]"
               : "border-white/[0.08] bg-white/[0.02]"
           }`}
-          onClick={handleDropZoneClick}
-          onKeyDown={handleDropZoneKeyDown}
-          tabIndex={nativeRuntime ? 0 : -1}
-          role={nativeRuntime ? "button" : undefined}
-          aria-label={
-            nativeRuntime
-              ? "Choose files to share or drop files here"
-              : undefined
-          }
         >
           <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
             <div className="min-w-0">
@@ -592,7 +540,6 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
             </div>
 
             <div
-              data-stage-action="true"
               className={`flex flex-col gap-3 ${mobileRuntime ? "w-full" : "w-full max-w-[320px]"}`}
             >
               <button
