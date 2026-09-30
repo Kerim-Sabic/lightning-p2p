@@ -19,4 +19,5 @@ pub use nearby::{
 pub use nearby_offer::{IncomingOffer, OfferInbox, OfferRejection, PendingOffer};
 pub use nearby_protocol::NearbyShareProtocol;
 pub use status::{NodeOnlineState, NodeRuntimeStatus};
+pub(crate) use supervisor::NearbyServices;
 pub use supervisor::{NodeSupervisor, NodeSupervisorPhase, NodeSupervisorStatus};

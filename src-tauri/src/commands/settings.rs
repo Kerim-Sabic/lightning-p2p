@@ -1,6 +1,7 @@
 //! Commands for persisted application settings and packaged-app actions.
 
 use crate::commands::{command_error, CommandResult};
+use crate::node::NearbyServices;
 use crate::storage::settings::{AppSettings, RelayModeSetting};
 use crate::transfer::TransferMode;
 use crate::AppState;
@@ -310,8 +311,11 @@ async fn restart_node_after_endpoint_setting(
         app,
         settings,
         &state.transfers,
-        state.nearby_shares.clone(),
-        state.offer_inbox.clone(),
+        NearbyServices::new(
+            state.nearby_shares.clone(),
+            state.offer_inbox.clone(),
+            state.blocked_peers.clone(),
+        ),
         reason,
     ))
     .await

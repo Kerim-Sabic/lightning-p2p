@@ -1042,6 +1042,19 @@ export async function respondToOffer(
   return invoke<string | null>("respond_to_offer", { offerId, accept });
 }
 
+export async function getBlockedNearbyPeers(): Promise<string[]> {
+  if (!isDesktopRuntime()) return [];
+  return invoke<string[]>("get_blocked_nearby_peers");
+}
+
+export async function setNearbyPeerBlocked(
+  nodeId: string,
+  blocked: boolean,
+): Promise<string[]> {
+  requireNativeRuntime("Blocking a nearby sender");
+  return invoke<string[]>("set_nearby_peer_blocked", { nodeId, blocked });
+}
+
 export async function cancelTransfer(transferId: string): Promise<void> {
   requireNativeRuntime("Transfer cancellation");
   await invoke("cancel_transfer", { transferId });

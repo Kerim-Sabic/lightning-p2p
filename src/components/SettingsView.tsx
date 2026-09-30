@@ -23,6 +23,7 @@ import {
 import { useEffect, useState } from "react";
 import {
   collectDiagnosticBundle,
+  getBlockedNearbyPeers,
   isDesktopRuntime,
   isMobileRuntime,
   TRANSFER_MODE_DESCRIPTORS,
@@ -30,6 +31,7 @@ import {
   type NodeStatus,
   type PlatformProfile,
   type RelayMode,
+  setNearbyPeerBlocked,
   writeClipboardText,
 } from "../lib/tauri";
 import { useTransferStore, type UpdateState } from "../stores/transferStore";
@@ -239,10 +241,36 @@ export function SettingsView() {
   const [peerCacheState, setPeerCacheState] = useState<
     "idle" | "cleared" | "error"
   >("idle");
+  const [blockedPeers, setBlockedPeers] = useState<string[]>([]);
+  const [blockedPeersLoaded, setBlockedPeersLoaded] = useState(false);
+  const [blockedPeersError, setBlockedPeersError] = useState<string | null>(
+    null,
+  );
 
   useEffect(() => {
     setCustomRelayUrlInput(settings?.custom_relay_url ?? "");
   }, [settings?.custom_relay_url]);
+
+  useEffect(() => {
+    if (!nativeRuntime) return;
+    let active = true;
+    void getBlockedNearbyPeers()
+      .then((ids) => {
+        if (active) {
+          setBlockedPeers(ids);
+          setBlockedPeersLoaded(true);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setBlockedPeersError("Could not load blocked senders.");
+          setBlockedPeersLoaded(true);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [nativeRuntime]);
 
   const updateBusy =
     updateState.phase === "checking" || updateState.phase === "downloading";
@@ -284,6 +312,16 @@ export function SettingsView() {
     } catch {
       setPeerCacheState("error");
       window.setTimeout(() => setPeerCacheState("idle"), 2200);
+    }
+  };
+
+  const handleUnblockPeer = async (nodeId: string): Promise<void> => {
+    try {
+      const ids = await setNearbyPeerBlocked(nodeId, false);
+      setBlockedPeers(ids);
+      setBlockedPeersError(null);
+    } catch {
+      setBlockedPeersError("Could not unblock this sender. Try again.");
     }
   };
 
@@ -610,6 +648,67 @@ export function SettingsView() {
           ) : null}
         </article>
       </section>
+
+      {nativeRuntime ? (
+        <section
+          className="glass-panel p-6"
+          aria-labelledby="blocked-senders-title"
+        >
+          <div className="flex items-start gap-3">
+            <div className="glass-icon">
+              <ShieldCheck className="h-5 w-5 text-sky-200" />
+            </div>
+            <div>
+              <h2
+                id="blocked-senders-title"
+                className="text-sm font-medium text-white"
+              >
+                Blocked nearby senders
+              </h2>
+              <p className="mt-1 text-[13px] text-slate-300/72">
+                Blocked device identities are rejected before an offer prompt
+                appears.
+              </p>
+            </div>
+          </div>
+          {blockedPeersError ? (
+            <p role="alert" className="mt-3 text-sm text-rose-200">
+              {blockedPeersError}
+            </p>
+          ) : !blockedPeersLoaded ? (
+            <p className="mt-4 text-sm text-slate-400">
+              Loading blocked senders…
+            </p>
+          ) : blockedPeers.length === 0 ? (
+            <p className="mt-4 text-sm text-slate-400">
+              No senders are blocked.
+            </p>
+          ) : (
+            <ul className="mt-4 divide-y divide-white/8">
+              {blockedPeers.map((nodeId) => (
+                <li
+                  key={nodeId}
+                  className="flex min-h-14 items-center gap-3 py-2"
+                >
+                  <span
+                    className="min-w-0 flex-1 truncate font-mono text-sm text-slate-200"
+                    title={nodeId}
+                  >
+                    {nodeId.slice(0, 16)}…
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => void handleUnblockPeer(nodeId)}
+                    className="glass-button min-h-11 px-3 text-sm text-slate-100"
+                  >
+                    Unblock
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      ) : null}
 
       <section className="glass-panel p-6">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">

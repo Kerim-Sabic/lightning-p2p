@@ -130,6 +130,39 @@ pub async fn offer_share_to_peer(
     }
 }
 
+/// Returns endpoint identities blocked from sending nearby offers.
+///
+/// # Errors
+///
+/// Returns an error if application state cannot be accessed.
+#[tauri::command]
+pub async fn get_blocked_nearby_peers(state: State<'_, AppState>) -> Result<Vec<String>, String> {
+    Ok(state.blocked_peers.list().await)
+}
+
+/// Blocks or unblocks a nearby sender by its authenticated endpoint identity.
+/// Blocking immediately rejects that peer's pending offers as well.
+///
+/// # Errors
+///
+/// Returns an error if the identity is invalid or the updated block list cannot be saved.
+#[tauri::command]
+pub async fn set_nearby_peer_blocked(
+    state: State<'_, AppState>,
+    node_id: String,
+    blocked: bool,
+) -> CommandResult<Vec<String>> {
+    let peer =
+        EndpointId::from_str(&node_id).map_err(|_| command_error("Invalid device identity."))?;
+    let blocked_peers = state
+        .blocked_peers
+        .set_blocked(&node_id, blocked)
+        .await
+        .map_err(command_error)?;
+    state.offer_inbox.set_peer_blocked(peer, blocked).await;
+    Ok(blocked_peers)
+}
+
 /// Resolves a pending inbound offer with the user's decision.
 ///
 /// On `accept = true` the receiver immediately starts a blob receive against

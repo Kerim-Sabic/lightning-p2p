@@ -6,6 +6,7 @@ use super::{
 };
 use crate::error::{LightningP2PError, Result};
 use crate::node::{NearbyShareRegistry, OfferInbox};
+use crate::storage::blocked_peers::BlockedPeers;
 use crate::storage::settings::AppSettings;
 use crate::transfer::queue::TransferQueue;
 use serde::Serialize;
@@ -17,6 +18,28 @@ use tokio::sync::{Mutex, RwLock};
 
 const NODE_SUPERVISOR_STATUS_EVENT: &str = "node-supervisor-status";
 const NODE_START_TIMEOUT: Duration = Duration::from_secs(25);
+
+/// Nearby services that must remain attached to the node across restarts.
+#[derive(Debug, Clone)]
+pub(crate) struct NearbyServices {
+    registry: NearbyShareRegistry,
+    offers: OfferInbox,
+    blocked_peers: BlockedPeers,
+}
+
+impl NearbyServices {
+    pub(crate) fn new(
+        registry: NearbyShareRegistry,
+        offers: OfferInbox,
+        blocked_peers: BlockedPeers,
+    ) -> Self {
+        Self {
+            registry,
+            offers,
+            blocked_peers,
+        }
+    }
+}
 
 /// Coarse supervisor phase surfaced to diagnostics and the frontend.
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
@@ -95,19 +118,17 @@ impl NodeSupervisor {
     }
 
     /// Starts the node during app startup.
-    pub async fn start(
+    pub(crate) async fn start(
         &self,
         app: AppHandle,
         settings: AppSettings,
-        nearby_shares: NearbyShareRegistry,
-        offer_inbox: OfferInbox,
+        nearby: NearbyServices,
     ) {
         if let Err(error) = self
             .replace_node(
                 app,
                 settings,
-                nearby_shares,
-                offer_inbox,
+                nearby,
                 NodeSupervisorPhase::Starting,
                 "app_startup",
             )
@@ -126,13 +147,12 @@ impl NodeSupervisor {
     ///
     /// Returns `LightningP2PError` if the replacement node cannot be built or
     /// if the persisted node identity changes unexpectedly during restart.
-    pub async fn restart_if_idle(
+    pub(crate) async fn restart_if_idle(
         &self,
         app: AppHandle,
         settings: AppSettings,
         transfers: &TransferQueue,
-        nearby_shares: NearbyShareRegistry,
-        offer_inbox: OfferInbox,
+        nearby: NearbyServices,
         reason: &'static str,
     ) -> Result<bool> {
         if transfers.has_active().await {
@@ -152,8 +172,7 @@ impl NodeSupervisor {
         self.replace_node(
             app,
             settings,
-            nearby_shares,
-            offer_inbox,
+            nearby,
             NodeSupervisorPhase::Restarting,
             reason,
         )
@@ -165,8 +184,7 @@ impl NodeSupervisor {
         &self,
         app: AppHandle,
         settings: AppSettings,
-        nearby_shares: NearbyShareRegistry,
-        offer_inbox: OfferInbox,
+        nearby: NearbyServices,
         phase: NodeSupervisorPhase,
         reason: &'static str,
     ) -> Result<()> {
@@ -181,10 +199,12 @@ impl NodeSupervisor {
             *runtime = NodeRuntimeStatus::starting();
         }
 
-        nearby_shares
+        nearby
+            .registry
             .set_local_discovery_enabled(settings.local_discovery_enabled)
             .await;
-        nearby_shares
+        nearby
+            .registry
             .set_bluetooth_discovery_enabled(settings.bluetooth_discovery_enabled)
             .await;
 
@@ -200,10 +220,7 @@ impl NodeSupervisor {
             }
         }
 
-        match self
-            .build_node(&app, settings, nearby_shares.clone(), offer_inbox)
-            .await
-        {
+        match self.build_node(&app, settings, nearby.clone()).await {
             Ok(node) => {
                 if let Some(expected) = old_node_id {
                     if node.node_id() != expected {
@@ -227,7 +244,7 @@ impl NodeSupervisor {
                     let mut runtime = self.runtime_status.write().await;
                     *runtime = runtime_status;
                 }
-                spawn_nearby_discovery_loop(app.clone(), endpoint, nearby_shares, lan_flag, mdns);
+                spawn_nearby_discovery_loop(app.clone(), endpoint, nearby.registry, lan_flag, mdns);
                 self.set_status(
                     &app,
                     NodeSupervisorStatus::new(NodeSupervisorPhase::Idle, Some(reason.into()), None),
@@ -247,14 +264,14 @@ impl NodeSupervisor {
         &self,
         app: &AppHandle,
         settings: AppSettings,
-        nearby_shares: NearbyShareRegistry,
-        offer_inbox: OfferInbox,
+        nearby: NearbyServices,
     ) -> Result<LightningP2PNode> {
         let relay_url = settings.resolved_custom_relay_url()?;
         let profile = settings.transfer_mode.profile();
         let nearby_protocol = Arc::new(NearbyShareProtocol::new(
-            nearby_shares,
-            offer_inbox,
+            nearby.registry,
+            nearby.offers,
+            nearby.blocked_peers,
             app.clone(),
         ));
         let chat_protocol = Arc::new(ChatProtocol::new(app.clone()));

@@ -11,7 +11,7 @@ use crate::error::{LightningP2PError, Result};
 use iroh::EndpointId;
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     sync::Arc,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
@@ -132,6 +132,9 @@ pub enum OfferRejection {
     /// The offer contains a field that is too large or empty.
     #[error("Offer contains invalid or oversized metadata")]
     InvalidMetadata,
+    /// The authenticated sender is blocked from sending nearby offers.
+    #[error("Sender is blocked")]
+    Blocked,
 }
 
 /// In-memory inbox of inbound offers waiting for a user decision.
@@ -143,6 +146,7 @@ pub struct OfferInbox {
 #[derive(Debug, Default)]
 struct OfferInboxState {
     pending: HashMap<String, PendingOffer>,
+    blocked_peers: HashSet<String>,
     /// IDs are reserved on first receipt, not just while awaiting consent, so
     /// an authenticated peer cannot replay a resolved offer during this window.
     seen_until: HashMap<(String, String), Instant>,
@@ -195,6 +199,9 @@ impl OfferInbox {
         let mut guard = self.state.lock().await;
         let now = Instant::now();
         guard.seen_until.retain(|_, expires| *expires > now);
+        if guard.blocked_peers.contains(&offer.sender_node_id) {
+            return Err(OfferRejection::Blocked);
+        }
         let replay_key = (offer.sender_node_id.clone(), offer.offer_id.clone());
         let peer_offers = guard
             .pending
@@ -252,6 +259,41 @@ impl OfferInbox {
     pub async fn drop_offer(&self, offer_id: &str) {
         let mut guard = self.state.lock().await;
         guard.pending.remove(offer_id);
+    }
+
+    /// Applies one peer's block state atomically with offer admission.
+    pub async fn set_peer_blocked(&self, peer: EndpointId, blocked: bool) {
+        let node_id = peer.to_string();
+        let pending = {
+            let mut guard = self.state.lock().await;
+            if blocked {
+                guard.blocked_peers.insert(node_id.clone());
+            } else {
+                guard.blocked_peers.remove(&node_id);
+            }
+            if blocked {
+                let ids = guard
+                    .pending
+                    .iter()
+                    .filter(|(_, pending)| pending.offer.sender_node_id == node_id)
+                    .map(|(offer_id, _)| offer_id.clone())
+                    .collect::<Vec<_>>();
+                ids.into_iter()
+                    .filter_map(|offer_id| guard.pending.remove(&offer_id))
+                    .collect::<Vec<_>>()
+            } else {
+                Vec::new()
+            }
+        };
+        for pending_offer in pending {
+            let _ = pending_offer.responder.send(OfferDecision::Rejected);
+        }
+    }
+
+    /// Seeds persisted block identities before the nearby protocol starts.
+    pub async fn load_blocked_peers(&self, peers: impl IntoIterator<Item = String>) {
+        let mut guard = self.state.lock().await;
+        guard.blocked_peers.extend(peers);
     }
 }
 
@@ -516,5 +558,28 @@ mod tests {
             Err(OfferRejection::InvalidMetadata)
         ));
         assert!(inbox.snapshot().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn blocking_peer_rejects_pending_and_future_offers() {
+        let inbox = OfferInbox::new();
+        let peer = iroh::SecretKey::from_bytes(&[9; 32]).public();
+        let mut offer = sample_offer("blocked-pending");
+        offer.sender_node_id = peer.to_string();
+        let mut decision = inbox.record(offer).await.expect("record offer");
+
+        inbox.set_peer_blocked(peer, true).await;
+        assert_eq!(
+            decision.try_recv().expect("pending offer is rejected"),
+            OfferDecision::Rejected
+        );
+        assert!(inbox.snapshot().await.is_empty());
+
+        let mut future = sample_offer("blocked-future");
+        future.sender_node_id = peer.to_string();
+        assert!(matches!(
+            inbox.record(future).await,
+            Err(OfferRejection::Blocked)
+        ));
     }
 }

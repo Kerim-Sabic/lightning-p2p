@@ -17,6 +17,7 @@ interface IncomingOfferStore {
   outbound: Record<string, OutboundOfferStatus>;
   pushIncoming: (offer: IncomingOffer) => void;
   dismissIncoming: (offerId: string) => void;
+  dismissFromPeer: (nodeId: string) => void;
   clearIncoming: () => void;
   recordOutbound: (status: OutboundOfferStatus) => void;
   applyOfferResolved: (resolved: OfferResolved) => void;
@@ -40,6 +41,11 @@ export const useIncomingOfferStore = create<IncomingOfferStore>((set) => ({
   dismissIncoming: (offerId) =>
     set((state) => ({
       queue: state.queue.filter((offer) => offer.offer_id !== offerId),
+    })),
+
+  dismissFromPeer: (nodeId) =>
+    set((state) => ({
+      queue: state.queue.filter((offer) => offer.sender_node_id !== nodeId),
     })),
 
   clearIncoming: () => set({ queue: [] }),

@@ -19,11 +19,12 @@ pub mod transfer;
 
 use error::{LightningP2PError, Result};
 use node::{
-    chat_mesh::ChatMeshRuntime, LightningP2PNode, NearbyShareRegistry, NodeRuntimeStatus,
-    NodeSupervisor, OfferInbox,
+    chat_mesh::ChatMeshRuntime, LightningP2PNode, NearbyServices, NearbyShareRegistry,
+    NodeRuntimeStatus, NodeSupervisor, OfferInbox,
 };
 use std::sync::{atomic::AtomicBool, Arc};
 use storage::{
+    blocked_peers::BlockedPeers,
     paired_devices::PairedDevices,
     settings::{resolve_app_data_dir, SettingsState},
 };
@@ -45,6 +46,8 @@ pub struct AppState {
     pub settings: SettingsState,
     /// Persisted user-confirmed public device identities.
     pub paired_devices: PairedDevices,
+    /// Persisted identities blocked from sending nearby file offers.
+    pub blocked_peers: BlockedPeers,
     /// In-memory registry of active transfers.
     pub transfers: TransferQueue,
     /// Nearby-share discovery state for LAN-based receive flows.
@@ -72,6 +75,10 @@ impl AppState {
         let paired_devices = PairedDevices::load(&data_dir).unwrap_or_else(|error| {
             tracing::error!(%error, "could not load saved devices; using an in-memory empty list");
             PairedDevices::in_memory(&data_dir)
+        });
+        let blocked_peers = BlockedPeers::load(&data_dir).unwrap_or_else(|error| {
+            tracing::error!(%error, "could not load nearby block list; using an in-memory empty list");
+            BlockedPeers::in_memory()
         });
         let node = Arc::new(RwLock::new(None));
         let node_runtime = Arc::new(RwLock::new(NodeRuntimeStatus::starting()));
@@ -107,6 +114,7 @@ impl AppState {
             node_supervisor,
             settings,
             paired_devices,
+            blocked_peers,
             transfers: TransferQueue::new(),
             nearby_shares: NearbyShareRegistry::new(true),
             offer_inbox: OfferInbox::new(),
@@ -186,12 +194,19 @@ fn spawn_node_startup(handle: tauri::AppHandle) {
         let state = handle.state::<AppState>();
         let settings = state.settings.snapshot().await;
         state
+            .offer_inbox
+            .load_blocked_peers(state.blocked_peers.list().await)
+            .await;
+        state
             .node_supervisor
             .start(
                 handle.clone(),
                 settings,
-                state.nearby_shares.clone(),
-                state.offer_inbox.clone(),
+                NearbyServices::new(
+                    state.nearby_shares.clone(),
+                    state.offer_inbox.clone(),
+                    state.blocked_peers.clone(),
+                ),
             )
             .await;
     });
@@ -265,6 +280,8 @@ pub fn run() {
             commands::nearby::clear_peer_cache,
             commands::nearby::offer_share_to_peer,
             commands::nearby::respond_to_offer,
+            commands::nearby::set_nearby_peer_blocked,
+            commands::nearby::get_blocked_nearby_peers,
             commands::diagnostics::get_network_diagnostics,
             commands::diagnostics::get_ble_discovery_status,
             commands::diagnostics::collect_diagnostic_bundle,

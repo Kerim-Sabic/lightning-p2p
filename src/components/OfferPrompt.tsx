@@ -1,7 +1,7 @@
 import { Check, Inbox, LaptopMinimal, X } from "lucide-react";
 import { useState } from "react";
 import { formatBytes } from "../lib/format";
-import { respondToOffer } from "../lib/tauri";
+import { respondToOffer, setNearbyPeerBlocked } from "../lib/tauri";
 import { useIncomingOfferStore } from "../stores/incomingOfferStore";
 import { useTransferStore } from "../stores/transferStore";
 
@@ -9,6 +9,9 @@ export function OfferPrompt() {
   const queue = useIncomingOfferStore((state) => state.queue);
   const dismissIncoming = useIncomingOfferStore(
     (state) => state.dismissIncoming,
+  );
+  const dismissFromPeer = useIncomingOfferStore(
+    (state) => state.dismissFromPeer,
   );
   const setError = useTransferStore((state) => state.setError);
   const [pending, setPending] = useState(false);
@@ -31,6 +34,20 @@ export function OfferPrompt() {
       // The Rust side already cleared the offer; clear locally too so the
       // user isn't stuck on a stale modal.
       dismissIncoming(offer.offer_id);
+    } finally {
+      setPending(false);
+    }
+  };
+
+  const handleBlock = async (): Promise<void> => {
+    setPending(true);
+    try {
+      await setNearbyPeerBlocked(offer.sender_node_id, true);
+      dismissFromPeer(offer.sender_node_id);
+    } catch (error) {
+      setError(
+        error instanceof Error ? error.message : "Could not block sender",
+      );
     } finally {
       setPending(false);
     }
@@ -84,25 +101,35 @@ export function OfferPrompt() {
           </p>
         ) : null}
 
-        <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
           <button
             type="button"
-            onClick={() => void handleRespond(false)}
+            onClick={() => void handleBlock()}
             disabled={pending}
-            className="glass-button inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm text-slate-100"
+            className="min-h-11 rounded-xl px-3 text-sm font-medium text-slate-300 underline-offset-4 hover:text-white hover:underline disabled:opacity-55"
           >
-            <X className="h-4 w-4" />
-            Decline
+            Block this sender
           </button>
-          <button
-            type="button"
-            onClick={() => void handleRespond(true)}
-            disabled={pending}
-            className="btn-success inline-flex items-center justify-center gap-2 px-4 py-2.5"
-          >
-            <Check className="h-4 w-4" />
-            {pending ? "Accepting..." : "Accept"}
-          </button>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <button
+              type="button"
+              onClick={() => void handleRespond(false)}
+              disabled={pending}
+              className="glass-button inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm text-slate-100"
+            >
+              <X className="h-4 w-4" />
+              Decline
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleRespond(true)}
+              disabled={pending}
+              className="btn-success inline-flex items-center justify-center gap-2 px-4 py-2.5"
+            >
+              <Check className="h-4 w-4" />
+              {pending ? "Accepting..." : "Accept"}
+            </button>
+          </div>
         </div>
 
         <p className="mt-3 text-[11px] text-slate-500">

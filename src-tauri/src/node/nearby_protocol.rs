@@ -12,6 +12,7 @@ use super::nearby_offer::{
     handle_offer_request, OfferDecision, OfferInbox, OfferResponseMessage, OfferShareMessage,
 };
 use crate::error::{LightningP2PError, Result};
+use crate::storage::blocked_peers::BlockedPeers;
 use iroh::{
     endpoint::Connection,
     protocol::{AcceptError, ProtocolHandler},
@@ -104,16 +105,23 @@ pub(crate) struct RemoteShareEnvelope {
 pub struct NearbyShareProtocol {
     registry: NearbyShareRegistry,
     offers: OfferInbox,
+    blocked_peers: BlockedPeers,
     app_handle: AppHandle,
 }
 
 impl NearbyShareProtocol {
     /// Creates a new nearby-share protocol handler.
     #[must_use]
-    pub fn new(registry: NearbyShareRegistry, offers: OfferInbox, app_handle: AppHandle) -> Self {
+    pub fn new(
+        registry: NearbyShareRegistry,
+        offers: OfferInbox,
+        blocked_peers: BlockedPeers,
+        app_handle: AppHandle,
+    ) -> Self {
         Self {
             registry,
             offers,
+            blocked_peers,
             app_handle,
         }
     }
@@ -161,14 +169,16 @@ impl NearbyShareProtocol {
                 }
             }
             NearbyRequest::OfferShare { offer, .. } => {
-                let response = handle_offer_request(
-                    &self.app_handle,
-                    &self.offers,
-                    offer,
-                    connection.remote_id(),
-                    connection,
-                )
-                .await?;
+                let peer = connection.remote_id();
+                let response = if self.blocked_peers.contains(peer).await {
+                    OfferResponseMessage {
+                        offer_id: offer.offer_id,
+                        decision: OfferDecision::Rejected,
+                    }
+                } else {
+                    handle_offer_request(&self.app_handle, &self.offers, offer, peer, connection)
+                        .await?
+                };
                 NearbyResponse::OfferDecision {
                     protocol_version: PROTOCOL_VERSION,
                     response,
