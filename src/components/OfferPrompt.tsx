@@ -1,6 +1,13 @@
-import { Check, Inbox, LaptopMinimal, X } from "lucide-react";
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { Check, File, Inbox, LaptopMinimal, X } from "lucide-react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent,
+} from "react";
 import { attachAsyncUnlisten } from "../hooks/asyncSubscription";
+import type { FlickDirection } from "../lib/flickGesture";
 import { formatBytes } from "../lib/format";
 import {
   listPairedDevices,
@@ -11,6 +18,21 @@ import {
 } from "../lib/tauri";
 import { useIncomingOfferStore } from "../stores/incomingOfferStore";
 import { useTransferStore } from "../stores/transferStore";
+
+const FLICK_ARRIVAL_OFFSETS: Record<FlickDirection, [number, number]> = {
+  right: [36, 0],
+  down_right: [26, 26],
+  down: [0, 36],
+  down_left: [-26, 26],
+  left: [-36, 0],
+  up_left: [-26, -26],
+  up: [0, -36],
+  up_right: [26, -26],
+};
+
+function directionLabel(direction: FlickDirection): string {
+  return direction.replace("_", " ");
+}
 
 export function OfferPrompt() {
   const queue = useIncomingOfferStore((state) => state.queue);
@@ -152,6 +174,16 @@ export function OfferPrompt() {
     ?.replace(/[\\/]+$/, "")
     .split(/[\\/]/)
     .pop();
+  const flickDirection = offer.flick_direction ?? null;
+  const flickOffset = flickDirection
+    ? FLICK_ARRIVAL_OFFSETS[flickDirection]
+    : null;
+  const flickArrivalStyle = flickOffset
+    ? ({
+        "--flick-arrival-x": `${flickOffset[0]}px`,
+        "--flick-arrival-y": `${flickOffset[1]}px`,
+      } as CSSProperties)
+    : undefined;
 
   const handleRespond = async (accept: boolean): Promise<void> => {
     setPending(true);
@@ -275,6 +307,21 @@ export function OfferPrompt() {
             </p>
           </div>
         </div>
+
+        {flickDirection ? (
+          <div className="mt-3 flex items-center justify-center gap-2 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-xs text-slate-300">
+            <span
+              className="flick-arrival-file grid h-7 w-7 place-items-center rounded-lg border border-sky-300/20 bg-sky-300/10 text-sky-100"
+              style={flickArrivalStyle}
+              aria-hidden="true"
+            >
+              <File className="h-3.5 w-3.5" />
+            </span>
+            <span>
+              Gesture cue · sender flicked {directionLabel(flickDirection)}
+            </span>
+          </div>
+        ) : null}
 
         {queue.length > 1 ? (
           <p className="mt-3 text-[12px] text-slate-400">

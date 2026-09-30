@@ -61,6 +61,32 @@ pub struct OfferShareMessage {
     /// Number of files in the collection when known. Optional for old peers.
     #[serde(default)]
     pub file_count: Option<u32>,
+    /// Direction of the sender's deliberate screen flick, when present.
+    /// This is a visual hint only and does not represent measured position.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub flick_direction: Option<FlickDirection>,
+}
+
+/// Eight-way screen-relative direction for a Flick & Catch visual cue.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum FlickDirection {
+    /// Sender flicked toward the left edge of their screen.
+    Left,
+    /// Sender flicked toward the right edge of their screen.
+    Right,
+    /// Sender flicked toward the top edge of their screen.
+    Up,
+    /// Sender flicked toward the bottom edge of their screen.
+    Down,
+    /// Sender flicked toward the upper-left corner of their screen.
+    UpLeft,
+    /// Sender flicked toward the upper-right corner of their screen.
+    UpRight,
+    /// Sender flicked toward the lower-left corner of their screen.
+    DownLeft,
+    /// Sender flicked toward the lower-right corner of their screen.
+    DownRight,
 }
 
 /// On-wire decision returned by the receiver.
@@ -107,6 +133,8 @@ pub struct IncomingOffer {
     pub received_at_unix: u64,
     /// True when this offer fits the receiver's active, peer-bound catch session.
     pub ready_to_catch: bool,
+    /// Optional sender gesture cue for the arrival animation.
+    pub flick_direction: Option<FlickDirection>,
 }
 
 /// Frontend-facing payload emitted when the sender's outbound offer resolves.
@@ -474,6 +502,7 @@ pub async fn handle_offer_request(
         blob_hash: request.blob_hash,
         blob_format: request.blob_format,
         file_count: request.file_count,
+        flick_direction: request.flick_direction,
         received_at_unix: unix_timestamp(),
         ready_to_catch: false,
     };
@@ -586,6 +615,7 @@ mod tests {
             file_count: Some(1),
             received_at_unix: 0,
             ready_to_catch: false,
+            flick_direction: None,
         }
     }
 
@@ -827,6 +857,7 @@ mod tests {
             blob_hash: "hash".into(),
             blob_format: super::super::nearby_protocol::WireBlobFormat::Raw,
             file_count: None,
+            flick_direction: None,
         };
         let mut legacy = serde_json::to_value(message).expect("serialize offer");
         legacy
@@ -837,6 +868,24 @@ mod tests {
         let decoded: OfferShareMessage =
             serde_json::from_value(legacy).expect("decode legacy offer");
         assert_eq!(decoded.file_count, None);
+        assert_eq!(decoded.flick_direction, None);
+    }
+
+    #[test]
+    fn flick_direction_is_encoded_as_an_optional_legacy_safe_hint() {
+        let message = OfferShareMessage {
+            offer_id: "offer-direction".into(),
+            sender_device_name: "Sender".into(),
+            sender_node_id: "untrusted-field".into(),
+            label: "file.txt".into(),
+            size: 12,
+            blob_hash: "hash".into(),
+            blob_format: super::super::nearby_protocol::WireBlobFormat::Raw,
+            file_count: Some(1),
+            flick_direction: Some(FlickDirection::Right),
+        };
+        let payload = serde_json::to_value(message).expect("serialize offer");
+        assert_eq!(payload["flick_direction"], "right");
     }
 
     #[tokio::test]

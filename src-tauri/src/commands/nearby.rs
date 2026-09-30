@@ -1,7 +1,9 @@
 //! Commands for nearby device discovery and the push-style share offer flow.
 
 use crate::commands::{command_error, CommandResult};
-use crate::node::nearby_offer::{emit_offer_resolved, OfferDecision, OfferShareMessage};
+use crate::node::nearby_offer::{
+    emit_offer_resolved, FlickDirection, OfferDecision, OfferShareMessage,
+};
 use crate::node::nearby_protocol::{local_device_name, send_offer, WireBlobFormat};
 use crate::node::NearbyDevice;
 use crate::storage::peers;
@@ -67,6 +69,7 @@ pub async fn offer_share_to_peer(
     state: State<'_, AppState>,
     node_id: String,
     paths: Vec<String>,
+    flick_direction: Option<FlickDirection>,
 ) -> Result<String, String> {
     if paths.is_empty() {
         return Err("Select at least one file to send.".into());
@@ -107,6 +110,7 @@ pub async fn offer_share_to_peer(
         blob_hash: outcome.hash.to_string(),
         blob_format: WireBlobFormat::HashSeq,
         file_count: Some(outcome.file_count),
+        flick_direction,
     };
 
     // The user's explicit recipient selection is the sender-side grant.

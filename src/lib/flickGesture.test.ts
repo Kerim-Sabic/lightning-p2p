@@ -1,5 +1,21 @@
 import { describe, expect, it } from "vitest";
-import { isDeliberateFlick } from "./flickGesture";
+import { classifyFlickDirection, isDeliberateFlick } from "./flickGesture";
+
+describe("classifyFlickDirection", () => {
+  it("maps gestures to the matching screen edge", () => {
+    expect(classifyFlickDirection(100, 0)).toBe("right");
+    expect(classifyFlickDirection(-100, 0)).toBe("left");
+    expect(classifyFlickDirection(0, -100)).toBe("up");
+    expect(classifyFlickDirection(0, 100)).toBe("down");
+    expect(classifyFlickDirection(100, 100)).toBe("down_right");
+    expect(classifyFlickDirection(-100, -100)).toBe("up_left");
+  });
+
+  it("rejects vectors without a usable direction", () => {
+    expect(classifyFlickDirection(0, 0)).toBeNull();
+    expect(classifyFlickDirection(Number.NaN, 1)).toBeNull();
+  });
+});
 
 describe("isDeliberateFlick", () => {
   it("accepts a fast movement toward the locked target", () => {

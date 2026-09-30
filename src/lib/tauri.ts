@@ -1,3 +1,4 @@
+import type { FlickDirection } from "./flickGesture";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getVersion } from "@tauri-apps/api/app";
@@ -421,6 +422,7 @@ export interface IncomingOffer {
   file_count?: number | null;
   received_at_unix: number;
   ready_to_catch: boolean;
+  flick_direction?: FlickDirection | null;
 }
 
 export interface OfferResolved {
@@ -1056,9 +1058,14 @@ export function onChatMessage(
 export async function offerShareToPeer(
   nodeId: string,
   paths: string[],
+  flickDirection?: FlickDirection,
 ): Promise<string> {
   requireNativeRuntime("Sending a nearby offer");
-  return invoke<string>("offer_share_to_peer", { nodeId, paths });
+  return invoke<string>("offer_share_to_peer", {
+    nodeId,
+    paths,
+    flickDirection: flickDirection ?? null,
+  });
 }
 
 export async function respondToOffer(

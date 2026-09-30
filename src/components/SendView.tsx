@@ -25,7 +25,11 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { formatBytes } from "../lib/format";
-import { isDeliberateFlick } from "../lib/flickGesture";
+import {
+  classifyFlickDirection,
+  isDeliberateFlick,
+  type FlickDirection,
+} from "../lib/flickGesture";
 import { createReceiveHandoffLink } from "../lib/shareLinks";
 import { attachAsyncUnlisten } from "../hooks/asyncSubscription";
 import {
@@ -304,7 +308,10 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
     }
   };
 
-  const handleSendToDevice = async (device: NearbyDevice): Promise<void> => {
+  const handleSendToDevice = async (
+    device: NearbyDevice,
+    flickDirection?: FlickDirection,
+  ): Promise<void> => {
     let paths = shareSelection.map((item) => item.path);
     if (paths.length === 0) {
       try {
@@ -320,7 +327,11 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
     setBusyNodeId(device.node_id);
     setError(null);
     try {
-      const offerId = await offerShareToPeer(device.node_id, paths);
+      const offerId = await offerShareToPeer(
+        device.node_id,
+        paths,
+        flickDirection,
+      );
       recordOutbound({
         offerId,
         receiverNodeId: device.node_id,
@@ -453,7 +464,13 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
         targetY: target.centerY - active.startY,
       })
     ) {
-      void handleSendToDevice(device);
+      void handleSendToDevice(
+        device,
+        classifyFlickDirection(
+          event.clientX - active.startX,
+          event.clientY - active.startY,
+        ) ?? undefined,
+      );
     }
   };
 
