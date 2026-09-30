@@ -1,5 +1,6 @@
 import { ArrowDownToLine, LaptopMinimal, Radar } from "lucide-react";
 import { formatBytes } from "../lib/format";
+import { safeDisplayText } from "../lib/safeDisplayText";
 import type { NearbyShare } from "../lib/tauri";
 
 interface NearbyShareCardProps {
@@ -40,6 +41,9 @@ export function NearbyShareCard({
   disabled,
   onReceive,
 }: NearbyShareCardProps) {
+  const shareLabel = safeDisplayText(share.label, "Shared files");
+  const deviceName = safeDisplayText(share.device_name, "Nearby device");
+
   return (
     <article className="glass-subtle flex flex-col gap-4 p-4">
       <div className="flex items-start justify-between gap-4">
@@ -50,7 +54,7 @@ export function NearbyShareCard({
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <p className="truncate text-sm font-semibold text-white">
-                {share.label}
+                {shareLabel}
               </p>
               <span className="rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-slate-300">
                 <Radar className="mr-1 inline h-3 w-3 text-sky-200/80" />
@@ -58,7 +62,7 @@ export function NearbyShareCard({
               </span>
             </div>
             <p className="mt-1 text-sm text-slate-300/72">
-              {share.device_name} | {formatBytes(share.size)} | Seen{" "}
+              {deviceName} | {formatBytes(share.size)} | Seen{" "}
               {freshnessLabel(share.freshness_seconds)}
             </p>
           </div>

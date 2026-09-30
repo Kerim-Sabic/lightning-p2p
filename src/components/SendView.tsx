@@ -25,6 +25,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { formatBytes } from "../lib/format";
+import { safeDisplayText } from "../lib/safeDisplayText";
 import { groupNearbyDevices } from "../lib/nearbyDeviceGroups";
 import {
   classifyFlickDirection,
@@ -344,7 +345,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
         offerId,
         receiverNodeId: device.node_id,
         status: "accepted",
-        message: `Accepted by ${device.device_name}`,
+        message: `Accepted by ${safeDisplayText(device.device_name, "nearby device")}`,
         updatedAt: Date.now(),
       });
     } catch (error) {
@@ -412,7 +413,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
     };
     setFlickDevices(devices.map((device) => ({ ...device })));
     setFlickVerifiedNodeIds(new Set(verifiedNodeIds));
-    setFlickHint("Flick toward a device to send");
+    setFlickHint("Flick toward a device to set its arrival side");
   };
 
   const handleFlickPointerMove = (
@@ -543,11 +544,11 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
       </span>
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm font-semibold text-white">
-          {device.device_name}
+          {safeDisplayText(device.device_name, "Nearby device")}
         </span>
         <span className="mt-1 block text-xs text-slate-400">
           {dropTargetNodeId === device.node_id
-            ? `Release to send to ${device.device_name}`
+            ? `Release to send to ${safeDisplayText(device.device_name, "Nearby device")}`
             : busyNodeId === device.node_id
               ? "Preparing and offering…"
               : device.transport === "ble"
@@ -721,7 +722,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
               {nativeRuntime && devices.length > 0 ? (
                 <button
                   type="button"
-                  aria-label="Flick toward a nearby device to send the staged files"
+                  aria-label="Flick toward a nearby device to send; its screen shows the file arriving from that direction"
                   onPointerDown={handleFlickPointerDown}
                   onPointerMove={handleFlickPointerMove}
                   onPointerUp={handleFlickPointerUp}

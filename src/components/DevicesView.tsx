@@ -16,6 +16,7 @@ import {
   type KeyboardEvent,
 } from "react";
 import { attachAsyncUnlisten } from "../hooks/asyncSubscription";
+import { safeDisplayText } from "../lib/safeDisplayText";
 import {
   getLocalDeviceIdentity,
   getDevicePairingCode,
@@ -257,7 +258,7 @@ export function DevicesView() {
       const code = await getDevicePairingCode(device.node_id);
       setPairingCandidate(device);
       setPairingCode(code);
-      setPairingName(device.device_name);
+      setPairingName(safeDisplayText(device.device_name, "Nearby device"));
       setCodesConfirmed(false);
     } catch (error) {
       setError(
@@ -377,7 +378,7 @@ export function DevicesView() {
         offerId,
         receiverNodeId: device.node_id,
         status: "accepted",
-        message: `Accepted by ${device.device_name}`,
+        message: `Accepted by ${safeDisplayText(device.device_name, "nearby device")}`,
         updatedAt: Date.now(),
       });
     } catch (error) {
@@ -620,7 +621,7 @@ export function DevicesView() {
                   <>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-semibold text-white">
-                        {device.name}
+                        {safeDisplayText(device.name, "Saved device")}
                       </p>
                       <p className="mt-1 truncate font-mono text-[11px] text-slate-500">
                         {device.node_id}
@@ -640,7 +641,7 @@ export function DevicesView() {
                       className="glass-button px-3 py-2 text-xs"
                       onClick={() => {
                         setRenamingNodeId(device.node_id);
-                        setRenamingValue(device.name);
+                        setRenamingValue(safeDisplayText(device.name, "Saved device"));
                       }}
                     >
                       Rename
@@ -694,7 +695,7 @@ export function DevicesView() {
               Is this your device?
             </h2>
             <p className="mt-2 text-sm leading-6 text-slate-300">
-              On <strong>{pairingCandidate.device_name}</strong>, open Devices
+              On <strong>{safeDisplayText(pairingCandidate.device_name, "Nearby device")}</strong>, open Devices
               and verify this device too. Compare the code in person before
               saving.
             </p>

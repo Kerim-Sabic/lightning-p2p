@@ -9,6 +9,7 @@ import {
 import { attachAsyncUnlisten } from "../hooks/asyncSubscription";
 import type { FlickDirection } from "../lib/flickGesture";
 import { formatBytes } from "../lib/format";
+import { safeDisplayText } from "../lib/safeDisplayText";
 import {
   listPairedDevices,
   onPairedDevicesUpdated,
@@ -174,8 +175,11 @@ export function OfferPrompt() {
         : pairedSender
           ? "Verified device"
           : "Unverified sender";
-  const senderName =
-    pairedSender?.name || offer.sender_device_name || "Nearby device";
+  const senderName = safeDisplayText(
+    pairedSender?.name || offer.sender_device_name,
+    "Nearby device",
+  );
+  const offerLabel = safeDisplayText(offer.label, "Shared item");
   const fileCountLabel =
     offer.file_count != null && offer.file_count > 0
       ? `${offer.file_count} file${offer.file_count === 1 ? "" : "s"}`
@@ -303,7 +307,7 @@ export function OfferPrompt() {
           </div>
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold text-white">
-              {offer.label}
+              {offerLabel}
             </p>
             <p className="mt-1 text-xs text-slate-400">
               Sender estimates {fileCountLabel} · {formatBytes(offer.size)}
@@ -332,7 +336,7 @@ export function OfferPrompt() {
                 Arriving {arrivalLabel(flickDirection)} · approximate
               </span>
               <span className="mt-0.5 block text-[10px] text-slate-500">
-                Direction comes from the sender’s flick; device location isn’t
+                The sender’s flick gives a rough side cue; no location data is
                 used.
               </span>
             </span>

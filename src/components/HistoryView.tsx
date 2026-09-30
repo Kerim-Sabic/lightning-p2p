@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { formatBytes, formatTimestamp } from "../lib/format";
+import { safeDisplayText } from "../lib/safeDisplayText";
 import { createReceiveHandoffLink } from "../lib/shareLinks";
 import { writeClipboardText } from "../lib/tauri";
 import { useTransferStore } from "../stores/transferStore";
@@ -356,7 +357,7 @@ export function HistoryView() {
                     </div>
 
                     <p className="mt-2 text-base font-semibold text-white">
-                      {record.filename}
+                      {safeDisplayText(record.filename, "Shared file")}
                     </p>
                     <div className="mt-2 flex flex-wrap items-center gap-3 text-[13px] text-slate-300/72">
                       <span className="tabular-nums">

@@ -1,4 +1,5 @@
 import { Bluetooth, LaptopMinimal, Radar, Send, Wifi } from "lucide-react";
+import { safeDisplayText } from "../lib/safeDisplayText";
 import type { NearbyDevice } from "../lib/tauri";
 
 interface DeviceCardProps {
@@ -72,6 +73,8 @@ export function DeviceCard({
   disabled,
   onSend,
 }: DeviceCardProps) {
+  const deviceName = safeDisplayText(device.device_name, "Nearby device");
+
   return (
     <article className="glass-subtle flex flex-col gap-4 p-4">
       <div className="flex items-start justify-between gap-4">
@@ -82,7 +85,7 @@ export function DeviceCard({
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <p className="truncate text-sm font-semibold text-white">
-                {device.device_name}
+                {deviceName}
               </p>
               <span className="rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-slate-300">
                 <span className="mr-1 inline-flex items-center align-middle">

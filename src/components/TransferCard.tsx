@@ -19,6 +19,7 @@ import {
   formatSpeed,
   formatTimestamp,
 } from "../lib/format";
+import { safeDisplayText } from "../lib/safeDisplayText";
 import {
   collectDiagnosticBundle,
   openExternalUrl,
@@ -166,6 +167,7 @@ export function TransferCard({
   onCancel,
   onSendAnother,
 }: TransferCardProps) {
+  const transferName = safeDisplayText(transfer.name, "File transfer");
   const openDownloadDir = useTransferStore((state) => state.openDownloadDir);
   const startReceive = useTransferStore((state) => state.startReceive);
   const [diagnosticsState, setDiagnosticsState] = useState<
@@ -295,7 +297,7 @@ export function TransferCard({
               </span>
             </div>
             <p className="mt-2 truncate text-base font-semibold tracking-[-0.02em] text-white">
-              {transfer.name}
+              {transferName}
             </p>
           </div>
 
