@@ -935,6 +935,21 @@ mod tests {
     }
 
     #[test]
+    fn save_failure_is_retryable_and_never_maps_to_completion() {
+        let error = LightningP2PError::Other(
+            "Export failed: Android could not save the verified transfer to public storage.".into(),
+        );
+        let payload = receive_error_payload(&error, TransferPhase::Saving);
+
+        assert_eq!(payload.code, crate::error::AppErrorCode::ExportFailed);
+        assert!(payload.retryable);
+        assert_eq!(
+            categorize_receive_error(&error, TransferPhase::Saving),
+            FailureCategory::Export
+        );
+    }
+
+    #[test]
     fn route_is_inferred_from_relay_only_ticket() {
         let relay_url = "https://relay.example.com"
             .parse()
