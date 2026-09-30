@@ -61,6 +61,100 @@
   --danger-copy: #f08b92;
 }
 
+:root[data-theme="light"] {
+  color-scheme: light;
+  --canvas-0: #f6f7f9;
+  --canvas-1: #ffffff;
+  --surface-0: #ffffff;
+  --surface-1: #f1f3f6;
+  --surface-2: #e9edf2;
+  --surface-3: #dce2ea;
+  --surface-hover: #e5eaf1;
+  --border-subtle: rgba(21, 23, 28, 0.07);
+  --border-strong: rgba(21, 23, 28, 0.13);
+  --fg-primary: #15171c;
+  --fg-secondary: #424955;
+  --fg-muted: #687180;
+  --accent-primary: #315eff;
+  --accent-primary-hover: #244fe8;
+  --accent-subtle: rgba(49, 94, 255, 0.09);
+  --accent-border: rgba(49, 94, 255, 0.28);
+  --lab-black: #f6f7f9;
+  --lab-green: #f6f7f9;
+  --grid-green: #e9edf2;
+  --signal-ink: #ffffff;
+  --signal-green-strong: #244fe8;
+  --proof-amber: #8a5a0a;
+  --amber-ink: #fff8e7;
+  --proof-paper: #ffffff;
+  --security-paper: #ffffff;
+  --text-ink: #15171c;
+  --border-light: #d7dbe2;
+  --hero-wash: rgba(49, 94, 255, 0.055);
+  --marketing-surface: rgba(21, 23, 28, 0.035);
+  --marketing-surface-strong: rgba(21, 23, 28, 0.06);
+  --marketing-border: rgba(21, 23, 28, 0.09);
+  --marketing-border-strong: rgba(21, 23, 28, 0.15);
+  --soft-copy: rgba(21, 23, 28, 0.82);
+  --muted-copy: rgba(66, 73, 85, 0.78);
+  --paper-copy: rgba(53, 58, 68, 0.86);
+  --signal-bg: rgba(49, 94, 255, 0.08);
+  --signal-border: rgba(49, 94, 255, 0.24);
+  --amber-bg: rgba(173, 112, 12, 0.1);
+  --amber-border: rgba(173, 112, 12, 0.25);
+  --danger-bg: rgba(190, 48, 62, 0.08);
+  --danger-border: rgba(190, 48, 62, 0.2);
+  --danger-copy: #a82a38;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    color-scheme: light;
+    --canvas-0: #f6f7f9;
+    --canvas-1: #ffffff;
+    --surface-0: #ffffff;
+    --surface-1: #f1f3f6;
+    --surface-2: #e9edf2;
+    --surface-3: #dce2ea;
+    --surface-hover: #e5eaf1;
+    --border-subtle: rgba(21, 23, 28, 0.07);
+    --border-strong: rgba(21, 23, 28, 0.13);
+    --fg-primary: #15171c;
+    --fg-secondary: #424955;
+    --fg-muted: #687180;
+    --accent-primary: #315eff;
+    --accent-primary-hover: #244fe8;
+    --accent-subtle: rgba(49, 94, 255, 0.09);
+    --accent-border: rgba(49, 94, 255, 0.28);
+    --lab-black: #f6f7f9;
+    --lab-green: #f6f7f9;
+    --grid-green: #e9edf2;
+    --signal-ink: #ffffff;
+    --signal-green-strong: #244fe8;
+    --proof-amber: #8a5a0a;
+    --amber-ink: #fff8e7;
+    --proof-paper: #ffffff;
+    --security-paper: #ffffff;
+    --text-ink: #15171c;
+    --border-light: #d7dbe2;
+    --hero-wash: rgba(49, 94, 255, 0.055);
+    --marketing-surface: rgba(21, 23, 28, 0.035);
+    --marketing-surface-strong: rgba(21, 23, 28, 0.06);
+    --marketing-border: rgba(21, 23, 28, 0.09);
+    --marketing-border-strong: rgba(21, 23, 28, 0.15);
+    --soft-copy: rgba(21, 23, 28, 0.82);
+    --muted-copy: rgba(66, 73, 85, 0.78);
+    --paper-copy: rgba(53, 58, 68, 0.86);
+    --signal-bg: rgba(49, 94, 255, 0.08);
+    --signal-border: rgba(49, 94, 255, 0.24);
+    --amber-bg: rgba(173, 112, 12, 0.1);
+    --amber-border: rgba(173, 112, 12, 0.25);
+    --danger-bg: rgba(190, 48, 62, 0.08);
+    --danger-border: rgba(190, 48, 62, 0.2);
+    --danger-copy: #a82a38;
+  }
+}
+
 html,
 body,
 #root {
@@ -1262,6 +1356,173 @@ body.app-hydrated .static-seo-fallback {
 
   [data-tauri-drag-region] {
     cursor: default;
+  }
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) .app-shell,
+  :root[data-theme="light"] .app-shell {
+    border-color: var(--border-subtle);
+    background: var(--canvas-0);
+  }
+
+  :root:not([data-theme]) .app-shell-mobile,
+  :root[data-theme="light"] .app-shell-mobile {
+    background: var(--canvas-0);
+  }
+
+  :root:not([data-theme]) .window-chrome,
+  :root[data-theme="light"] .window-chrome,
+  :root:not([data-theme]) .glass-panel,
+  :root[data-theme="light"] .glass-panel,
+  :root:not([data-theme]) .hero-panel,
+  :root[data-theme="light"] .hero-panel,
+  :root:not([data-theme]) .sidebar-card,
+  :root[data-theme="light"] .sidebar-card {
+    border-color: var(--border-subtle);
+    background: var(--surface-0);
+  }
+
+  :root:not([data-theme]) .glass-subtle,
+  :root[data-theme="light"] .glass-subtle,
+  :root:not([data-theme]) .glass-icon,
+  :root[data-theme="light"] .glass-icon,
+  :root:not([data-theme]) .glass-button,
+  :root[data-theme="light"] .glass-button,
+  :root:not([data-theme]) .chrome-pill,
+  :root[data-theme="light"] .chrome-pill,
+  :root:not([data-theme]) .stat-card,
+  :root[data-theme="light"] .stat-card {
+    border-color: var(--border-subtle);
+    background: var(--surface-1);
+  }
+
+  :root:not([data-theme]) .glass-button:hover,
+  :root[data-theme="light"] .glass-button:hover {
+    border-color: var(--border-strong);
+    background: var(--surface-hover);
+  }
+
+  :root:not([data-theme]) .glass-input,
+  :root[data-theme="light"] .glass-input {
+    border-color: var(--border-strong);
+    background: var(--surface-0);
+    color: var(--fg-primary);
+  }
+
+  :root:not([data-theme]) .window-control-button,
+  :root[data-theme="light"] .window-control-button {
+    border-color: var(--border-subtle);
+    background: var(--surface-1);
+    color: var(--fg-secondary);
+  }
+
+  :root:not([data-theme]) .window-control-button:hover,
+  :root[data-theme="light"] .window-control-button:hover {
+    background: var(--surface-hover);
+    color: var(--fg-primary);
+  }
+
+  :root:not([data-theme]) .mobile-tab-bar,
+  :root[data-theme="light"] .mobile-tab-bar,
+  :root:not([data-theme]) .bottom-sheet-panel,
+  :root[data-theme="light"] .bottom-sheet-panel {
+    border-color: var(--border-subtle);
+    background: var(--surface-0);
+    color: var(--fg-primary);
+  }
+
+  :root:not([data-theme]) .bottom-sheet-grabber,
+  :root[data-theme="light"] .bottom-sheet-grabber {
+    background: rgba(21, 23, 28, 0.18);
+  }
+
+  :root:not([data-theme]) .app-shell .page-copy,
+  :root:not([data-theme]) .app-shell .meta-copy,
+  :root[data-theme="light"] .app-shell .page-copy,
+  :root[data-theme="light"] .app-shell .meta-copy {
+    color: var(--fg-secondary);
+  }
+
+  :root:not([data-theme]) .app-shell :focus-visible,
+  :root[data-theme="light"] .app-shell :focus-visible {
+    outline-color: #244fe8;
+  }
+
+  :root:not([data-theme]) .app-shell .text-white,
+  :root[data-theme="light"] .app-shell .text-white {
+    color: var(--fg-primary) !important;
+  }
+
+  :root:not([data-theme]) .app-shell .text-slate-100,
+  :root:not([data-theme]) .app-shell .text-slate-200,
+  :root[data-theme="light"] .app-shell .text-slate-100,
+  :root[data-theme="light"] .app-shell .text-slate-200 {
+    color: var(--fg-primary) !important;
+  }
+
+  :root:not([data-theme]) .app-shell .text-slate-300,
+  :root:not([data-theme]) .app-shell .text-slate-400,
+  :root:not([data-theme]) .app-shell .text-slate-500,
+  :root:not([data-theme]) .app-shell .text-slate-600,
+  :root[data-theme="light"] .app-shell .text-slate-300,
+  :root[data-theme="light"] .app-shell .text-slate-400,
+  :root[data-theme="light"] .app-shell .text-slate-500,
+  :root[data-theme="light"] .app-shell .text-slate-600 {
+    color: var(--fg-muted) !important;
+  }
+
+  :root:not([data-theme]) .app-shell .text-sky-100,
+  :root:not([data-theme]) .app-shell .text-sky-200,
+  :root:not([data-theme]) .app-shell .text-blue-100,
+  :root:not([data-theme]) .app-shell .text-blue-200,
+  :root[data-theme="light"] .app-shell .text-sky-100,
+  :root[data-theme="light"] .app-shell .text-sky-200,
+  :root[data-theme="light"] .app-shell .text-blue-100,
+  :root[data-theme="light"] .app-shell .text-blue-200 {
+    color: #244fe8 !important;
+  }
+
+  :root:not([data-theme]) .app-shell [class*="border-white/"],
+  :root[data-theme="light"] .app-shell [class*="border-white/"] {
+    border-color: var(--border-subtle) !important;
+  }
+
+  :root:not([data-theme]) .app-shell [class*="bg-white/"],
+  :root[data-theme="light"] .app-shell [class*="bg-white/"] {
+    background-color: rgba(21, 23, 28, 0.035) !important;
+  }
+
+  :root:not([data-theme]) .app-shell [class*="bg-black/20"],
+  :root:not([data-theme]) .app-shell [class*="bg-black/25"],
+  :root:not([data-theme]) .app-shell [class*="bg-black/30"],
+  :root:not([data-theme]) .app-shell [class*="bg-black/40"],
+  :root[data-theme="light"] .app-shell [class*="bg-black/20"],
+  :root[data-theme="light"] .app-shell [class*="bg-black/25"],
+  :root[data-theme="light"] .app-shell [class*="bg-black/30"],
+  :root[data-theme="light"] .app-shell [class*="bg-black/40"] {
+    background-color: var(--surface-1) !important;
+  }
+
+  :root:not([data-theme]) .app-shell .text-amber-200,
+  :root:not([data-theme]) .app-shell .text-amber-300,
+  :root[data-theme="light"] .app-shell .text-amber-200,
+  :root[data-theme="light"] .app-shell .text-amber-300 {
+    color: var(--proof-amber) !important;
+  }
+
+  :root:not([data-theme]) .app-shell .text-emerald-200,
+  :root:not([data-theme]) .app-shell .text-emerald-300,
+  :root[data-theme="light"] .app-shell .text-emerald-200,
+  :root[data-theme="light"] .app-shell .text-emerald-300 {
+    color: #176445 !important;
+  }
+
+  :root:not([data-theme]) .app-shell .text-rose-200,
+  :root:not([data-theme]) .app-shell .text-rose-300,
+  :root[data-theme="light"] .app-shell .text-rose-200,
+  :root[data-theme="light"] .app-shell .text-rose-300 {
+    color: #a82a38 !important;
   }
 }
 

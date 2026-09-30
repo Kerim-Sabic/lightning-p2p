@@ -674,7 +674,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
                     }
                   }}
                   style={{ touchAction: "none" }}
-                  className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-full border border-[var(--accent)]/35 bg-[var(--accent)]/10 px-4 text-xs font-semibold text-blue-100 transition hover:bg-[var(--accent)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300"
+                  className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-full border border-[var(--accent-primary)]/35 bg-[var(--accent-primary)]/10 px-4 text-xs font-semibold text-blue-100 transition hover:bg-[var(--accent-primary)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300"
                 >
                   <span aria-hidden="true" className="text-base">
                     ↗
