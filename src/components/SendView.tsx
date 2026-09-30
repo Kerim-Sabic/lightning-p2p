@@ -25,6 +25,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { formatBytes } from "../lib/format";
+import { groupNearbyDevices } from "../lib/nearbyDeviceGroups";
 import {
   classifyFlickDirection,
   isDeliberateFlick,
@@ -160,11 +161,18 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
   const [busyNodeId, setBusyNodeId] = useState<string | null>(null);
   const [dropTargetNodeId, setDropTargetNodeId] = useState<string | null>(null);
   const [flickDevices, setFlickDevices] = useState<NearbyDevice[] | null>(null);
+  const [flickVerifiedNodeIds, setFlickVerifiedNodeIds] =
+    useState<Set<string> | null>(null);
   const [verifiedNodeIds, setVerifiedNodeIds] = useState<Set<string>>(
     () => new Set(),
   );
   const [flickHint, setFlickHint] = useState<string | null>(null);
   const recipientDevices = flickDevices ?? devices;
+  const recipientVerifiedNodeIds = flickVerifiedNodeIds ?? verifiedNodeIds;
+  const recipientGroups = groupNearbyDevices(
+    recipientDevices,
+    recipientVerifiedNodeIds,
+  );
   const recipientSurfaceRef = useRef<HTMLElement | null>(null);
   const activeFlickRef = useRef<ActiveFlick | null>(null);
 
@@ -354,6 +362,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
     activeFlickRef.current = null;
     setDropTargetNodeId(null);
     setFlickDevices(null);
+    setFlickVerifiedNodeIds(null);
   };
 
   const handleFlickPointerDown = (
@@ -402,6 +411,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
       element: event.currentTarget,
     };
     setFlickDevices(devices.map((device) => ({ ...device })));
+    setFlickVerifiedNodeIds(new Set(verifiedNodeIds));
     setFlickHint("Flick toward a device to send");
   };
 
@@ -428,6 +438,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
     activeFlickRef.current = null;
     setDropTargetNodeId(null);
     setFlickDevices(null);
+    setFlickVerifiedNodeIds(null);
     setFlickHint(null);
     if (active.element.hasPointerCapture(active.pointerId)) {
       active.element.releasePointerCapture(active.pointerId);
@@ -500,6 +511,72 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
     event.dataTransfer.effectAllowed = "copy";
     event.dataTransfer.setData("application/x-lightning-selection", "files");
   };
+
+  const renderDeviceTarget = (device: NearbyDevice) => (
+    <button
+      key={device.node_id}
+      data-flick-target={device.node_id}
+      type="button"
+      onClick={() => void handleSendToDevice(device)}
+      onDragOver={(event) => {
+        if (
+          event.dataTransfer.types.includes("application/x-lightning-selection")
+        ) {
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "copy";
+          setDropTargetNodeId(device.node_id);
+        }
+      }}
+      onDragLeave={() => setDropTargetNodeId(null)}
+      onDrop={(event) => {
+        event.preventDefault();
+        if (event.dataTransfer.getData("application/x-lightning-selection")) {
+          void handleSendToDevice(device);
+        }
+        setDropTargetNodeId(null);
+      }}
+      disabled={busyNodeId !== null || !nativeRuntime}
+      className={`flex min-h-16 items-center gap-3 rounded-2xl border px-4 py-3 text-left transition disabled:opacity-55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300 ${dropTargetNodeId === device.node_id ? "border-sky-300/60 bg-sky-400/10" : "border-white/[0.08] bg-white/[0.025] hover:border-sky-300/30 hover:bg-white/[0.05]"}`}
+    >
+      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-white/[0.08] bg-white/[0.04]">
+        <LaptopMinimal className="h-4 w-4 text-sky-200" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-semibold text-white">
+          {device.device_name}
+        </span>
+        <span className="mt-1 block text-xs text-slate-400">
+          {dropTargetNodeId === device.node_id
+            ? `Release to send to ${device.device_name}`
+            : busyNodeId === device.node_id
+              ? "Preparing and offering…"
+              : device.transport === "ble"
+                ? "Bluetooth nearby"
+                : device.transport === "both"
+                  ? "Wi-Fi and Bluetooth"
+                  : "On your local network"}
+        </span>
+        <span
+          className={`mt-1 inline-flex items-center gap-1 text-xs font-medium ${recipientVerifiedNodeIds.has(device.node_id) ? "text-emerald-200" : "text-amber-200/85"}`}
+        >
+          {recipientVerifiedNodeIds.has(device.node_id) ? (
+            <>
+              <ShieldCheck className="h-3.5 w-3.5" /> Verified by you
+            </>
+          ) : (
+            "Not verified"
+          )}
+        </span>
+      </span>
+      <span className="shrink-0 text-xs font-semibold text-sky-200">
+        {busyNodeId === device.node_id
+          ? "Working"
+          : shareSelection.length > 0
+            ? "Send"
+            : "Choose files"}
+      </span>
+    </button>
+  );
 
   return (
     <div className="space-y-4">
@@ -779,78 +856,43 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
             Open the native app to send files to nearby devices.
           </p>
         ) : recipientDevices.length > 0 ? (
-          <div className="mt-4 grid gap-2 sm:grid-cols-2">
-            {recipientDevices.map((device) => (
-              <button
-                key={device.node_id}
-                data-flick-target={device.node_id}
-                type="button"
-                onClick={() => void handleSendToDevice(device)}
-                onDragOver={(event) => {
-                  if (
-                    event.dataTransfer.types.includes(
-                      "application/x-lightning-selection",
-                    )
-                  ) {
-                    event.preventDefault();
-                    event.dataTransfer.dropEffect = "copy";
-                    setDropTargetNodeId(device.node_id);
-                  }
-                }}
-                onDragLeave={() => setDropTargetNodeId(null)}
-                onDrop={(event) => {
-                  event.preventDefault();
-                  if (
-                    event.dataTransfer.getData(
-                      "application/x-lightning-selection",
-                    )
-                  ) {
-                    void handleSendToDevice(device);
-                  }
-                  setDropTargetNodeId(null);
-                }}
-                disabled={busyNodeId !== null || !nativeRuntime}
-                className={`flex min-h-16 items-center gap-3 rounded-2xl border px-4 py-3 text-left transition disabled:opacity-55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300 ${dropTargetNodeId === device.node_id ? "border-sky-300/60 bg-sky-400/10" : "border-white/[0.08] bg-white/[0.025] hover:border-sky-300/30 hover:bg-white/[0.05]"}`}
-              >
-                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-white/[0.08] bg-white/[0.04]">
-                  <LaptopMinimal className="h-4 w-4 text-sky-200" />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-semibold text-white">
-                    {device.device_name}
-                  </span>
-                  <span className="mt-1 block text-xs text-slate-400">
-                    {dropTargetNodeId === device.node_id
-                      ? `Release to send to ${device.device_name}`
-                      : busyNodeId === device.node_id
-                        ? "Preparing and offering…"
-                        : device.transport === "ble"
-                          ? "Bluetooth nearby"
-                          : device.transport === "both"
-                            ? "Wi-Fi and Bluetooth"
-                            : "On your local network"}
-                  </span>
-                  <span
-                    className={`mt-1 inline-flex items-center gap-1 text-[10px] font-medium ${verifiedNodeIds.has(device.node_id) ? "text-emerald-200" : "text-amber-200/85"}`}
+          <div className="mt-4 space-y-5">
+            {recipientGroups.myDevices.length > 0 ? (
+              <section aria-labelledby="my-device-targets-title">
+                <div className="mb-2 flex items-baseline justify-between gap-3">
+                  <h3
+                    id="my-device-targets-title"
+                    className="text-sm font-semibold text-white"
                   >
-                    {verifiedNodeIds.has(device.node_id) ? (
-                      <>
-                        <ShieldCheck className="h-3 w-3" /> Verified by you
-                      </>
-                    ) : (
-                      "Not verified"
-                    )}
+                    My Devices
+                  </h3>
+                  <span className="text-xs text-slate-400">
+                    Saved and verified
                   </span>
-                </span>
-                <span className="shrink-0 text-xs font-semibold text-sky-200">
-                  {busyNodeId === device.node_id
-                    ? "Working"
-                    : shareSelection.length > 0
-                      ? "Send"
-                      : "Choose files"}
-                </span>
-              </button>
-            ))}
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {recipientGroups.myDevices.map(renderDeviceTarget)}
+                </div>
+              </section>
+            ) : null}
+            {recipientGroups.nearbyDevices.length > 0 ? (
+              <section aria-labelledby="other-device-targets-title">
+                <div className="mb-2 flex items-baseline justify-between gap-3">
+                  <h3
+                    id="other-device-targets-title"
+                    className="text-sm font-semibold text-white"
+                  >
+                    Nearby devices
+                  </h3>
+                  <span className="text-xs text-slate-400">
+                    Confirm the device name before sending
+                  </span>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {recipientGroups.nearbyDevices.map(renderDeviceTarget)}
+                </div>
+              </section>
+            ) : null}
           </div>
         ) : !discoveryEnabled ? (
           <p className="meta-copy mt-4">
