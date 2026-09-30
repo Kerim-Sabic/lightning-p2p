@@ -365,7 +365,21 @@ export async function saveReceivedFileStreaming(
     suggestedName: safeName,
   });
   const writable = await handle.createWritable();
+  let abortPromise: Promise<void> | null = null;
+  const abortWritable = (): Promise<void> => {
+    if (abortPromise) return abortPromise;
+    const pendingAbort = writable.abort().catch(() => undefined);
+    abortPromise = pendingAbort;
+    return pendingAbort;
+  };
+  const abortSave = (): void => {
+    void abortWritable();
+  };
+  signal?.addEventListener("abort", abortSave, { once: true });
   try {
+    if (signal?.aborted) {
+      throw new DOMException("File save cancelled.", "AbortError");
+    }
     const written = await receiver.streamBlobTo(
       file.hash,
       file.size,
@@ -390,15 +404,13 @@ export async function saveReceivedFileStreaming(
     await writable.close();
     return written;
   } catch (error) {
-    try {
-      await writable.abort();
-    } catch {
-      // The stream already failed; discard any unpublished partial file.
-    }
+    await abortWritable();
     if (signal?.aborted) {
       throw new DOMException("File save cancelled.", "AbortError");
     }
     throw error;
+  } finally {
+    signal?.removeEventListener("abort", abortSave);
   }
 }
 
