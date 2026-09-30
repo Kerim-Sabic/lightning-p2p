@@ -58,7 +58,7 @@ This is a direct-first peer-to-peer app. It is not a hosted cloud storage servic
 - It does not scan received files for malware.
 - It does not protect against a compromised sender or receiver device.
 - It does not hide all network metadata from infrastructure that helps peers connect.
-- Nearby discovery can reveal local-network metadata for active shares, including device label, file label, content hash, size, route hints, and persistent NodeId.
+- Nearby discovery reveals device presence, persistent NodeId, and device name to local peers. Detailed active-share metadata is returned only to identities saved in My Devices.
 - Local logs, transfer history, peer cache, blob store, and fallback identity files are local artifacts that should be treated as sensitive on shared machines.
 - It has not completed a third-party security audit.
 
@@ -75,11 +75,11 @@ Treat tickets like secrets:
 
 ## Nearby Discovery
 
-Nearby discovery is designed for trusted local networks. When local discovery and a share are active, nearby peers can query the app over the Lightning P2P nearby-share protocol and see enough metadata to show a receive card: device label, share label, size, content hash, blob format, published time, NodeId, route hints, and direct-address count.
+Nearby discovery reveals device presence, persistent NodeId, and device name to local peers. A peer must be saved in My Devices before the nearby-share protocol returns active-share labels, sizes, hashes, format, publication time, and route hints. New peers can still send a push offer, which requires receiver approval, or use a ticket that was deliberately shared with them.
 
-This metadata is not the raw receive ticket, but it is sensitive. Use manual ticket sharing instead of nearby discovery if filenames, hostnames, organizational device names, or local-network presence should remain private.
+Detailed share metadata is sensitive. Use manual ticket sharing and turn off local discovery if local-network device presence and device names should remain private. Turning discovery off restarts the endpoint when no transfer is active.
 
-The current settings toggle controls nearby share listings and active-share responses. The iroh endpoint may still use local-network discovery for connectivity metadata until endpoint restart/rebuild support is added.
+The settings toggle controls nearby discovery and rebuilds the endpoint when no transfer is active. mDNS may still expose endpoint identity and device name while discovery is on, even when no share is published.
 
 ## Local Key Storage
 
@@ -146,7 +146,7 @@ Diagnostic bundles redact known app/download paths and ticket-like strings befor
 | Attacker without ticket | Cannot request the referenced transfer without the capability token. |
 | Attacker with ticket | Can request that transfer while the sender is online and content is available. |
 | Relay visibility | Relay infrastructure may see connection metadata needed for connectivity, but it is not a storage bucket. |
-| Nearby LAN peer | Can see active nearby-share metadata while nearby discovery is enabled; use manual tickets for more private sharing. |
+| Nearby LAN peer | Can see device presence, identity, and name. Detailed active-share metadata requires a saved verified identity; new peers need receiver consent for push offers. |
 | Sender goes offline | Transfer becomes unavailable or fails. |
 | Malicious file content | Bytes can be verified for integrity, but Lightning P2P does not judge whether the file is safe to open. |
 | Receiver download path | App checks that the destination is writable and exports verified content to disk. |
@@ -158,7 +158,7 @@ Diagnostic bundles redact known app/download paths and ticket-like strings befor
 - Public benchmark leadership claims are not published yet.
 - macOS/Linux/iOS are not public releases.
 - The keychain fallback stores raw identity key material in the app data directory when platform key storage is unavailable.
-- Nearby discovery does not yet have an approval/pairing step before share metadata is visible to local-network peers.
+- Nearby discovery still exposes device presence, stable identity, and device name to local peers while enabled.
 - Pause/resume transfer UX is tracked but not complete.
 - A formal third-party audit has not been completed.
 

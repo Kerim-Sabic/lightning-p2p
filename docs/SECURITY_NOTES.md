@@ -48,12 +48,14 @@ Fallback path:
 - Unix writes use restrictive mode at creation time.
 - Windows ACL hardening should be added if fallback is kept for production.
 
+Android imports use user-granted `content://` URIs and stage into the app cache; received media is published through scoped `MediaStore` APIs. The manifest no longer requests broad shared-media read permissions or declares a `FileProvider`. Physical-device coverage is still needed for the supported document-picker, share-intent, and save flows.
+
 ## Current Security TODOs
 
-- Add a log redaction test that fails if raw ticket strings are emitted.
-- Add a "clear history and peer cache" user control.
-- Add endpoint restart/rebuild support so local discovery can be fully disabled after startup.
-- Hide raw ticket text by default in receive handoff UI and reveal it only on user action.
-- Add a web CSP and validate it against Netlify/Tauri constraints.
-- Narrow Android FileProvider paths and avoid broad media permissions unless they are required by real file-picker behavior.
-- Document deep-link query exposure for custom scheme handoff.
+- Keep ticket strings out of runtime logs; current tests cover diagnostic redaction, not every logging call.
+- Validate the configured web and Tauri CSP against packaged builds and the deployed receive/send pages.
+- Validate Android document-picker, share-intent, and MediaStore save flows on supported OS versions after removing broad media read permissions.
+- Add Windows ACL hardening for the plaintext identity-key fallback.
+- Document that custom-scheme deep links carry the receive ticket to the operating system and may be retained by OS/app history or logs.
+
+History and peer-cache clearing, endpoint restart when local discovery changes, hidden-by-default raw tickets in the handoff UI, and web/Tauri CSP configuration are implemented. Receive ticket fragments stay out of normal website HTTP requests. The custom-scheme ticket exposure remains a local artifact concern.
