@@ -44,7 +44,7 @@ export function OfferPrompt() {
         previousFocusRef.current = document.activeElement;
       }
       const acceptButton = acceptButtonRef.current;
-      if (readyToCatch || acceptButton?.disabled) {
+      if (readyToCatch || pending || acceptButton?.disabled) {
         dialogRef.current?.focus();
       } else {
         (acceptButton ?? dialogRef.current)?.focus();
@@ -54,7 +54,7 @@ export function OfferPrompt() {
 
     previousFocusRef.current?.focus();
     previousFocusRef.current = null;
-  }, [offerId, readyToCatch]);
+  }, [offerId, pending, readyToCatch]);
 
   useEffect(() => {
     if (!offerId) return;
