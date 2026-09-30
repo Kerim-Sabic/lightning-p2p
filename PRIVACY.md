@@ -42,11 +42,15 @@ publicly if they contain sensitive details.
 ## Nearby Discovery
 
 Nearby discovery is intended for trusted local networks. When enabled and the app
-is running, peers on the same network can discover device presence and limited
-share metadata needed to show nearby-device and offer prompts.
+is running, peers on the same network can discover device presence, endpoint
+identity, and the device name. Detailed active-share metadata is returned only
+to identities the user has verified and saved in My Devices. Unpaired peers can
+still send an offer, which requires receiver consent, or receive a ticket that
+the user deliberately shares with them.
 
-Use manual ticket sharing if local-network presence, device labels, filenames, or
-active-share metadata should remain private.
+Use manual ticket sharing if local-network device presence and labels should
+remain private. Revoking a paired device clears its cached nearby-share
+metadata; a ticket already shared remains a bearer capability.
 
 ## Telemetry
 

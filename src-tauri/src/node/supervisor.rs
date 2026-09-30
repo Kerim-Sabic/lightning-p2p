@@ -7,6 +7,7 @@ use super::{
 use crate::error::{LightningP2PError, Result};
 use crate::node::{NearbyShareRegistry, OfferInbox};
 use crate::storage::blocked_peers::BlockedPeers;
+use crate::storage::paired_devices::PairedDevices;
 use crate::storage::settings::AppSettings;
 use crate::transfer::queue::TransferQueue;
 use serde::Serialize;
@@ -25,6 +26,7 @@ pub(crate) struct NearbyServices {
     registry: NearbyShareRegistry,
     offers: OfferInbox,
     blocked_peers: BlockedPeers,
+    paired_devices: PairedDevices,
 }
 
 impl NearbyServices {
@@ -32,11 +34,13 @@ impl NearbyServices {
         registry: NearbyShareRegistry,
         offers: OfferInbox,
         blocked_peers: BlockedPeers,
+        paired_devices: PairedDevices,
     ) -> Self {
         Self {
             registry,
             offers,
             blocked_peers,
+            paired_devices,
         }
     }
 }
@@ -272,6 +276,7 @@ impl NodeSupervisor {
             nearby.registry,
             nearby.offers,
             nearby.blocked_peers,
+            nearby.paired_devices,
             app.clone(),
         ));
         let chat_protocol = Arc::new(ChatProtocol::new(app.clone()));

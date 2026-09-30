@@ -268,7 +268,8 @@ export function ReceiveView({ onNavigateSend }: ReceiveViewProps = {}) {
           <div>
             <p className="text-sm font-semibold text-white">Nearby shares</p>
             <p className="meta-copy mt-1">
-              Same-network senders with an active share should appear here.
+              Active share details appear here only for verified devices. New
+              senders can send you an offer or a receive link.
             </p>
           </div>
           <div className="flex items-center gap-2 text-xs text-slate-400">
@@ -293,11 +294,11 @@ export function ReceiveView({ onNavigateSend }: ReceiveViewProps = {}) {
           ) : nearbyShares.length === 0 ? (
             <div className="glass-subtle px-5 py-8 text-center">
               <p className="text-base font-semibold text-white">
-                No nearby shares detected yet
+                No verified nearby shares yet
               </p>
               <p className="meta-copy mt-2">
-                If a sender is active on this LAN and still does not appear,
-                fall back to a receive link below.
+                Pair your device to see its active shares. For a new device,
+                ask the sender to send an offer or use a receive link below.
               </p>
             </div>
           ) : (

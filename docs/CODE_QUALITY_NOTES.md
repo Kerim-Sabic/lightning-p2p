@@ -30,11 +30,10 @@ These notes summarize the launch-readiness audit and the changes made in this pa
 ## Highest Priority Remaining Issues
 
 1. **Endpoint restart supervisor.** Relay mode and full local-network discovery changes are persisted, but the running endpoint is not rebuilt. Add a `NodeSupervisor` that can shut down/restart endpoint/router/discovery safely.
-2. **Nearby discovery privacy.** Nearby active shares expose metadata to trusted LAN peers. Add an approval/pairing flow before exposing labels/hashes if this becomes a stronger privacy goal.
-3. **Module size.** `node/nearby.rs`, `storage/settings.rs`, `transfer/receiver.rs`, and `transfer/progress.rs` are still larger than the preferred module size.
-4. **Cancellation during export.** Receive cancellation is honored during download, but large export work still needs a cancellation token.
-5. **Default test speed.** Full `cargo test` on Windows can take a long time because integration tests compile and start real iroh endpoints. Move multicast LAN smoke tests and large-directory transfer tests to ignored/manual suites.
-6. **Android storage.** Android content URI import/export behavior still needs real-device validation and likely platform-specific adapter work.
+2. **Module size.** `node/nearby.rs`, `storage/settings.rs`, `transfer/receiver.rs`, and `transfer/progress.rs` are still larger than the preferred module size.
+3. **Cancellation during export.** Receive cancellation is honored during download, but large export work still needs a cancellation token.
+4. **Default test speed.** Full `cargo test` on Windows can take a long time because integration tests compile and start real iroh endpoints. Move multicast LAN smoke tests and large-directory transfer tests to ignored/manual suites.
+5. **Android storage.** Android content URI import/export behavior still needs real-device validation and likely platform-specific adapter work.
 
 ## Testing Gaps To Fill Next
 

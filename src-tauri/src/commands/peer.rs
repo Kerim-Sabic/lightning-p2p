@@ -5,7 +5,7 @@ use crate::node::{NodeRuntimeStatus, NodeSupervisorStatus};
 use crate::storage::paired_devices::{comparison_code, PairedDevice};
 use crate::AppState;
 use serde::Serialize;
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
 
 const SHORT_NODE_ID_LEN: usize = 12;
 
@@ -153,6 +153,7 @@ pub async fn rename_paired_device(
 /// Returns an error if the updated list cannot be saved.
 #[tauri::command]
 pub async fn remove_paired_device(
+    app: AppHandle,
     state: State<'_, AppState>,
     node_id: String,
 ) -> Result<Vec<PairedDevice>, String> {
@@ -162,5 +163,14 @@ pub async fn remove_paired_device(
         .remove(&node_id)
         .await
         .map_err(String::from)?;
+    if let Some(shares) = state
+        .nearby_shares
+        .clear_discovered_shares_for(&node_id)
+        .await
+    {
+        if let Err(error) = app.emit("discovered-shares-updated", shares) {
+            tracing::warn!(%error, "could not publish nearby-share revocation update");
+        }
+    }
     Ok(devices)
 }

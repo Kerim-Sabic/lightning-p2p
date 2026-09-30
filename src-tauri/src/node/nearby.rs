@@ -125,11 +125,11 @@ pub struct NearbyDevice {
     pub route_hint: NearbyRouteHint,
     /// Known direct addresses currently attached to the peer.
     pub direct_address_count: usize,
-    /// Whether the peer currently advertises an active share.
+    /// Whether the peer advertises an active share to this verified identity.
     pub has_active_share: bool,
 }
 
-/// Active local share advertised to nearby peers while sharing is enabled.
+/// Active local share advertised to verified nearby peers while sharing is enabled.
 #[derive(Debug, Clone)]
 pub struct ActiveShare {
     /// User-visible label for the share.
@@ -258,6 +258,20 @@ impl NearbyShareRegistry {
     /// Clears the discovered-share cache and returns the new public snapshot if it changed.
     pub(crate) async fn clear_discovered_shares(&self) -> Option<Vec<NearbyShare>> {
         self.replace_discovered_shares(Vec::new()).await
+    }
+
+    /// Removes cached share metadata for a peer whose verified identity was revoked.
+    pub(crate) async fn clear_discovered_shares_for(
+        &self,
+        node_id: &str,
+    ) -> Option<Vec<NearbyShare>> {
+        let mut guard = self.discovered_shares.write().await;
+        let previous_len = guard.len();
+        guard.retain(|record| record.public.node_id != node_id);
+        if guard.len() == previous_len {
+            return None;
+        }
+        Some(guard.iter().map(|record| record.public.clone()).collect())
     }
 
     /// Replaces the discovered-share cache and returns the public snapshot if it changed.
@@ -1017,6 +1031,25 @@ mod tests {
         let changed = registry.clear_discovered_shares().await;
         assert_eq!(changed, Some(Vec::new()));
         assert!(registry.snapshot().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn revoking_a_peer_clears_its_cached_share_metadata_only() {
+        let registry = NearbyShareRegistry::new(true);
+        let mut revoked = sample_record("share-revoked");
+        revoked.public.node_id = "peer-revoked".into();
+        let retained = sample_record("share-retained");
+        registry
+            .replace_discovered_shares(vec![revoked, retained.clone()])
+            .await;
+
+        let snapshot = registry
+            .clear_discovered_shares_for("peer-revoked")
+            .await
+            .expect("revoked peer had a cached share");
+        assert_eq!(snapshot, vec![retained.public]);
+        assert!(registry.ticket_for_share("share-revoked").await.is_err());
+        assert!(registry.ticket_for_share("share-retained").await.is_ok());
     }
 
     #[tokio::test]

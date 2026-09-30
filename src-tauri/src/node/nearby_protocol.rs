@@ -12,7 +12,7 @@ use super::nearby_offer::{
     handle_offer_request, OfferDecision, OfferInbox, OfferResponseMessage, OfferShareMessage,
 };
 use crate::error::{LightningP2PError, Result};
-use crate::storage::blocked_peers::BlockedPeers;
+use crate::storage::{blocked_peers::BlockedPeers, paired_devices::PairedDevices};
 use iroh::{
     endpoint::Connection,
     protocol::{AcceptError, ProtocolHandler},
@@ -36,7 +36,7 @@ const PROTOCOL_VERSION: u8 = 2;
 pub enum NearbyRequest {
     /// Lightweight identity probe — returns only the peer's device name.
     Hello { protocol_version: u8 },
-    /// Returns the peer's currently advertised shares (if any).
+    /// Returns active-share metadata to a locally verified peer (if any).
     ListShares { protocol_version: u8 },
     /// Push-style offer from a sender to a receiver.
     OfferShare {
@@ -106,6 +106,7 @@ pub struct NearbyShareProtocol {
     registry: NearbyShareRegistry,
     offers: OfferInbox,
     blocked_peers: BlockedPeers,
+    paired_devices: PairedDevices,
     app_handle: AppHandle,
 }
 
@@ -116,12 +117,14 @@ impl NearbyShareProtocol {
         registry: NearbyShareRegistry,
         offers: OfferInbox,
         blocked_peers: BlockedPeers,
+        paired_devices: PairedDevices,
         app_handle: AppHandle,
     ) -> Self {
         Self {
             registry,
             offers,
             blocked_peers,
+            paired_devices,
             app_handle,
         }
     }
@@ -152,7 +155,12 @@ impl NearbyShareProtocol {
                 device_name: local_device_name(),
             },
             NearbyRequest::ListShares { .. } => {
-                let shares = if self.registry.local_discovery_enabled().await {
+                let authenticated_peer = connection.remote_id().to_string();
+                let peer_is_verified = self.paired_devices.contains(&authenticated_peer).await;
+                let shares = if should_disclose_share_metadata(
+                    self.registry.local_discovery_enabled().await,
+                    peer_is_verified,
+                ) {
                     self.registry
                         .active_share()
                         .await
@@ -188,6 +196,10 @@ impl NearbyShareProtocol {
 
         serde_json::to_vec(&response).map_err(LightningP2PError::from)
     }
+}
+
+fn should_disclose_share_metadata(local_discovery_enabled: bool, peer_is_verified: bool) -> bool {
+    local_discovery_enabled && peer_is_verified
 }
 
 impl ProtocolHandler for NearbyShareProtocol {
@@ -504,5 +516,13 @@ mod tests {
         let bytes = serde_json::to_vec(&envelope).expect("encode response");
         let parsed: NearbyResponse = serde_json::from_slice(&bytes).expect("decode response");
         assert!(matches!(parsed, NearbyResponse::Shares { .. }));
+    }
+
+    #[test]
+    fn active_share_metadata_requires_local_discovery_and_verified_identity() {
+        assert!(should_disclose_share_metadata(true, true));
+        assert!(!should_disclose_share_metadata(true, false));
+        assert!(!should_disclose_share_metadata(false, true));
+        assert!(!should_disclose_share_metadata(false, false));
     }
 }

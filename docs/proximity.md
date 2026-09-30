@@ -7,7 +7,7 @@ File bytes always move through iroh QUIC and iroh-blobs.
 
 | Surface | Status | What it carries | Notes |
 | --- | --- | --- | --- |
-| Wi-Fi/LAN discovery | Stable | iroh nearby identity and active-share metadata | Primary nearby path today. |
+| Wi-Fi/LAN discovery | Stable | Device identity and name; active-share metadata only for saved verified peers | Primary nearby path today. Unpaired senders can still use explicit offers or receive links. |
 | Android BLE | Experimental in v0.5.0 | iroh NodeId beacons | Starts scan and advertise from Settings when permissions and adapter are available. |
 | Windows BLE | Experimental in v0.5.0 | iroh NodeId beacons | Uses the native WinRT advertisement watcher and publisher when the adapter supports BLE. |
 | macOS/Linux BLE | Not shipped | Nothing | No native BLE backend is compiled for these desktop targets yet. |

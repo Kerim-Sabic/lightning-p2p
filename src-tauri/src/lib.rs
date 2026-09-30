@@ -206,6 +206,7 @@ fn spawn_node_startup(handle: tauri::AppHandle) {
                     state.nearby_shares.clone(),
                     state.offer_inbox.clone(),
                     state.blocked_peers.clone(),
+                    state.paired_devices.clone(),
                 ),
             )
             .await;

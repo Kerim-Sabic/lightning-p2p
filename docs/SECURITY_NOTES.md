@@ -23,7 +23,7 @@ Treat these as sensitive when sharing diagnostics or support bundles:
 
 ## Nearby Discovery Metadata
 
-Nearby discovery is for trusted local networks. When active, peers can query metadata about the current active share:
+Nearby discovery exposes device presence and a human-readable device name on the local network. Detailed active-share metadata is returned only when the authenticated transport peer's NodeId is saved in My Devices:
 
 - device label
 - share label
@@ -33,7 +33,7 @@ Nearby discovery is for trusted local networks. When active, peers can query met
 - published timestamp
 - NodeId and route hints
 
-This is not the raw ticket, but it is enough to reveal presence and file metadata. Future privacy work should add an approval or pairing step before exposing detailed share metadata.
+The protocol uses `Connection::remote_id()` for this check; it does not trust an identity supplied inside the request. Unpaired peers receive an empty share list, but can still send a push offer that requires receiver consent or use a ticket shared with them. Revoking a paired identity clears its cached nearby-share metadata. A ticket already given to someone remains a bearer capability until the share is otherwise removed from serving.
 
 ## Key Storage
 

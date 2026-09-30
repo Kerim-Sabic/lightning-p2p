@@ -256,13 +256,16 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let store = PairedDevices::load(directory.path()).unwrap();
         let node_id = identity(9);
+        assert!(!store.contains(&node_id).await);
         let devices = store.pair(&node_id, "  Desk PC  ").await.unwrap();
         assert_eq!(devices[0].name, "Desk PC");
+        assert!(store.contains(&node_id).await);
         let reloaded = PairedDevices::load(directory.path()).unwrap();
         assert_eq!(reloaded.list().await, devices);
         reloaded.rename(&node_id, "Workstation").await.unwrap();
         assert_eq!(reloaded.list().await[0].name, "Workstation");
         assert!(reloaded.remove(&node_id).await.unwrap().is_empty());
+        assert!(!reloaded.contains(&node_id).await);
     }
 
     #[tokio::test]

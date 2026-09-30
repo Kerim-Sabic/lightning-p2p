@@ -315,6 +315,7 @@ async fn restart_node_after_endpoint_setting(
             state.nearby_shares.clone(),
             state.offer_inbox.clone(),
             state.blocked_peers.clone(),
+            state.paired_devices.clone(),
         ),
         reason,
     ))
