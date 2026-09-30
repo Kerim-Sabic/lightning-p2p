@@ -51,7 +51,10 @@ function statusLabel(transfer: TransferEntry): string {
         return "Connecting";
       }
       if (transfer.phase === "verifying") {
-        return "Verifying and saving";
+        return "Verifying content";
+      }
+      if (transfer.phase === "saving") {
+        return "Saving to this device";
       }
       return transfer.direction === "send" ? "Importing content" : "Receiving";
     case "prepared":

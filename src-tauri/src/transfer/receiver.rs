@@ -316,17 +316,18 @@ async fn receive_core(
     .await?;
     let download_ms = elapsed_ms(download_started_at.elapsed());
 
-    // The download just completed but the user may have flipped the cancel
-    // signal during the brief window between the last `next_event` check and
-    // now. iroh-blobs' `export()` does not take a cancel channel, so once we
-    // start it the export runs to completion regardless. Check here so a
-    // late-cancel doesn't end up as a Completed event with a delivered file.
+    // A late cancel can arrive after the final downloader event. Check before
+    // metadata verification and destination staging so it cannot be reported
+    // as a completed receive.
     if *cancel_rx.borrow() {
         return Err(LightningP2PError::Other("Cancelled".into()));
     }
 
     // The ticket's size is only a sender-provided estimate. Recompute from
     // the fully verified local blobs before disk preflight and final progress.
+    if let Some(progress) = progress {
+        progress.set_phase(TransferPhase::Verifying);
+    }
     let verified_size = export::ticket_size(node.blobs_client(), ticket.primary()).await?;
     let verified_file_names =
         export::ticket_file_names(node.blobs_client(), ticket.primary()).await?;
@@ -344,7 +345,7 @@ async fn receive_core(
     )?;
     if let Some(progress) = progress {
         progress.set(verified_size, verified_size);
-        progress.set_phase(TransferPhase::Verifying);
+        progress.set_phase(TransferPhase::Saving);
     }
     let export_started_at = Instant::now();
     let primary = ticket.primary();
@@ -725,7 +726,9 @@ fn categorize_receive_error(error: &LightningP2PError, phase: TransferPhase) -> 
     {
         return FailureCategory::Destination;
     }
-    if phase == TransferPhase::Verifying || message.contains("export") {
+    if matches!(phase, TransferPhase::Verifying | TransferPhase::Saving)
+        || message.contains("export")
+    {
         return FailureCategory::Export;
     }
     if matches!(error, LightningP2PError::Blob(_)) {
@@ -735,7 +738,7 @@ fn categorize_receive_error(error: &LightningP2PError, phase: TransferPhase) -> 
 }
 
 fn receive_error_payload(error: &LightningP2PError, phase: TransferPhase) -> AppErrorPayload {
-    let mut payload = if phase == TransferPhase::Verifying {
+    let mut payload = if matches!(phase, TransferPhase::Verifying | TransferPhase::Saving) {
         AppErrorPayload::export_failed(error.to_string())
     } else {
         error.to_payload()

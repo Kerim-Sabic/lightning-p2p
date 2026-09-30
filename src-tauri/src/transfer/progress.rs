@@ -36,8 +36,10 @@ pub enum TransferPhase {
     Retrying,
     /// File bytes are moving into the local blob store.
     Downloading,
-    /// Verified blobs are being exported to the destination folder.
+    /// Downloaded content and its receive limits are being checked.
     Verifying,
+    /// Verified content is being exported to the destination folder.
+    Saving,
     /// The transfer completed successfully.
     Completed,
     /// The transfer failed.
@@ -58,6 +60,7 @@ impl TransferPhase {
             5 => Self::Completed,
             6 => Self::Failed,
             7 => Self::Cancelled,
+            8 => Self::Saving,
             _ => Self::Preparing,
         }
     }
@@ -74,6 +77,7 @@ impl TransferPhase {
             Self::Completed => 5,
             Self::Failed => 6,
             Self::Cancelled => 7,
+            Self::Saving => 8,
         }
     }
 }
@@ -856,6 +860,12 @@ mod tests {
     fn retrying_phase_round_trips_through_atomic_representation() {
         let repr = TransferPhase::Retrying.as_repr();
         assert_eq!(TransferPhase::from_repr(repr), TransferPhase::Retrying);
+    }
+
+    #[test]
+    fn saving_phase_round_trips_through_atomic_representation() {
+        let repr = TransferPhase::Saving.as_repr();
+        assert_eq!(TransferPhase::from_repr(repr), TransferPhase::Saving);
     }
 
     #[test]
