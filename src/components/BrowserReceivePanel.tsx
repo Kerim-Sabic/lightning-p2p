@@ -19,8 +19,8 @@ import {
   type TicketInfo,
 } from "../lib/webReceiver";
 
-// The browser store is memory-backed. Gate advertised size for a useful early
-// warning, then enforce this same aggregate limit against actual bytes in Rust.
+// The compatibility receive path is memory-backed. Gate advertised size for a
+// useful early warning, then enforce the limit against actual bytes in Rust.
 const WARN_BYTES = 64 * 1024 * 1024;
 const REFUSE_BYTES = 128 * 1024 * 1024;
 
@@ -53,6 +53,7 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
   const [savedHashes, setSavedHashes] = useState<Set<string>>(new Set());
   const [streamedReceive, setStreamedReceive] = useState(false);
   const [savingHash, setSavingHash] = useState<string | null>(null);
+  const [savingBytes, setSavingBytes] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [receiver, setReceiver] = useState<BrowserReceiver | null>(null);
   const [receivedBytes, setReceivedBytes] = useState(0);
@@ -176,9 +177,22 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
   const save = async (file: CollectionFile) => {
     if (!receiver) return;
     setSavingHash(file.hash);
+    setSavingBytes(0);
     try {
       if (streamedReceive) {
-        const bytes = await saveReceivedFileStreaming(receiver, file);
+        let lastUiUpdate = 0;
+        const bytes = await saveReceivedFileStreaming(
+          receiver,
+          file,
+          (count) => {
+            const now = performance.now();
+            if (now - lastUiUpdate >= 100 || count >= file.size) {
+              lastUiUpdate = now;
+              setSavingBytes(count);
+            }
+          },
+        );
+        setSavingBytes(bytes);
         setReceivedBytes((current) => current + bytes);
       } else {
         await saveReceivedFile(receiver, file);
@@ -383,6 +397,11 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
                         type="button"
                         onClick={() => void save(file)}
                         disabled={savingHash !== null}
+                        aria-label={
+                          saving
+                            ? `Saving ${file.name}: ${formatBytes(savingBytes)} of ${formatBytes(file.size)}`
+                            : `${saved ? "Saved" : "Save"} ${file.name}`
+                        }
                         className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[12px] font-semibold transition disabled:opacity-60 ${
                           saved
                             ? "border-[color:var(--signal-green)]/40 bg-[color:var(--signal-green)]/14 text-[var(--signal-green)]"
@@ -396,7 +415,13 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
                         ) : (
                           <Download className="h-3.5 w-3.5" />
                         )}
-                        {saved ? "Saved" : saving ? "Saving" : "Save"}
+                        {saved
+                          ? "Saved"
+                          : saving
+                            ? streamedReceive
+                              ? `${formatBytes(savingBytes)} / ${formatBytes(file.size)}`
+                              : "Saving"
+                            : "Save"}
                       </button>
                     </motion.li>
                   );

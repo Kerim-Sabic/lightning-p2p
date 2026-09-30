@@ -227,10 +227,16 @@ export class BrowserReceiver {
     hashHex: string,
     expectedSize: number,
     onChunk: (chunk: Uint8Array) => Promise<void>,
+    onProgress?: (receivedBytes: number) => void,
   ): Promise<number> {
     if (!this.inner.stream_blob_to)
       throw new Error("engine version without streamed receive");
-    return this.inner.stream_blob_to(hashHex, expectedSize, onChunk);
+    let receivedBytes = 0;
+    return this.inner.stream_blob_to(hashHex, expectedSize, async (chunk) => {
+      await onChunk(chunk);
+      receivedBytes += chunk.byteLength;
+      onProgress?.(receivedBytes);
+    });
   }
 }
 
@@ -348,6 +354,7 @@ export async function saveReceivedFile(
 export async function saveReceivedFileStreaming(
   receiver: BrowserReceiver,
   file: CollectionFile,
+  onProgress?: (receivedBytes: number) => void,
 ): Promise<number> {
   if (!receiver.supportsStreamingReceive() || !hasSaveFilePicker())
     throw new Error("This browser cannot stream received files to disk.");
@@ -358,8 +365,11 @@ export async function saveReceivedFileStreaming(
   });
   const writable = await handle.createWritable();
   try {
-    const written = await receiver.streamBlobTo(file.hash, file.size, (chunk) =>
-      writable.write(chunk),
+    const written = await receiver.streamBlobTo(
+      file.hash,
+      file.size,
+      (chunk) => writable.write(chunk),
+      onProgress,
     );
     if (written !== file.size)
       throw new Error(
