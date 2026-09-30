@@ -117,7 +117,7 @@ and timing metadata, so review them before posting publicly.
 - Received files are not scanned for malware.
 - Endpoints can be compromised.
 - Nearby discovery still exposes device presence, the stable endpoint identity, and the device name to local peers. Active-share metadata is restricted to saved verified identities. A ticket already shared remains a bearer capability even after a device is unpaired.
-- Keychain fallback stores plaintext identity key material in the app data directory when platform key storage is unavailable.
+- Keychain fallback stores plaintext identity key material in the app data directory when platform key storage is unavailable; Unix permissions and a protected Windows owner-only DACL limit access by other local accounts but do not encrypt the key or protect against the same account or an administrator.
 - Public benchmark leadership claims are not published yet.
 - No third-party audit has been completed.
 

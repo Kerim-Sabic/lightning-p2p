@@ -10,8 +10,11 @@
 use crate::error::{LightningP2PError, Result};
 use iroh::SecretKey;
 use sha2::{Digest, Sha256};
-use std::io::Write;
+use std::io::{Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
+
+mod fallback_permissions;
+use fallback_permissions::restrict_private_file;
 
 const SERVICE_NAME: &str = "com.lightningp2p.app";
 const APP_IDENTIFIER: &str = "com.lightningp2p.app";
@@ -281,6 +284,7 @@ fn load_chat_mesh_fallback(data_dir: &Path) -> Result<Option<String>> {
     if !path.exists() {
         return Ok(None);
     }
+    restrict_private_file(&path)?;
     let encoded = std::fs::read_to_string(path)?.trim().to_string();
     crate::node::chat_mesh::MeshIdentity::decode_secret(&encoded)
         .map_err(LightningP2PError::Key)?;
@@ -292,6 +296,7 @@ fn load_chat_fallback(data_dir: &Path) -> Result<Option<String>> {
     if !path.exists() {
         return Ok(None);
     }
+    restrict_private_file(&path)?;
     let secret = std::fs::read_to_string(path)?.trim().to_string();
     if !valid_chat_secret(&secret) {
         return Err(LightningP2PError::Key(
@@ -305,13 +310,16 @@ fn store_chat_fallback(data_dir: &Path, secret: &str) -> Result<()> {
     std::fs::create_dir_all(data_dir)?;
     let path = chat_fallback_path(data_dir);
     let mut options = std::fs::OpenOptions::new();
-    options.create(true).truncate(true).write(true);
+    options.create(true).write(true);
     #[cfg(unix)]
     {
         use std::os::unix::fs::OpenOptionsExt;
         options.mode(0o600);
     }
     let mut file = options.open(path)?;
+    restrict_private_file(&chat_fallback_path(data_dir))?;
+    file.set_len(0)?;
+    file.seek(SeekFrom::Start(0))?;
     file.write_all(secret.as_bytes())?;
     file.sync_all()?;
     Ok(())
@@ -322,13 +330,16 @@ fn store_private_fallback(path: &Path, value: &str) -> Result<()> {
         std::fs::create_dir_all(parent)?;
     }
     let mut options = std::fs::OpenOptions::new();
-    options.create(true).truncate(true).write(true);
+    options.create(true).write(true);
     #[cfg(unix)]
     {
         use std::os::unix::fs::OpenOptionsExt;
         options.mode(0o600);
     }
     let mut file = options.open(path)?;
+    restrict_private_file(path)?;
+    file.set_len(0)?;
+    file.seek(SeekFrom::Start(0))?;
     file.write_all(value.as_bytes())?;
     file.sync_all()?;
     Ok(())
@@ -402,6 +413,7 @@ fn load_fallback_secret_key(data_dir: &Path) -> Result<Option<Vec<u8>>> {
     if !path.exists() {
         return Ok(None);
     }
+    restrict_private_file(&path)?;
     let encoded = std::fs::read_to_string(path)?;
     let bytes = hex::decode(encoded.trim()).map_err(|error| {
         LightningP2PError::Key(format!("invalid fallback iroh secret key: {error}"))
@@ -414,7 +426,7 @@ fn store_fallback_secret_key(data_dir: &Path, key_bytes: &[u8]) -> Result<()> {
     let path = fallback_key_path(data_dir);
     let tmp_path = path.with_extension("hex.tmp");
     let mut options = std::fs::OpenOptions::new();
-    options.create(true).truncate(true).write(true);
+    options.create(true).write(true);
 
     #[cfg(unix)]
     {
@@ -423,6 +435,9 @@ fn store_fallback_secret_key(data_dir: &Path, key_bytes: &[u8]) -> Result<()> {
     }
 
     let mut file = options.open(&tmp_path)?;
+    restrict_private_file(&tmp_path)?;
+    file.set_len(0)?;
+    file.seek(SeekFrom::Start(0))?;
     file.write_all(hex::encode(key_bytes).as_bytes())?;
     file.sync_all()?;
     std::fs::rename(tmp_path, path)?;
