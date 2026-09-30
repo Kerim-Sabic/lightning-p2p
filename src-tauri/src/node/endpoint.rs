@@ -21,6 +21,7 @@ use iroh::protocol::Router;
 use iroh::{Endpoint, EndpointAddr, EndpointId, RelayMap, RelayMode, RelayUrl, TransportAddr};
 use iroh_blobs::api::Store;
 use iroh_blobs::format::collection::Collection;
+use iroh_blobs::hashseq::HashSeq;
 use iroh_blobs::store::fs::FsStore;
 use iroh_blobs::Hash;
 #[cfg(not(target_os = "ios"))]
@@ -179,15 +180,18 @@ impl LightningP2PNode {
     }
 
     async fn share_hashes(&self, root: Hash) -> Result<Vec<Hash>> {
-        let collection = Collection::load(root, self.blobs_client())
+        Collection::load(root, self.blobs_client())
             .await
             .map_err(|error| LightningP2PError::Blob(error.to_string()))?;
-        let mut hashes = Vec::new();
-        hashes.push(root);
-        hashes.extend(collection.iter().map(|(_name, hash)| *hash));
-        hashes.sort_unstable();
-        hashes.dedup();
-        Ok(hashes)
+        let root_bytes = self
+            .blobs_client()
+            .blobs()
+            .get_bytes(root)
+            .await
+            .map_err(|error| LightningP2PError::Blob(error.to_string()))?;
+        let links = HashSeq::try_from(root_bytes)
+            .map_err(|error| LightningP2PError::Blob(error.to_string()))?;
+        Ok(hashes_for_collection(root, links))
     }
 
     /// Returns a clone of the LAN mDNS address lookup for the discovery loop
@@ -283,6 +287,17 @@ impl LightningP2PNode {
             .await
             .map_err(|error| LightningP2PError::Network(error.into()))
     }
+}
+
+fn hashes_for_collection(root: Hash, links: impl IntoIterator<Item = Hash>) -> Vec<Hash> {
+    let mut hashes = Vec::new();
+    hashes.push(root);
+    // HashSeq includes the CollectionMeta blob first, followed by each file.
+    // Both are needed by remote receivers to enumerate and fetch the share.
+    hashes.extend(links);
+    hashes.sort_unstable();
+    hashes.dedup();
+    hashes
 }
 
 async fn bind_endpoint(
@@ -495,5 +510,19 @@ mod tests {
         ] {
             let _config = tuned_transport_config(mode.profile());
         }
+    }
+
+    #[test]
+    fn collection_authorization_includes_metadata_and_file_links() {
+        let root = Hash::from([1; 32]);
+        let metadata = Hash::from([2; 32]);
+        let file = Hash::from([3; 32]);
+
+        let hashes = hashes_for_collection(root, [metadata, file, metadata]);
+
+        assert_eq!(hashes.len(), 3);
+        assert!(hashes.contains(&root));
+        assert!(hashes.contains(&metadata));
+        assert!(hashes.contains(&file));
     }
 }

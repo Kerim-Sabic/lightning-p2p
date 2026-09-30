@@ -198,6 +198,7 @@ mod tests {
         SecretKey,
     };
     use iroh_blobs::store::mem::MemStore;
+    use iroh_blobs::{format::collection::Collection, hashseq::HashSeq};
     use std::time::Duration;
 
     fn test_peer(value: u8) -> EndpointId {
@@ -281,6 +282,14 @@ mod tests {
         let source = MemStore::new();
         let public_hash = source.add_bytes(b"public bytes".to_vec()).await?.hash;
         let private_hash = source.add_bytes(b"private bytes".to_vec()).await?.hash;
+        let collection_root = Collection::from_iter([(String::from("private.bin"), private_hash)])
+            .store(source.as_ref())
+            .await?
+            .hash();
+        let links = HashSeq::try_from(source.get_bytes(collection_root).await?)?;
+        let collection_hashes = std::iter::once(collection_root)
+            .chain(links.iter())
+            .collect::<Vec<_>>();
         let access = BlobAccessController::default();
         assert!(access.publish_public(&[public_hash]));
 
@@ -300,7 +309,7 @@ mod tests {
             .address_lookup(authorized_lookup)
             .bind()
             .await?;
-        assert!(access.authorize_peer(authorized_peer.id(), &[private_hash]));
+        assert!(access.authorize_peer(authorized_peer.id(), &collection_hashes));
 
         let denied_store = MemStore::new();
         let denied_lookup = MemoryLookup::new();
@@ -310,24 +319,18 @@ mod tests {
             .bind()
             .await?;
 
-        assert!(
-            fetch(
-                &authorized_peer,
-                &authorized_store,
-                server_addr.clone(),
-                private_hash
-            )
-            .await?
-        );
-        assert!(
-            !fetch(
-                &denied_peer,
-                &denied_store,
-                server_addr.clone(),
-                private_hash
-            )
-            .await?
-        );
+        for hash in &collection_hashes {
+            assert!(
+                fetch(
+                    &authorized_peer,
+                    &authorized_store,
+                    server_addr.clone(),
+                    *hash
+                )
+                .await?
+            );
+            assert!(!fetch(&denied_peer, &denied_store, server_addr.clone(), *hash).await?);
+        }
         assert!(fetch(&denied_peer, &denied_store, server_addr, public_hash).await?);
         assert_eq!(
             authorized_store.get_bytes(private_hash).await?.as_ref(),
