@@ -8,7 +8,7 @@ import {
   Search,
   Trash2,
 } from "lucide-react";
-import { useDeferredValue, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { formatBytes, formatTimestamp } from "../lib/format";
 import { createReceiveHandoffLink } from "../lib/shareLinks";
 import { writeClipboardText } from "../lib/tauri";
@@ -16,6 +16,7 @@ import { useTransferStore } from "../stores/transferStore";
 import { EmptyState } from "./EmptyState";
 
 type DirectionFilter = "all" | "send" | "receive";
+const HISTORY_PAGE_SIZE = 40;
 
 function directionTone(
   direction: "send" | "receive",
@@ -43,9 +44,15 @@ export function HistoryView() {
   const [resharedTicket, setResharedTicket] = useState<string | null>(null);
   const [copied, setCopied] = useState<"link" | "ticket" | null>(null);
   const [clearingHistory, setClearingHistory] = useState(false);
+  const [visibleHistoryCount, setVisibleHistoryCount] =
+    useState(HISTORY_PAGE_SIZE);
 
   const deferredQuery = useDeferredValue(query);
   const normalizedQuery = deferredQuery.trim().toLowerCase();
+
+  useEffect(() => {
+    setVisibleHistoryCount(HISTORY_PAGE_SIZE);
+  }, [directionFilter, normalizedQuery]);
 
   const filteredHistory = useMemo(
     () =>
@@ -72,6 +79,7 @@ export function HistoryView() {
       }),
     [directionFilter, history, normalizedQuery],
   );
+  const visibleHistory = filteredHistory.slice(0, visibleHistoryCount);
 
   const totals = useMemo(() => {
     let sharesPreparedCount = 0;
@@ -299,6 +307,12 @@ export function HistoryView() {
           </button>
         </div>
 
+        {filteredHistory.length > 0 ? (
+          <p className="text-xs text-slate-500" aria-live="polite">
+            Showing {visibleHistory.length} of {filteredHistory.length} records
+          </p>
+        ) : null}
+
         {filteredHistory.length === 0 ? (
           <EmptyState
             icon={history.length === 0 ? Clock3 : Search}
@@ -315,12 +329,12 @@ export function HistoryView() {
           />
         ) : (
           <div className="grid gap-3">
-            {filteredHistory.map((record, index) => (
+            {visibleHistory.map((record, index) => (
               <motion.article
                 key={`${record.timestamp}-${record.hash}`}
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.02, duration: 0.18 }}
+                transition={{ delay: Math.min(index, 8) * 0.012, duration: 0.18 }}
                 className="glass-panel group p-5 transition-colors duration-200 hover:bg-white/[0.05]"
               >
                 <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
@@ -371,6 +385,19 @@ export function HistoryView() {
             ))}
           </div>
         )}
+        {visibleHistory.length < filteredHistory.length ? (
+          <button
+            type="button"
+            onClick={() =>
+              setVisibleHistoryCount((count) =>
+                Math.min(count + HISTORY_PAGE_SIZE, filteredHistory.length),
+              )
+            }
+            className="glass-button mt-3 min-h-11 w-full justify-center px-4 text-sm text-slate-100"
+          >
+            Load {Math.min(HISTORY_PAGE_SIZE, filteredHistory.length - visibleHistory.length)} more
+          </button>
+        ) : null}
       </section>
     </div>
   );
