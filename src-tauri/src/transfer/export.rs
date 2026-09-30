@@ -44,11 +44,20 @@ pub async fn export_ticket(
     ticket: &BlobTicket,
     destination: &Path,
     known_size: Option<u64>,
+    suggested_file_name: Option<&str>,
     cancel_rx: &mut watch::Receiver<bool>,
 ) -> Result<ExportSummary> {
     ensure_not_cancelled(cancel_rx)?;
     preflight_destination(destination)?;
-    let label = resolve_label(store, ticket).await?;
+    let suggested_file_name = if ticket.recursive() {
+        None
+    } else {
+        suggested_file_name.map(safe_suggested_file_name)
+    };
+    let label = match suggested_file_name.as_deref() {
+        Some(name) => name.to_string(),
+        None => resolve_label(store, ticket).await?,
+    };
     let size = match known_size {
         Some(size) if size > 0 => size,
         _ => ticket_size(store, ticket).await?,
@@ -57,7 +66,14 @@ pub async fn export_ticket(
     let output_path = if ticket.recursive() {
         export_collection(store, ticket, destination, &label, cancel_rx).await?
     } else {
-        export_blob(store, ticket, destination, cancel_rx).await?
+        export_blob(
+            store,
+            ticket,
+            destination,
+            suggested_file_name.as_deref(),
+            cancel_rx,
+        )
+        .await?
     };
 
     let output_path = publish_to_public_storage(output_path, ticket.recursive()).await;
@@ -166,9 +182,13 @@ async fn export_blob(
     store: &Store,
     ticket: &BlobTicket,
     destination: &Path,
+    suggested_file_name: Option<&str>,
     cancel_rx: &mut watch::Receiver<bool>,
 ) -> Result<PathBuf> {
-    let base_path = destination.join(ticket.hash().to_string());
+    let base_path = destination.join(
+        suggested_file_name
+            .map_or_else(|| ticket.hash().to_string(), str::to_string),
+    );
     let staging_dir = create_export_staging_dir(destination, ticket.hash())?;
     let temp_path = staging_dir.join(ticket.hash().to_string());
 
@@ -193,6 +213,11 @@ async fn export_blob(
     let published = publish_staged_file(&temp_path, &base_path).await;
     let _ = tokio::fs::remove_dir_all(&staging_dir).await;
     published
+}
+
+fn safe_suggested_file_name(label: &str) -> String {
+    let name = label.rsplit(['/', '\\']).next().unwrap_or_default();
+    safe_collection_label(name)
 }
 
 /// Creates a fresh private directory for a single-file export. A predictable
@@ -541,6 +566,13 @@ mod tests {
     use super::*;
 
     #[test]
+    fn suggested_file_names_keep_only_a_safe_basename() {
+        assert_eq!(safe_suggested_file_name(r"C:\users\photo.png"), "photo.png");
+        assert_eq!(safe_suggested_file_name("../CON.txt"), "_CON.txt");
+        assert_eq!(safe_suggested_file_name("folder/"), "download");
+    }
+
+    #[test]
     fn summarize_names_uses_common_root() {
         let label = summarize_names(["folder/a.txt", "folder/b.txt"].into_iter());
         assert_eq!(label, "folder");
@@ -584,7 +616,7 @@ mod tests {
         let (_cancel_tx, mut cancel_rx) = watch::channel(true);
 
         assert!(
-            export_blob(store.as_ref(), &ticket, dir.path(), &mut cancel_rx)
+            export_blob(store.as_ref(), &ticket, dir.path(), None, &mut cancel_rx)
                 .await
                 .is_err()
         );
@@ -608,7 +640,7 @@ mod tests {
         );
         let (_cancel_tx, mut cancel_rx) = watch::channel(false);
 
-        let published = export_blob(store.as_ref(), &ticket, dir.path(), &mut cancel_rx)
+        let published = export_blob(store.as_ref(), &ticket, dir.path(), None, &mut cancel_rx)
             .await
             .expect("export safely");
 
@@ -641,7 +673,7 @@ mod tests {
         );
         let (_cancel_tx, mut cancel_rx) = watch::channel(false);
 
-        let published = export_blob(store.as_ref(), &ticket, dir.path(), &mut cancel_rx)
+        let published = export_blob(store.as_ref(), &ticket, dir.path(), None, &mut cancel_rx)
             .await
             .expect("export safely");
 

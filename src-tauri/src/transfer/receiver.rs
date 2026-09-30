@@ -353,6 +353,7 @@ async fn receive_core(
         primary,
         &destination,
         Some(verified_size),
+        fallback_file_name.as_deref(),
         cancel_rx,
     )
     .await?;

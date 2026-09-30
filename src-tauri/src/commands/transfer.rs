@@ -231,7 +231,7 @@ pub(crate) async fn start_receive_from_offer(
         window,
         ShareTicket::from_blob_ticket(ticket),
         limits,
-        auto_catch.then_some(offer_label),
+        Some(offer_label),
     )
     .await
 }
