@@ -2,7 +2,8 @@
 
 pub(crate) use super::destination::preflight_destination;
 use super::destination::{
-    ensure_enough_space, next_available_path, safe_collection_label, staging_dir_name,
+    ensure_enough_space, safe_collection_entry_path, safe_collection_label, staging_dir_name,
+    suffixed_path,
 };
 use crate::error::{LightningP2PError, Result};
 use iroh_blobs::api::proto::BlobStatus;
@@ -166,8 +167,8 @@ async fn export_blob(store: &Store, ticket: &BlobTicket, destination: &Path) -> 
     // in the same directory as the final file so the rename is intra-filesystem
     // and remains atomic. `next_available_path` runs against the FINAL name so
     // we don't collide with an existing user file.
-    let output_path = next_available_path(&destination.join(ticket.hash().to_string()));
-    let temp_path = part_path_for(&output_path);
+    let base_path = destination.join(ticket.hash().to_string());
+    let temp_path = part_path_for(&base_path);
 
     let export_result = store
         .blobs()
@@ -180,11 +181,7 @@ async fn export_blob(store: &Store, ticket: &BlobTicket, destination: &Path) -> 
         return Err(error);
     }
 
-    if let Err(error) = tokio::fs::rename(&temp_path, &output_path).await {
-        let _ = tokio::fs::remove_file(&temp_path).await;
-        return Err(LightningP2PError::from(error));
-    }
-    Ok(output_path)
+    publish_staged_file(&temp_path, &base_path).await
 }
 
 /// Returns a sibling `.part` path next to `final_path`. Used as the temp name
@@ -204,8 +201,7 @@ async fn export_collection(
     destination: &Path,
     label: &str,
 ) -> Result<PathBuf> {
-    let staging_dir = next_available_path(&destination.join(staging_dir_name(ticket.hash())));
-    tokio::fs::create_dir_all(&staging_dir).await?;
+    let staging_dir = create_collection_staging_dir(destination, ticket.hash()).await?;
 
     // iroh-blobs 1.0 has no collection-export helper, so load the collection
     // and export each child to `staging/<name>` (creating parent dirs for
@@ -217,7 +213,27 @@ async fn export_collection(
         return Err(error);
     }
 
-    move_staged_collection(&staging_dir, destination, label).await
+    match move_staged_collection(&staging_dir, destination, label).await {
+        Ok(path) => Ok(path),
+        Err(error) => {
+            let _ = tokio::fs::remove_dir_all(&staging_dir).await;
+            Err(error)
+        }
+    }
+}
+
+async fn create_collection_staging_dir(destination: &Path, hash: Hash) -> Result<PathBuf> {
+    for _ in 0..64 {
+        let candidate = destination.join(staging_dir_name(hash));
+        match tokio::fs::create_dir(&candidate).await {
+            Ok(()) => return Ok(candidate),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+            Err(error) => return Err(error.into()),
+        }
+    }
+    Err(LightningP2PError::Other(
+        "Could not reserve a safe folder for the received files.".into(),
+    ))
 }
 
 async fn export_collection_children(store: &Store, root: Hash, staging_dir: &Path) -> Result<()> {
@@ -225,7 +241,8 @@ async fn export_collection_children(store: &Store, root: Hash, staging_dir: &Pat
         .await
         .map_err(|error| blob_error(&error))?;
     for (name, hash) in collection.iter() {
-        let target = staging_dir.join(name);
+        let safe_relative_path = safe_collection_entry_path(name)?;
+        let target = staging_dir.join(safe_relative_path);
         if let Some(parent) = target.parent() {
             tokio::fs::create_dir_all(parent).await?;
         }
@@ -282,15 +299,76 @@ async fn move_staged_collection(
             .file_name()
             .map(OsString::from)
             .ok_or_else(|| LightningP2PError::Other("Export output has no filename".into()))?;
-        let target = next_available_path(&destination.join(file_name));
-        tokio::fs::rename(&source, &target).await?;
+        let base = destination.join(file_name);
+        let target = if tokio::fs::metadata(&source).await?.is_dir() {
+            publish_staged_directory(&source, &base).await?
+        } else {
+            publish_staged_file(&source, &base).await?
+        };
         let _ = tokio::fs::remove_dir(staging_dir).await;
         return Ok(target);
     }
 
-    let target = next_available_path(&destination.join(safe_collection_label(label)));
-    tokio::fs::rename(staging_dir, &target).await?;
-    Ok(target)
+    publish_staged_directory(staging_dir, &destination.join(safe_collection_label(label))).await
+}
+
+/// Atomically creates a no-clobber output file on the same filesystem.
+/// Hard-link creation fails when the destination already exists, so a racing
+/// file cannot be overwritten after the suffix was selected.
+async fn publish_staged_file(source: &Path, base: &Path) -> Result<PathBuf> {
+    for index in 0..1000 {
+        let candidate = if index == 0 {
+            base.to_path_buf()
+        } else {
+            suffixed_path(base, index)
+        };
+        match tokio::fs::hard_link(source, &candidate).await {
+            Ok(()) => {
+                if let Err(error) = tokio::fs::remove_file(source).await {
+                    tracing::warn!(%error, path = %source.display(), "could not remove staged file after publishing");
+                }
+                return Ok(candidate);
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+            Err(error) => return Err(LightningP2PError::from(error)),
+        }
+    }
+    Err(LightningP2PError::Other(
+        "Could not reserve a unique filename for the received file.".into(),
+    ))
+}
+
+/// Reserves a directory name with an atomic create operation, then atomically
+/// replaces only that empty reservation with the fully staged tree on Unix.
+/// Windows requires removing the reservation before rename; its rename fails
+/// if another path appears in the gap, so existing files still are not replaced.
+async fn publish_staged_directory(source: &Path, base: &Path) -> Result<PathBuf> {
+    for index in 0..1000 {
+        let candidate = if index == 0 {
+            base.to_path_buf()
+        } else {
+            suffixed_path(base, index)
+        };
+        match tokio::fs::create_dir(&candidate).await {
+            Ok(()) => {
+                #[cfg(windows)]
+                tokio::fs::remove_dir(&candidate).await?;
+                match tokio::fs::rename(source, &candidate).await {
+                    Ok(()) => return Ok(candidate),
+                    Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+                    Err(error) => {
+                        let _ = tokio::fs::remove_dir(&candidate).await;
+                        return Err(LightningP2PError::from(error));
+                    }
+                }
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+            Err(error) => return Err(LightningP2PError::from(error)),
+        }
+    }
+    Err(LightningP2PError::Other(
+        "Could not reserve a unique folder for the received files.".into(),
+    ))
 }
 
 async fn read_dir_entries(path: &Path) -> Result<Vec<PathBuf>> {
@@ -349,5 +427,55 @@ mod tests {
         let final_path = PathBuf::from("/tmp/downloads/raw_hash_value");
         let temp = part_path_for(&final_path);
         assert_eq!(temp.file_name().unwrap(), "raw_hash_value.part");
+    }
+
+    #[tokio::test]
+    async fn publishing_a_file_preserves_existing_output() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let existing = dir.path().join("payload.txt");
+        let staged = dir.path().join("payload.txt.part");
+        tokio::fs::write(&existing, b"keep")
+            .await
+            .expect("existing");
+        tokio::fs::write(&staged, b"new").await.expect("staged");
+
+        let published = publish_staged_file(&staged, &existing)
+            .await
+            .expect("publish");
+
+        assert_eq!(tokio::fs::read(existing).await.unwrap(), b"keep");
+        assert_eq!(tokio::fs::read(published).await.unwrap(), b"new");
+        assert!(!staged.exists());
+    }
+
+    #[tokio::test]
+    async fn publishing_a_directory_preserves_existing_output() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let existing = dir.path().join("folder");
+        let staged = dir.path().join("staged");
+        tokio::fs::create_dir(&existing)
+            .await
+            .expect("existing dir");
+        tokio::fs::write(existing.join("keep.txt"), b"keep")
+            .await
+            .expect("existing file");
+        tokio::fs::create_dir(&staged).await.expect("staged dir");
+        tokio::fs::write(staged.join("new.txt"), b"new")
+            .await
+            .expect("staged file");
+
+        let published = publish_staged_directory(&staged, &existing)
+            .await
+            .expect("publish");
+
+        assert_eq!(
+            tokio::fs::read(existing.join("keep.txt")).await.unwrap(),
+            b"keep"
+        );
+        assert_eq!(
+            tokio::fs::read(published.join("new.txt")).await.unwrap(),
+            b"new"
+        );
+        assert!(!staged.exists());
     }
 }

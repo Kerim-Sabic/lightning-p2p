@@ -3,9 +3,11 @@
 use crate::error::{LightningP2PError, Result};
 use iroh_blobs::Hash;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const DISK_SPACE_HEADROOM_BYTES: u64 = 64 * 1024 * 1024;
+static STAGING_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 /// Destination folder preflight result.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -68,42 +70,95 @@ pub(crate) fn ensure_enough_space(destination: &Path, size: u64) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn next_available_path(base: &Path) -> PathBuf {
-    if !base.exists() {
-        return base.to_path_buf();
-    }
-
-    for index in 1..=999 {
-        let candidate = suffixed_path(base, index);
-        if !candidate.exists() {
-            return candidate;
-        }
-    }
-
-    suffixed_path(base, unix_timestamp())
-}
-
 pub(crate) fn safe_collection_label(label: &str) -> String {
     let safe = label
         .trim()
         .chars()
         .map(|character| match character {
             '\\' | '/' | ':' | '*' | '?' | '"' | '<' | '>' | '|' => '_',
+            character if character.is_control() => '_',
             other => other,
         })
+        .collect::<String>()
+        .trim_end_matches(['.', ' '])
+        .chars()
+        .take(120)
         .collect::<String>();
     if safe.is_empty() {
         "download".into()
+    } else if is_windows_reserved_name(&safe) {
+        format!("_{safe}")
     } else {
         safe
     }
 }
 
-pub(crate) fn staging_dir_name(hash: Hash) -> String {
-    format!(".lightning-p2p-export-{hash}-{}", unix_timestamp())
+/// Validates an untrusted collection member name and returns a relative path.
+/// Both slash styles are treated as separators on every platform so a ticket
+/// cannot carry a Windows traversal path that becomes meaningful elsewhere.
+///
+/// # Errors
+///
+/// Returns an error for absolute paths, traversal, empty components, Windows
+/// device names, control characters, invalid cross-platform characters, or
+/// components that exceed common filesystem limits.
+pub(crate) fn safe_collection_entry_path(name: &str) -> Result<PathBuf> {
+    let normalized = name.replace('\\', "/");
+    if normalized.is_empty()
+        || normalized.starts_with('/')
+        || normalized.as_bytes().get(1) == Some(&b':')
+        || normalized.contains(':')
+    {
+        return Err(unsafe_collection_path_error());
+    }
+
+    let mut relative = PathBuf::new();
+    for component in normalized.split('/') {
+        if component.is_empty()
+            || component == "."
+            || component == ".."
+            || component.ends_with(['.', ' '])
+            || component.chars().any(|character| {
+                character.is_control() || matches!(character, '<' | '>' | '"' | '|' | '?' | '*')
+            })
+            || component.encode_utf16().count() > 255
+            || is_windows_reserved_name(component)
+        {
+            return Err(unsafe_collection_path_error());
+        }
+        relative.push(component);
+    }
+    Ok(relative)
 }
 
-fn suffixed_path(base: &Path, index: u64) -> PathBuf {
+fn unsafe_collection_path_error() -> LightningP2PError {
+    LightningP2PError::Other("The shared folder contains an unsafe file path.".into())
+}
+
+fn is_windows_reserved_name(name: &str) -> bool {
+    let stem = name.split('.').next().unwrap_or_default();
+    let stem = stem.trim_end_matches(['.', ' ']).to_ascii_uppercase();
+    matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+        || ["COM", "LPT"].iter().any(|prefix| {
+            stem.strip_prefix(prefix).is_some_and(|suffix| {
+                suffix.len() == 1
+                    && suffix
+                        .as_bytes()
+                        .first()
+                        .is_some_and(|digit| (b'1'..=b'9').contains(digit))
+            })
+        })
+}
+
+pub(crate) fn staging_dir_name(hash: Hash) -> String {
+    let sequence = STAGING_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    format!(
+        ".lightning-p2p-export-{hash}-{}-{sequence:x}",
+        unix_timestamp()
+    )
+}
+
+pub(crate) fn suffixed_path(base: &Path, index: u64) -> PathBuf {
     let parent = base.parent().map_or_else(PathBuf::new, Path::to_path_buf);
     let file_name = base
         .file_name()
@@ -185,20 +240,39 @@ mod tests {
     use super::*;
 
     #[test]
-    fn next_available_path_adds_suffix_before_extension() {
-        let dir = tempfile::tempdir().expect("tempdir");
-        let base = dir.path().join("payload.bin");
-        std::fs::write(&base, b"existing").expect("write existing");
-        let next = next_available_path(&base);
+    fn collection_label_is_filesystem_safe() {
+        assert_eq!(safe_collection_label("bad/name:here"), "bad_name_here");
+        assert_eq!(safe_collection_label("   "), "download");
+        assert_eq!(safe_collection_label("CON"), "_CON");
+        assert_eq!(safe_collection_label("folder. "), "folder");
+    }
+
+    #[test]
+    fn collection_entry_paths_allow_nested_relative_files() {
         assert_eq!(
-            next.file_name().and_then(|name| name.to_str()),
-            Some("payload (1).bin")
+            safe_collection_entry_path("folder/sub/file.txt").unwrap(),
+            PathBuf::from("folder").join("sub").join("file.txt")
         );
     }
 
     #[test]
-    fn collection_label_is_filesystem_safe() {
-        assert_eq!(safe_collection_label("bad/name:here"), "bad_name_here");
-        assert_eq!(safe_collection_label("   "), "download");
+    fn collection_entry_paths_reject_traversal_and_cross_platform_special_names() {
+        for unsafe_name in [
+            "../outside.txt",
+            "..\\outside.txt",
+            "/rooted.txt",
+            "\\\\server\\share.txt",
+            "C:\\outside.txt",
+            "folder//empty.txt",
+            "CON.txt",
+            "folder\\LPT1.log",
+            "trail. ",
+            "bad:name.txt",
+        ] {
+            assert!(
+                safe_collection_entry_path(unsafe_name).is_err(),
+                "accepted unsafe path {unsafe_name:?}"
+            );
+        }
     }
 }
