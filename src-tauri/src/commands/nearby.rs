@@ -72,6 +72,7 @@ pub async fn offer_share_to_peer(
         return Err("Select at least one file to send.".into());
     }
 
+    let _activity = state.node_supervisor.begin_transfer_activity().await;
     let node = state.get_node().await.map_err(String::from)?;
     let target_node_id =
         EndpointId::from_str(&node_id).map_err(|err| format!("Invalid target node id: {err}"))?;
@@ -259,7 +260,6 @@ pub async fn respond_to_offer(
             .map_err(|err| command_error(format!("Invalid blob hash: {err}")))?;
         let blob_format: BlobFormat = offer.blob_format.blob_format();
 
-        let node = state.get_node().await.map_err(command_error)?;
         let node_addr = state
             .nearby_shares
             .node_addr_for_device(&sender_node_id)
@@ -267,7 +267,7 @@ pub async fn respond_to_offer(
             .unwrap_or_else(|| EndpointAddr::new(sender_node_id));
 
         let ticket = iroh_blobs::ticket::BlobTicket::new(node_addr, hash, blob_format);
-        crate::commands::transfer::start_receive_from_offer(state, window, node, ticket).await
+        crate::commands::transfer::start_receive_from_offer(state, window, ticket).await
     }
     .await;
 

@@ -42,10 +42,9 @@ pub async fn start_receive(
     state: State<'_, AppState>,
     ticket: String,
 ) -> CommandResult<String> {
-    let node = state.get_node().await.map_err(command_error)?;
     let ticket = ShareTicket::parse(&ticket)
         .map_err(|_err| command_error(AppErrorPayload::invalid_ticket()))?;
-    start_receive_ticket(state, window, node, ticket).await
+    start_receive_ticket(state, window, ticket).await
 }
 
 /// Pre-dials the providers named in a ticket so discovery, NAT holepunching,
@@ -137,13 +136,12 @@ pub async fn start_receive_discovered_share(
     state: State<'_, AppState>,
     share_id: String,
 ) -> CommandResult<String> {
-    let node = state.get_node().await.map_err(command_error)?;
     let ticket = state
         .nearby_shares
         .ticket_for_share(&share_id)
         .await
         .map_err(command_error)?;
-    start_receive_ticket(state, window, node, ShareTicket::from_blob_ticket(ticket)).await
+    start_receive_ticket(state, window, ShareTicket::from_blob_ticket(ticket)).await
 }
 
 /// Cancels an in-progress transfer.
@@ -205,18 +203,18 @@ pub async fn clear_transfer_history(state: State<'_, AppState>) -> Result<(), St
 pub(crate) async fn start_receive_from_offer(
     state: State<'_, AppState>,
     window: tauri::Window,
-    node: std::sync::Arc<crate::node::LightningP2PNode>,
     ticket: BlobTicket,
 ) -> CommandResult<String> {
-    start_receive_ticket(state, window, node, ShareTicket::from_blob_ticket(ticket)).await
+    start_receive_ticket(state, window, ShareTicket::from_blob_ticket(ticket)).await
 }
 
 async fn start_receive_ticket(
     state: State<'_, AppState>,
     window: tauri::Window,
-    node: std::sync::Arc<crate::node::LightningP2PNode>,
     ticket: ShareTicket,
 ) -> CommandResult<String> {
+    let activity = state.node_supervisor.begin_transfer_activity().await;
+    let node = state.get_node().await.map_err(command_error)?;
     let settings = state.settings.snapshot().await;
     let destination = settings.download_dir.clone();
     let profile = settings.transfer_mode.profile();
@@ -280,6 +278,7 @@ async fn start_receive_ticket(
     };
 
     tauri::async_runtime::spawn(async move {
+        let _activity = activity;
         if let Err(err) = crate::transfer::receiver::receive_blob(
             node.as_ref(),
             ctx,

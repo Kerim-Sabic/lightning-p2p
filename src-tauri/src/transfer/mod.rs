@@ -2,6 +2,7 @@
 
 mod destination;
 pub(crate) mod export;
+pub(crate) mod lifecycle;
 pub mod metrics;
 pub mod mime;
 pub mod mode;

@@ -9,10 +9,13 @@ use crate::node::{NearbyShareRegistry, OfferInbox};
 use crate::storage::blocked_peers::BlockedPeers;
 use crate::storage::paired_devices::PairedDevices;
 use crate::storage::settings::AppSettings;
-use crate::transfer::queue::TransferQueue;
+use crate::transfer::lifecycle::TransferLifecycleGate;
 use serde::Serialize;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter};
 use tokio::sync::{Mutex, RwLock};
@@ -55,7 +58,7 @@ pub enum NodeSupervisorPhase {
     Starting,
     /// A settings change is rebuilding the endpoint/router/discovery stack.
     Restarting,
-    /// A restart was requested while transfers were still active.
+    /// An endpoint restart is queued behind admitted transfer work.
     BlockedActiveTransfers,
     /// The last start/restart attempt failed.
     Failed,
@@ -93,6 +96,16 @@ pub struct NodeSupervisor {
     runtime_status: Arc<RwLock<NodeRuntimeStatus>>,
     status: Arc<RwLock<NodeSupervisorStatus>>,
     lifecycle_lock: Arc<Mutex<()>>,
+    transfer_gate: TransferLifecycleGate,
+    pending_restart: Arc<Mutex<Option<PendingRestart>>>,
+    pending_worker_running: Arc<AtomicBool>,
+}
+
+struct PendingRestart {
+    app: AppHandle,
+    settings: AppSettings,
+    nearby: NearbyServices,
+    reason: &'static str,
 }
 
 impl NodeSupervisor {
@@ -113,7 +126,15 @@ impl NodeSupervisor {
                 None,
             ))),
             lifecycle_lock: Arc::new(Mutex::new(())),
+            transfer_gate: TransferLifecycleGate::new(),
+            pending_restart: Arc::new(Mutex::new(None)),
+            pending_worker_running: Arc::new(AtomicBool::new(false)),
         }
+    }
+
+    /// Holds endpoint lifecycle stable for one complete send or receive flow.
+    pub(crate) async fn begin_transfer_activity(&self) -> tokio::sync::OwnedRwLockReadGuard<()> {
+        self.transfer_gate.begin_activity().await
     }
 
     /// Returns a snapshot of the current supervisor status.
@@ -142,10 +163,8 @@ impl NodeSupervisor {
         }
     }
 
-    /// Restarts the node after settings that affect endpoint construction change.
-    ///
-    /// Returns `true` when a restart happened, `false` when it was blocked by
-    /// active transfers.
+    /// Queues an endpoint restart behind active transfer workflows and stops
+    /// admitting new work until the replacement node is ready.
     ///
     /// # Errors
     ///
@@ -155,33 +174,70 @@ impl NodeSupervisor {
         &self,
         app: AppHandle,
         settings: AppSettings,
-        transfers: &TransferQueue,
         nearby: NearbyServices,
         reason: &'static str,
-    ) -> Result<bool> {
-        if transfers.has_active().await {
-            self.set_status(
-                &app,
-                NodeSupervisorStatus::new(
-                    NodeSupervisorPhase::BlockedActiveTransfers,
-                    Some(reason.into()),
-                    Some("restart deferred because transfers are active".into()),
-                ),
-            )
-            .await;
-            tracing::warn!(reason, "node restart blocked while transfers are active");
-            return Ok(false);
+    ) -> Result<()> {
+        {
+            let mut pending = self.pending_restart.lock().await;
+            *pending = Some(PendingRestart {
+                app: app.clone(),
+                settings,
+                nearby,
+                reason,
+            });
+            self.transfer_gate.request_restart();
         }
-
-        self.replace_node(
-            app,
-            settings,
-            nearby,
-            NodeSupervisorPhase::Restarting,
-            reason,
+        self.set_status(
+            &app,
+            NodeSupervisorStatus::new(
+                NodeSupervisorPhase::BlockedActiveTransfers,
+                Some(reason.into()),
+                Some("Endpoint update queued until current transfer work finishes".into()),
+            ),
         )
-        .await?;
-        Ok(true)
+        .await;
+        let started_worker = self
+            .pending_worker_running
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .is_ok();
+        if started_worker {
+            let supervisor = self.clone();
+            tauri::async_runtime::spawn(async move {
+                supervisor.apply_pending_restarts().await;
+            });
+        }
+        Ok(())
+    }
+
+    async fn apply_pending_restarts(&self) {
+        loop {
+            let _transfer_gate = self.transfer_gate.begin_restart().await;
+            let pending = {
+                let mut slot = self.pending_restart.lock().await;
+                if let Some(pending) = slot.take() {
+                    Some(pending)
+                } else {
+                    self.transfer_gate.finish_restart();
+                    self.pending_worker_running.store(false, Ordering::Release);
+                    None
+                }
+            };
+            let Some(pending) = pending else {
+                return;
+            };
+            if let Err(error) = self
+                .replace_node(
+                    pending.app,
+                    pending.settings,
+                    pending.nearby,
+                    NodeSupervisorPhase::Restarting,
+                    pending.reason,
+                )
+                .await
+            {
+                tracing::error!(reason = pending.reason, %error, "queued node restart failed");
+            }
+        }
     }
 
     async fn replace_node(

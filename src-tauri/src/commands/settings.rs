@@ -225,12 +225,12 @@ pub async fn set_local_discovery_enabled(
 }
 
 /// Updates the session transfer mode and triggers a node restart so the new
-/// QUIC transport config takes effect. The restart is deferred if any
-/// transfer is in flight (see `node_supervisor::restart_if_idle`).
+/// QUIC transport config takes effect. The update waits for admitted transfer
+/// work to finish before rebuilding the endpoint.
 ///
 /// # Errors
 ///
-/// Returns an error string if persistence or the deferred restart fails.
+/// Returns an error string if persistence or restart scheduling fails.
 #[tauri::command]
 pub async fn set_transfer_mode(
     app: AppHandle,
@@ -310,7 +310,6 @@ async fn restart_node_after_endpoint_setting(
     Box::pin(state.node_supervisor.restart_if_idle(
         app,
         settings,
-        &state.transfers,
         NearbyServices::new(
             state.nearby_shares.clone(),
             state.offer_inbox.clone(),
@@ -320,7 +319,6 @@ async fn restart_node_after_endpoint_setting(
         reason,
     ))
     .await
-    .map(|_| ())
     .map_err(command_error)
 }
 
