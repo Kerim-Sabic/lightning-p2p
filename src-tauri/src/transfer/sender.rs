@@ -6,9 +6,10 @@ use crate::storage::history::{self, TransferRecord, TransferRecordStatus};
 use crate::transfer::metrics::TransferMetrics;
 use crate::transfer::mode::TransferProfile;
 use crate::transfer::progress::{
-    EventReporter, FailureCategory, ProgressHandle, ProgressSampler, TransferDirection,
-    TransferPhase,
+    EventReporter, FailureCategory, ProgressHandle, ProgressSampler, QueueProgressTarget,
+    TransferDirection, TransferInfo, TransferPhase,
 };
+use crate::transfer::queue::TransferQueue;
 use futures_util::stream;
 use futures_util::StreamExt;
 use iroh_blobs::api::proto::AddProgressItem;
@@ -23,7 +24,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::Window;
-use tokio::sync::{Semaphore, SemaphorePermit};
+use tokio::sync::{watch, Semaphore, SemaphorePermit};
 
 /// A single file to import, with the name it should carry inside a collection.
 #[derive(Debug, Clone)]
@@ -93,30 +94,57 @@ pub async fn send_files(
     window: Window,
     paths: Vec<PathBuf>,
     profile: TransferProfile,
+    queue: TransferQueue,
 ) -> Result<ShareOutcome> {
     let _foreground = crate::commands::mobile::TransferForegroundGuard::acquire();
     let plan = build_share_plan(paths)?;
+    let (transfer_id, cancel_rx) =
+        register_send_preparation(&queue, &plan.label, plan.total_size).await;
     let reporter = EventReporter::new(
         window,
-        next_share_id(),
+        transfer_id.clone(),
         TransferDirection::Send,
         plan.label.clone(),
         None,
     );
-    reporter.emit_started(
+    if let Err(error) = reporter.emit_started(
         plan.total_size,
         TransferMetrics::default(),
         TransferPhase::Preparing,
-    )?;
-    let sampler =
-        ProgressSampler::spawn_with_interval(reporter.clone(), None, profile.progress_interval);
+    ) {
+        queue.remove(&transfer_id).await;
+        return Err(error);
+    }
+    let sampler = ProgressSampler::spawn_with_interval(
+        reporter.clone(),
+        Some(QueueProgressTarget::new(queue.clone(), transfer_id.clone())),
+        profile.progress_interval,
+    );
     let progress = sampler.handle();
 
-    let result = create_share_with_plan(node, plan, Some(progress.clone()), profile).await;
+    let mut result = create_share_with_plan(
+        node,
+        plan,
+        Some(progress.clone()),
+        profile,
+        Some(cancel_rx.clone()),
+    )
+    .await;
+    if *cancel_rx.borrow() {
+        result = Err(transfer_cancelled());
+    }
+    if let Ok(outcome) = &result {
+        progress.set(outcome.total_size, outcome.total_size);
+    }
+    let sampler_result = sampler.finish().await;
+    if result.is_ok() {
+        if let Err(error) = sampler_result {
+            result = Err(error);
+        }
+    }
+
     match result {
         Ok(outcome) => {
-            progress.set(outcome.total_size, outcome.total_size);
-            sampler.finish().await?;
             if let Err(error) = save_send_record(node, &outcome) {
                 let payload = error.to_payload();
                 let message = payload.message.clone();
@@ -126,24 +154,72 @@ pub async fn send_files(
                     Some(FailureCategory::Unknown),
                     Some(payload),
                 );
+                queue.remove(&transfer_id).await;
                 return Err(error);
             }
-            reporter.emit_share_prepared(outcome.hash.to_string(), outcome.total_size)?;
+            if let Err(error) =
+                reporter.emit_share_prepared(outcome.hash.to_string(), outcome.total_size)
+            {
+                queue.remove(&transfer_id).await;
+                return Err(error);
+            }
+            queue.remove(&transfer_id).await;
             Ok(outcome)
         }
         Err(error) => {
-            let _ = sampler.finish().await;
             let error_payload = error.to_payload();
             let error_message = error_payload.message.clone();
             let _ = reporter.emit_failed_with_payload(
                 &error_message,
                 progress.metrics_snapshot().route_kind,
-                Some(FailureCategory::Unknown),
+                Some(if *cancel_rx.borrow() {
+                    FailureCategory::Cancelled
+                } else {
+                    FailureCategory::Unknown
+                }),
                 Some(error_payload),
             );
+            queue.remove(&transfer_id).await;
             Err(error)
         }
     }
+}
+
+async fn register_send_preparation(
+    queue: &TransferQueue,
+    name: &str,
+    total: u64,
+) -> (String, watch::Receiver<bool>) {
+    let transfer_id = next_share_id();
+    let (cancel_tx, cancel_rx) = watch::channel(false);
+    queue
+        .add(
+            TransferInfo {
+                transfer_id: transfer_id.clone(),
+                direction: TransferDirection::Send,
+                name: name.to_string(),
+                peer: None,
+                bytes: 0,
+                total,
+                speed_bps: 0,
+                route_kind: crate::transfer::metrics::RouteKind::Unknown,
+                phase: TransferPhase::Preparing,
+                failure_category: None,
+                output_path: None,
+                connect_ms: 0,
+                download_ms: 0,
+                export_ms: 0,
+                provider_count: 0,
+                direct_provider_count: 0,
+                relay_provider_count: 0,
+                strategy: crate::transfer::metrics::TransferStrategy::Unknown,
+                first_byte_ms: 0,
+                effective_mbps: 0,
+            },
+            Some(cancel_tx),
+        )
+        .await;
+    (transfer_id, cancel_rx)
 }
 
 /// Adds files or directories to the local blob store without emitting UI events.
@@ -158,7 +234,7 @@ pub async fn send_files(
 pub async fn create_share(node: &LightningP2PNode, paths: Vec<PathBuf>) -> Result<ShareOutcome> {
     let plan = build_share_plan(paths)?;
     let profile = crate::transfer::TransferMode::platform_default().profile();
-    let outcome = create_share_with_plan(node, plan, None, profile).await?;
+    let outcome = create_share_with_plan(node, plan, None, profile, None).await?;
     node.authorize_public_share(outcome.hash).await?;
     Ok(outcome)
 }
@@ -168,8 +244,9 @@ async fn create_share_with_plan(
     plan: SharePlan,
     progress: Option<ProgressHandle>,
     profile: TransferProfile,
+    cancel_rx: Option<watch::Receiver<bool>>,
 ) -> Result<ShareOutcome> {
-    let imported = import_sources(node.blobs_client(), &plan, progress, profile).await?;
+    let imported = import_sources(node.blobs_client(), &plan, progress, profile, cancel_rx).await?;
     let hash = persist_collection(node.blobs_client(), imported).await?;
     let ticket = build_ticket(node, hash).await?;
     tracing::info!(
@@ -393,6 +470,7 @@ async fn import_sources(
     plan: &SharePlan,
     progress: Option<ProgressHandle>,
     profile: TransferProfile,
+    cancel_rx: Option<watch::Receiver<bool>>,
 ) -> Result<Vec<ImportedSource>> {
     let tasks = plan
         .sources
@@ -407,6 +485,7 @@ async fn import_sources(
                 plan.total_size,
                 progress.clone(),
                 profile.mode == crate::transfer::TransferMode::SmartAuto,
+                cancel_rx.clone(),
             )
         });
     let mut pending = stream::iter(tasks).buffer_unordered(import_parallelism(
@@ -489,6 +568,21 @@ fn compute_import_parallelism(source_count: usize, cap: usize) -> usize {
     source_count.clamp(1, cap.max(1))
 }
 
+async fn wait_for_cancellation(cancel_rx: &mut watch::Receiver<bool>) {
+    if *cancel_rx.borrow() {
+        return;
+    }
+    loop {
+        if cancel_rx.changed().await.is_err() || *cancel_rx.borrow() {
+            return;
+        }
+    }
+}
+
+fn transfer_cancelled() -> LightningP2PError {
+    LightningP2PError::Other("Transfer cancelled".into())
+}
+
 async fn import_source(
     store: &Store,
     source: Source,
@@ -496,14 +590,24 @@ async fn import_source(
     total_size: u64,
     progress: Option<ProgressHandle>,
     smart_auto: bool,
+    mut cancel_rx: Option<watch::Receiver<bool>>,
 ) -> Result<IndexedImport> {
+    if cancel_rx.as_ref().is_some_and(|rx| *rx.borrow()) {
+        return Err(transfer_cancelled());
+    }
     let _budget_permit: Option<SemaphorePermit<'static>> = if smart_auto {
-        Some(
+        Some(if let Some(rx) = cancel_rx.as_mut() {
+            tokio::select! {
+                permit = smart_auto_import_budget().acquire() => permit
+                    .map_err(|_| LightningP2PError::Other("SmartAuto import budget closed".into()))?,
+                () = wait_for_cancellation(rx) => return Err(transfer_cancelled()),
+            }
+        } else {
             smart_auto_import_budget()
                 .acquire()
                 .await
-                .map_err(|_| LightningP2PError::Other("SmartAuto import budget closed".into()))?,
-        )
+                .map_err(|_| LightningP2PError::Other("SmartAuto import budget closed".into()))?
+        })
     } else {
         None
     };
@@ -514,7 +618,18 @@ async fn import_source(
     let mut stream = store.blobs().add_path(&source.path).stream().await;
     let mut hash: Option<Hash> = None;
 
-    while let Some(item) = stream.next().await {
+    loop {
+        let next_item = if let Some(rx) = cancel_rx.as_mut() {
+            tokio::select! {
+                item = stream.next() => item,
+                () = wait_for_cancellation(rx) => return Err(transfer_cancelled()),
+            }
+        } else {
+            stream.next().await
+        };
+        let Some(item) = next_item else {
+            break;
+        };
         match item {
             AddProgressItem::CopyProgress(offset) | AddProgressItem::OutboardProgress(offset) => {
                 advance_progress(
@@ -704,9 +819,41 @@ mod tests {
         fs::write(&path, b"changed content").expect("mutate source");
         let store = iroh_blobs::store::mem::MemStore::new();
 
-        assert!(import_source(store.as_ref(), source, 0, 8, None, false)
-            .await
-            .is_err());
+        assert!(
+            import_source(store.as_ref(), source, 0, 8, None, false, None)
+                .await
+                .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn cancelled_share_preparation_stops_before_importing_next_source() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("payload.txt");
+        fs::write(&path, b"payload").expect("source");
+        let source = Source {
+            name: "payload.txt".into(),
+            path,
+            snapshot: SourceSnapshot {
+                size: 7,
+                modified: None,
+                #[cfg(unix)]
+                device: 0,
+                #[cfg(unix)]
+                inode: 0,
+                #[cfg(windows)]
+                creation_time: 0,
+            },
+        };
+        let (_cancel_tx, cancel_rx) = watch::channel(true);
+        let store = iroh_blobs::store::mem::MemStore::new();
+
+        let Err(error) =
+            import_source(store.as_ref(), source, 0, 7, None, false, Some(cancel_rx)).await
+        else {
+            panic!("cancel should stop before import");
+        };
+        assert_eq!(error.to_string(), "Transfer cancelled");
     }
 
     #[cfg(unix)]

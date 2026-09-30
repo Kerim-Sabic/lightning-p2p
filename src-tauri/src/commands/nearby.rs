@@ -79,9 +79,15 @@ pub async fn offer_share_to_peer(
 
     let profile = state.settings.snapshot().await.transfer_mode.profile();
     let path_bufs = paths.into_iter().map(PathBuf::from).collect::<Vec<_>>();
-    let outcome = crate::transfer::sender::send_files(node.as_ref(), window, path_bufs, profile)
-        .await
-        .map_err(String::from)?;
+    let outcome = crate::transfer::sender::send_files(
+        node.as_ref(),
+        window,
+        path_bufs,
+        profile,
+        state.transfers.clone(),
+    )
+    .await
+    .map_err(String::from)?;
 
     let offer_id = generate_offer_id();
     let sender_node_id = node.node_id();

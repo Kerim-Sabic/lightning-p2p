@@ -654,7 +654,9 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
       set({ shareTicket });
       await get().refreshHistory();
     } catch (error) {
-      set(errorState(error));
+      if (normalizeAppError(error).code !== "transfer_cancelled") {
+        set(errorState(error));
+      }
     } finally {
       set({ isSharing: false });
     }

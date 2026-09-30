@@ -121,6 +121,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
   const clearShareSelection = useTransferStore(
     (state) => state.clearShareSelection,
   );
+  const cancelTransfer = useTransferStore((state) => state.cancelTransfer);
   const createShare = useTransferStore((state) => state.createShare);
   const isSharing = useTransferStore((state) => state.isSharing);
   const isPreparingSelection = useTransferStore(
@@ -977,7 +978,10 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
             <CheckCircle2 className="h-4 w-4 text-sky-200" />
             Current share
           </div>
-          <TransferCard transfer={sendTransfer} />
+          <TransferCard
+            transfer={sendTransfer}
+            onCancel={(transferId) => void cancelTransfer(transferId)}
+          />
         </section>
       ) : null}
     </div>

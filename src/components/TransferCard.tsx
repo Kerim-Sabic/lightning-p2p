@@ -200,7 +200,9 @@ export function TransferCard({
 
     if (
       window.confirm(
-        "Cancel this transfer? Partially downloaded data will stay local.",
+        transfer.direction === "send"
+          ? "Stop preparing this share? Content already imported stays in this device's local store."
+          : "Cancel this transfer? Partially downloaded data will stay local.",
       )
     ) {
       onCancel(transfer.transferId);

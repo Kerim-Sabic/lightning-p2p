@@ -117,6 +117,43 @@ describe("active transfer snapshot reconciliation", () => {
     expect(receivedTransfer().bytes).toBe(100);
   });
 
+  it("keeps cancelled share preparation distinct from receiver completion", () => {
+    useTransferStore.getState().applyTransferEvent({
+      type: "started",
+      transfer_id: "send-1",
+      direction: "send",
+      name: "Photos",
+      peer: null,
+      total: 100,
+      route_kind: "unknown",
+      phase: "preparing",
+      connect_ms: 0,
+      download_ms: 0,
+      export_ms: 0,
+      provider_count: 0,
+      direct_provider_count: 0,
+      relay_provider_count: 0,
+      strategy: "unknown",
+      first_byte_ms: 0,
+      effective_mbps: 0,
+    });
+    useTransferStore.getState().applyTransferEvent({
+      type: "failed",
+      transfer_id: "send-1",
+      error: "Transfer cancelled",
+      route_kind: "unknown",
+      phase: "cancelled",
+      failure_category: "cancelled",
+      error_payload: null,
+    });
+
+    const transfer = useTransferStore.getState().transfers["send-1"];
+    expect(transfer?.direction).toBe("send");
+    expect(transfer?.status).toBe("failed");
+    expect(transfer?.phase).toBe("cancelled");
+    expect(transfer?.failureCategory).toBe("cancelled");
+  });
+
   it("ignores an older snapshot that resolves after a newer refresh", async () => {
     let resolveOlder: ((value: ActiveTransfer[]) => void) | undefined;
     vi.mocked(tauri.getActiveTransfers)
