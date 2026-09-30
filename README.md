@@ -128,7 +128,7 @@ drop files → share the /receive link  →     open link → "Receive in this b
 
 ## ◆ Install
 
-Stable: **v0.4.6**. Experimental: **v0.9.11** (screen-relative Flick handoff, secure restart-safe receive resume, Lightning Chat, BBR congestion control, Warp mode, swarm receive, and ticket pre-warming). Android's latest signed beta artifact remains **v0.9.9**.
+Stable: **v0.4.6**. Experimental: **v0.9.11** (screen-relative Flick handoff, secure restart-safe receive resume, Lightning Chat, BBR congestion control, Warp mode, swarm receive, and ticket pre-warming). Android's latest signed beta artifact is **v0.9.11**.
 
 | Platform | Asset | Channel | Best for |
 | --- | --- | --- | --- |
@@ -137,7 +137,7 @@ Stable: **v0.4.6**. Experimental: **v0.9.11** (screen-relative Flick handoff, se
 | **Windows** | [`LightningP2P.msi`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P.msi) | Stable | Policy-managed deployments |
 | **macOS** | [`LightningP2P-macos-universal.dmg`](https://github.com/Kerim-Sabic/lightning-p2p/releases/download/v0.9.11/LightningP2P-macos-universal.dmg) | Beta v0.9.11 | 10.15+ · Intel + Apple Silicon · unsigned: right-click → Open |
 | **Linux** | [`LightningP2P-linux-x86_64.AppImage`](https://github.com/Kerim-Sabic/lightning-p2p/releases/download/v0.9.11/LightningP2P-linux-x86_64.AppImage) | Beta v0.9.11 | Portable AppImage · `.deb` / `.rpm` also published |
-| **Android** | [`LightningP2P-android-latest.apk`](https://github.com/Kerim-Sabic/lightning-p2p/releases/download/v0.9.9/LightningP2P-android-latest.apk) | Beta v0.9.9 | Android 10+ sideload · Lightning Chat + Bluetooth mesh included |
+| **Android** | [`LightningP2P-android-latest.apk`](https://github.com/Kerim-Sabic/lightning-p2p/releases/download/v0.9.11/LightningP2P-android-latest.apk) | Beta v0.9.11 | Android 10+ sideload · Lightning Chat + Bluetooth mesh included |
 | **CLI** | [`lightning-p2p-cli`](https://github.com/Kerim-Sabic/lightning-p2p/releases/tag/v0.9.11) | Beta v0.9.11 | `send <file>` prints a ticket to stdout · Win/mac/Linux tarballs |
 | **Browser** | [lightning-p2p.netlify.app/receive](https://lightning-p2p.netlify.app/receive) | Public beta | Receiving only — nothing to install, the sender's link is enough |
 | **Lightning Chat** | [Open web chat](https://lightning-p2p.netlify.app/chat) | Beta v0.9.11 | Signed web rooms · encrypted DMs · native nearby chat |
