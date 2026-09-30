@@ -217,6 +217,24 @@ describe("active transfer snapshot reconciliation", () => {
 
     expect(receivedTransfer().bytes).toBe(60);
   });
+
+  it("ignores an older refresh failure after a newer snapshot succeeds", async () => {
+    let rejectOlder: ((reason: Error) => void) | undefined;
+    vi.mocked(tauri.getActiveTransfers)
+      .mockReturnValueOnce(
+        new Promise((_resolve, reject) => {
+          rejectOlder = reject;
+        }),
+      )
+      .mockResolvedValueOnce([]);
+
+    const olderRefresh = useTransferStore.getState().refreshActiveTransfers();
+    await useTransferStore.getState().refreshActiveTransfers();
+    rejectOlder?.(new Error("stale request failed"));
+    await olderRefresh;
+
+    expect(useTransferStore.getState().error).toBeNull();
+  });
 });
 
 describe("node status snapshot reconciliation", () => {

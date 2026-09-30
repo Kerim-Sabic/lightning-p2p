@@ -664,6 +664,7 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
         return { transfers };
       });
     } catch (error) {
+      if (requestSequence !== activeTransfersRequestSequence) return;
       set(errorState(error));
     }
   },
