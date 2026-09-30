@@ -430,7 +430,10 @@ export function DevicesView() {
               </div>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold text-white">
-                  {localIdentity?.device_name ?? "Detecting device name..."}
+                  {safeDisplayText(
+                    localIdentity?.device_name ?? "",
+                    "Detecting device name...",
+                  )}
                 </p>
                 <p className="mt-1 break-all font-mono text-[11px] leading-5 text-slate-400">
                   {localIdentity

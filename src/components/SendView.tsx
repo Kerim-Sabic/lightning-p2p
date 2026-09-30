@@ -791,6 +791,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
           >
             {shareSelection.map((item) => {
               const Icon = iconForSelection(item.name, item.is_dir);
+              const itemName = safeDisplayText(item.name, "Selected item");
 
               return (
                 <div
@@ -802,7 +803,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium text-white">
-                      {item.name}
+                      {itemName}
                     </p>
                     <p className="text-xs text-slate-500">
                       {item.is_dir ? "Folder" : "File"}
@@ -814,8 +815,8 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
                     </span>
                     <button
                       type="button"
-                      aria-label={`Remove ${item.name} from selection`}
-                      title={`Remove ${item.name}`}
+                      aria-label={`Remove ${itemName} from selection`}
+                      title={`Remove ${itemName}`}
                       onClick={() => removeShareSelectionItem(item.path)}
                       disabled={isSharing}
                       className="grid h-10 w-10 place-items-center rounded-full text-slate-400 transition hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"

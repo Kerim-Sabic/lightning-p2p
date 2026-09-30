@@ -25,6 +25,7 @@ import {
 import { nip19 } from "nostr-tools";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { isNativeRuntime } from "../../lib/tauri";
+import { safeDisplayText } from "../../lib/safeDisplayText";
 import { lightningChatService } from "./service";
 import {
   DEFAULT_LIGHTNING_CHAT_CHANNEL,
@@ -313,7 +314,9 @@ export function LightningChatView() {
                 }`}
               >
                 <ShieldCheck className="h-4 w-4" />
-                <span className="min-w-0 flex-1 truncate">{group.name}</span>
+                <span className="min-w-0 flex-1 truncate">
+                  {safeDisplayText(group.name, "Private group")}
+                </span>
                 <span className="text-[9px] text-slate-600">
                   {group.members.length}
                 </span>
@@ -359,10 +362,12 @@ export function LightningChatView() {
           onClick={() => setDialog("identity")}
           className="m-3 flex items-center gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.025] p-3 text-left transition hover:bg-white/[0.05]"
         >
-          <Avatar label={snapshot.identity?.nickname ?? "?"} />
+          <Avatar
+            label={safeDisplayText(snapshot.identity?.nickname ?? "", "?")}
+          />
           <span className="min-w-0 flex-1">
             <span className="block truncate text-xs font-medium text-white">
-              {snapshot.identity?.nickname ?? "anonymous"}
+              {safeDisplayText(snapshot.identity?.nickname ?? "", "anonymous")}
             </span>
             <span className="block truncate text-[10px] text-slate-500">
               {compact(snapshot.identity?.npub ?? "identity starting")}
@@ -403,7 +408,7 @@ export function LightningChatView() {
                 }`}
               >
                 <MapPin className="h-3.5 w-3.5" />
-                {room.label}
+                {safeDisplayText(room.label, "Location room")}
               </button>
             ))}
             {snapshot.groups.map((group) => (
@@ -425,7 +430,7 @@ export function LightningChatView() {
                 }`}
               >
                 <ShieldCheck className="h-3.5 w-3.5" />
-                {group.name}
+                {safeDisplayText(group.name, "Private group")}
               </button>
             ))}
             {snapshot.peers
@@ -443,7 +448,7 @@ export function LightningChatView() {
                   }`}
                 >
                   <MessageCircle className="h-3.5 w-3.5" />
-                  {peer.label}
+                  {safeDisplayText(peer.label, "Nearby person")}
                 </button>
               ))}
             <button
@@ -716,7 +721,10 @@ export function LightningChatView() {
             Display name
           </p>
           <input
-            defaultValue={snapshot.identity?.nickname ?? "anonymous"}
+            defaultValue={safeDisplayText(
+              snapshot.identity?.nickname ?? "",
+              "anonymous",
+            )}
             onBlur={(event) =>
               lightningChatService.setNickname(event.currentTarget.value)
             }
@@ -798,6 +806,7 @@ function ChatHeader({
         : conversation.kind === "group"
           ? "Encrypted group · signed roster · rotating epoch key"
           : "Authenticated private envelope";
+  const safeTitle = safeDisplayText(title, "Conversation");
   return (
     <header className="flex h-[68px] shrink-0 items-center gap-3 border-b border-white/[0.06] px-4">
       <span className="flex h-9 w-9 items-center justify-center rounded-2xl bg-white/[0.04] text-sky-200">
@@ -814,7 +823,9 @@ function ChatHeader({
         )}
       </span>
       <div className="min-w-0 flex-1">
-        <h2 className="truncate text-sm font-semibold text-white">{title}</h2>
+        <h2 className="truncate text-sm font-semibold text-white">
+          {safeTitle}
+        </h2>
         <p className="truncate text-[11px] text-slate-500">{detail}</p>
       </div>
       <button
@@ -892,15 +903,16 @@ function Timeline({
 
 function Bubble({ message }: { message: LightningChatMessage }) {
   const outgoing = message.direction === "outgoing";
+  const authorName = safeDisplayText(message.author_name, "Nearby person");
   return (
     <article
       className={`flex max-w-[82%] gap-2.5 ${outgoing ? "self-end" : "self-start"}`}
     >
-      {!outgoing ? <Avatar label={message.author_name} small /> : null}
+      {!outgoing ? <Avatar label={authorName} small /> : null}
       <div>
         {!outgoing ? (
           <p className="mb-1 px-1 text-[10px] text-slate-500">
-            {message.author_name}
+            {authorName}
           </p>
         ) : null}
         <div
@@ -971,6 +983,7 @@ function PeerRow({
   active: boolean;
   onSelect: () => void;
 }) {
+  const peerLabel = safeDisplayText(peer.label, "Nearby person");
   return (
     <div
       className={`mb-1 flex items-center rounded-xl ${active ? "bg-white/[0.06]" : "hover:bg-white/[0.035]"}`}
@@ -980,8 +993,8 @@ function PeerRow({
         onClick={onSelect}
         className="flex min-w-0 flex-1 items-center gap-2 px-2 py-2 text-left"
       >
-        <Avatar label={peer.label} small />
-        <span className="truncate text-xs text-slate-300">{peer.label}</span>
+        <Avatar label={peerLabel} small />
+        <span className="truncate text-xs text-slate-300">{peerLabel}</span>
       </button>
       <button
         type="button"
