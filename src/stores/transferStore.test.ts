@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   ActiveTransfer,
+  NodeStatus,
   SharePathInfo,
   TransferEvent,
 } from "../lib/tauri";
@@ -10,6 +11,7 @@ vi.mock("../lib/tauri", async (importOriginal) => {
   return {
     ...actual,
     getActiveTransfers: vi.fn(),
+    getNodeStatus: vi.fn(),
     describeSharePaths: vi.fn(),
   };
 });
@@ -196,6 +198,44 @@ describe("active transfer snapshot reconciliation", () => {
     await olderRefresh;
 
     expect(receivedTransfer().bytes).toBe(60);
+  });
+});
+
+describe("node status snapshot reconciliation", () => {
+  const directStatus: NodeStatus = {
+    online: true,
+    node_id: "node-1",
+    relay_connected: false,
+    relay_url: null,
+    direct_address_count: 1,
+    lan_discovery_active: true,
+    online_state: "direct_ready",
+  };
+  const offlineStatus: NodeStatus = {
+    ...directStatus,
+    online: false,
+    direct_address_count: 0,
+    lan_discovery_active: false,
+    online_state: "offline",
+  };
+
+  it("ignores an older status snapshot that resolves after a newer refresh", async () => {
+    let resolveOlder: ((value: NodeStatus) => void) | undefined;
+    vi.mocked(tauri.getNodeStatus)
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveOlder = resolve;
+        }),
+      )
+      .mockResolvedValueOnce(directStatus);
+
+    const olderRefresh = useTransferStore.getState().refreshNodeStatus();
+    const newerRefresh = useTransferStore.getState().refreshNodeStatus();
+    await newerRefresh;
+    resolveOlder?.(offlineStatus);
+    await olderRefresh;
+
+    expect(useTransferStore.getState().nodeStatus).toEqual(directStatus);
   });
 });
 

@@ -43,6 +43,7 @@ export type UpdatePhase =
 type ProgressTransferEvent = Extract<TransferEvent, { type: "progress" }>;
 
 let activeTransfersRequestSequence = 0;
+let nodeStatusRequestSequence = 0;
 let shareSelectionRequestSequence = 0;
 
 export interface TransferEntry {
@@ -526,12 +527,17 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
   },
 
   refreshNodeStatus: async () => {
+    const requestSequence = ++nodeStatusRequestSequence;
     try {
       const nodeStatus = await tauri.getNodeStatus();
-      set((state) =>
-        sameNodeStatus(state.nodeStatus, nodeStatus) ? state : { nodeStatus },
-      );
+      set((state) => {
+        if (requestSequence !== nodeStatusRequestSequence) return state;
+        return sameNodeStatus(state.nodeStatus, nodeStatus)
+          ? state
+          : { nodeStatus };
+      });
     } catch (error) {
+      if (requestSequence !== nodeStatusRequestSequence) return;
       set(errorState(error));
     }
   },
