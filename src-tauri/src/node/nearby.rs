@@ -571,8 +571,8 @@ pub fn spawn_nearby_discovery_loop(
             if let Some(events) = discovery_events.as_mut() {
                 tokio::select! {
                     _ = interval.tick() => {
-                        if let Err(error) = refresh_candidates(&app_handle, &endpoint, &registry, &mut candidates, &stream_seen).await {
-                            tracing::debug!("nearby share refresh failed: {error}");
+                        if let Err(_error) = refresh_candidates(&app_handle, &endpoint, &registry, &mut candidates, &stream_seen).await {
+                            tracing::debug!("nearby share refresh failed");
                         }
                     }
                     maybe_item = events.next() => {
@@ -585,8 +585,8 @@ pub fn spawn_nearby_discovery_loop(
                                 emit_device_upsert(&app_handle, &registry, &candidate).await;
                                 upsert_candidate(&mut candidates, candidate);
                             }
-                            if let Err(error) = refresh_candidates(&app_handle, &endpoint, &registry, &mut candidates, &stream_seen).await {
-                                tracing::debug!("nearby share refresh failed: {error}");
+                            if let Err(_error) = refresh_candidates(&app_handle, &endpoint, &registry, &mut candidates, &stream_seen).await {
+                                tracing::debug!("nearby share refresh failed");
                             }
                         } else {
                             tracing::warn!("LAN discovery subscription ended");
@@ -608,7 +608,7 @@ pub fn spawn_nearby_discovery_loop(
             }
             update_diagnostic_state(&app_handle, &registry, started_at, &mut diagnostic_state)
                 .await;
-            if let Err(error) = refresh_candidates(
+            if let Err(_error) = refresh_candidates(
                 &app_handle,
                 &endpoint,
                 &registry,
@@ -617,7 +617,7 @@ pub fn spawn_nearby_discovery_loop(
             )
             .await
             {
-                tracing::debug!("nearby share refresh failed: {error}");
+                tracing::debug!("nearby share refresh failed");
             }
         }
     });
@@ -658,14 +658,14 @@ async fn emit_device_upsert(
 }
 
 fn emit_devices(app_handle: &AppHandle, snapshot: Vec<NearbyDevice>) {
-    if let Err(error) = app_handle.emit(NEARBY_DEVICES_UPDATED_EVENT, snapshot) {
-        tracing::debug!("failed to emit nearby-devices-updated: {error}");
+    if let Err(_error) = app_handle.emit(NEARBY_DEVICES_UPDATED_EVENT, snapshot) {
+        tracing::debug!("failed to emit nearby-devices-updated");
     }
 }
 
 fn emit_diagnostic_state(app_handle: &AppHandle, state: NearbyDiagnosticState) {
-    if let Err(error) = app_handle.emit(NEARBY_DIAGNOSTIC_STATE_EVENT, state) {
-        tracing::debug!("failed to emit nearby-diagnostic-state: {error}");
+    if let Err(_error) = app_handle.emit(NEARBY_DIAGNOSTIC_STATE_EVENT, state) {
+        tracing::debug!("failed to emit nearby-diagnostic-state");
     }
 }
 
@@ -900,11 +900,8 @@ async fn query_candidate(endpoint: Endpoint, candidate: RemoteCandidate) -> Cand
                     .collect(),
             }
         }
-        Ok(Err(error)) => {
-            tracing::debug!(
-                node_id = %candidate.node_id,
-                "nearby share query failed: {error}"
-            );
+        Ok(Err(_error)) => {
+            tracing::debug!("nearby share query failed");
             CandidateQueryResult {
                 node_id,
                 responded: false,

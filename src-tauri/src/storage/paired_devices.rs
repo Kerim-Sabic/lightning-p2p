@@ -56,8 +56,8 @@ impl PairedDevices {
                 serde_json::from_slice::<Vec<PairedDevice>>(&bytes).map_err(std::io::Error::other)
             }) {
                 Ok(devices) => devices,
-                Err(error) => {
-                    tracing::warn!(%error, "could not read saved devices; preserving the damaged file");
+                Err(_error) => {
+                    tracing::warn!("could not read saved devices; preserving the damaged file");
                     let backup = path.with_extension(format!("json.corrupt-{}", unix_timestamp()));
                     std::fs::rename(&path, backup)?;
                     Vec::new()

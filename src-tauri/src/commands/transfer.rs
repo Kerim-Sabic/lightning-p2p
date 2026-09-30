@@ -100,15 +100,15 @@ fn spawn_prewarm(
             let dial = node.endpoint().connect(addr, iroh_blobs::ALPN);
             match tokio::time::timeout(PREWARM_CONNECT_TIMEOUT, dial).await {
                 Ok(Ok(connection)) => {
-                    tracing::debug!(node_id = %node_id, "prewarm: peer path established");
+                    tracing::debug!("prewarm: peer path established");
                     tokio::time::sleep(PREWARM_HOLD).await;
                     drop(connection);
                 }
-                Ok(Err(error)) => {
-                    tracing::debug!(node_id = %node_id, %error, "prewarm: dial failed");
+                Ok(Err(_error)) => {
+                    tracing::debug!("prewarm: dial failed");
                 }
                 Err(_) => {
-                    tracing::debug!(node_id = %node_id, "prewarm: dial timed out");
+                    tracing::debug!("prewarm: dial timed out");
                 }
             }
             PREWARM_INFLIGHT
@@ -317,7 +317,7 @@ async fn start_receive_ticket(
 
     tauri::async_runtime::spawn(async move {
         let _activity = activity;
-        if let Err(err) = crate::transfer::receiver::receive_blob(
+        if let Err(_err) = crate::transfer::receiver::receive_blob(
             node.as_ref(),
             ctx,
             ticket,
@@ -326,7 +326,7 @@ async fn start_receive_ticket(
         )
         .await
         {
-            tracing::error!(transfer_id = %transfer_id_for_task, "receive failed: {err}");
+            tracing::error!("receive failed");
         }
     });
 

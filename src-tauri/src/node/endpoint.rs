@@ -331,8 +331,8 @@ async fn bind_endpoint(
 fn setup_mdns(endpoint: &Endpoint) -> Option<MdnsAddressLookup> {
     let mdns = match MdnsAddressLookup::builder().build(endpoint.id()) {
         Ok(mdns) => mdns,
-        Err(error) => {
-            tracing::warn!(%error, "could not start mDNS LAN discovery");
+        Err(_error) => {
+            tracing::warn!("could not start mDNS LAN discovery");
             return None;
         }
     };
@@ -341,8 +341,8 @@ fn setup_mdns(endpoint: &Endpoint) -> Option<MdnsAddressLookup> {
             services.add(mdns.clone());
             Some(mdns)
         }
-        Err(error) => {
-            tracing::warn!(%error, "endpoint has no address-lookup registry for mDNS");
+        Err(_error) => {
+            tracing::warn!("endpoint has no address-lookup registry for mDNS");
             None
         }
     }
@@ -370,23 +370,21 @@ fn local_network_discovery_label() -> &'static str {
 fn probe_mdns_socket() {
     let socket = match Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP)) {
         Ok(socket) => socket,
-        Err(error) => {
+        Err(_error) => {
             tracing::warn!(
-                error = %error,
                 "mDNS probe: could not create UDP socket — LAN discovery may be unavailable"
             );
             return;
         }
     };
 
-    if let Err(error) = socket.set_reuse_address(true) {
-        tracing::warn!(error = %error, "mDNS probe: SO_REUSEADDR failed");
+    if let Err(_error) = socket.set_reuse_address(true) {
+        tracing::warn!("mDNS probe: SO_REUSEADDR failed");
     }
 
     let addr: SocketAddr = SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, MDNS_PORT).into();
-    if let Err(error) = socket.bind(&addr.into()) {
+    if let Err(_error) = socket.bind(&addr.into()) {
         tracing::warn!(
-            error = %error,
             port = MDNS_PORT,
             "mDNS probe: bind failed — LAN peer discovery will not work. \
              On Windows this usually means the firewall is blocking the app; \
@@ -397,12 +395,8 @@ fn probe_mdns_socket() {
         return;
     }
 
-    if let Err(error) = socket.join_multicast_v4(&MDNS_MULTICAST_ADDR, &Ipv4Addr::UNSPECIFIED) {
-        tracing::warn!(
-            error = %error,
-            group = %MDNS_MULTICAST_ADDR,
-            "mDNS probe: multicast group join failed — LAN discovery may be degraded"
-        );
+    if let Err(_error) = socket.join_multicast_v4(&MDNS_MULTICAST_ADDR, &Ipv4Addr::UNSPECIFIED) {
+        tracing::warn!("mDNS probe: multicast group join failed — LAN discovery may be degraded");
         return;
     }
 

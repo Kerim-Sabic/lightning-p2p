@@ -342,11 +342,7 @@ async fn create_share_with_plan(
     let imported = import_sources(node.blobs_client(), &plan, progress, profile, cancel_rx).await?;
     let hash = persist_collection(node.blobs_client(), imported).await?;
     let ticket = build_ticket(node, hash).await?;
-    tracing::info!(
-        hash = %hash,
-        total_size = plan.total_size,
-        "Lightning P2P share ticket created"
-    );
+    tracing::info!("Lightning P2P share content prepared");
     Ok(ShareOutcome {
         hash,
         ticket,

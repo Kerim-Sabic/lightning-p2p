@@ -174,8 +174,8 @@ pub fn observe_advertisement(address: u64, advertisement: &BluetoothLEAdvertisem
                 if let Ok(mut session) = session().lock() {
                     session.connecting.remove(&address);
                 }
-                if let Err(error) = result {
-                    tracing::debug!(address, %error, "chat BLE peer connection failed");
+                if let Err(_error) = result {
+                    tracing::debug!("chat BLE peer connection failed");
                 }
             });
     }

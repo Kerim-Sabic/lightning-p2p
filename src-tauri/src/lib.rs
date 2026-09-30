@@ -72,32 +72,33 @@ impl AppState {
     /// cannot be initialized.
     #[must_use]
     pub fn new(data_dir: std::path::PathBuf, settings: SettingsState) -> Self {
-        let paired_devices = PairedDevices::load(&data_dir).unwrap_or_else(|error| {
-            tracing::error!(%error, "could not load saved devices; using an in-memory empty list");
+        let paired_devices = PairedDevices::load(&data_dir).unwrap_or_else(|_error| {
+            tracing::error!("could not load saved devices; using an in-memory empty list");
             PairedDevices::in_memory(&data_dir)
         });
-        let blocked_peers = BlockedPeers::load(&data_dir).unwrap_or_else(|error| {
-            tracing::error!(%error, "could not load nearby block list; using an in-memory empty list");
+        let blocked_peers = BlockedPeers::load(&data_dir).unwrap_or_else(|_error| {
+            tracing::error!("could not load nearby block list; using an in-memory empty list");
             BlockedPeers::in_memory()
         });
         let node = Arc::new(RwLock::new(None));
         let node_runtime = Arc::new(RwLock::new(NodeRuntimeStatus::starting()));
         let node_supervisor =
             NodeSupervisor::new(data_dir.clone(), node.clone(), node_runtime.clone());
-        let mesh_identity = crypto::load_or_create_chat_mesh_identity(&data_dir).unwrap_or_else(
-            |error| {
-                tracing::error!(%error, "could not load persisted chat mesh identity; using a session identity");
+        let mesh_identity =
+            crypto::load_or_create_chat_mesh_identity(&data_dir).unwrap_or_else(|_error| {
+                tracing::error!(
+                    "could not load persisted chat mesh identity; using a session identity"
+                );
                 node::chat_mesh::MeshIdentity::generate()
                     .expect("operating system randomness is required for chat identity")
-            },
-        );
+            });
         let chat_mesh = ChatMeshRuntime::load(
             &data_dir,
             mesh_identity,
             node::nearby_protocol::local_device_name(),
         )
-        .unwrap_or_else(|error| {
-            tracing::error!(%error, "could not load chat mesh stores; using clean bounded stores");
+        .unwrap_or_else(|_error| {
+            tracing::error!("could not load chat mesh stores; using clean bounded stores");
             let fallback = std::env::temp_dir().join("lightning-chat-recovery");
             ChatMeshRuntime::load(
                 &fallback,
@@ -142,8 +143,8 @@ impl AppState {
 fn register_deep_links<R: tauri::Runtime>(app: &tauri::App<R>) {
     use tauri_plugin_deep_link::DeepLinkExt;
 
-    if let Err(error) = app.deep_link().register_all() {
-        tracing::warn!("Failed to register deep links at runtime: {error}");
+    if let Err(_error) = app.deep_link().register_all() {
+        tracing::warn!("failed to register deep links at runtime");
     }
 }
 
@@ -169,7 +170,7 @@ fn sweep_mobile_staging_cache() {
                         tracing::info!(removed, "swept stale shared-staging cache entries");
                     }
                 }
-                Err(error) => tracing::warn!(%error, "shared-staging cleanup failed"),
+                Err(_error) => tracing::warn!("shared-staging cleanup failed"),
             }
         });
     }
@@ -225,30 +226,22 @@ pub fn run() {
 
     let data_dir = match resolve_app_data_dir() {
         Ok(data_dir) => data_dir,
-        Err(error) => {
+        Err(_error) => {
             let fallback = std::env::temp_dir().join("com.lightningp2p.app");
-            tracing::error!(
-                error = %error,
-                fallback = %fallback.display(),
-                "failed to resolve app data dir; using temporary fallback"
-            );
+            tracing::error!("failed to resolve app data dir; using temporary fallback");
             fallback
         }
     };
     let settings = match SettingsState::load_or_create(&data_dir) {
         Ok(settings) => settings,
-        Err(error) => {
-            tracing::error!(
-                error = %error,
-                data_dir = %data_dir.display(),
-                "failed to load settings; launching with in-memory defaults"
-            );
+        Err(_error) => {
+            tracing::error!("failed to load settings; launching with in-memory defaults");
             SettingsState::in_memory_defaults(&data_dir)
         }
     };
     let app_state = AppState::new(data_dir, settings);
 
-    if let Err(error) = app_builder()
+    if let Err(_error) = app_builder()
         .manage(app_state)
         .invoke_handler(tauri::generate_handler![
             commands::chat::send_chat_message,
@@ -326,6 +319,6 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
     {
-        tracing::error!("error while running tauri application: {error}");
+        tracing::error!("error while running tauri application");
     }
 }

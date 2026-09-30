@@ -671,8 +671,8 @@ fn refresh_transfer_foreground_count() {
     let queued = QUEUED_FOREGROUND_TRANSFERS.load(Ordering::SeqCst);
     let scoped = SCOPED_FOREGROUND_TRANSFERS.load(Ordering::SeqCst);
     let active_count = queued.saturating_add(scoped);
-    if let Err(error) = android::set_transfer_foreground_count(active_count) {
-        tracing::warn!(%error, active_count, "failed to sync Android foreground service");
+    if let Err(_error) = android::set_transfer_foreground_count(active_count) {
+        tracing::warn!(active_count, "failed to sync Android foreground service");
     }
 }
 
@@ -902,20 +902,20 @@ fn spawn_chat_mesh_poll_loop(
                                     let _ = chat_transport_send(&frame);
                                 }
                                 for event in ingress.events {
-                                    if let Err(error) =
+                                    if let Err(_error) =
                                         app_handle.emit("lightning-chat-mesh-event", event)
                                     {
-                                        tracing::debug!(%error, "could not emit chat mesh event");
+                                        tracing::debug!("could not emit chat mesh event");
                                     }
                                 }
                             }
-                            Err(error) => {
-                                tracing::debug!(%error, "rejected inbound chat mesh frame");
+                            Err(_error) => {
+                                tracing::debug!("rejected inbound chat mesh frame");
                             }
                         }
                     }
                 }
-                Err(error) => tracing::debug!(%error, "chat mesh receive queue unavailable"),
+                Err(_error) => tracing::debug!("chat mesh receive queue unavailable"),
             }
 
             announce_ticks = announce_ticks.saturating_add(1);
@@ -998,12 +998,12 @@ fn spawn_ble_poll_loop(
             let drained = tauri::async_runtime::spawn_blocking(drain_discoveries).await;
             let discoveries = match drained {
                 Ok(Ok(discoveries)) => discoveries,
-                Ok(Err(error)) => {
-                    tracing::warn!(%error, "BLE discovery drain failed");
+                Ok(Err(_error)) => {
+                    tracing::warn!("BLE discovery drain failed");
                     Vec::new()
                 }
-                Err(error) => {
-                    tracing::warn!(%error, "BLE discovery drain task failed");
+                Err(_error) => {
+                    tracing::warn!("BLE discovery drain task failed");
                     Vec::new()
                 }
             };
@@ -1011,7 +1011,7 @@ fn spawn_ble_poll_loop(
             let mut changed = false;
             for (node_id_hex, _) in discoveries {
                 let Ok(node_id) = iroh::EndpointId::from_str(&node_id_hex) else {
-                    tracing::debug!(node_id_hex, "ignoring invalid BLE NodeId");
+                    tracing::debug!("ignoring invalid BLE NodeId");
                     continue;
                 };
                 if local_node_id
@@ -1031,8 +1031,8 @@ fn spawn_ble_poll_loop(
 
             if changed {
                 let snapshot = registry.devices_snapshot().await;
-                if let Err(error) = app_handle.emit("nearby-devices-updated", snapshot) {
-                    tracing::warn!(%error, "failed to emit BLE nearby devices");
+                if let Err(_error) = app_handle.emit("nearby-devices-updated", snapshot) {
+                    tracing::warn!("failed to emit BLE nearby devices");
                 }
             }
         }

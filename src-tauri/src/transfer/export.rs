@@ -103,13 +103,13 @@ async fn publish_to_public_storage(staged_path: PathBuf, _recursive: bool) -> Re
     let is_directory = match tokio::fs::metadata(&staged_path).await {
         Ok(metadata) => metadata.is_dir(),
         Err(error) => {
-            tracing::warn!(%error, path = %staged_path.display(), "could not inspect verified Android staging output");
+            tracing::warn!(error_kind = ?error.kind(), "could not inspect verified Android staging output");
             return Err(android_public_storage_error());
         }
     };
     if is_directory {
         let Some(folder_name) = staged_path.file_name().and_then(|name| name.to_str()) else {
-            tracing::warn!(path = %staged_path.display(), "received folder has no usable name");
+            tracing::warn!("received folder has no usable name");
             return Err(android_public_storage_error());
         };
         let staged_path_string = staged_path.to_string_lossy().into_owned();
@@ -121,16 +121,18 @@ async fn publish_to_public_storage(staged_path: PathBuf, _recursive: bool) -> Re
         {
             Ok(Ok(published_path)) => {
                 if let Err(error) = tokio::fs::remove_dir_all(&staged_path).await {
-                    tracing::warn!(%error, path = %staged_path.display(), "could not remove staged folder after MediaStore publish");
+                    tracing::warn!(error_kind = ?error.kind(), "could not remove staged folder after MediaStore publish");
                 }
                 Ok(PathBuf::from(published_path))
             }
             Ok(Err(error)) => {
-                tracing::warn!(%error, "MediaStore folder publish failed; verified blobs remain available for retry");
+                tracing::warn!(
+                    "MediaStore folder publish failed; verified blobs remain available for retry"
+                );
                 Err(android_public_storage_error())
             }
             Err(error) => {
-                tracing::warn!(%error, "MediaStore folder publish task failed; verified blobs remain available for retry");
+                tracing::warn!("MediaStore folder publish task failed; verified blobs remain available for retry");
                 Err(android_public_storage_error())
             }
         };
@@ -139,10 +141,7 @@ async fn publish_to_public_storage(staged_path: PathBuf, _recursive: bool) -> Re
     let file_name = match staged_path.file_name().and_then(|n| n.to_str()) {
         Some(name) if !name.is_empty() => name.to_string(),
         _ => {
-            tracing::warn!(
-                path = %staged_path.display(),
-                "received file has no usable name; keeping app-private"
-            );
+            tracing::warn!("received file has no usable name; keeping app-private");
             return Err(android_public_storage_error());
         }
     };
@@ -171,18 +170,20 @@ async fn publish_to_public_storage(staged_path: PathBuf, _recursive: bool) -> Re
     match publish_result {
         Ok(Ok(_uri)) => {
             if let Err(error) = tokio::fs::remove_file(&staged_path).await {
-                tracing::warn!(%error, path = %staged_path.display(), "could not remove staged file after MediaStore publish");
+                tracing::warn!(error_kind = ?error.kind(), "could not remove staged file after MediaStore publish");
             }
             Ok(PathBuf::from(format!(
                 "{bucket_id}/Lightning P2P/{file_name}"
             )))
         }
         Ok(Err(error)) => {
-            tracing::warn!(%error, "MediaStore publish failed; verified blobs remain available for retry");
+            tracing::warn!("MediaStore publish failed; verified blobs remain available for retry");
             Err(android_public_storage_error())
         }
         Err(join_error) => {
-            tracing::warn!(%join_error, "MediaStore publish task failed; verified blobs remain available for retry");
+            tracing::warn!(
+                "MediaStore publish task failed; verified blobs remain available for retry"
+            );
             Err(android_public_storage_error())
         }
     }
@@ -200,7 +201,7 @@ async fn discard_failed_public_export(staged_path: &Path) {
         Ok(metadata) => metadata,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return,
         Err(error) => {
-            tracing::warn!(%error, path = %staged_path.display(), "could not inspect failed export staging output");
+            tracing::warn!(error_kind = ?error.kind(), "could not inspect failed export staging output");
             return;
         }
     };
@@ -210,7 +211,7 @@ async fn discard_failed_public_export(staged_path: &Path) {
         tokio::fs::remove_file(staged_path).await
     };
     if let Err(error) = result {
-        tracing::warn!(%error, path = %staged_path.display(), "could not remove failed public export staging output");
+        tracing::warn!(error_kind = ?error.kind(), "could not remove failed public export staging output");
     }
 }
 
@@ -546,7 +547,7 @@ async fn publish_staged_file(source: &Path, base: &Path) -> Result<PathBuf> {
         match tokio::fs::hard_link(source, &candidate).await {
             Ok(()) => {
                 if let Err(error) = tokio::fs::remove_file(source).await {
-                    tracing::warn!(%error, path = %source.display(), "could not remove staged file after publishing");
+                    tracing::warn!(error_kind = ?error.kind(), "could not remove staged file after publishing");
                 }
                 return Ok(candidate);
             }

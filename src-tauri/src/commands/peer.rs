@@ -176,15 +176,15 @@ pub async fn remove_paired_device(
         .clear_discovered_shares_for(&node_id)
         .await
     {
-        if let Err(error) = app.emit("discovered-shares-updated", shares) {
-            tracing::warn!(%error, "could not publish nearby-share revocation update");
+        if let Err(_error) = app.emit("discovered-shares-updated", shares) {
+            tracing::warn!("could not publish nearby-share revocation update");
         }
     }
     Ok(devices)
 }
 
 fn emit_paired_devices_updated(app: &AppHandle, devices: &[PairedDevice]) {
-    if let Err(error) = app.emit(PAIRED_DEVICES_UPDATED_EVENT, devices) {
-        tracing::warn!(%error, "could not publish paired-device update");
+    if let Err(_error) = app.emit(PAIRED_DEVICES_UPDATED_EVENT, devices) {
+        tracing::warn!("could not publish paired-device update");
     }
 }

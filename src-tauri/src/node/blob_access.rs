@@ -166,20 +166,20 @@ impl iroh::protocol::ProtocolHandler for AuthorizedBlobsProtocol {
                 };
                 match request {
                     Request::Get(request) if access.allows(peer, request.hash) => {
-                        if let Err(error) = provider::handle_get(pair, store, request).await {
-                            tracing::debug!(%error, %peer, "authorized blob request failed");
+                        if let Err(_error) = provider::handle_get(pair, store, request).await {
+                            tracing::debug!("authorized blob request failed");
                         }
                     }
                     Request::GetMany(request)
                         if request.hashes.iter().all(|hash| access.allows(peer, *hash)) =>
                     {
-                        if let Err(error) = provider::handle_get_many(pair, store, request).await {
-                            tracing::debug!(%error, %peer, "authorized multi-blob request failed");
+                        if let Err(_error) = provider::handle_get_many(pair, store, request).await {
+                            tracing::debug!("authorized multi-blob request failed");
                         }
                     }
                     Request::Observe(request) if access.allows(peer, request.hash) => {
-                        if let Err(error) = provider::handle_observe(pair, store, request).await {
-                            tracing::debug!(%error, %peer, "authorized blob observation failed");
+                        if let Err(_error) = provider::handle_observe(pair, store, request).await {
+                            tracing::debug!("authorized blob observation failed");
                         }
                     }
                     // Push, unknown hashes, and all other operations are
@@ -193,8 +193,8 @@ impl iroh::protocol::ProtocolHandler for AuthorizedBlobsProtocol {
     }
 
     async fn shutdown(&self) {
-        if let Err(error) = self.store.shutdown().await {
-            tracing::error!(%error, "failed to shut down blob store");
+        if let Err(_error) = self.store.shutdown().await {
+            tracing::error!("failed to shut down blob store");
         }
     }
 }

@@ -211,25 +211,25 @@ pub async fn receive_blob(
             progress.set(summary.size, summary.size);
             progress.set_metrics(summary.metrics);
             progress.set_phase(TransferPhase::Completed);
-            if let Err(error) = sampler.finish().await {
-                tracing::warn!(%error, transfer_id, "could not emit final receive progress");
+            if let Err(_error) = sampler.finish().await {
+                tracing::warn!("could not emit final receive progress");
             }
-            if let Err(error) = reporter.emit_completed(
+            if let Err(_error) = reporter.emit_completed(
                 summary.hash.clone(),
                 summary.size,
                 summary.metrics,
                 Some(summary.output_path.to_string_lossy().to_string()),
             ) {
-                tracing::warn!(%error, transfer_id, "could not emit completed receive event");
+                tracing::warn!("could not emit completed receive event");
             }
-            if let Err(error) = save_peer_no_flush(node, &summary.peer) {
-                tracing::warn!(%error, transfer_id, "could not update received peer history");
+            if let Err(_error) = save_peer_no_flush(node, &summary.peer) {
+                tracing::warn!("could not update received peer history");
             }
-            if let Err(error) = save_receive_record_no_flush(node, &summary) {
-                tracing::warn!(%error, transfer_id, "could not save receive history record");
+            if let Err(_error) = save_receive_record_no_flush(node, &summary) {
+                tracing::warn!("could not save receive history record");
             }
-            if let Err(error) = node.db().flush() {
-                tracing::warn!(%error, transfer_id, "could not flush receive history");
+            if let Err(_error) = node.db().flush() {
+                tracing::warn!("could not flush receive history");
             }
             Ok(())
         }
@@ -447,10 +447,7 @@ async fn download_with_retry(
             return Err(error);
         }
         if use_swarm {
-            tracing::warn!(
-                %error,
-                "swarm receive failed; falling back to the standard sequential path"
-            );
+            tracing::warn!("swarm receive failed; falling back to the standard sequential path");
             use_swarm = false;
             if let Some(progress) = progress {
                 progress.set_phase(TransferPhase::Connecting);
@@ -462,7 +459,6 @@ async fn download_with_retry(
             return Err(error);
         }
         tracing::warn!(
-            %error,
             attempt,
             backoff_ms = u64::try_from(backoff.as_millis()).unwrap_or(u64::MAX),
             "transient receive failure; retrying after backoff"

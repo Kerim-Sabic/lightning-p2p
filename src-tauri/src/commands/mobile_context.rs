@@ -51,8 +51,8 @@ pub extern "system" fn Java_com_lightningp2p_app_MainActivity_initRustAndroidCon
         .with_env(|env| -> jni::errors::Result<jboolean> {
             match install_context(env, &application) {
                 Ok(()) => Ok(JNI_TRUE),
-                Err(error) => {
-                    tracing::error!(%error, "failed to install Android JNI context");
+                Err(_error) => {
+                    tracing::error!("failed to install Android JNI context");
                     Ok(JNI_FALSE)
                 }
             }

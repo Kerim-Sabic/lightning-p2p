@@ -213,7 +213,6 @@ fn available_disk_space(path: &Path) -> Option<u64> {
     if ok == 0 {
         tracing::warn!(
             error = %std::io::Error::last_os_error(),
-            path = %path.display(),
             "Could not query free disk space for receive destination"
         );
         return None;
@@ -239,7 +238,6 @@ fn available_disk_space(path: &Path) -> Option<u64> {
     if unsafe { libc::statvfs(path.as_ptr(), &mut space) } != 0 {
         tracing::warn!(
             error = %std::io::Error::last_os_error(),
-            path = %path.to_string_lossy(),
             "Could not query free disk space for receive destination"
         );
         return None;

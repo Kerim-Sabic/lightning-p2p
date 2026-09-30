@@ -132,8 +132,8 @@ pub fn load_chat_secret(data_dir: &Path) -> Result<Option<String>> {
     match entry.get_password() {
         Ok(secret) => Ok(Some(secret)),
         Err(keyring::Error::NoEntry) => load_chat_fallback(data_dir),
-        Err(error) => {
-            tracing::warn!(%error, "Lightning Chat keychain lookup failed; trying fallback");
+        Err(_error) => {
+            tracing::warn!("Lightning Chat keychain lookup failed; trying fallback");
             load_chat_fallback(data_dir)
         }
     }
@@ -156,8 +156,8 @@ pub fn store_chat_secret(data_dir: &Path, secret: &str) -> Result<()> {
             remove_chat_fallback(data_dir)?;
             Ok(())
         }
-        Err(error) => {
-            tracing::warn!(%error, "Lightning Chat keychain write failed; using fallback");
+        Err(_error) => {
+            tracing::warn!("Lightning Chat keychain write failed; using fallback");
             store_chat_fallback(data_dir, secret)
         }
     }
@@ -171,8 +171,8 @@ pub fn store_chat_secret(data_dir: &Path, secret: &str) -> Result<()> {
 pub fn delete_chat_secret(data_dir: &Path) -> Result<()> {
     match chat_keyring_entry(data_dir)?.delete_credential() {
         Ok(()) | Err(keyring::Error::NoEntry) => {}
-        Err(error) => {
-            tracing::warn!(%error, "Lightning Chat keychain delete failed");
+        Err(_error) => {
+            tracing::warn!("Lightning Chat keychain delete failed");
         }
     }
     remove_chat_fallback(data_dir)
@@ -192,8 +192,8 @@ pub fn load_or_create_chat_mesh_identity(
     let stored = match entry.get_password() {
         Ok(value) => Some(value),
         Err(keyring::Error::NoEntry) => load_chat_mesh_fallback(data_dir)?,
-        Err(error) => {
-            tracing::warn!(%error, "Lightning Chat mesh keychain lookup failed; trying fallback");
+        Err(_error) => {
+            tracing::warn!("Lightning Chat mesh keychain lookup failed; trying fallback");
             load_chat_mesh_fallback(data_dir)?
         }
     };
@@ -207,8 +207,8 @@ pub fn load_or_create_chat_mesh_identity(
     let encoded = identity.encode_secret().map_err(LightningP2PError::Key)?;
     match entry.set_password(&encoded) {
         Ok(()) => remove_file_if_present(&chat_mesh_fallback_path(data_dir))?,
-        Err(error) => {
-            tracing::warn!(%error, "Lightning Chat mesh keychain write failed; using fallback");
+        Err(_error) => {
+            tracing::warn!("Lightning Chat mesh keychain write failed; using fallback");
             store_private_fallback(&chat_mesh_fallback_path(data_dir), &encoded)?;
         }
     }
@@ -223,7 +223,7 @@ pub fn load_or_create_chat_mesh_identity(
 pub fn delete_chat_mesh_identity(data_dir: &Path) -> Result<()> {
     match chat_mesh_keyring_entry(data_dir)?.delete_credential() {
         Ok(()) | Err(keyring::Error::NoEntry) => {}
-        Err(error) => tracing::warn!(%error, "Lightning Chat mesh keychain delete failed"),
+        Err(_error) => tracing::warn!("Lightning Chat mesh keychain delete failed"),
     }
     remove_file_if_present(&chat_mesh_fallback_path(data_dir))
 }
@@ -242,14 +242,14 @@ fn load_legacy_secret_key_for_default_profile(data_dir: &Path) -> Option<Vec<u8>
                 );
                 Some(bytes)
             }
-            Err(error) => {
-                tracing::warn!(error = %error, "legacy iroh identity could not be decoded");
+            Err(_error) => {
+                tracing::warn!("legacy iroh identity could not be decoded");
                 None
             }
         },
         Err(keyring::Error::NoEntry) => None,
-        Err(error) => {
-            tracing::warn!(error = %error, "legacy iroh identity lookup failed");
+        Err(_error) => {
+            tracing::warn!("legacy iroh identity lookup failed");
             None
         }
     }

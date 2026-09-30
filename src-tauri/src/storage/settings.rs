@@ -319,8 +319,8 @@ fn load_settings_file(path: &Path, data_dir: &Path) -> Result<AppSettings> {
     match std::fs::read_to_string(path) {
         Ok(contents) => serde_json::from_str(&contents)
             .map_err(LightningP2PError::from)
-            .or_else(|err| {
-                tracing::warn!("settings file invalid, preserving corrupt copy: {err}");
+            .or_else(|_err| {
+                tracing::warn!("settings file invalid, preserving corrupt copy");
                 preserve_corrupt_settings(path)?;
                 Ok(AppSettings::defaults(data_dir))
             }),

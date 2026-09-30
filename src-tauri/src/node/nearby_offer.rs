@@ -509,8 +509,8 @@ pub async fn handle_offer_request(
 
     let receiver = match inbox.record(offer.clone()).await {
         Ok(receiver) => receiver,
-        Err(reason) => {
-            tracing::warn!("rejecting nearby offer from authenticated peer: {reason}");
+        Err(_reason) => {
+            tracing::warn!("rejecting nearby offer from authenticated peer");
             return Ok(OfferResponseMessage {
                 offer_id: request.offer_id,
                 decision: OfferDecision::Rejected,
@@ -519,11 +519,11 @@ pub async fn handle_offer_request(
     };
     let mut offer = offer;
     offer.ready_to_catch = inbox.is_ready_to_catch(&offer).await;
-    if let Err(error) = app_handle.emit(NEARBY_OFFER_RECEIVED_EVENT, offer) {
+    if let Err(_error) = app_handle.emit(NEARBY_OFFER_RECEIVED_EVENT, offer) {
         // The connection is still open but the UI never saw the offer — best
         // we can do is auto-reject so the sender stops waiting.
         inbox.drop_offer(&request.offer_id).await;
-        tracing::warn!("failed to emit nearby-offer-received: {error}");
+        tracing::warn!("failed to emit nearby-offer-received");
         return Ok(OfferResponseMessage {
             offer_id: request.offer_id,
             decision: OfferDecision::Rejected,
@@ -557,8 +557,8 @@ pub async fn handle_offer_request(
 }
 
 fn emit_offer_closed(app_handle: &AppHandle, offer_id: String) {
-    if let Err(error) = app_handle.emit(NEARBY_OFFER_CLOSED_EVENT, OfferClosedEvent { offer_id }) {
-        tracing::warn!("failed to emit nearby-offer-closed: {error}");
+    if let Err(_error) = app_handle.emit(NEARBY_OFFER_CLOSED_EVENT, OfferClosedEvent { offer_id }) {
+        tracing::warn!("failed to emit nearby-offer-closed");
     }
 }
 

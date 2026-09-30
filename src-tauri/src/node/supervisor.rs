@@ -149,7 +149,7 @@ impl NodeSupervisor {
         settings: AppSettings,
         nearby: NearbyServices,
     ) {
-        if let Err(error) = self
+        if let Err(_error) = self
             .replace_node(
                 app,
                 settings,
@@ -159,7 +159,7 @@ impl NodeSupervisor {
             )
             .await
         {
-            tracing::error!("Failed to start supervised iroh node: {error}");
+            tracing::error!("failed to start supervised iroh node");
         }
     }
 
@@ -225,7 +225,7 @@ impl NodeSupervisor {
             let Some(pending) = pending else {
                 return;
             };
-            if let Err(error) = self
+            if let Err(_error) = self
                 .replace_node(
                     pending.app,
                     pending.settings,
@@ -235,7 +235,7 @@ impl NodeSupervisor {
                 )
                 .await
             {
-                tracing::error!(reason = pending.reason, %error, "queued node restart failed");
+                tracing::error!(reason = pending.reason, "queued node restart failed");
             }
         }
     }
@@ -275,8 +275,8 @@ impl NodeSupervisor {
         let old_node_id = old_node.as_ref().map(|node| node.node_id());
 
         if let Some(node) = old_node {
-            if let Err(error) = node.shutdown().await {
-                tracing::warn!(error = %error, "old iroh node shutdown failed during restart");
+            if let Err(_error) = node.shutdown().await {
+                tracing::warn!("old iroh node shutdown failed during restart");
             }
         }
 
@@ -367,7 +367,7 @@ impl NodeSupervisor {
             ),
         )
         .await;
-        tracing::error!(reason, "supervised node lifecycle failed: {error}");
+        tracing::error!(reason, "supervised node lifecycle failed");
     }
 
     async fn set_status(&self, app: &AppHandle, status: NodeSupervisorStatus) {
@@ -375,8 +375,8 @@ impl NodeSupervisor {
             let mut guard = self.status.write().await;
             *guard = status.clone();
         }
-        if let Err(error) = app.emit(NODE_SUPERVISOR_STATUS_EVENT, status) {
-            tracing::warn!("failed to emit node supervisor status: {error}");
+        if let Err(_error) = app.emit(NODE_SUPERVISOR_STATUS_EVENT, status) {
+            tracing::warn!("failed to emit node supervisor status");
         }
     }
 }
