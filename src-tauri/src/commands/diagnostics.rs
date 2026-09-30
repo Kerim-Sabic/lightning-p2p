@@ -602,7 +602,10 @@ fn inspect_download_dir(path: &Path) -> DownloadDirectoryDiagnostics {
 }
 
 fn write_probe(path: &Path) -> Result<(), String> {
-    let probe_path = path.join(format!(".lightning-p2p-diagnostics-{}", unix_timestamp()));
+    let probe_path = path.join(format!(
+        ".lightning-p2p-diagnostics-{}",
+        uuid::Uuid::new_v4()
+    ));
     let file = std::fs::OpenOptions::new()
         .write(true)
         .create_new(true)

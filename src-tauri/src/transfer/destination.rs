@@ -2,7 +2,6 @@
 
 use crate::error::{LightningP2PError, Result};
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 const DISK_SPACE_HEADROOM_BYTES: u64 = 64 * 1024 * 1024;
 
@@ -179,7 +178,7 @@ pub(crate) fn suffixed_path(base: &Path, index: u64) -> PathBuf {
 }
 
 fn write_probe(destination: &Path) -> Result<()> {
-    let probe_path = destination.join(format!(".lightning-p2p-write-test-{}", unix_timestamp()));
+    let probe_path = write_probe_path(destination);
     let file = std::fs::OpenOptions::new()
         .write(true)
         .create_new(true)
@@ -190,6 +189,10 @@ fn write_probe(destination: &Path) -> Result<()> {
     drop(file);
     let _ = std::fs::remove_file(probe_path);
     Ok(())
+}
+
+fn write_probe_path(destination: &Path) -> PathBuf {
+    destination.join(format!(".lightning-p2p-write-test-{}", uuid::Uuid::new_v4()))
 }
 
 #[cfg(windows)]
@@ -248,15 +251,20 @@ fn available_disk_space(path: &Path) -> Option<u64> {
         .checked_mul(u64::try_from(space.f_frsize).ok()?)
 }
 
-fn unix_timestamp() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |duration| duration.as_secs())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashSet;
+
+    #[test]
+    fn concurrent_write_probe_names_do_not_collide() {
+        let directory = PathBuf::from("downloads");
+        let paths = (0..128)
+            .map(|_| write_probe_path(&directory))
+            .collect::<HashSet<_>>();
+
+        assert_eq!(paths.len(), 128);
+    }
 
     #[test]
     fn collection_label_is_filesystem_safe() {
