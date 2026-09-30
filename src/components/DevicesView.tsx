@@ -121,7 +121,10 @@ export function DevicesView() {
   const prepareShareSelection = useTransferStore(
     (state) => state.prepareShareSelection,
   );
-  const shareSelection = useTransferStore((state) => state.shareSelection);
+  const isPreparingSelection = useTransferStore(
+    (state) => state.isPreparingSelection,
+  );
+  const isSharing = useTransferStore((state) => state.isSharing);
   const devices = useNearbyDeviceStore((state) => state.devices);
   const diagnosticState = useNearbyDiagnosticStore((state) => state.state);
   const recordOutbound = useIncomingOfferStore((state) => state.recordOutbound);
@@ -359,15 +362,26 @@ export function DevicesView() {
   };
 
   const handleSend = async (device: NearbyDevice): Promise<void> => {
+    const initial = useTransferStore.getState();
+    if (
+      busyNodeId !== null ||
+      initial.isPreparingSelection ||
+      initial.isSharing
+    ) {
+      return;
+    }
     setError(null);
     setBusyNodeId(device.node_id);
     try {
-      let paths = shareSelection.map((item) => item.path);
+      let paths = initial.shareSelection.map((item) => item.path);
       if (paths.length === 0) {
-        paths = await pickShareFiles();
-        if (paths.length === 0) return;
-        await prepareShareSelection(paths);
+        const pickedPaths = await pickShareFiles();
+        if (pickedPaths.length === 0) return;
+        const current = useTransferStore.getState();
+        if (current.isPreparingSelection || current.isSharing) return;
+        await prepareShareSelection(pickedPaths);
         const prepared = useTransferStore.getState();
+        if (prepared.isPreparingSelection || prepared.isSharing) return;
         paths = prepared.shareSelection.map((item) => item.path);
         if (paths.length === 0) {
           setError(
@@ -375,6 +389,17 @@ export function DevicesView() {
           );
           return;
         }
+      }
+
+      const current = useTransferStore.getState();
+      if (current.isPreparingSelection || current.isSharing) return;
+      const currentPaths = current.shareSelection.map((item) => item.path);
+      if (
+        currentPaths.length !== paths.length ||
+        currentPaths.some((path, index) => path !== paths[index])
+      ) {
+        setError("Your selection changed. Review it and send again.");
+        return;
       }
 
       const offerId = await offerShareToPeer(device.node_id, paths);
@@ -524,7 +549,9 @@ export function DevicesView() {
                 <DeviceCard
                   device={device}
                   busy={busyNodeId === device.node_id}
-                  disabled={!nativeRuntime}
+                  disabled={
+                    !nativeRuntime || isPreparingSelection || isSharing
+                  }
                   onSend={(target) => void handleSend(target)}
                 />
                 {pairedDevices.some(

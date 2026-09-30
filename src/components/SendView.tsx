@@ -351,21 +351,45 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
     device: NearbyDevice,
     flickDirection?: FlickDirection,
   ): Promise<void> => {
-    let paths = shareSelection.map((item) => item.path);
-    if (paths.length === 0) {
-      try {
-        paths = await pickShareFilesFromDialog();
-      } catch (error) {
-        setError(error instanceof Error ? error.message : "File picker failed");
-        return;
-      }
-      if (paths.length === 0) return;
-      await prepareShareSelection(paths);
+    const initial = useTransferStore.getState();
+    if (
+      busyNodeId !== null ||
+      initial.isPreparingSelection ||
+      initial.isSharing
+    ) {
+      return;
     }
-
     setBusyNodeId(device.node_id);
     setError(null);
     try {
+      let paths = initial.shareSelection.map((item) => item.path);
+      if (paths.length === 0) {
+        const pickedPaths = await pickShareFilesFromDialog();
+        if (pickedPaths.length === 0) return;
+
+        const current = useTransferStore.getState();
+        if (current.isPreparingSelection || current.isSharing) return;
+        await prepareShareSelection(pickedPaths);
+
+        const prepared = useTransferStore.getState();
+        paths = prepared.shareSelection.map((item) => item.path);
+        if (paths.length === 0) {
+          setError(prepared.error ?? "Lightning could not prepare those files.");
+          return;
+        }
+      }
+
+      const current = useTransferStore.getState();
+      if (current.isPreparingSelection || current.isSharing) return;
+      const currentPaths = current.shareSelection.map((item) => item.path);
+      if (
+        currentPaths.length !== paths.length ||
+        currentPaths.some((path, index) => path !== paths[index])
+      ) {
+        setError("Your selection changed. Review it and send again.");
+        return;
+      }
+
       const offerId = await offerShareToPeer(
         device.node_id,
         paths,
@@ -404,6 +428,8 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
       event.button !== 0 ||
       event.pointerType === "mouse" ||
       shareSelection.length === 0 ||
+      isPreparingSelection ||
+      isSharing ||
       devices.length === 0 ||
       busyNodeId !== null
     ) {
@@ -576,7 +602,12 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
         }
         setDropTargetNodeId(null);
       }}
-      disabled={busyNodeId !== null || !nativeRuntime}
+      disabled={
+        busyNodeId !== null ||
+        isPreparingSelection ||
+        isSharing ||
+        !nativeRuntime
+      }
       className={`flex min-h-16 items-center gap-3 rounded-2xl border px-4 py-3 text-left transition disabled:opacity-55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300 ${dropTargetNodeId === device.node_id ? "border-sky-300/60 bg-sky-400/10" : "border-white/[0.08] bg-white/[0.025] hover:border-sky-300/30 hover:bg-white/[0.05]"}`}
     >
       <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-white/[0.08] bg-white/[0.04]">
@@ -776,6 +807,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
                       setFlickHint(null);
                     }
                   }}
+                  disabled={isPreparingSelection || isSharing || busyNodeId !== null}
                   style={{ touchAction: "none" }}
                   className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-full border border-[var(--accent-primary)]/35 bg-[var(--accent-primary)]/10 px-4 text-xs font-semibold text-blue-100 transition hover:bg-[var(--accent-primary)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300"
                 >
