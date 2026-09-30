@@ -192,7 +192,10 @@ fn write_probe(destination: &Path) -> Result<()> {
 }
 
 fn write_probe_path(destination: &Path) -> PathBuf {
-    destination.join(format!(".lightning-p2p-write-test-{}", uuid::Uuid::new_v4()))
+    destination.join(format!(
+        ".lightning-p2p-write-test-{}",
+        uuid::Uuid::new_v4()
+    ))
 }
 
 #[cfg(windows)]

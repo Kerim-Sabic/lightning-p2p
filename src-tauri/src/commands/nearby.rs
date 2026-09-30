@@ -220,21 +220,25 @@ pub async fn respond_to_offer(
     window: tauri::Window,
     state: State<'_, AppState>,
     offer_id: String,
+    sender_node_id: String,
     accept: bool,
     auto_catch: bool,
 ) -> CommandResult<Option<String>> {
+    let sender_node_id = EndpointId::from_str(&sender_node_id)
+        .map_err(|err| command_error(format!("Invalid sender node id: {err}")))?
+        .to_string();
     // Snapshot the offer payload before resolving so we still have it after
     // the inbox releases its lock.
     let snapshot = state.offer_inbox.snapshot().await;
     let offer = snapshot
         .into_iter()
-        .find(|offer| offer.offer_id == offer_id)
+        .find(|offer| offer.offer_id == offer_id && offer.sender_node_id == sender_node_id)
         .ok_or_else(|| command_error("Offer is no longer pending."))?;
 
     if auto_catch && !accept {
         let _ = state
             .offer_inbox
-            .resolve(&offer_id, OfferDecision::Rejected)
+            .resolve(&offer.sender_node_id, &offer_id, OfferDecision::Rejected)
             .await;
         return Err(command_error(
             "Ready to Catch can only accept an authorized offer.",
@@ -247,7 +251,7 @@ pub async fn respond_to_offer(
     {
         let _ = state
             .offer_inbox
-            .resolve(&offer_id, OfferDecision::Rejected)
+            .resolve(&offer.sender_node_id, &offer_id, OfferDecision::Rejected)
             .await;
         return Err(command_error(
             "Ready to Catch expired or no longer matches this offer.",
@@ -257,7 +261,7 @@ pub async fn respond_to_offer(
     let inbox = state.offer_inbox.clone();
     if !accept {
         inbox
-            .resolve(&offer_id, OfferDecision::Rejected)
+            .resolve(&offer.sender_node_id, &offer_id, OfferDecision::Rejected)
             .await
             .map_err(|err| command_error(err.to_string()))?;
         return Ok(None);
@@ -291,7 +295,10 @@ pub async fn respond_to_offer(
 
     match start_result {
         Ok(transfer_id) => {
-            if let Err(error) = inbox.resolve(&offer_id, OfferDecision::Accepted).await {
+            if let Err(error) = inbox
+                .resolve(&offer.sender_node_id, &offer_id, OfferDecision::Accepted)
+                .await
+            {
                 let _ = transfer_queue.cancel(&transfer_id).await;
                 return Err(command_error(error.to_string()));
             }
@@ -301,7 +308,9 @@ pub async fn respond_to_offer(
             // A malformed ticket or local setup failure must never be reported
             // as an accepted offer. Best-effort rejection also releases the
             // sender's temporary peer-bound blob grant.
-            let _ = inbox.resolve(&offer_id, OfferDecision::Rejected).await;
+            let _ = inbox
+                .resolve(&offer.sender_node_id, &offer_id, OfferDecision::Rejected)
+                .await;
             Err(error)
         }
     }

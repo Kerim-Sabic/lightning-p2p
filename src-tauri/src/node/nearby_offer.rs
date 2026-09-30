@@ -153,6 +153,8 @@ pub struct OfferResolvedEvent {
 pub struct OfferClosedEvent {
     /// Offer identifier.
     pub offer_id: String,
+    /// Authenticated sender whose offer was closed.
+    pub sender_node_id: String,
 }
 
 /// Internal record describing an offer awaiting a user decision.
@@ -192,7 +194,7 @@ pub struct OfferInbox {
 
 #[derive(Debug, Default)]
 struct OfferInboxState {
-    pending: HashMap<String, PendingOffer>,
+    pending: HashMap<(String, String), PendingOffer>,
     blocked_peers: HashSet<String>,
     ready_to_catch: Option<ReadyToCatchSession>,
     /// IDs are reserved on first receipt, not just while awaiting consent, so
@@ -258,7 +260,8 @@ impl OfferInbox {
                 session.claimed_offer_id = Some(offer.offer_id.clone());
             }
         }
-        if let Some(pending) = guard.pending.get_mut(&offer.offer_id) {
+        let key = (offer.sender_node_id.clone(), offer.offer_id.clone());
+        if let Some(pending) = guard.pending.get_mut(&key) {
             pending.offer.ready_to_catch = eligible;
         }
         eligible
@@ -327,8 +330,8 @@ impl OfferInbox {
         let replay_key = (offer.sender_node_id.clone(), offer.offer_id.clone());
         let peer_offers = guard
             .pending
-            .values()
-            .filter(|pending| pending.offer.sender_node_id == offer.sender_node_id)
+            .keys()
+            .filter(|(peer_id, _)| peer_id == &offer.sender_node_id)
             .count();
         let peer_seen = guard
             .seen_until
@@ -337,7 +340,7 @@ impl OfferInbox {
             .count();
         if guard.pending.len() >= MAX_PENDING_OFFERS
             || peer_offers >= MAX_PENDING_OFFERS_PER_PEER
-            || guard.pending.contains_key(&offer.offer_id)
+            || guard.pending.contains_key(&replay_key)
             || guard.seen_until.contains_key(&replay_key)
             || guard.seen_until.len() >= MAX_SEEN_OFFER_IDS
             || peer_seen >= MAX_SEEN_OFFER_IDS_PER_PEER
@@ -346,8 +349,8 @@ impl OfferInbox {
         }
         guard
             .seen_until
-            .insert(replay_key, now + OFFER_REPLAY_WINDOW);
-        guard.pending.insert(offer.offer_id.clone(), pending);
+            .insert(replay_key.clone(), now + OFFER_REPLAY_WINDOW);
+        guard.pending.insert(replay_key, pending);
         Ok(rx)
     }
 
@@ -360,12 +363,15 @@ impl OfferInbox {
     /// (e.g. the QUIC connection closed before the user responded).
     pub async fn resolve(
         &self,
+        sender_node_id: &str,
         offer_id: &str,
         decision: OfferDecision,
     ) -> std::result::Result<(), OfferRejection> {
         let pending = {
             let mut guard = self.state.lock().await;
-            guard.pending.remove(offer_id)
+            guard
+                .pending
+                .remove(&(sender_node_id.to_owned(), offer_id.to_owned()))
         };
         let pending = pending.ok_or(OfferRejection::NotFound)?;
         pending
@@ -378,9 +384,11 @@ impl OfferInbox {
     ///
     /// Used when the protocol handler's await completes (e.g. timeout) and the
     /// pending state should be cleared even if no decision arrived.
-    pub async fn drop_offer(&self, offer_id: &str) {
+    pub async fn drop_offer(&self, sender_node_id: &str, offer_id: &str) {
         let mut guard = self.state.lock().await;
-        guard.pending.remove(offer_id);
+        guard
+            .pending
+            .remove(&(sender_node_id.to_owned(), offer_id.to_owned()));
     }
 
     /// Applies one peer's block state atomically with offer admission.
@@ -401,14 +409,14 @@ impl OfferInbox {
                 {
                     guard.ready_to_catch = None;
                 }
-                let ids = guard
+                let keys = guard
                     .pending
                     .iter()
-                    .filter(|(_, pending)| pending.offer.sender_node_id == node_id)
-                    .map(|(offer_id, _)| offer_id.clone())
+                    .filter(|((peer_id, _), _)| peer_id == &node_id)
+                    .map(|(key, _)| key.clone())
                     .collect::<Vec<_>>();
-                ids.into_iter()
-                    .filter_map(|offer_id| guard.pending.remove(&offer_id))
+                keys.into_iter()
+                    .filter_map(|key| guard.pending.remove(&key))
                     .collect::<Vec<_>>()
             } else {
                 Vec::new()
@@ -519,10 +527,12 @@ pub async fn handle_offer_request(
     };
     let mut offer = offer;
     offer.ready_to_catch = inbox.is_ready_to_catch(&offer).await;
-    if let Err(_error) = app_handle.emit(NEARBY_OFFER_RECEIVED_EVENT, offer) {
+    if let Err(_error) = app_handle.emit(NEARBY_OFFER_RECEIVED_EVENT, offer.clone()) {
         // The connection is still open but the UI never saw the offer — best
         // we can do is auto-reject so the sender stops waiting.
-        inbox.drop_offer(&request.offer_id).await;
+        inbox
+            .drop_offer(&offer.sender_node_id, &request.offer_id)
+            .await;
         tracing::warn!("failed to emit nearby-offer-received");
         return Ok(OfferResponseMessage {
             offer_id: request.offer_id,
@@ -532,19 +542,23 @@ pub async fn handle_offer_request(
 
     let decision = tokio::select! {
         _ = connection.closed() => {
-            inbox.drop_offer(&request.offer_id).await;
-            emit_offer_closed(app_handle, request.offer_id.clone());
+            inbox
+                .drop_offer(&offer.sender_node_id, &request.offer_id)
+                .await;
+            emit_offer_closed(app_handle, request.offer_id.clone(), offer.sender_node_id.clone());
             OfferDecision::Rejected
         }
         result = tokio::time::timeout(OFFER_DECISION_TIMEOUT, receiver) => match result {
             Ok(Ok(decision)) => decision,
             Ok(Err(_)) => {
-                emit_offer_closed(app_handle, request.offer_id.clone());
+                emit_offer_closed(app_handle, request.offer_id.clone(), offer.sender_node_id.clone());
                 OfferDecision::Rejected
             }
             Err(_) => {
-                inbox.drop_offer(&request.offer_id).await;
-                emit_offer_closed(app_handle, request.offer_id.clone());
+                inbox
+                    .drop_offer(&offer.sender_node_id, &request.offer_id)
+                    .await;
+                emit_offer_closed(app_handle, request.offer_id.clone(), offer.sender_node_id.clone());
                 OfferDecision::Expired
             }
         }
@@ -556,8 +570,14 @@ pub async fn handle_offer_request(
     })
 }
 
-fn emit_offer_closed(app_handle: &AppHandle, offer_id: String) {
-    if let Err(_error) = app_handle.emit(NEARBY_OFFER_CLOSED_EVENT, OfferClosedEvent { offer_id }) {
+fn emit_offer_closed(app_handle: &AppHandle, offer_id: String, sender_node_id: String) {
+    if let Err(_error) = app_handle.emit(
+        NEARBY_OFFER_CLOSED_EVENT,
+        OfferClosedEvent {
+            offer_id,
+            sender_node_id,
+        },
+    ) {
         tracing::warn!("failed to emit nearby-offer-closed");
     }
 }
@@ -628,7 +648,7 @@ mod tests {
             .expect("record offer");
 
         inbox
-            .resolve("offer-1", OfferDecision::Accepted)
+            .resolve("sender-node", "offer-1", OfferDecision::Accepted)
             .await
             .expect("resolve should succeed");
 
@@ -645,10 +665,10 @@ mod tests {
                 .await
                 .expect("record offer"),
         );
-        inbox.drop_offer("offer-2").await;
+        inbox.drop_offer("sender-node", "offer-2").await;
 
         let err = inbox
-            .resolve("offer-2", OfferDecision::Accepted)
+            .resolve("sender-node", "offer-2", OfferDecision::Accepted)
             .await
             .expect_err("missing offer should fail");
         assert!(matches!(err, OfferRejection::NotFound));
@@ -686,13 +706,46 @@ mod tests {
         ));
         assert_eq!(inbox.snapshot().await.len(), 1);
         inbox
-            .resolve("same-id", OfferDecision::Accepted)
+            .resolve("sender-node", "same-id", OfferDecision::Accepted)
             .await
             .expect("resolve original");
         assert_eq!(
             original.try_recv().expect("decision arrives"),
             OfferDecision::Accepted
         );
+    }
+
+    #[tokio::test]
+    async fn colliding_offer_ids_remain_bound_to_their_authenticated_peers() {
+        let inbox = OfferInbox::new();
+        let mut first_offer = sample_offer("shared-id");
+        first_offer.sender_node_id = "peer-a".into();
+        let mut second_offer = sample_offer("shared-id");
+        second_offer.sender_node_id = "peer-b".into();
+        let mut first = inbox.record(first_offer).await.expect("first peer offer");
+        let mut second = inbox
+            .record(second_offer)
+            .await
+            .expect("second peer may use the same wire identifier");
+
+        assert!(matches!(
+            inbox
+                .resolve("peer-c", "shared-id", OfferDecision::Accepted)
+                .await,
+            Err(OfferRejection::NotFound)
+        ));
+        assert_eq!(inbox.snapshot().await.len(), 2);
+
+        inbox
+            .resolve("peer-b", "shared-id", OfferDecision::Accepted)
+            .await
+            .expect("resolve only the matching peer offer");
+        assert_eq!(
+            second.try_recv().expect("peer b decision delivered"),
+            OfferDecision::Accepted
+        );
+        assert!(first.try_recv().is_err());
+        assert_eq!(inbox.snapshot().await.len(), 1);
     }
 
     #[tokio::test]
@@ -703,7 +756,7 @@ mod tests {
             .await
             .expect("record initial offer");
         inbox
-            .resolve("single-use", OfferDecision::Accepted)
+            .resolve("sender-node", "single-use", OfferDecision::Accepted)
             .await
             .expect("resolve initial offer");
         assert_eq!(

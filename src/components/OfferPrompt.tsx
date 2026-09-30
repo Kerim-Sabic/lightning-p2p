@@ -60,7 +60,7 @@ export function OfferPrompt() {
   const downloadDir = useTransferStore((state) => state.downloadDir);
   const [pending, setPending] = useState(false);
   const [pairedLookup, setPairedLookup] = useState<{
-    offerId: string;
+    offerKey: string;
     devices: PairedDevice[] | null;
     failed: boolean;
   } | null>(null);
@@ -71,7 +71,9 @@ export function OfferPrompt() {
   const previousFocusRef = useRef<HTMLElement | null>(null);
 
   const offer = queue[0];
-  const offerId = offer?.offer_id;
+  const offerKey = offer
+    ? JSON.stringify([offer.sender_node_id, offer.offer_id])
+    : undefined;
   const readyToCatch = offer?.ready_to_catch ?? false;
 
   useEffect(
@@ -94,7 +96,7 @@ export function OfferPrompt() {
   );
 
   useEffect(() => {
-    if (offerId) {
+    if (offerKey) {
       if (
         previousFocusRef.current === null &&
         document.activeElement instanceof HTMLElement
@@ -112,44 +114,44 @@ export function OfferPrompt() {
 
     previousFocusRef.current?.focus();
     previousFocusRef.current = null;
-  }, [offerId, pending, readyToCatch]);
+  }, [offerKey, pending, readyToCatch]);
 
   useEffect(() => {
-    if (!offerId) return;
+    if (!offerKey) return;
     let active = true;
     const revision = pairedLookupRevision.current;
     void listPairedDevices().then(
       (devices) => {
         if (active && revision === pairedLookupRevision.current) {
-          setPairedLookup({ offerId, devices, failed: false });
+          setPairedLookup({ offerKey, devices, failed: false });
         }
       },
       () => {
         if (active && revision === pairedLookupRevision.current) {
-          setPairedLookup({ offerId, devices: null, failed: true });
+          setPairedLookup({ offerKey, devices: null, failed: true });
         }
       },
     );
     return () => {
       active = false;
     };
-  }, [offerId]);
+  }, [offerKey]);
 
   useEffect(() => {
-    if (!offer?.ready_to_catch || autoCatchStarted.current === offer.offer_id) {
+    if (!offer?.ready_to_catch || autoCatchStarted.current === offerKey) {
       return;
     }
-    autoCatchStarted.current = offer.offer_id;
+    autoCatchStarted.current = offerKey ?? null;
     setPending(true);
-    void respondToOffer(offer.offer_id, true, true)
-      .then(() => dismissIncoming(offer.offer_id))
+    void respondToOffer(offer.offer_id, offer.sender_node_id, true, true)
+      .then(() => dismissIncoming(offer.offer_id, offer.sender_node_id))
       .catch((error: unknown) => {
         setError(
           error instanceof Error
             ? error.message
             : "Ready to Catch could not receive this offer",
         );
-        dismissIncoming(offer.offer_id);
+        dismissIncoming(offer.offer_id, offer.sender_node_id);
       })
       .finally(() => {
         setPending(false);
@@ -159,21 +161,22 @@ export function OfferPrompt() {
           }),
         );
       });
-  }, [dismissIncoming, offer, setError]);
+  }, [dismissIncoming, offer, offerKey, setError]);
 
   if (!offer) {
     return null;
   }
 
-  const pairedDevices =
-    pairedLookup?.offerId === offer.offer_id ? pairedLookup.devices : null;
+  const currentPairedLookup =
+    pairedLookup?.offerKey === offerKey ? pairedLookup : null;
+  const pairedDevices = currentPairedLookup?.devices ?? null;
   const pairedSender =
     pairedDevices?.find((device) => device.node_id === offer.sender_node_id) ??
     null;
   const trustLabel =
-    pairedLookup?.offerId !== offer.offer_id
+    !currentPairedLookup
       ? "Checking device trust"
-      : pairedLookup.failed
+      : currentPairedLookup.failed
         ? "Trust status unavailable"
         : pairedSender
           ? "Verified device"
@@ -208,15 +211,15 @@ export function OfferPrompt() {
   const handleRespond = async (accept: boolean): Promise<void> => {
     setPending(true);
     try {
-      await respondToOffer(offer.offer_id, accept);
-      dismissIncoming(offer.offer_id);
+      await respondToOffer(offer.offer_id, offer.sender_node_id, accept);
+      dismissIncoming(offer.offer_id, offer.sender_node_id);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Could not respond to offer";
       setError(message);
       // The Rust side already cleared the offer; clear locally too so the
       // user isn't stuck on a stale modal.
-      dismissIncoming(offer.offer_id);
+      dismissIncoming(offer.offer_id, offer.sender_node_id);
     } finally {
       setPending(false);
     }

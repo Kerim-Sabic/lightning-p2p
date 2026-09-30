@@ -38,9 +38,21 @@ describe("incoming offer queue", () => {
     store.pushIncoming(offer("expired", "peer-1"));
     store.pushIncoming(offer("next", "peer-2"));
 
-    store.dismissIncoming("expired");
+    store.dismissIncoming("expired", "peer-1");
 
     expect(useIncomingOfferStore.getState().queue.map((item) => item.offer_id))
       .toEqual(["next"]);
+  });
+
+  it("keeps colliding offer identifiers isolated by sender identity", () => {
+    const store = useIncomingOfferStore.getState();
+    store.pushIncoming(offer("shared-id", "peer-a"));
+    store.pushIncoming(offer("shared-id", "peer-b"));
+    store.pushIncoming(offer("shared-id", "peer-a"));
+
+    expect(useIncomingOfferStore.getState().queue).toHaveLength(2);
+    useIncomingOfferStore.getState().dismissIncoming("shared-id", "peer-a");
+    expect(useIncomingOfferStore.getState().queue.map((item) => item.sender_node_id))
+      .toEqual(["peer-b"]);
   });
 });

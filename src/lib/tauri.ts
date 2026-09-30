@@ -435,6 +435,7 @@ export interface OfferResolved {
 
 export interface OfferClosed {
   offer_id: string;
+  sender_node_id: string;
 }
 
 export interface LocalDeviceIdentity {
@@ -1072,12 +1073,14 @@ export async function offerShareToPeer(
 
 export async function respondToOffer(
   offerId: string,
+  senderNodeId: string,
   accept: boolean,
   autoCatch = false,
 ): Promise<string | null> {
   requireNativeRuntime("Responding to a nearby offer");
   return invoke<string | null>("respond_to_offer", {
     offerId,
+    senderNodeId,
     accept,
     autoCatch,
   });

@@ -260,8 +260,10 @@ export function useTransfer(): void {
     }
 
     return attachAsyncUnlisten(
-      onIncomingOfferClosed(({ offer_id }) => {
-        useIncomingOfferStore.getState().dismissIncoming(offer_id);
+      onIncomingOfferClosed(({ offer_id, sender_node_id }) => {
+        useIncomingOfferStore
+          .getState()
+          .dismissIncoming(offer_id, sender_node_id);
       }),
       handleSubscriptionError,
     );
