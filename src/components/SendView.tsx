@@ -157,10 +157,12 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
   const [showRawTicket, setShowRawTicket] = useState(false);
   const [busyNodeId, setBusyNodeId] = useState<string | null>(null);
   const [dropTargetNodeId, setDropTargetNodeId] = useState<string | null>(null);
+  const [flickDevices, setFlickDevices] = useState<NearbyDevice[] | null>(null);
   const [verifiedNodeIds, setVerifiedNodeIds] = useState<Set<string>>(
     () => new Set(),
   );
   const [flickHint, setFlickHint] = useState<string | null>(null);
+  const recipientDevices = flickDevices ?? devices;
   const recipientSurfaceRef = useRef<HTMLElement | null>(null);
   const activeFlickRef = useRef<ActiveFlick | null>(null);
 
@@ -350,6 +352,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
     }
     activeFlickRef.current = null;
     setDropTargetNodeId(null);
+    setFlickDevices(null);
   };
 
   const handleFlickPointerDown = (
@@ -397,6 +400,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
       targets,
       element: event.currentTarget,
     };
+    setFlickDevices(devices.map((device) => ({ ...device })));
     setFlickHint("Flick toward a device to send");
   };
 
@@ -422,6 +426,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
     if (!active || active.pointerId !== event.pointerId) return;
     activeFlickRef.current = null;
     setDropTargetNodeId(null);
+    setFlickDevices(null);
     setFlickHint(null);
     if (active.element.hasPointerCapture(active.pointerId)) {
       active.element.releasePointerCapture(active.pointerId);
@@ -809,9 +814,9 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
           <p className="meta-copy mt-4">
             Open the native app to send files to nearby devices.
           </p>
-        ) : devices.length > 0 ? (
+        ) : recipientDevices.length > 0 ? (
           <div className="mt-4 grid gap-2 sm:grid-cols-2">
-            {devices.map((device) => (
+            {recipientDevices.map((device) => (
               <button
                 key={device.node_id}
                 data-flick-target={device.node_id}
