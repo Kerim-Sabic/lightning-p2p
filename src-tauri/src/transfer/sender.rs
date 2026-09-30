@@ -305,6 +305,10 @@ fn canonicalize_paths(paths: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
                         .into(),
                 ));
             }
+            let metadata = fs::symlink_metadata(&path)?;
+            if is_reparse_point(&metadata) || !(metadata.is_file() || metadata.is_dir()) {
+                return Err(unsafe_source_path_error());
+            }
             path.canonicalize().map_err(LightningP2PError::from)
         })
         .collect()
@@ -775,6 +779,21 @@ mod tests {
         let sources = vec![source("dup.txt"), source("dup.txt")];
         let err = ensure_unique_names(&sources).expect_err("duplicates should fail");
         assert!(err.to_string().contains("Duplicate share path name"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn selected_symlink_is_rejected_before_canonicalization() {
+        use std::os::unix::fs::symlink;
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let target = dir.path().join("target.txt");
+        let link = dir.path().join("link.txt");
+        fs::write(&target, b"private target").expect("target");
+        symlink(&target, &link).expect("symlink");
+
+        let error = canonicalize_paths(vec![link]).expect_err("symlink root is unsafe");
+        assert!(error.to_string().contains("symbolic link"));
     }
 
     #[test]
