@@ -20,6 +20,7 @@ import { useNearbyDeviceStore } from "../stores/nearbyDeviceStore";
 import { useNearbyDiagnosticStore } from "../stores/nearbyDiagnosticStore";
 import { useNearbyShareStore } from "../stores/nearbyShareStore";
 import { useTransferStore } from "../stores/transferStore";
+import { attachAsyncUnlisten } from "./asyncSubscription";
 
 const FAST_NODE_STATUS_POLL_MS = 2500;
 const STABLE_NODE_STATUS_POLL_MS = 12000;
@@ -111,7 +112,7 @@ export function useTransfer(): void {
     if (event.type === "completed" || event.type === "failed") {
       void store.refreshActiveTransfers();
     }
-    if (event.type === "completed") {
+    if (event.type === "completed" || event.type === "share_prepared") {
       void store.refreshHistory();
     }
   });
@@ -197,17 +198,10 @@ export function useTransfer(): void {
       return;
     }
 
-    let unlisten: (() => void) | null = null;
-
-    void onTransferProgress(handleTransferEvent)
-      .then((fn) => {
-        unlisten = fn;
-      })
-      .catch(handleSubscriptionError);
-
-    return () => {
-      unlisten?.();
-    };
+    return attachAsyncUnlisten(
+      onTransferProgress(handleTransferEvent),
+      handleSubscriptionError,
+    );
   }, [handleSubscriptionError, handleTransferEvent, inTauriRuntime]);
 
   useEffect(() => {
@@ -215,19 +209,12 @@ export function useTransfer(): void {
       return;
     }
 
-    let unlisten: (() => void) | null = null;
-
-    void onNodeSupervisorStatus((status) => {
-      useTransferStore.getState().applyNodeSupervisorStatus(status);
-    })
-      .then((fn) => {
-        unlisten = fn;
-      })
-      .catch(handleSubscriptionError);
-
-    return () => {
-      unlisten?.();
-    };
+    return attachAsyncUnlisten(
+      onNodeSupervisorStatus((status) => {
+        useTransferStore.getState().applyNodeSupervisorStatus(status);
+      }),
+      handleSubscriptionError,
+    );
   }, [handleSubscriptionError, inTauriRuntime]);
 
   useEffect(() => {
@@ -235,19 +222,12 @@ export function useTransfer(): void {
       return;
     }
 
-    let unlisten: (() => void) | null = null;
-
-    void onDiscoveredSharesUpdated((shares) => {
-      useNearbyShareStore.getState().applySharesUpdated(shares);
-    })
-      .then((fn) => {
-        unlisten = fn;
-      })
-      .catch(handleSubscriptionError);
-
-    return () => {
-      unlisten?.();
-    };
+    return attachAsyncUnlisten(
+      onDiscoveredSharesUpdated((shares) => {
+        useNearbyShareStore.getState().applySharesUpdated(shares);
+      }),
+      handleSubscriptionError,
+    );
   }, [handleSubscriptionError, inTauriRuntime]);
 
   useEffect(() => {
@@ -255,19 +235,12 @@ export function useTransfer(): void {
       return;
     }
 
-    let unlisten: (() => void) | null = null;
-
-    void onNearbyDevicesUpdated((devices) => {
-      useNearbyDeviceStore.getState().applyDevicesUpdated(devices);
-    })
-      .then((fn) => {
-        unlisten = fn;
-      })
-      .catch(handleSubscriptionError);
-
-    return () => {
-      unlisten?.();
-    };
+    return attachAsyncUnlisten(
+      onNearbyDevicesUpdated((devices) => {
+        useNearbyDeviceStore.getState().applyDevicesUpdated(devices);
+      }),
+      handleSubscriptionError,
+    );
   }, [handleSubscriptionError, inTauriRuntime]);
 
   useEffect(() => {
@@ -275,19 +248,12 @@ export function useTransfer(): void {
       return;
     }
 
-    let unlisten: (() => void) | null = null;
-
-    void onNearbyDiagnosticState((state) => {
-      useNearbyDiagnosticStore.getState().applyState(state);
-    })
-      .then((fn) => {
-        unlisten = fn;
-      })
-      .catch(handleSubscriptionError);
-
-    return () => {
-      unlisten?.();
-    };
+    return attachAsyncUnlisten(
+      onNearbyDiagnosticState((state) => {
+        useNearbyDiagnosticStore.getState().applyState(state);
+      }),
+      handleSubscriptionError,
+    );
   }, [handleSubscriptionError, inTauriRuntime]);
 
   useEffect(() => {
@@ -295,19 +261,12 @@ export function useTransfer(): void {
       return;
     }
 
-    let unlisten: (() => void) | null = null;
-
-    void onIncomingOffer((offer) => {
-      useIncomingOfferStore.getState().pushIncoming(offer);
-    })
-      .then((fn) => {
-        unlisten = fn;
-      })
-      .catch(handleSubscriptionError);
-
-    return () => {
-      unlisten?.();
-    };
+    return attachAsyncUnlisten(
+      onIncomingOffer((offer) => {
+        useIncomingOfferStore.getState().pushIncoming(offer);
+      }),
+      handleSubscriptionError,
+    );
   }, [handleSubscriptionError, inTauriRuntime]);
 
   useEffect(() => {
@@ -315,18 +274,11 @@ export function useTransfer(): void {
       return;
     }
 
-    let unlisten: (() => void) | null = null;
-
-    void onOfferResolved((resolved) => {
-      useIncomingOfferStore.getState().applyOfferResolved(resolved);
-    })
-      .then((fn) => {
-        unlisten = fn;
-      })
-      .catch(handleSubscriptionError);
-
-    return () => {
-      unlisten?.();
-    };
+    return attachAsyncUnlisten(
+      onOfferResolved((resolved) => {
+        useIncomingOfferStore.getState().applyOfferResolved(resolved);
+      }),
+      handleSubscriptionError,
+    );
   }, [handleSubscriptionError, inTauriRuntime]);
 }

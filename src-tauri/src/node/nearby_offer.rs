@@ -27,6 +27,11 @@ pub const NEARBY_OFFER_RESOLVED_EVENT: &str = "nearby-offer-resolved";
 /// the offer auto-expires. `AirDrop` uses around 30 s for the visible prompt; we
 /// double it to be lenient on slower mobile devices.
 pub const OFFER_DECISION_TIMEOUT: Duration = Duration::from_secs(60);
+const MAX_PENDING_OFFERS: usize = 64;
+const MAX_PENDING_OFFERS_PER_PEER: usize = 4;
+const MAX_OFFER_ID_BYTES: usize = 128;
+const MAX_DEVICE_NAME_BYTES: usize = 128;
+const MAX_OFFER_LABEL_BYTES: usize = 512;
 
 /// On-wire offer payload exchanged via the nearby ALPN.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -118,6 +123,12 @@ pub enum OfferRejection {
     /// The protocol handler is gone (likely because the connection dropped).
     #[error("Offer connection has closed")]
     HandlerDropped,
+    /// The inbox already has this identifier or has reached a safety limit.
+    #[error("Offer inbox is full or the offer identifier is already pending")]
+    CapacityOrDuplicate,
+    /// The offer contains a field that is too large or empty.
+    #[error("Offer contains invalid or oversized metadata")]
+    InvalidMetadata,
 }
 
 /// In-memory inbox of inbound offers waiting for a user decision.
@@ -146,15 +157,42 @@ impl OfferInbox {
 
     /// Records a new pending offer and returns the receiver side of the
     /// decision channel so the protocol handler can await the user's reply.
-    pub async fn record(&self, offer: IncomingOffer) -> oneshot::Receiver<OfferDecision> {
+    ///
+    /// # Errors
+    ///
+    /// Returns `OfferRejection` if metadata is invalid, the identifier is
+    /// already pending, or the global/per-peer inbox limit has been reached.
+    pub async fn record(
+        &self,
+        offer: IncomingOffer,
+    ) -> std::result::Result<oneshot::Receiver<OfferDecision>, OfferRejection> {
+        if offer.offer_id.is_empty()
+            || offer.offer_id.len() > MAX_OFFER_ID_BYTES
+            || offer.sender_device_name.len() > MAX_DEVICE_NAME_BYTES
+            || offer.label.is_empty()
+            || offer.label.len() > MAX_OFFER_LABEL_BYTES
+        {
+            return Err(OfferRejection::InvalidMetadata);
+        }
+
         let (tx, rx) = oneshot::channel();
         let pending = PendingOffer {
             offer: offer.clone(),
             responder: tx,
         };
         let mut guard = self.pending.lock().await;
+        let peer_offers = guard
+            .values()
+            .filter(|pending| pending.offer.sender_node_id == offer.sender_node_id)
+            .count();
+        if guard.len() >= MAX_PENDING_OFFERS
+            || peer_offers >= MAX_PENDING_OFFERS_PER_PEER
+            || guard.contains_key(&offer.offer_id)
+        {
+            return Err(OfferRejection::CapacityOrDuplicate);
+        }
         guard.insert(offer.offer_id.clone(), pending);
-        rx
+        Ok(rx)
     }
 
     /// Resolves an offer with the given decision.
@@ -204,10 +242,14 @@ pub async fn handle_offer_request(
     app_handle: &AppHandle,
     inbox: &OfferInbox,
     request: OfferShareMessage,
+    authenticated_sender: EndpointId,
+    connection: &iroh::endpoint::Connection,
 ) -> Result<OfferResponseMessage> {
     let offer = IncomingOffer {
         offer_id: request.offer_id.clone(),
-        sender_node_id: request.sender_node_id.clone(),
+        // The node ID inside the message is untrusted. Bind all identity-sensitive
+        // follow-up work to the peer authenticated by iroh's encrypted transport.
+        sender_node_id: authenticated_sender.to_string(),
         sender_device_name: request.sender_device_name,
         label: request.label,
         size: request.size,
@@ -216,7 +258,16 @@ pub async fn handle_offer_request(
         received_at_unix: unix_timestamp(),
     };
 
-    let receiver = inbox.record(offer.clone()).await;
+    let receiver = match inbox.record(offer.clone()).await {
+        Ok(receiver) => receiver,
+        Err(reason) => {
+            tracing::warn!("rejecting nearby offer from authenticated peer: {reason}");
+            return Ok(OfferResponseMessage {
+                offer_id: request.offer_id,
+                decision: OfferDecision::Rejected,
+            });
+        }
+    };
     if let Err(error) = app_handle.emit(NEARBY_OFFER_RECEIVED_EVENT, offer) {
         // The connection is still open but the UI never saw the offer — best
         // we can do is auto-reject so the sender stops waiting.
@@ -228,15 +279,18 @@ pub async fn handle_offer_request(
         });
     }
 
-    let decision = match tokio::time::timeout(OFFER_DECISION_TIMEOUT, receiver).await {
-        Ok(Ok(decision)) => decision,
-        Ok(Err(_)) => {
-            // Inbox dropped the channel without sending — treat as rejection.
+    let decision = tokio::select! {
+        _ = connection.closed() => {
+            inbox.drop_offer(&request.offer_id).await;
             OfferDecision::Rejected
         }
-        Err(_) => {
-            inbox.drop_offer(&request.offer_id).await;
-            OfferDecision::Expired
+        result = tokio::time::timeout(OFFER_DECISION_TIMEOUT, receiver) => match result {
+            Ok(Ok(decision)) => decision,
+            Ok(Err(_)) => OfferDecision::Rejected,
+            Err(_) => {
+                inbox.drop_offer(&request.offer_id).await;
+                OfferDecision::Expired
+            }
         }
     };
 
@@ -295,7 +349,10 @@ mod tests {
     #[tokio::test]
     async fn record_and_resolve_round_trips_decision() {
         let inbox = OfferInbox::new();
-        let mut receiver = inbox.record(sample_offer("offer-1")).await;
+        let mut receiver = inbox
+            .record(sample_offer("offer-1"))
+            .await
+            .expect("record offer");
 
         inbox
             .resolve("offer-1", OfferDecision::Accepted)
@@ -309,7 +366,12 @@ mod tests {
     #[tokio::test]
     async fn resolve_returns_not_found_when_expired() {
         let inbox = OfferInbox::new();
-        drop(inbox.record(sample_offer("offer-2")).await);
+        drop(
+            inbox
+                .record(sample_offer("offer-2"))
+                .await
+                .expect("record offer"),
+        );
         inbox.drop_offer("offer-2").await;
 
         let err = inbox
@@ -327,12 +389,82 @@ mod tests {
         let mut second = sample_offer("second");
         second.received_at_unix = 200;
 
-        drop(inbox.record(first).await);
-        drop(inbox.record(second).await);
+        drop(inbox.record(first).await.expect("record first offer"));
+        drop(inbox.record(second).await.expect("record second offer"));
 
         let snapshot = inbox.snapshot().await;
         assert_eq!(snapshot.len(), 2);
         assert_eq!(snapshot[0].offer_id, "second");
         assert_eq!(snapshot[1].offer_id, "first");
+    }
+
+    #[tokio::test]
+    async fn inbox_rejects_duplicate_ids_without_replacing_original() {
+        let inbox = OfferInbox::new();
+        let mut original = inbox
+            .record(sample_offer("same-id"))
+            .await
+            .expect("first offer");
+        let duplicate = inbox.record(sample_offer("same-id")).await;
+
+        assert!(matches!(
+            duplicate,
+            Err(OfferRejection::CapacityOrDuplicate)
+        ));
+        assert_eq!(inbox.snapshot().await.len(), 1);
+        inbox
+            .resolve("same-id", OfferDecision::Accepted)
+            .await
+            .expect("resolve original");
+        assert_eq!(
+            original.try_recv().expect("decision arrives"),
+            OfferDecision::Accepted
+        );
+    }
+
+    #[tokio::test]
+    async fn inbox_enforces_global_and_per_peer_limits() {
+        let inbox = OfferInbox::new();
+        for index in 0..MAX_PENDING_OFFERS_PER_PEER {
+            let mut offer = sample_offer(&format!("peer-a-{index}"));
+            offer.sender_node_id = "peer-a".into();
+            drop(inbox.record(offer).await.expect("within peer limit"));
+        }
+        let mut over_peer_limit = sample_offer("peer-a-over");
+        over_peer_limit.sender_node_id = "peer-a".into();
+        assert!(matches!(
+            inbox.record(over_peer_limit).await,
+            Err(OfferRejection::CapacityOrDuplicate)
+        ));
+
+        for index in 0..(MAX_PENDING_OFFERS - MAX_PENDING_OFFERS_PER_PEER) {
+            let mut offer = sample_offer(&format!("peer-b-{index}"));
+            offer.sender_node_id = format!("peer-b-{index}");
+            drop(inbox.record(offer).await.expect("within global limit"));
+        }
+        let mut over_global_limit = sample_offer("peer-c");
+        over_global_limit.sender_node_id = "peer-c".into();
+        assert!(matches!(
+            inbox.record(over_global_limit).await,
+            Err(OfferRejection::CapacityOrDuplicate)
+        ));
+        assert_eq!(inbox.snapshot().await.len(), MAX_PENDING_OFFERS);
+    }
+
+    #[tokio::test]
+    async fn inbox_rejects_empty_or_oversized_metadata() {
+        let inbox = OfferInbox::new();
+        let mut offer = sample_offer("");
+        assert!(matches!(
+            inbox.record(offer.clone()).await,
+            Err(OfferRejection::InvalidMetadata)
+        ));
+        offer.offer_id = "valid".into();
+        offer.label = "x".repeat(MAX_OFFER_LABEL_BYTES + 1);
+        assert!(matches!(
+            inbox.record(offer).await,
+            Err(OfferRejection::InvalidMetadata)
+        ));
+        assert!(inbox.snapshot().await.is_empty());
     }
 }

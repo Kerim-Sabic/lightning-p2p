@@ -29,7 +29,8 @@ import { useNearbyDeviceStore } from "./nearbyDeviceStore";
 import { useNearbyShareStore } from "./nearbyShareStore";
 import { mergeFailedTransferEvent } from "./transferEventMapping";
 
-export type TransferStatus = "starting" | "running" | "completed" | "failed";
+export type TransferStatus =
+  "starting" | "running" | "prepared" | "completed" | "failed";
 export type UpdatePhase =
   | "idle"
   | "checking"
@@ -955,6 +956,33 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
           retryTicket: state.transfers[event.transfer_id]?.retryTicket ?? null,
         };
         return { transfers };
+      } else if (event.type === "share_prepared") {
+        const current =
+          state.transfers[event.transfer_id] ??
+          createTransferEntry(event.transfer_id, "send", event.name, null);
+        return {
+          transfers: {
+            ...state.transfers,
+            [event.transfer_id]: {
+              ...current,
+              direction: "send",
+              name: event.name,
+              bytes: event.size,
+              total: event.size,
+              speedBps: 0,
+              routeKind: "unknown",
+              phase: "preparing",
+              failureCategory: null,
+              outputPath: null,
+              status: "prepared",
+              hash: event.hash,
+              size: event.size,
+              timestamp: event.timestamp,
+              error: null,
+              appError: null,
+            },
+          },
+        };
       } else if (event.type === "progress") {
         const current =
           state.transfers[event.transfer_id] ??

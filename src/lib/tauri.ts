@@ -510,6 +510,14 @@ export type TransferEvent =
       effective_mbps: number;
     }
   | {
+      type: "share_prepared";
+      transfer_id: string;
+      hash: string;
+      name: string;
+      size: number;
+      timestamp: number;
+    }
+  | {
       type: "failed";
       transfer_id: string;
       error: string;

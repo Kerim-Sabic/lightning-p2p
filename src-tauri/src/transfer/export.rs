@@ -159,11 +159,7 @@ pub async fn resolve_label(store: &Store, ticket: &BlobTicket) -> Result<String>
     ))
 }
 
-async fn export_blob(
-    store: &Store,
-    ticket: &BlobTicket,
-    destination: &Path,
-) -> Result<PathBuf> {
+async fn export_blob(store: &Store, ticket: &BlobTicket, destination: &Path) -> Result<PathBuf> {
     // Write to a `.part` sibling first, then rename onto the final name. A
     // crash mid-write leaves a clearly partial `.part` file in the destination
     // and never a half-written file at the final name. The `.part` is created

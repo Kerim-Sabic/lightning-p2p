@@ -125,7 +125,11 @@ impl NearbyShareProtocol {
         self.offers.clone()
     }
 
-    async fn response_bytes(&self, request_bytes: Vec<u8>) -> Result<Vec<u8>> {
+    async fn response_bytes(
+        &self,
+        request_bytes: Vec<u8>,
+        connection: &Connection,
+    ) -> Result<Vec<u8>> {
         let request: NearbyRequest = serde_json::from_slice(&request_bytes)?;
         let version = request_version(&request);
         if version > PROTOCOL_VERSION {
@@ -157,7 +161,14 @@ impl NearbyShareProtocol {
                 }
             }
             NearbyRequest::OfferShare { offer, .. } => {
-                let response = handle_offer_request(&self.app_handle, &self.offers, offer).await?;
+                let response = handle_offer_request(
+                    &self.app_handle,
+                    &self.offers,
+                    offer,
+                    connection.remote_id(),
+                    connection,
+                )
+                .await?;
                 NearbyResponse::OfferDecision {
                     protocol_version: PROTOCOL_VERSION,
                     response,
@@ -180,7 +191,7 @@ impl ProtocolHandler for NearbyShareProtocol {
             .await
             .map_err(AcceptError::from_err)?;
         let response = self
-            .response_bytes(request)
+            .response_bytes(request, &connection)
             .await
             .map_err(AcceptError::from_err)?;
         send.write_all(&response)

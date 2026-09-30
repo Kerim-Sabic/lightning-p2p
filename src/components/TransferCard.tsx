@@ -54,6 +54,8 @@ function statusLabel(transfer: TransferEntry): string {
         return "Verifying and saving";
       }
       return transfer.direction === "send" ? "Importing content" : "Receiving";
+    case "prepared":
+      return "Share prepared";
     case "completed":
       return transfer.direction === "send" ? "Ticket ready" : "Saved locally";
     case "failed":
@@ -104,7 +106,7 @@ function strategyLabel(strategy: TransferEntry["strategy"]): string {
 }
 
 function statusIcon(transfer: TransferEntry) {
-  if (transfer.status === "completed") {
+  if (transfer.status === "completed" || transfer.status === "prepared") {
     return CheckCircle2;
   }
   if (transfer.status === "failed") {

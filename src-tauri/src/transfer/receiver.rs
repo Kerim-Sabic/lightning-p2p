@@ -753,10 +753,9 @@ mod tests {
         let relay_url = "https://relay.example.com"
             .parse()
             .expect("relay url should parse");
-        let node_id = PublicKey::from_str(
-            "ae58ff8833241ac82d6ff7611046ed67b5072d142c588d0063e942d9a75502b6",
-        )
-        .expect("public key should parse");
+        let node_id =
+            PublicKey::from_str("ae58ff8833241ac82d6ff7611046ed67b5072d142c588d0063e942d9a75502b6")
+                .expect("public key should parse");
         let ticket = BlobTicket::new(
             EndpointAddr::from_parts(node_id, [TransportAddr::Relay(relay_url)]),
             iroh_blobs::Hash::new(b"hello"),

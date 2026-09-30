@@ -3,7 +3,7 @@
 use crate::error::{LightningP2PError, Result};
 use crate::node::LightningP2PNode;
 use crate::storage::history::{self, TransferRecord};
-use crate::transfer::metrics::{RouteKind, TransferMetrics, TransferStrategy};
+use crate::transfer::metrics::TransferMetrics;
 use crate::transfer::mode::TransferProfile;
 use crate::transfer::progress::{
     EventReporter, FailureCategory, ProgressHandle, ProgressSampler, TransferDirection,
@@ -19,7 +19,8 @@ use iroh_blobs::{BlobFormat, Hash};
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::Window;
 
 /// A single file to import, with the name it should carry inside a collection.
@@ -33,6 +34,7 @@ struct Source {
 /// [`TransferProfile`] picks a value within this range; env-var override is
 /// still honored as the final escape hatch for bench sweeps.
 const MAX_IMPORT_PARALLELISM: usize = 128;
+static SHARE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 struct SharePlan {
     sources: Vec<Source>,
@@ -76,11 +78,10 @@ pub async fn send_files(
     profile: TransferProfile,
 ) -> Result<ShareOutcome> {
     let _foreground = crate::commands::mobile::TransferForegroundGuard::acquire();
-    let started_at = Instant::now();
     let plan = build_share_plan(paths)?;
     let reporter = EventReporter::new(
         window,
-        "share".into(),
+        next_share_id(),
         TransferDirection::Send,
         plan.label.clone(),
         None,
@@ -97,24 +98,20 @@ pub async fn send_files(
     let result = create_share_with_plan(node, plan, Some(progress.clone()), profile).await;
     match result {
         Ok(outcome) => {
-            let prep_ms = elapsed_ms(started_at.elapsed());
-            let metrics = TransferMetrics {
-                route_kind: RouteKind::Unknown,
-                connect_ms: prep_ms,
-                download_ms: 0,
-                export_ms: 0,
-                provider_count: 1,
-                direct_provider_count: 0,
-                relay_provider_count: 0,
-                strategy: TransferStrategy::QueuedSingleProvider,
-                first_byte_ms: 0,
-                effective_mbps: effective_mbps(outcome.total_size, prep_ms),
-            };
             progress.set(outcome.total_size, outcome.total_size);
-            progress.set_metrics(metrics);
             sampler.finish().await?;
-            reporter.emit_completed(outcome.hash.to_string(), outcome.total_size, metrics, None)?;
-            save_send_record(node, &outcome)?;
+            if let Err(error) = save_send_record(node, &outcome) {
+                let payload = error.to_payload();
+                let message = payload.message.clone();
+                let _ = reporter.emit_failed_with_payload(
+                    &message,
+                    progress.metrics_snapshot().route_kind,
+                    Some(FailureCategory::Unknown),
+                    Some(payload),
+                );
+                return Err(error);
+            }
+            reporter.emit_share_prepared(outcome.hash.to_string(), outcome.total_size)?;
             Ok(outcome)
         }
         Err(error) => {
@@ -288,7 +285,14 @@ fn file_size(path: &Path) -> Result<u64> {
 fn summarize_sources(sources: &[Source]) -> String {
     let mut roots = sources
         .iter()
-        .map(|source| source.name.split('/').next().unwrap_or_default().to_string())
+        .map(|source| {
+            source
+                .name
+                .split('/')
+                .next()
+                .unwrap_or_default()
+                .to_string()
+        })
         .collect::<Vec<_>>();
     roots.sort();
     roots.dedup();
@@ -378,10 +382,13 @@ async fn import_source(
         }
     }
 
-    let hash = hash.ok_or_else(|| {
-        LightningP2PError::Blob("Import stream ended before completion".into())
-    })?;
-    advance_progress(progress.as_ref(), size.saturating_sub(last_offset), total_size);
+    let hash = hash
+        .ok_or_else(|| LightningP2PError::Blob("Import stream ended before completion".into()))?;
+    advance_progress(
+        progress.as_ref(),
+        size.saturating_sub(last_offset),
+        total_size,
+    );
     Ok(IndexedImport {
         index,
         source: ImportedSource {
@@ -441,16 +448,12 @@ fn unix_timestamp() -> u64 {
         .map_or(0, |duration| duration.as_secs())
 }
 
-fn elapsed_ms(duration: std::time::Duration) -> u64 {
-    u64::try_from(duration.as_millis()).unwrap_or(u64::MAX)
-}
-
-fn effective_mbps(bytes: u64, duration_ms: u64) -> u64 {
-    if duration_ms == 0 {
-        return 0;
-    }
-    let mbps = u128::from(bytes).saturating_mul(8) / u128::from(duration_ms) / 1000;
-    u64::try_from(mbps).unwrap_or(u64::MAX)
+fn next_share_id() -> String {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |duration| duration.as_nanos());
+    let sequence = SHARE_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    format!("share-{nanos:x}-{sequence:x}")
 }
 
 #[cfg(test)]
@@ -500,8 +503,7 @@ mod tests {
     }
 
     #[test]
-    fn effective_mbps_uses_payload_and_elapsed_time() {
-        assert_eq!(effective_mbps(125_000_000, 1_000), 1000);
-        assert_eq!(effective_mbps(125_000_000, 0), 0);
+    fn share_preparation_ids_are_unique() {
+        assert_ne!(next_share_id(), next_share_id());
     }
 }

@@ -258,6 +258,19 @@ pub enum TransferEvent {
         /// Effective transfer throughput in megabits per second.
         effective_mbps: u64,
     },
+    /// Local content is imported and ready to share; no receiver completion is implied.
+    SharePrepared {
+        /// Stable identifier of the share preparation operation.
+        transfer_id: String,
+        /// Root content hash.
+        hash: String,
+        /// User-visible label for the share.
+        name: String,
+        /// Total bytes imported into the local blob store.
+        size: u64,
+        /// Preparation timestamp in unix seconds.
+        timestamp: u64,
+    },
     /// Transfer failed.
     Failed {
         /// Stable identifier of the transfer.
@@ -425,6 +438,21 @@ impl EventReporter {
             strategy: metrics.strategy,
             first_byte_ms: metrics.first_byte_ms,
             effective_mbps: metrics.effective_mbps,
+        })
+    }
+
+    /// Emits that local share preparation completed without claiming delivery.
+    ///
+    /// # Errors
+    ///
+    /// Returns `LightningP2PError` if the Tauri event cannot be emitted.
+    pub fn emit_share_prepared(&self, hash: String, size: u64) -> Result<()> {
+        self.emit(TransferEvent::SharePrepared {
+            transfer_id: self.transfer_id.clone(),
+            hash,
+            name: self.name.clone(),
+            size,
+            timestamp: unix_timestamp(),
         })
     }
 
@@ -854,6 +882,19 @@ mod tests {
         assert!(json.contains("\"bytes\":128"));
         assert!(json.contains("\"route_kind\":\"direct\""));
         assert!(json.contains("\"phase\":\"downloading\""));
+    }
+
+    #[test]
+    fn prepared_share_serializes_as_a_non_transfer_completion() {
+        let event = TransferEvent::SharePrepared {
+            transfer_id: "share-1".into(),
+            hash: "abc".into(),
+            name: "demo.bin".into(),
+            size: 42,
+            timestamp: 10,
+        };
+        let json = serde_json::to_string(&event).expect("share event should serialize");
+        assert!(json.contains("\"type\":\"share_prepared\""));
     }
 
     #[test]

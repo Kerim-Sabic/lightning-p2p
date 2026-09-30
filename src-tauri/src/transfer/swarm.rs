@@ -158,7 +158,16 @@ pub(crate) async fn download_collection(
     let tracker = SwarmTracker::new(ticket.size().filter(|&size| size > 0));
 
     // Stage 1: the HashSeq root is a tiny blob listing child hashes.
-    fetch_blob(node, root, &providers, cancel_rx, &tracker, None, idle_timeout).await?;
+    fetch_blob(
+        node,
+        root,
+        &providers,
+        cancel_rx,
+        &tracker,
+        None,
+        idle_timeout,
+    )
+    .await?;
     let children = read_child_hashes(node, root).await?;
     tracing::info!(
         children = children.len(),
@@ -169,7 +178,15 @@ pub(crate) async fn download_collection(
     // Stage 2: fan the children out. Futures are polled in place (not
     // spawned), so the first error drops all in-flight siblings.
     let mut fan_out = stream::iter(children.into_iter().map(|child| {
-        fetch_blob(node, child, &providers, cancel_rx, &tracker, progress, idle_timeout)
+        fetch_blob(
+            node,
+            child,
+            &providers,
+            cancel_rx,
+            &tracker,
+            progress,
+            idle_timeout,
+        )
     }))
     .buffer_unordered(swarm_parallelism(profile));
     while let Some(result) = fan_out.next().await {
@@ -254,7 +271,8 @@ fn handle_event(
             tracker.add_done(offset.saturating_sub(*credited));
             *credited = offset;
         }
-        DownloadProgressItem::ProviderFailed { .. } | DownloadProgressItem::PartComplete { .. } => {}
+        DownloadProgressItem::ProviderFailed { .. } | DownloadProgressItem::PartComplete { .. } => {
+        }
         DownloadProgressItem::Error(error) => {
             return Err(abort_error(&error.to_string(), tracker));
         }

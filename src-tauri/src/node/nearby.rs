@@ -4,8 +4,8 @@ use super::nearby_protocol::{fetch_remote_shares, RemoteAdvertisedShare};
 use crate::error::{LightningP2PError, Result};
 use futures_util::{stream, StreamExt};
 use iroh::{Endpoint, EndpointAddr, EndpointId, TransportAddr};
-use iroh_mdns_address_lookup::{DiscoveryEvent, MdnsAddressLookup};
 use iroh_blobs::{ticket::BlobTicket, BlobFormat, Hash};
+use iroh_mdns_address_lookup::{DiscoveryEvent, MdnsAddressLookup};
 use serde::Serialize;
 use std::{
     collections::{BTreeMap, HashSet},
@@ -1132,8 +1132,7 @@ mod tests {
         let relay_url: iroh::RelayUrl = "https://relay.example.com".parse().expect("relay url");
         let direct_addr: std::net::SocketAddr = "127.0.0.1:4433".parse().expect("direct addr");
 
-        let direct_only =
-            EndpointAddr::from_parts(node_id, [TransportAddr::Ip(direct_addr)]);
+        let direct_only = EndpointAddr::from_parts(node_id, [TransportAddr::Ip(direct_addr)]);
         assert_eq!(route_hint_for_addr(&direct_only), NearbyRouteHint::Direct);
 
         let relay_only =
