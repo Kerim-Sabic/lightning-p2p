@@ -8,7 +8,7 @@ import {
   Send,
   WifiOff,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { attachAsyncUnlisten } from "../hooks/asyncSubscription";
 import {
   getLocalDeviceIdentity,
@@ -68,8 +68,7 @@ export function DevicesView() {
   const bluetoothDiscoveryEnabled =
     bluetoothDiscoverySupported &&
     (settings?.bluetooth_discovery_enabled ?? false);
-  const discoveryEnabled =
-    localDiscoveryEnabled || bluetoothDiscoveryEnabled;
+  const discoveryEnabled = localDiscoveryEnabled || bluetoothDiscoveryEnabled;
   const networkLikelyBlocked =
     diagnosticState === "likely_blocked" &&
     localDiscoveryEnabled &&
@@ -93,6 +92,23 @@ export function DevicesView() {
     expiresAtMs: number;
   } | null>(null);
   const [clockMs, setClockMs] = useState(() => Date.now());
+  const pairingNameRef = useRef<HTMLInputElement>(null);
+  const previousPairingFocusRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!pairingCandidate) return;
+    if (
+      previousPairingFocusRef.current === null &&
+      document.activeElement instanceof HTMLElement
+    ) {
+      previousPairingFocusRef.current = document.activeElement;
+    }
+    pairingNameRef.current?.focus();
+    return () => {
+      previousPairingFocusRef.current?.focus();
+      previousPairingFocusRef.current = null;
+    };
+  }, [pairingCandidate]);
 
   useEffect(() => {
     if (!readySession) return;
@@ -243,7 +259,9 @@ export function DevicesView() {
       }
     } catch (error) {
       setError(
-        error instanceof Error ? error.message : "Could not enable Ready to Catch",
+        error instanceof Error
+          ? error.message
+          : "Could not enable Ready to Catch",
       );
     }
   };
@@ -256,6 +274,31 @@ export function DevicesView() {
       setError(
         error instanceof Error ? error.message : "Could not rename this device",
       );
+    }
+  };
+
+  const handlePairingDialogKeyDown = (
+    event: KeyboardEvent<HTMLElement>,
+  ): void => {
+    if (event.key !== "Tab") return;
+    const focusable = Array.from(
+      event.currentTarget.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), a[href], input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ),
+    );
+    if (focusable.length === 0) {
+      event.preventDefault();
+      event.currentTarget.focus();
+      return;
+    }
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last?.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first?.focus();
     }
   };
 
@@ -310,9 +353,8 @@ export function DevicesView() {
             <p className="meta-copy mt-3 max-w-[58ch]">
               Devices appear here when an enabled discovery method finds them.
               Choose a peer and its receiver must accept before files move.
-              Bluetooth discovery is available on supported platforms; it
-              helps find peers but does not verify identity or measure exact
-              distance.
+              Bluetooth discovery is available on supported platforms; it helps
+              find peers but does not verify identity or measure exact distance.
             </p>
 
             <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-400">
@@ -475,10 +517,17 @@ export function DevicesView() {
             <p className="min-w-0 flex-1 text-xs leading-5 text-sky-50/85">
               Ready to Catch from{" "}
               <strong>
-                {pairedDevices.find((device) => device.node_id === readySession.nodeId)?.name ?? "verified device"}
+                {pairedDevices.find(
+                  (device) => device.node_id === readySession.nodeId,
+                )?.name ?? "verified device"}
               </strong>{" "}
-              for {Math.max(0, Math.ceil((readySession.expiresAtMs - clockMs) / 1000))}s.
-              One supported file up to 100 MiB. Received files never open automatically.
+              for{" "}
+              {Math.max(
+                0,
+                Math.ceil((readySession.expiresAtMs - clockMs) / 1000),
+              )}
+              s. One supported file up to 100 MiB. Received files never open
+              automatically.
             </p>
             <button
               type="button"
@@ -594,6 +643,8 @@ export function DevicesView() {
           }}
         >
           <section
+            tabIndex={-1}
+            onKeyDown={handlePairingDialogKeyDown}
             role="dialog"
             aria-modal="true"
             aria-labelledby="pair-device-title"
@@ -621,6 +672,7 @@ export function DevicesView() {
               Name on this device
             </label>
             <input
+              ref={pairingNameRef}
               autoFocus
               id="paired-device-name"
               value={pairingName}
