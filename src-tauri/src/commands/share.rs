@@ -76,11 +76,16 @@ pub async fn create_share(
 ///
 /// Returns an error string if any path cannot be read.
 #[tauri::command]
-pub fn describe_share_paths(paths: Vec<String>) -> CommandResult<Vec<SharePathInfo>> {
-    paths
-        .into_iter()
-        .map(|path| describe_path(PathBuf::from(path)).map_err(command_error))
-        .collect()
+pub async fn describe_share_paths(paths: Vec<String>) -> CommandResult<Vec<SharePathInfo>> {
+    tokio::task::spawn_blocking(move || {
+        paths
+            .into_iter()
+            .map(|path| describe_path(PathBuf::from(path)))
+            .collect::<crate::error::Result<Vec<_>>>()
+    })
+    .await
+    .map_err(|error| command_error(error.to_string()))?
+    .map_err(command_error)
 }
 
 /// Regenerates a ticket string for locally stored content.
@@ -174,16 +179,47 @@ fn display_name(path: &Path) -> String {
 }
 
 fn path_size(path: &Path) -> crate::error::Result<u64> {
-    let metadata = fs::metadata(path)?;
+    let metadata = fs::symlink_metadata(path)?;
+    if is_reparse_point(&metadata) {
+        return Err(crate::error::LightningP2PError::Other(
+            "Selected folders cannot contain symbolic links or reparse points.".into(),
+        ));
+    }
     if metadata.is_file() {
         return Ok(metadata.len());
     }
 
+    if !metadata.is_dir() {
+        return Err(crate::error::LightningP2PError::Other(
+            "Only regular files and folders can be shared.".into(),
+        ));
+    }
+
     let mut total = 0u64;
     for entry in fs::read_dir(path)? {
-        total += path_size(&entry?.path())?;
+        total = total
+            .checked_add(path_size(&entry?.path())?)
+            .ok_or_else(|| {
+                crate::error::LightningP2PError::Other("Selected folder is too large.".into())
+            })?;
     }
     Ok(total)
+}
+
+fn is_reparse_point(metadata: &fs::Metadata) -> bool {
+    if metadata.file_type().is_symlink() {
+        return true;
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0400;
+        metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
+    }
+    #[cfg(not(windows))]
+    {
+        false
+    }
 }
 
 #[cfg(test)]
@@ -214,5 +250,21 @@ mod tests {
         let info = describe_path(temp_dir.path().to_path_buf()).expect("path should describe");
         assert_eq!(info.size, 8);
         assert!(info.is_dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn directory_size_rejects_nested_symlinks_without_following_them() {
+        use std::os::unix::fs::symlink;
+
+        let temp_dir = tempfile::tempdir().expect("temp dir should exist");
+        let root = temp_dir.path().join("root");
+        let outside = temp_dir.path().join("outside.bin");
+        fs::create_dir(&root).expect("root should be created");
+        fs::write(&outside, [1_u8; 7]).expect("file should write");
+        symlink(&outside, root.join("linked.bin")).expect("symlink should be created");
+
+        let error = describe_path(root).expect_err("nested symlink must be rejected");
+        assert!(error.to_string().contains("symbolic links"));
     }
 }
