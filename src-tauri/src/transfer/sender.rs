@@ -28,6 +28,19 @@ use tauri::Window;
 struct Source {
     name: String,
     path: PathBuf,
+    snapshot: SourceSnapshot,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct SourceSnapshot {
+    size: u64,
+    modified: Option<SystemTime>,
+    #[cfg(unix)]
+    device: u64,
+    #[cfg(unix)]
+    inode: u64,
+    #[cfg(windows)]
+    creation_time: u64,
 }
 
 /// Hard upper bound on import parallelism. The per-transfer
@@ -228,11 +241,15 @@ fn scan_into(path: &Path, out: &mut Vec<Source>) -> Result<()> {
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_default();
-    let meta = fs::metadata(path)?;
+    let meta = fs::symlink_metadata(path)?;
+    if is_reparse_point(&meta) {
+        return Err(unsafe_source_path_error());
+    }
     if meta.is_file() {
         out.push(Source {
             name,
             path: path.to_path_buf(),
+            snapshot: source_snapshot(path)?,
         });
     } else if meta.is_dir() {
         scan_dir(path, &name, out)?;
@@ -241,6 +258,10 @@ fn scan_into(path: &Path, out: &mut Vec<Source>) -> Result<()> {
 }
 
 fn scan_dir(dir: &Path, prefix: &str, out: &mut Vec<Source>) -> Result<()> {
+    let directory_metadata = fs::symlink_metadata(dir)?;
+    if !directory_metadata.is_dir() || is_reparse_point(&directory_metadata) {
+        return Err(unsafe_source_path_error());
+    }
     let mut entries = fs::read_dir(dir)?
         .map(|entry| entry.map(|e| e.path()))
         .collect::<std::io::Result<Vec<_>>>()?;
@@ -251,9 +272,16 @@ fn scan_dir(dir: &Path, prefix: &str, out: &mut Vec<Source>) -> Result<()> {
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_default();
         let name = format!("{prefix}/{entry_name}");
-        let meta = fs::metadata(&entry)?;
+        let meta = fs::symlink_metadata(&entry)?;
+        if is_reparse_point(&meta) {
+            return Err(unsafe_source_path_error());
+        }
         if meta.is_file() {
-            out.push(Source { name, path: entry });
+            out.push(Source {
+                name,
+                snapshot: source_snapshot(&entry)?,
+                path: entry,
+            });
         } else if meta.is_dir() {
             scan_dir(&entry, &name, out)?;
         }
@@ -264,6 +292,16 @@ fn scan_dir(dir: &Path, prefix: &str, out: &mut Vec<Source>) -> Result<()> {
 fn ensure_unique_names(sources: &[Source]) -> Result<()> {
     let mut names = HashSet::new();
     for source in sources {
+        if source
+            .name
+            .split('/')
+            .any(|component| component.contains('\\'))
+            || super::destination::safe_collection_entry_path(&source.name).is_err()
+        {
+            return Err(LightningP2PError::Other(
+                "A selected file or folder name cannot be safely shared between devices.".into(),
+            ));
+        }
         if !names.insert(source.name.clone()) {
             return Err(LightningP2PError::Other(format!(
                 "Duplicate share path name: {}",
@@ -275,13 +313,55 @@ fn ensure_unique_names(sources: &[Source]) -> Result<()> {
 }
 
 fn total_size(sources: &[Source]) -> Result<u64> {
-    sources
-        .iter()
-        .try_fold(0, |total, source| Ok(total + file_size(&source.path)?))
+    sources.iter().try_fold(0_u64, |total, source| {
+        total
+            .checked_add(source.snapshot.size)
+            .ok_or_else(|| LightningP2PError::Other("Selected files are too large.".into()))
+    })
 }
 
-fn file_size(path: &Path) -> Result<u64> {
-    Ok(fs::metadata(path)?.len())
+fn source_snapshot(path: &Path) -> Result<SourceSnapshot> {
+    #[cfg(unix)]
+    use std::os::unix::fs::MetadataExt;
+    #[cfg(windows)]
+    use std::os::windows::fs::MetadataExt;
+
+    let metadata = fs::symlink_metadata(path)?;
+    if !metadata.is_file() || is_reparse_point(&metadata) {
+        return Err(unsafe_source_path_error());
+    }
+    Ok(SourceSnapshot {
+        size: metadata.len(),
+        modified: metadata.modified().ok(),
+        #[cfg(unix)]
+        device: metadata.dev(),
+        #[cfg(unix)]
+        inode: metadata.ino(),
+        #[cfg(windows)]
+        creation_time: metadata.creation_time(),
+    })
+}
+
+fn is_reparse_point(metadata: &fs::Metadata) -> bool {
+    if metadata.file_type().is_symlink() {
+        return true;
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0400;
+        metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
+    }
+    #[cfg(not(windows))]
+    {
+        false
+    }
+}
+
+fn unsafe_source_path_error() -> LightningP2PError {
+    LightningP2PError::Other(
+        "Selected files changed or contain a symbolic link or reparse point.".into(),
+    )
 }
 
 fn summarize_sources(sources: &[Source]) -> String {
@@ -388,7 +468,9 @@ async fn import_source(
     total_size: u64,
     progress: Option<ProgressHandle>,
 ) -> Result<IndexedImport> {
-    let size = file_size(&source.path)?;
+    if source_snapshot(&source.path)? != source.snapshot {
+        return Err(unsafe_source_path_error());
+    }
     let mut last_offset = 0u64;
     let mut stream = store.blobs().add_path(&source.path).stream().await;
     let mut hash: Option<Hash> = None;
@@ -415,9 +497,12 @@ async fn import_source(
 
     let hash = hash
         .ok_or_else(|| LightningP2PError::Blob("Import stream ended before completion".into()))?;
+    if source_snapshot(&source.path)? != source.snapshot {
+        return Err(unsafe_source_path_error());
+    }
     advance_progress(
         progress.as_ref(),
-        size.saturating_sub(last_offset),
+        source.snapshot.size.saturating_sub(last_offset),
         total_size,
     );
     Ok(IndexedImport {
@@ -495,6 +580,16 @@ mod tests {
         Source {
             name: name.into(),
             path: PathBuf::from(name),
+            snapshot: SourceSnapshot {
+                size: 0,
+                modified: None,
+                #[cfg(unix)]
+                device: 0,
+                #[cfg(unix)]
+                inode: 0,
+                #[cfg(windows)]
+                creation_time: 0,
+            },
         }
     }
 
@@ -546,5 +641,38 @@ mod tests {
     #[test]
     fn share_preparation_ids_are_unique() {
         assert_ne!(next_share_id(), next_share_id());
+    }
+
+    #[tokio::test]
+    async fn source_mutation_after_planning_is_rejected_before_import() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("payload.txt");
+        fs::write(&path, b"original").expect("source");
+        let source = Source {
+            name: "payload.txt".into(),
+            path: path.clone(),
+            snapshot: source_snapshot(&path).expect("snapshot"),
+        };
+        fs::write(&path, b"changed content").expect("mutate source");
+        let store = iroh_blobs::store::mem::MemStore::new();
+
+        assert!(import_source(store.as_ref(), source, 0, 8, None)
+            .await
+            .is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn directory_scanning_rejects_nested_symlinks() {
+        use std::os::unix::fs::symlink;
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = dir.path().join("selected");
+        let outside = dir.path().join("outside.txt");
+        fs::create_dir(&root).expect("selected dir");
+        fs::write(&outside, b"outside").expect("outside file");
+        symlink(&outside, root.join("linked.txt")).expect("symlink");
+
+        assert!(collect_sources(&[root]).is_err());
     }
 }
