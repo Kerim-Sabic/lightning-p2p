@@ -20,8 +20,10 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::Window;
+use tokio::sync::{Semaphore, SemaphorePermit};
 
 /// A single file to import, with the name it should carry inside a collection.
 #[derive(Debug, Clone)]
@@ -47,7 +49,9 @@ struct SourceSnapshot {
 /// [`TransferProfile`] picks a value within this range; env-var override is
 /// still honored as the final escape hatch for bench sweeps.
 const MAX_IMPORT_PARALLELISM: usize = 128;
+const MAX_SMART_AUTO_IMPORTS: usize = 8;
 static SHARE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+static SMART_AUTO_IMPORT_BUDGET: OnceLock<Semaphore> = OnceLock::new();
 
 struct SharePlan {
     sources: Vec<Source>,
@@ -396,7 +400,14 @@ async fn import_sources(
         .cloned()
         .enumerate()
         .map(|(index, source)| {
-            import_source(store, source, index, plan.total_size, progress.clone())
+            import_source(
+                store,
+                source,
+                index,
+                plan.total_size,
+                progress.clone(),
+                profile.mode == crate::transfer::TransferMode::SmartAuto,
+            )
         });
     let mut pending = stream::iter(tasks).buffer_unordered(import_parallelism(
         plan.sources.len(),
@@ -450,6 +461,23 @@ fn smart_auto_import_parallelism(source_count: usize, total_size: u64, cores: us
     source_count.min(cap.max(1))
 }
 
+fn smart_auto_global_parallelism(cores: usize) -> usize {
+    cores
+        .max(1)
+        .saturating_mul(2)
+        .clamp(1, MAX_SMART_AUTO_IMPORTS)
+}
+
+fn smart_auto_import_budget() -> &'static Semaphore {
+    SMART_AUTO_IMPORT_BUDGET.get_or_init(|| {
+        let cap = env_import_parallelism_cap().unwrap_or_else(|| {
+            let cores = std::thread::available_parallelism().map_or(2, std::num::NonZeroUsize::get);
+            smart_auto_global_parallelism(cores)
+        });
+        Semaphore::new(cap.clamp(1, MAX_IMPORT_PARALLELISM))
+    })
+}
+
 fn env_import_parallelism_cap() -> Option<usize> {
     std::env::var("LIGHTNING_P2P_IMPORT_PARALLELISM")
         .ok()
@@ -467,7 +495,18 @@ async fn import_source(
     index: usize,
     total_size: u64,
     progress: Option<ProgressHandle>,
+    smart_auto: bool,
 ) -> Result<IndexedImport> {
+    let _budget_permit: Option<SemaphorePermit<'static>> = if smart_auto {
+        Some(
+            smart_auto_import_budget()
+                .acquire()
+                .await
+                .map_err(|_| LightningP2PError::Other("SmartAuto import budget closed".into()))?,
+        )
+    } else {
+        None
+    };
     if source_snapshot(&source.path)? != source.snapshot {
         return Err(unsafe_source_path_error());
     }
@@ -640,6 +679,14 @@ mod tests {
     }
 
     #[test]
+    fn smart_auto_global_budget_scales_with_cores_and_stays_bounded() {
+        assert_eq!(smart_auto_global_parallelism(0), 2);
+        assert_eq!(smart_auto_global_parallelism(1), 2);
+        assert_eq!(smart_auto_global_parallelism(2), 4);
+        assert_eq!(smart_auto_global_parallelism(64), MAX_SMART_AUTO_IMPORTS);
+    }
+
+    #[test]
     fn share_preparation_ids_are_unique() {
         assert_ne!(next_share_id(), next_share_id());
     }
@@ -657,7 +704,7 @@ mod tests {
         fs::write(&path, b"changed content").expect("mutate source");
         let store = iroh_blobs::store::mem::MemStore::new();
 
-        assert!(import_source(store.as_ref(), source, 0, 8, None)
+        assert!(import_source(store.as_ref(), source, 0, 8, None, false)
             .await
             .is_err());
     }
