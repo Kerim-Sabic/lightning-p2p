@@ -4,6 +4,21 @@ All notable changes to Lightning P2P are documented here. The project follows se
 
 ## [Unreleased]
 
+## [0.9.10] - 2026-09-30 ("Directional Flick Handoff")
+
+### Added
+
+- Flick transfers now carry the sender's screen-relative gesture direction to
+  the receiver. The receiver previews the file arriving from the opposite
+  edge, giving both people a useful left/right handoff cue without sharing
+  precise location.
+
+### Fixed
+
+- Sanitized untrusted transfer labels and removed sensitive paths, tickets,
+  peer identifiers, and raw errors from production logs.
+- Protected fallback credential files with owner-only filesystem permissions.
+
 ## [0.9.9] - 2026-07-28 ("Lightning Chat interoperability")
 
 ### Added
