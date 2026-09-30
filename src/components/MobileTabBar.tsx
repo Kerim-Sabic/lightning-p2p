@@ -1,13 +1,5 @@
-import {
-  ArrowDownToLine,
-  Clock3,
-  Home,
-  MessageCircle,
-  Send,
-  Settings2,
-} from "lucide-react";
+import { Clock3, MessageCircle, Radar, Send, Settings2 } from "lucide-react";
 import type { View } from "../App";
-import { useNavigationSnapshot } from "../stores/transferSelectors";
 
 interface MobileTabBarProps {
   currentView: View;
@@ -19,27 +11,19 @@ const tabItems: Array<{
   label: string;
   icon: typeof Send;
 }> = [
-  { id: "home", label: "Home", icon: Home },
-  { id: "send", label: "Send", icon: Send },
-  { id: "receive", label: "Receive", icon: ArrowDownToLine },
-  { id: "chat", label: "L. Chat", icon: MessageCircle },
-  { id: "history", label: "History", icon: Clock3 },
+  { id: "send", label: "Transfer", icon: Send },
+  { id: "devices", label: "Devices", icon: Radar },
+  { id: "chat", label: "Chat", icon: MessageCircle },
+  { id: "history", label: "Activity", icon: Clock3 },
   { id: "settings", label: "Settings", icon: Settings2 },
 ];
 
 export function MobileTabBar({ currentView, onNavigate }: MobileTabBarProps) {
-  const { receiveTransferCount } = useNavigationSnapshot();
-
   return (
     <nav className="mobile-tab-bar" aria-label="Primary">
       {tabItems.map((item) => {
         const Icon = item.icon;
         const active = currentView === item.id;
-        const badge =
-          item.id === "receive" && receiveTransferCount > 0
-            ? receiveTransferCount
-            : null;
-
         return (
           <button
             key={item.id}
@@ -50,11 +34,6 @@ export function MobileTabBar({ currentView, onNavigate }: MobileTabBarProps) {
           >
             <span className="relative">
               <Icon className="h-[19px] w-[19px]" />
-              {badge ? (
-                <span className="absolute -right-2 -top-2 min-w-4 rounded-full border border-emerald-300/20 bg-emerald-500 px-1 text-[9px] font-semibold leading-4 text-white">
-                  {badge}
-                </span>
-              ) : null}
             </span>
             <span className="text-[11px] font-medium">{item.label}</span>
           </button>

@@ -2,10 +2,12 @@ import {
   Binary,
   CheckCircle2,
   Copy,
+  ArrowDownToLine,
   Eye,
   File,
   Folder,
   ImageIcon,
+  LaptopMinimal,
   Link2,
   Loader2,
   Trash2,
@@ -16,21 +18,32 @@ import {
   useEffect,
   useMemo,
   useState,
+  type DragEvent,
   type KeyboardEvent,
   type MouseEvent,
 } from "react";
 import { formatBytes } from "../lib/format";
 import { createReceiveHandoffLink } from "../lib/shareLinks";
+import { attachAsyncUnlisten } from "../hooks/asyncSubscription";
 import {
   isDesktopRuntime,
   isMobileRuntime,
+  offerShareToPeer,
   onWindowDragDropEvent,
+  pickShareFiles as pickShareFilesFromDialog,
   renderTicketQr,
+  type NearbyDevice,
   writeClipboardText,
 } from "../lib/tauri";
+import { useIncomingOfferStore } from "../stores/incomingOfferStore";
+import { useNearbyDeviceStore } from "../stores/nearbyDeviceStore";
 import { useLatestSendTransfer } from "../stores/transferSelectors";
 import { useTransferStore } from "../stores/transferStore";
 import { TransferCard } from "./TransferCard";
+
+interface SendViewProps {
+  onNavigateReceive: () => void;
+}
 
 function uniquePaths(paths: string[]): string[] {
   return Array.from(new Set(paths));
@@ -80,7 +93,7 @@ function displayReceiveLink(link: string): string {
   return link.replace(/(#t=).+$/u, "$1[hidden ticket]");
 }
 
-export function SendView() {
+export function SendView({ onNavigateReceive }: SendViewProps) {
   const clearShareSelection = useTransferStore(
     (state) => state.clearShareSelection,
   );
@@ -99,6 +112,8 @@ export function SendView() {
   const setError = useTransferStore((state) => state.setError);
   const shareSelection = useTransferStore((state) => state.shareSelection);
   const shareTicket = useTransferStore((state) => state.shareTicket);
+  const devices = useNearbyDeviceStore((state) => state.devices);
+  const recordOutbound = useIncomingOfferStore((state) => state.recordOutbound);
   const sendTransfer = useLatestSendTransfer();
   const nativeRuntime = isDesktopRuntime();
   const mobileRuntime = isMobileRuntime();
@@ -106,6 +121,8 @@ export function SendView() {
   const [isDragActive, setIsDragActive] = useState(false);
   const [qrSvg, setQrSvg] = useState<string | null>(null);
   const [showRawTicket, setShowRawTicket] = useState(false);
+  const [busyNodeId, setBusyNodeId] = useState<string | null>(null);
+  const [dropTargetNodeId, setDropTargetNodeId] = useState<string | null>(null);
 
   const selectionSize = useMemo(
     () => shareSelection.reduce((total, item) => total + item.size, 0),
@@ -122,36 +139,29 @@ export function SendView() {
       return;
     }
 
-    let unlisten: (() => void) | null = null;
+    return attachAsyncUnlisten(
+      onWindowDragDropEvent((event) => {
+        if (event.type === "enter" || event.type === "over") {
+          setIsDragActive(true);
+          return;
+        }
 
-    void onWindowDragDropEvent((event) => {
-      if (event.type === "enter" || event.type === "over") {
-        setIsDragActive(true);
-        return;
-      }
+        if (event.type === "leave") {
+          setIsDragActive(false);
+          return;
+        }
 
-      if (event.type === "leave") {
         setIsDragActive(false);
-        return;
-      }
-
-      setIsDragActive(false);
-      void prepareShareSelection(uniquePaths(event.paths));
-    })
-      .then((fn) => {
-        unlisten = fn;
-      })
-      .catch((reason: unknown) => {
+        void prepareShareSelection(uniquePaths(event.paths));
+      }),
+      (reason: unknown) => {
         const message =
           reason instanceof Error
             ? reason.message
             : "Failed to register drag-and-drop";
         setError(message);
-      });
-
-    return () => {
-      unlisten?.();
-    };
+      },
+    );
   }, [mobileRuntime, nativeRuntime, prepareShareSelection, setError]);
 
   useEffect(() => {
@@ -219,6 +229,46 @@ export function SendView() {
     }
 
     await pickShareFiles();
+  };
+
+  const handleSendToDevice = async (device: NearbyDevice): Promise<void> => {
+    let paths = shareSelection.map((item) => item.path);
+    if (paths.length === 0) {
+      try {
+        paths = await pickShareFilesFromDialog();
+      } catch (error) {
+        setError(error instanceof Error ? error.message : "File picker failed");
+        return;
+      }
+      if (paths.length === 0) return;
+      await prepareShareSelection(paths);
+    }
+
+    setBusyNodeId(device.node_id);
+    setError(null);
+    try {
+      const offerId = await offerShareToPeer(device.node_id, paths);
+      recordOutbound({
+        offerId,
+        receiverNodeId: device.node_id,
+        status: "accepted",
+        message: `Accepted by ${device.device_name}`,
+        updatedAt: Date.now(),
+      });
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Could not send offer");
+    } finally {
+      setBusyNodeId(null);
+    }
+  };
+
+  const handleSelectionDragStart = (event: DragEvent<HTMLDivElement>): void => {
+    if (shareSelection.length === 0 || mobileRuntime) {
+      event.preventDefault();
+      return;
+    }
+    event.dataTransfer.effectAllowed = "copy";
+    event.dataTransfer.setData("application/x-lightning-selection", "files");
   };
 
   const handleDropZoneClick = (event: MouseEvent<HTMLDivElement>): void => {
@@ -306,6 +356,14 @@ export function SendView() {
                       : "Manual code only"}
                 </span>
               </div>
+              <button
+                type="button"
+                onClick={onNavigateReceive}
+                className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-full border border-white/[0.1] px-4 text-sm font-medium text-slate-200 transition hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+              >
+                <ArrowDownToLine className="h-4 w-4" />
+                Receive a file
+              </button>
             </div>
 
             <div
@@ -382,6 +440,11 @@ export function SendView() {
                 {shareSelection.length === 1 ? "" : "s"} ready |{" "}
                 {formatBytes(selectionSize)}
               </p>
+              {!mobileRuntime ? (
+                <p className="mt-2 text-xs text-slate-400">
+                  Drag the file stack onto a nearby device, or choose Send.
+                </p>
+              ) : null}
             </div>
 
             <div className="flex flex-wrap gap-2">
@@ -409,7 +472,13 @@ export function SendView() {
             </div>
           </div>
 
-          <div className="mt-4 grid gap-2">
+          <div
+            className="mt-4 grid gap-2"
+            draggable={shareSelection.length > 0 && !mobileRuntime}
+            onDragStart={handleSelectionDragStart}
+            onDragEnd={() => setDropTargetNodeId(null)}
+            aria-label="Selected files. Drag onto a nearby device to send."
+          >
             {shareSelection.map((item) => {
               const Icon = iconForSelection(item.name, item.is_dir);
 
@@ -438,6 +507,103 @@ export function SendView() {
           </div>
         </section>
       ) : null}
+
+      <section
+        className="glass-panel p-5"
+        aria-labelledby="nearby-recipient-title"
+      >
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="page-eyebrow">Choose a destination</p>
+            <h2
+              id="nearby-recipient-title"
+              className="mt-1 text-lg font-semibold text-white"
+            >
+              Nearby devices
+            </h2>
+          </div>
+          <p className="text-xs leading-5 text-slate-400">
+            Device names are supplied by nearby peers. Confirm the device before
+            sending.
+          </p>
+        </div>
+        {!nativeRuntime ? (
+          <p className="meta-copy mt-4">
+            Open the native app to send files to nearby devices.
+          </p>
+        ) : settings?.local_discovery_enabled === false ? (
+          <p className="meta-copy mt-4">
+            Nearby discovery is off. Turn it on in Settings, or choose files to
+            create a receive link.
+          </p>
+        ) : devices.length === 0 ? (
+          <p className="meta-copy mt-4">
+            No devices found yet. Open Lightning on the other device and connect
+            both devices to the same network. You can also create a receive link
+            above.
+          </p>
+        ) : (
+          <div className="mt-4 grid gap-2 sm:grid-cols-2">
+            {devices.map((device) => (
+              <button
+                key={device.node_id}
+                type="button"
+                onClick={() => void handleSendToDevice(device)}
+                onDragOver={(event) => {
+                  if (
+                    event.dataTransfer.types.includes(
+                      "application/x-lightning-selection",
+                    )
+                  ) {
+                    event.preventDefault();
+                    event.dataTransfer.dropEffect = "copy";
+                    setDropTargetNodeId(device.node_id);
+                  }
+                }}
+                onDragLeave={() => setDropTargetNodeId(null)}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  if (
+                    event.dataTransfer.getData(
+                      "application/x-lightning-selection",
+                    )
+                  ) {
+                    void handleSendToDevice(device);
+                  }
+                  setDropTargetNodeId(null);
+                }}
+                disabled={busyNodeId !== null || !nativeRuntime}
+                className={`flex min-h-16 items-center gap-3 rounded-2xl border px-4 py-3 text-left transition disabled:opacity-55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300 ${dropTargetNodeId === device.node_id ? "border-sky-300/60 bg-sky-400/10" : "border-white/[0.08] bg-white/[0.025] hover:border-sky-300/30 hover:bg-white/[0.05]"}`}
+              >
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-white/[0.08] bg-white/[0.04]">
+                  <LaptopMinimal className="h-4 w-4 text-sky-200" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-semibold text-white">
+                    {device.device_name}
+                  </span>
+                  <span className="mt-1 block text-xs text-slate-400">
+                    {dropTargetNodeId === device.node_id
+                      ? `Release to send to ${device.device_name}`
+                      : busyNodeId === device.node_id
+                        ? "Sending offer…"
+                        : device.transport === "ble"
+                          ? "Bluetooth nearby"
+                          : "On your local network"}
+                  </span>
+                </span>
+                <span className="shrink-0 text-xs font-semibold text-sky-200">
+                  {busyNodeId === device.node_id
+                    ? "Sending"
+                    : shareSelection.length > 0
+                      ? "Send"
+                      : "Choose files"}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+      </section>
 
       {shareTicket ? (
         <section className="glass-panel p-5">

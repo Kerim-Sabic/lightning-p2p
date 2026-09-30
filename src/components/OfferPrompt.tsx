@@ -68,9 +68,9 @@ export function OfferPrompt() {
               {offer.label}
             </p>
             <p className="mt-1 text-xs text-slate-400">
-              {formatBytes(offer.size)} | from{" "}
+              {formatBytes(offer.size)} · Name supplied by sender · Peer{" "}
               <span className="font-mono">
-                {offer.sender_node_id.slice(0, 12)}...
+                {offer.sender_node_id.slice(0, 12)}…
               </span>
             </p>
           </div>

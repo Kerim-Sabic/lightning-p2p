@@ -1,12 +1,4 @@
-import {
-  ArrowDownToLine,
-  Clock3,
-  Home,
-  MessageCircle,
-  Radar,
-  Send,
-  Settings2,
-} from "lucide-react";
+import { Clock3, MessageCircle, Radar, Send, Settings2 } from "lucide-react";
 import type { View } from "../App";
 import lightningMark from "../assets/lightning-p2p-mark.png";
 import { useNavigationSnapshot } from "../stores/transferSelectors";
@@ -21,11 +13,10 @@ const navItems: Array<{
   label: string;
   icon: typeof Send;
 }> = [
-  { id: "home", label: "Home", icon: Home },
-  { id: "send", label: "Send", icon: Send },
-  { id: "receive", label: "Receive", icon: ArrowDownToLine },
-  { id: "chat", label: "Lightning Chat", icon: MessageCircle },
-  { id: "history", label: "History", icon: Clock3 },
+  { id: "send", label: "Transfer", icon: Send },
+  { id: "devices", label: "Devices", icon: Radar },
+  { id: "chat", label: "Chat", icon: MessageCircle },
+  { id: "history", label: "Activity", icon: Clock3 },
   { id: "settings", label: "Settings", icon: Settings2 },
 ];
 
@@ -46,8 +37,7 @@ function routeLabel(onlineState: string): string {
 }
 
 export function Sidebar({ currentView, onNavigate }: SidebarProps) {
-  const { activeTransferCount, nodeStatus, receiveTransferCount } =
-    useNavigationSnapshot();
+  const { activeTransferCount, nodeStatus } = useNavigationSnapshot();
 
   return (
     <aside className="flex w-[228px] shrink-0 flex-col border-r border-white/[0.05] px-3 pb-3 pt-4">
@@ -85,11 +75,6 @@ export function Sidebar({ currentView, onNavigate }: SidebarProps) {
         {navItems.map((item) => {
           const Icon = item.icon;
           const active = currentView === item.id;
-          const badge =
-            item.id === "receive" && receiveTransferCount > 0
-              ? receiveTransferCount
-              : null;
-
           return (
             <button
               key={item.id}
@@ -104,11 +89,6 @@ export function Sidebar({ currentView, onNavigate }: SidebarProps) {
                   <span className="truncate text-sm font-medium text-white">
                     {item.label}
                   </span>
-                  {badge ? (
-                    <span className="rounded-full border border-emerald-400/15 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-100">
-                      {badge}
-                    </span>
-                  ) : null}
                 </div>
               </div>
             </button>

@@ -2,6 +2,7 @@ import { Copy, Minus, Radar, Square, X } from "lucide-react";
 import { useEffect, useEffectEvent, useState } from "react";
 import type { View } from "../App";
 import lightningMark from "../assets/lightning-p2p-mark.png";
+import { attachAsyncUnlisten } from "../hooks/asyncSubscription";
 import {
   closeDesktopWindow,
   getDesktopWindowState,
@@ -34,19 +35,17 @@ function routeLabel(onlineState: string): string {
 
 function viewLabel(view: View): string {
   switch (view) {
-    case "home":
-      return "Home";
     case "devices":
       return "Devices";
     case "receive":
       return "Receive";
     case "history":
-      return "History";
+      return "Activity";
     case "settings":
       return "Settings";
     case "send":
     default:
-      return "Send";
+      return "Transfer";
   }
 }
 
@@ -82,21 +81,19 @@ export function WindowChrome({ currentView }: WindowChromeProps) {
 
     void syncWindowState();
 
-    let unlistenFocus: (() => void) | null = null;
-
-    void onDesktopWindowFocusChanged((focused) => {
-      setWindowState((current) => ({
-        ...current,
-        focused,
-      }));
-    }).then((fn) => {
-      unlistenFocus = fn;
-    });
-
-    return () => {
-      unlistenFocus?.();
-    };
-  }, [desktopRuntime, syncWindowState]);
+    return attachAsyncUnlisten(
+      onDesktopWindowFocusChanged((focused) => {
+        setWindowState((current) => ({
+          ...current,
+          focused,
+        }));
+      }),
+      (error: unknown) =>
+        setError(
+          error instanceof Error ? error.message : "Window listener failed",
+        ),
+    );
+  }, [desktopRuntime, setError, syncWindowState]);
 
   const runWindowAction = useEffectEvent(
     async (

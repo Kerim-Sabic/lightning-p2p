@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import { useTransfer } from "./hooks/useTransfer";
+import { attachAsyncUnlisten } from "./hooks/asyncSubscription";
 import {
   drainPendingSharedFiles,
   drainPendingSharedTicket,
@@ -41,11 +42,6 @@ const FirstRunOverlay = lazy(() =>
 const HistoryView = lazy(() =>
   import("./components/HistoryView").then((module) => ({
     default: module.HistoryView,
-  })),
-);
-const HomeView = lazy(() =>
-  import("./components/HomeView").then((module) => ({
-    default: module.HomeView,
   })),
 );
 const InlineAlert = lazy(() =>
@@ -90,7 +86,7 @@ const WindowChrome = lazy(() =>
 );
 
 export type View =
-  "home" | "send" | "devices" | "chat" | "receive" | "history" | "settings";
+  "send" | "devices" | "chat" | "receive" | "history" | "settings";
 
 export function App() {
   const runtimeKind = getRuntimeKind();
@@ -200,7 +196,7 @@ interface NativeAppShellProps {
 }
 
 function NativeAppShell({ runtimeKind }: NativeAppShellProps) {
-  const [view, setView] = useState<View>("home");
+  const [view, setView] = useState<View>("send");
   const error = useTransferStore((state) => state.error);
   const appError = useTransferStore((state) => state.appError);
   const clearError = useTransferStore((state) => state.clearError);
@@ -215,20 +211,17 @@ function NativeAppShell({ runtimeKind }: NativeAppShellProps) {
   const mobileRuntime = runtimeKind === "android" || runtimeKind === "ios";
 
   useEffect(() => {
-    let active = true;
     const subscription = onDeepLinkOpened((ticket) => {
-      if (!active) {
-        return;
-      }
       setPendingReceiveTicket(ticket);
       startTransition(() => {
         setView("receive");
       });
     });
-    return () => {
-      active = false;
-      void subscription.then((unlisten) => unlisten());
-    };
+    return attachAsyncUnlisten(subscription, () => {
+      useTransferStore
+        .getState()
+        .setError("Could not listen for receive links");
+    });
   }, [setPendingReceiveTicket]);
 
   // Drain Android share-sheet handoffs on cold-start and on every window focus
@@ -295,10 +288,12 @@ function NativeAppShell({ runtimeKind }: NativeAppShellProps) {
     handleNavigate("send");
   }, [handleNavigate]);
 
+  const handleNavigateToReceive = useCallback((): void => {
+    handleNavigate("receive");
+  }, [handleNavigate]);
+
   const content = useMemo(() => {
     switch (view) {
-      case "home":
-        return <HomeView onNavigate={handleNavigate} />;
       case "devices":
         return <DevicesView />;
       case "chat":
@@ -311,9 +306,9 @@ function NativeAppShell({ runtimeKind }: NativeAppShellProps) {
         return <SettingsView />;
       case "send":
       default:
-        return <SendView />;
+        return <SendView onNavigateReceive={handleNavigateToReceive} />;
     }
-  }, [view, handleNavigate, handleNavigateToSend]);
+  }, [view, handleNavigate, handleNavigateToSend, handleNavigateToReceive]);
 
   return (
     <div className="relative h-screen overflow-hidden bg-[var(--canvas-0)] text-[var(--fg-primary)]">
