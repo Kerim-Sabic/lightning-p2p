@@ -54,13 +54,35 @@ impl WebReceiver {
     /// collection hash as a hex string. Pass it to
     /// [`list_collection`](Self::list_collection) to enumerate the files.
     #[wasm_bindgen]
-    pub async fn fetch(&self, ticket: String) -> Result<String, JsError> {
+    pub async fn fetch(
+        &self,
+        ticket: String,
+        max_bytes: f64,
+        progress_callback: js_sys::Function,
+    ) -> Result<String, JsError> {
+        if !max_bytes.is_finite() || max_bytes < 0.0 {
+            return Err(JsError::new("invalid browser receive byte limit"));
+        }
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let max_bytes = max_bytes.min(u64::MAX as f64) as u64;
         let hash = self
             .inner
-            .fetch(&ticket)
+            .fetch_with_limit(&ticket, max_bytes, |bytes| {
+                progress_callback
+                    .call1(&JsValue::NULL, &JsValue::from_f64(bytes as f64))
+                    .ok()
+                    .and_then(|value| value.as_bool())
+                    .unwrap_or(false)
+            })
             .await
             .map_err(|e| JsError::new(&e))?;
         Ok(hash.to_string())
+    }
+
+    /// Closes the endpoint to interrupt a running receive immediately.
+    #[wasm_bindgen]
+    pub async fn cancel(&self) {
+        self.inner.cancel().await;
     }
 
     /// Lists the files inside a fetched collection as a JSON string:

@@ -8,7 +8,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   BrowserReceiver,
   type CollectionFile,
@@ -18,17 +18,27 @@ import {
   type TicketInfo,
 } from "../lib/webReceiver";
 
-// The blob lives in WASM memory (~2x its size with the download copy), so we
-// gate before fetching: soft-warn past 500 MB, hard-refuse past ~2 GB.
-const WARN_BYTES = 500 * 1024 * 1024;
-const REFUSE_BYTES = 2 * 1024 * 1024 * 1024;
+// The browser store is memory-backed. Gate advertised size for a useful early
+// warning, then enforce this same aggregate limit against actual bytes in Rust.
+const WARN_BYTES = 64 * 1024 * 1024;
+const REFUSE_BYTES = 128 * 1024 * 1024;
 
-type Phase = "idle" | "inspecting" | "ready" | "receiving" | "done" | "error";
+type Phase =
+  | "idle"
+  | "inspecting"
+  | "ready"
+  | "receiving"
+  | "done"
+  | "error"
+  | "cancelled";
 
 function formatBytes(bytes: number): string {
   if (bytes <= 0) return "0 B";
   const units = ["B", "KB", "MB", "GB", "TB"];
-  const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  const exponent = Math.min(
+    Math.floor(Math.log(bytes) / Math.log(1024)),
+    units.length - 1,
+  );
   const value = bytes / 1024 ** exponent;
   return `${value >= 100 || exponent === 0 ? Math.round(value) : value.toFixed(1)} ${units[exponent]}`;
 }
@@ -43,6 +53,20 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
   const [savingHash, setSavingHash] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [receiver, setReceiver] = useState<BrowserReceiver | null>(null);
+  const [receivedBytes, setReceivedBytes] = useState(0);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort();
+      if (receiver) {
+        void receiver
+          .cancel()
+          .catch(() => undefined)
+          .finally(() => window.setTimeout(() => receiver.stop(), 0));
+      }
+    };
+  }, [receiver]);
 
   const refused = info != null && info.size > REFUSE_BYTES;
   const heavy = info != null && info.size > WARN_BYTES && !refused;
@@ -62,18 +86,56 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
   const beginReceive = async () => {
     setPhase("receiving");
     setError(null);
+    setReceivedBytes(0);
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    let lastUiUpdate = 0;
+    let latestBytes = 0;
+    let rx: BrowserReceiver | null = receiver;
     try {
       setStatus("Connecting to the sender over the relay…");
-      const rx = receiver ?? (await BrowserReceiver.spawn());
+      rx ??= await BrowserReceiver.spawn();
       setReceiver(rx);
+      if (controller.signal.aborted) {
+        await rx.cancel();
+        throw new Error("Browser receive cancelled.");
+      }
       setStatus("Receiving and verifying (BLAKE3)…");
-      const root = await rx.fetch(ticket);
+      const root = await rx.fetch(ticket, REFUSE_BYTES, (bytes) => {
+        latestBytes = bytes;
+        const now = performance.now();
+        if (now - lastUiUpdate >= 150 || bytes >= REFUSE_BYTES) {
+          lastUiUpdate = now;
+          setReceivedBytes(bytes);
+        }
+        return !controller.signal.aborted;
+      });
+      setReceivedBytes(latestBytes);
       setStatus("Reading files…");
       setFiles(await rx.listCollection(root));
       setPhase("done");
     } catch (err) {
-      setError(describe(err));
-      setPhase("error");
+      rx?.stop();
+      setReceiver(null);
+      if (controller.signal.aborted) {
+        setError("Receive cancelled. Partial browser data was cleared.");
+        setPhase("cancelled");
+      } else {
+        setError(describe(err));
+        setPhase("error");
+      }
+    } finally {
+      abortControllerRef.current = null;
+    }
+  };
+
+  const cancelReceive = async (): Promise<void> => {
+    abortControllerRef.current?.abort();
+    setStatus("Stopping the receive and clearing partial data…");
+    try {
+      await receiver?.cancel();
+    } catch {
+      // The transfer may have completed or the page may already be closing.
     }
   };
 
@@ -82,9 +144,15 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
     setSavingHash(file.hash);
     try {
       await saveReceivedFile(receiver, file);
-      setSavedHashes((prev) => new Set(prev).add(file.hash));
+      const nextSavedHashes = new Set(savedHashes).add(file.hash);
+      setSavedHashes(nextSavedHashes);
+      if (nextSavedHashes.size >= files.length) {
+        receiver.stop();
+        setReceiver(null);
+      }
     } catch (err) {
-      if (!(err instanceof DOMException && err.name === "AbortError")) setError(describe(err));
+      if (!(err instanceof DOMException && err.name === "AbortError"))
+        setError(describe(err));
     } finally {
       setSavingHash(null);
     }
@@ -98,14 +166,17 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <p className="text-[13.5px] font-semibold text-white">Receive in this browser</p>
+            <p className="text-[13.5px] font-semibold text-white">
+              Receive in this browser
+            </p>
             <span className="rounded-full border border-[color:var(--proof-amber)]/30 bg-[color:var(--proof-amber)]/10 px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-[0.18em] text-[var(--proof-amber)]">
               Beta
             </span>
           </div>
           <p className="mt-1.5 text-[12.5px] leading-6 text-[color:var(--soft-copy)]">
-            No install. The same Rust engine runs as WebAssembly in this tab and pulls the files
-            directly from the sender — BLAKE3-verified, never through a server.
+            No install. The same Rust engine runs as WebAssembly in this tab and
+            pulls the files directly from the sender — BLAKE3-verified, never
+            through a server.
           </p>
         </div>
       </div>
@@ -134,7 +205,10 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
             <Frame key="ready" reduce={reduce}>
               <div className="rounded-xl border border-white/8 bg-black/30 p-4">
                 <div className="flex items-baseline justify-between gap-3">
-                  <p className="truncate text-[13px] font-semibold text-white" title={info.label}>
+                  <p
+                    className="truncate text-[13px] font-semibold text-white"
+                    title={info.label}
+                  >
                     {info.label || "Shared files"}
                   </p>
                   <p className="shrink-0 font-mono text-[12px] text-[var(--signal-green)]">
@@ -144,17 +218,24 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
                 {refused && (
                   <p className="mt-3 flex items-start gap-2 text-[12px] leading-5 text-[color:var(--proof-amber)]">
                     <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                    Too large for browser receive (the whole file must fit in this tab's memory).
-                    Use the desktop app for transfers over ~2&nbsp;GB.
+                    This ticket advertises more than 128&nbsp;MiB. Browser
+                    receive has a conservative memory limit; use the native app
+                    for this transfer.
                   </p>
                 )}
                 {heavy && (
                   <p className="mt-3 flex items-start gap-2 text-[12px] leading-5 text-[color:var(--soft-copy)]">
                     <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--proof-amber)]" />
-                    Large transfer — it's held in this tab's memory. Keep the tab focused; the
-                    desktop app streams to disk without the size limit.
+                    Large transfer — received bytes stay in this tab's memory
+                    until saved. The ticket size is supplied by the sender;
+                    actual incoming bytes are capped at 128&nbsp;MiB during the
+                    transfer.
                   </p>
                 )}
+                <p className="mt-3 text-[11px] leading-5 text-[color:var(--muted-copy)]">
+                  Sender identity is not verified by the link. Confirm who
+                  shared it before saving files.
+                </p>
               </div>
               <button
                 type="button"
@@ -162,7 +243,8 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
                 disabled={refused}
                 className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-[var(--signal-green)] px-5 py-3 text-[13.5px] font-semibold text-[var(--text-ink)] transition hover:brightness-[1.04] disabled:cursor-not-allowed disabled:opacity-50"
               >
-                <Download className="h-4 w-4" /> {heavy ? "Receive anyway" : "Receive here"}
+                <Download className="h-4 w-4" />{" "}
+                {heavy ? "Receive anyway" : "Receive here"}
               </button>
             </Frame>
           )}
@@ -170,7 +252,14 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
           {phase === "receiving" && (
             <Frame key="receiving" reduce={reduce}>
               <Busy label={status} />
-              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/[0.06]" aria-hidden>
+              <p className="mt-3 text-center text-[11px] text-[color:var(--muted-copy)]">
+                {formatBytes(receivedBytes)} received and verified so far. The
+                sender must stay online.
+              </p>
+              <div
+                className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/[0.06]"
+                aria-hidden
+              >
                 {!reduce && (
                   <motion.div
                     className="h-full w-1/3 rounded-full"
@@ -179,13 +268,21 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
                         "linear-gradient(90deg, transparent, oklch(82% 0.16 150 / 0.9), transparent)",
                     }}
                     animate={{ x: ["-120%", "340%"] }}
-                    transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
+                    transition={{
+                      duration: 1.5,
+                      repeat: Infinity,
+                      ease: "easeInOut",
+                    }}
                   />
                 )}
               </div>
-              <p className="mt-2 text-center text-[11px] text-[color:var(--muted-copy)]">
-                The sender must stay online until this completes.
-              </p>
+              <button
+                type="button"
+                onClick={() => void cancelReceive()}
+                className="mt-3 w-full rounded-full border border-white/12 bg-white/[0.04] px-4 py-2.5 text-[12px] font-semibold text-white hover:bg-white/[0.08]"
+              >
+                Cancel receive
+              </button>
             </Frame>
           )}
 
@@ -197,7 +294,8 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
                 transition={{ type: "spring", stiffness: 360, damping: 22 }}
                 className="flex items-center gap-2 rounded-lg border border-[color:var(--signal-green)]/25 bg-[color:var(--signal-green)]/10 px-3 py-2 text-[12.5px] font-semibold text-[var(--signal-green)]"
               >
-                <ShieldCheck className="h-4 w-4" /> BLAKE3 verified — bytes are proven correct.
+                <ShieldCheck className="h-4 w-4" /> BLAKE3 verified — bytes are
+                proven correct.
               </motion.div>
               <ul className="mt-3 space-y-2">
                 {files.map((file, index) => {
@@ -208,12 +306,18 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
                       key={file.hash}
                       initial={reduce ? false : { opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: reduce ? 0 : 0.12 + index * 0.08, duration: 0.3 }}
+                      transition={{
+                        delay: reduce ? 0 : 0.12 + index * 0.08,
+                        duration: 0.3,
+                      }}
                       className="flex items-center gap-3 rounded-xl border border-white/8 bg-black/30 px-3.5 py-2.5"
                     >
                       <FileDown className="h-4 w-4 shrink-0 text-[color:var(--soft-copy)]" />
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-[12.5px] font-medium text-white" title={file.name}>
+                        <p
+                          className="truncate text-[12.5px] font-medium text-white"
+                          title={file.name}
+                        >
                           {file.name}
                         </p>
                         <p className="font-mono text-[10.5px] text-[color:var(--muted-copy)]">
@@ -223,7 +327,7 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
                       <button
                         type="button"
                         onClick={() => void save(file)}
-                        disabled={saving}
+                        disabled={savingHash !== null}
                         className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[12px] font-semibold transition disabled:opacity-60 ${
                           saved
                             ? "border-[color:var(--signal-green)]/40 bg-[color:var(--signal-green)]/14 text-[var(--signal-green)]"
@@ -271,13 +375,37 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
               </button>
             </Frame>
           )}
+
+          {phase === "cancelled" && (
+            <Frame key="cancelled" reduce={reduce}>
+              <div className="rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-slate-200">
+                {error}
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setPhase("idle");
+                  setError(null);
+                }}
+                className="mt-3 inline-flex min-h-10 w-full items-center justify-center rounded-full border border-white/12 bg-white/[0.04] px-5 py-2.5 text-[13px] font-semibold text-white transition hover:bg-white/[0.08]"
+              >
+                Receive again
+              </button>
+            </Frame>
+          )}
         </AnimatePresence>
       </div>
     </div>
   );
 }
 
-function Frame({ children, reduce }: { children: React.ReactNode; reduce: boolean | null }) {
+function Frame({
+  children,
+  reduce,
+}: {
+  children: React.ReactNode;
+  reduce: boolean | null;
+}) {
   return (
     <motion.div
       initial={reduce ? false : { opacity: 0, y: 6 }}

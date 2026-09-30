@@ -29,10 +29,20 @@ export interface CollectionFile {
 // and fall back rather than assume ("this.inner.begin_file is not a
 // function" reached production exactly this way).
 interface WebReceiverInstance {
-  fetch(ticket: string): Promise<string>;
+  fetch(
+    ticket: string,
+    maxBytes: number,
+    onProgress: (receivedBytes: number) => boolean,
+  ): Promise<string>;
+  cancel(): Promise<void>;
   list_collection(rootHex: string): Promise<string>;
   read_blob(hashHex: string): Promise<Uint8Array>;
-  read_blob_range?(hashHex: string, offset: number, len: number): Promise<Uint8Array>;
+  read_blob_range?(
+    hashHex: string,
+    offset: number,
+    len: number,
+  ): Promise<Uint8Array>;
+  free(): void;
 }
 interface WebSenderInstance {
   add_file(name: string, bytes: Uint8Array): Promise<void>;
@@ -105,6 +115,8 @@ export async function renderQrSvg(text: string): Promise<string> {
 
 /** A live browser receiver: a bound iroh endpoint plus an in-memory store. */
 export class BrowserReceiver {
+  private stopped = false;
+
   private constructor(private readonly inner: WebReceiverInstance) {}
 
   /** Binds the endpoint and store. Cheap; call when the user opts in. */
@@ -117,8 +129,25 @@ export class BrowserReceiver {
    * Downloads the ticket's content, BLAKE3-verified as it lands, and returns
    * the root collection hash. A successful return means every byte is proven.
    */
-  async fetch(ticket: string): Promise<string> {
-    return this.inner.fetch(ticket);
+  async fetch(
+    ticket: string,
+    maxBytes: number,
+    onProgress: (receivedBytes: number) => boolean,
+  ): Promise<string> {
+    return this.inner.fetch(ticket, maxBytes, onProgress);
+  }
+
+  /** Drops the endpoint and in-memory store, including partial data from a cancelled receive. */
+  stop(): void {
+    if (this.stopped) return;
+    this.stopped = true;
+    this.inner.free();
+  }
+
+  /** Closes the endpoint so an in-flight receive stops without waiting for more payload progress. */
+  async cancel(): Promise<void> {
+    if (this.stopped) return;
+    await this.inner.cancel();
   }
 
   /** Enumerates the files inside a fetched collection. */
@@ -142,8 +171,13 @@ export class BrowserReceiver {
    * [`supportsRangedReads`](BrowserReceiver#supportsRangedReads) first: a
    * stale-cached engine lacks this and the call throws.
    */
-  async readBlobRange(hashHex: string, offset: number, len: number): Promise<Uint8Array> {
-    if (!this.inner.read_blob_range) throw new Error("engine version without ranged reads");
+  async readBlobRange(
+    hashHex: string,
+    offset: number,
+    len: number,
+  ): Promise<Uint8Array> {
+    if (!this.inner.read_blob_range)
+      throw new Error("engine version without ranged reads");
     return this.inner.read_blob_range(hashHex, offset, len);
   }
 
@@ -248,8 +282,10 @@ export async function saveReceivedFile(
   file: CollectionFile,
 ): Promise<void> {
   if (receiver.supportsRangedReads()) {
-    const streamed = await saveBlobStreamed(file.name, file.size, (offset, len) =>
-      receiver.readBlobRange(file.hash, offset, len),
+    const streamed = await saveBlobStreamed(
+      file.name,
+      file.size,
+      (offset, len) => receiver.readBlobRange(file.hash, offset, len),
     );
     if (streamed) return;
   }
@@ -270,11 +306,16 @@ async function saveBlobStreamed(
   if (!hasSaveFilePicker()) return false;
   const safeName = name.split(/[\\/]/).pop() || "download";
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const handle = await (window as any).showSaveFilePicker({ suggestedName: safeName });
+  const handle = await (window as any).showSaveFilePicker({
+    suggestedName: safeName,
+  });
   const writable = await handle.createWritable();
   try {
     for (let offset = 0; offset < size; offset += SAVE_CHUNK_BYTES) {
-      const chunk = await read(offset, Math.min(SAVE_CHUNK_BYTES, size - offset));
+      const chunk = await read(
+        offset,
+        Math.min(SAVE_CHUNK_BYTES, size - offset),
+      );
       await writable.write(chunk);
     }
     await writable.close();
@@ -294,21 +335,29 @@ async function saveBlobStreamed(
  * dialog on Chromium); falls back to an anchor download (Firefox/Safari) that
  * lands in the browser's Downloads folder.
  */
-export async function saveBytes(name: string, bytes: Uint8Array): Promise<void> {
+export async function saveBytes(
+  name: string,
+  bytes: Uint8Array,
+): Promise<void> {
   const safeName = name.split(/[\\/]/).pop() || "download";
-  const blob = new Blob([bytes as BlobPart], { type: "application/octet-stream" });
+  const blob = new Blob([bytes as BlobPart], {
+    type: "application/octet-stream",
+  });
 
   if (hasSaveFilePicker()) {
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const handle = await (window as any).showSaveFilePicker({ suggestedName: safeName });
+      const handle = await (window as any).showSaveFilePicker({
+        suggestedName: safeName,
+      });
       const writable = await handle.createWritable();
       await writable.write(blob);
       await writable.close();
       return;
     } catch (error) {
       // AbortError = user cancelled the picker; propagate so the UI stays put.
-      if (error instanceof DOMException && error.name === "AbortError") throw error;
+      if (error instanceof DOMException && error.name === "AbortError")
+        throw error;
       // Any other failure: fall through to the anchor-download path.
     }
   }

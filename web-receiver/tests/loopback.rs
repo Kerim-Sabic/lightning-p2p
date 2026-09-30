@@ -83,6 +83,23 @@ async fn browser_engine_share_and_fetch_round_trip() {
     assert_eq!(info.size, (payload_a.len() + payload_b.len()) as u64);
 
     let receiver = Receiver::spawn().await.expect("receiver spawn");
+    // The ticket advertises one byte but the collection contains over half a
+    // megabyte. The receiver must stop on observed transport progress.
+    let parsed = web_receiver::ticket::parse(&ticket).expect("parse original ticket");
+    let underreported = web_receiver::ticket::fd2_encode(parsed.primary(), "underreported", 1);
+    let limited_receiver = Receiver::spawn().await.expect("limited receiver spawn");
+    let limit_error = limited_receiver
+        .fetch_with_limit(&underreported, 64, |_| true)
+        .await
+        .expect_err("actual downloaded bytes must enforce the memory limit");
+    assert!(limit_error.contains("actual-data memory limit"));
+    let cancelled_receiver = Receiver::spawn().await.expect("cancel receiver spawn");
+    let cancel_error = cancelled_receiver
+        .fetch_with_limit(&ticket, u64::MAX, |_| false)
+        .await
+        .expect_err("a cancelled browser receive must stop");
+    assert!(cancel_error.contains("cancelled"));
+
     let root = receiver.fetch(&ticket).await.expect("fetch");
     let files = receiver.list_collection(root).await.expect("list");
     assert_eq!(files.len(), 2);

@@ -17,10 +17,12 @@ pub mod ticket;
 use iroh::address_lookup::memory::MemoryLookup;
 use iroh::endpoint::presets;
 use iroh::Endpoint;
+use iroh_blobs::api::downloader::DownloadProgressItem;
 use iroh_blobs::api::proto::BlobStatus;
 use iroh_blobs::format::collection::Collection;
 use iroh_blobs::store::mem::MemStore;
 use iroh_blobs::Hash;
+use n0_future::StreamExt;
 use ticket::ParsedTicket;
 
 #[cfg(target_arch = "wasm32")]
@@ -96,14 +98,59 @@ impl Receiver {
     ///
     /// Returns a message if the ticket is invalid or the download fails.
     pub async fn fetch(&self, ticket_str: &str) -> Result<Hash, String> {
+        self.fetch_with_limit(ticket_str, u64::MAX, |_| true).await
+    }
+
+    /// Closes the endpoint so any in-flight browser receive is cancelled.
+    pub async fn cancel(&self) {
+        self.endpoint.close().await;
+    }
+
+    /// Downloads while enforcing an aggregate byte ceiling from actual transport progress.
+    /// The callback returns false to cancel. The sender's advertised size is never used as the limit.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for invalid tickets, transport failures, cancellation, or when the limit is exceeded.
+    pub async fn fetch_with_limit<F>(
+        &self,
+        ticket_str: &str,
+        max_bytes: u64,
+        mut on_progress: F,
+    ) -> Result<Hash, String>
+    where
+        F: FnMut(u64) -> bool,
+    {
         let parsed = ticket::parse(ticket_str)?;
         self.register_providers(&parsed);
         let primary = parsed.primary();
         let downloader = self.store.downloader(&self.endpoint);
-        downloader
+        let mut progress = downloader
             .download(primary.hash_and_format(), provider_ids(&parsed))
+            .stream()
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|error| error.to_string())?;
+        while let Some(item) = progress.next().await {
+            match item {
+                DownloadProgressItem::Progress(bytes) => {
+                    if bytes > max_bytes {
+                        return Err(
+                            "Browser receive stopped at its actual-data memory limit.".into()
+                        );
+                    }
+                    if !on_progress(bytes) {
+                        return Err("Browser receive cancelled.".into());
+                    }
+                }
+                DownloadProgressItem::Error(error) => return Err(error.to_string()),
+                DownloadProgressItem::DownloadError => {
+                    return Err("The sender could not complete the transfer.".into());
+                }
+                DownloadProgressItem::TryProvider { .. }
+                | DownloadProgressItem::ProviderFailed { .. }
+                | DownloadProgressItem::PartComplete { .. } => {}
+            }
+        }
         Ok(primary.hash())
     }
 
