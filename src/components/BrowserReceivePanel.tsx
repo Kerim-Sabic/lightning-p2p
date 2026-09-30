@@ -18,6 +18,7 @@ import {
   saveReceivedFileStreaming,
   type TicketInfo,
 } from "../lib/webReceiver";
+import { browserReceiveFileKey } from "../lib/browserReceiveFiles";
 
 // The compatibility receive path is memory-backed. Gate advertised size for a
 // useful early warning, then enforce the limit against actual bytes in Rust.
@@ -51,9 +52,9 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
   const [info, setInfo] = useState<TicketInfo | null>(null);
   const [sizeVerified, setSizeVerified] = useState(false);
   const [files, setFiles] = useState<CollectionFile[]>([]);
-  const [savedHashes, setSavedHashes] = useState<Set<string>>(new Set());
+  const [savedFileKeys, setSavedFileKeys] = useState<Set<string>>(new Set());
   const [streamedReceive, setStreamedReceive] = useState(false);
-  const [savingHash, setSavingHash] = useState<string | null>(null);
+  const [savingFileKey, setSavingFileKey] = useState<string | null>(null);
   const [savingBytes, setSavingBytes] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [receiver, setReceiver] = useState<BrowserReceiver | null>(null);
@@ -95,7 +96,7 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
     setError(null);
     setReceivedBytes(0);
     setFiles([]);
-    setSavedHashes(new Set());
+    setSavedFileKeys(new Set());
     setStreamedReceive(false);
     setSizeVerified(false);
     const controller = new AbortController();
@@ -187,9 +188,9 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
     }
   };
 
-  const save = async (file: CollectionFile) => {
+  const save = async (file: CollectionFile, fileKey: string) => {
     if (!receiver) return;
-    setSavingHash(file.hash);
+    setSavingFileKey(fileKey);
     setSavingBytes(0);
     try {
       if (streamedReceive) {
@@ -210,9 +211,9 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
       } else {
         await saveReceivedFile(receiver, file);
       }
-      const nextSavedHashes = new Set(savedHashes).add(file.hash);
-      setSavedHashes(nextSavedHashes);
-      if (nextSavedHashes.size >= files.length) {
+      const nextSavedFileKeys = new Set(savedFileKeys).add(fileKey);
+      setSavedFileKeys(nextSavedFileKeys);
+      if (nextSavedFileKeys.size >= files.length) {
         receiver.stop();
         setReceiver(null);
       }
@@ -220,7 +221,7 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
       if (!(err instanceof DOMException && err.name === "AbortError"))
         setError(describe(err));
     } finally {
-      setSavingHash(null);
+      setSavingFileKey(null);
     }
   };
 
@@ -384,11 +385,12 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
               </motion.div>
               <ul className="mt-3 space-y-2">
                 {files.map((file, index) => {
-                  const saved = savedHashes.has(file.hash);
-                  const saving = savingHash === file.hash;
+                  const fileKey = browserReceiveFileKey(file.hash, index);
+                  const saved = savedFileKeys.has(fileKey);
+                  const saving = savingFileKey === fileKey;
                   return (
                     <motion.li
-                      key={file.hash}
+                      key={fileKey}
                       initial={reduce ? false : { opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{
@@ -411,8 +413,8 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
                       </div>
                       <button
                         type="button"
-                        onClick={() => void save(file)}
-                        disabled={savingHash !== null}
+                        onClick={() => void save(file, fileKey)}
+                        disabled={savingFileKey !== null}
                         aria-label={
                           saving
                             ? `Saving ${file.name}: ${formatBytes(savingBytes)} of ${formatBytes(file.size)}`
