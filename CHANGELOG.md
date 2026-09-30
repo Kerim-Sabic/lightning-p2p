@@ -10,6 +10,11 @@ All notable changes to Lightning P2P are documented here. The project follows se
   tickets stay in the OS credential store; local recovery metadata preserves
   the original receive limits and is removed after completion or discard.
 
+### Fixed
+
+- Reject Windows superscript COM/LPT device-name aliases during cross-platform
+  receive path validation.
+
 ## [0.9.10] - 2026-09-30 ("Directional Flick Handoff")
 
 ### Added

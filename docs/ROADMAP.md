@@ -33,8 +33,8 @@ linked release evidence.
 
 - Make automatic retry state visible and keep verified iroh-blobs data across
   transient failures.
-- Add explicit pause and restart-safe resume without storing raw capability
-  tickets in plaintext.
+- Receive pause and restart-safe resume are implemented on `main`; native
+  credential-store validation across supported platforms remains.
 - Complete Android folder publishing and collision tests on physical devices.
 - Expand firewall, mDNS, relay, destination, and sender-offline diagnostics.
 

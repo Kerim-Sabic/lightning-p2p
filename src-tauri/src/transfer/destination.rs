@@ -146,11 +146,12 @@ fn is_windows_reserved_name(name: &str) -> bool {
     matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL")
         || ["COM", "LPT"].iter().any(|prefix| {
             stem.strip_prefix(prefix).is_some_and(|suffix| {
-                suffix.len() == 1
-                    && suffix
-                        .as_bytes()
-                        .first()
-                        .is_some_and(|digit| (b'1'..=b'9').contains(digit))
+                matches!(suffix, "¹" | "²" | "³")
+                    || (suffix.len() == 1
+                        && suffix
+                            .as_bytes()
+                            .first()
+                            .is_some_and(|digit| (b'1'..=b'9').contains(digit)))
             })
         })
 }
@@ -262,6 +263,8 @@ mod tests {
         assert_eq!(safe_collection_label("bad/name:here"), "bad_name_here");
         assert_eq!(safe_collection_label("   "), "download");
         assert_eq!(safe_collection_label("CON"), "_CON");
+        assert_eq!(safe_collection_label("COM¹.txt"), "_COM¹.txt");
+        assert_eq!(safe_collection_label("LPT³"), "_LPT³");
         assert_eq!(safe_collection_label("folder. "), "folder");
     }
 
@@ -294,6 +297,9 @@ mod tests {
             "folder//empty.txt",
             "CON.txt",
             "folder\\LPT1.log",
+            "COM¹.txt",
+            "folder/LPT².log",
+            "COM³",
             "trail. ",
             "bad:name.txt",
         ] {
