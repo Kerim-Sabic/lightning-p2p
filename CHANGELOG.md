@@ -4,6 +4,12 @@ All notable changes to Lightning P2P are documented here. The project follows se
 
 ## [Unreleased]
 
+### Added
+
+- Incoming transfers can be paused and resumed after an app restart. Resume
+  tickets stay in the OS credential store; local recovery metadata preserves
+  the original receive limits and is removed after completion or discard.
+
 ## [0.9.10] - 2026-09-30 ("Directional Flick Handoff")
 
 ### Added

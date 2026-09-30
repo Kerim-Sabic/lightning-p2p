@@ -13,7 +13,7 @@ use sha2::{Digest, Sha256};
 use std::io::{Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
-mod fallback_permissions;
+pub(crate) mod fallback_permissions;
 use fallback_permissions::restrict_private_file;
 
 const SERVICE_NAME: &str = "com.lightningp2p.app";
@@ -24,6 +24,7 @@ const CHAT_KEY_NAME: &str = "lightning-chat-nsec";
 const CHAT_FALLBACK_KEY_FILE_NAME: &str = "lightning-chat-nsec";
 const CHAT_MESH_KEY_NAME: &str = "lightning-chat-mesh-identity";
 const CHAT_MESH_FALLBACK_KEY_FILE_NAME: &str = "lightning-chat-mesh-identity";
+const RECEIVE_RESUME_KEY_NAME: &str = "receive-resume";
 
 /// Loads the persisted iroh identity key, or creates and persists one.
 ///
@@ -118,6 +119,52 @@ pub fn load_secret_key(data_dir: &Path) -> Result<Option<Vec<u8>>> {
         }
         Err(keyring::Error::NoEntry) => Ok(None),
         Err(e) => Err(LightningP2PError::Key(e.to_string())),
+    }
+}
+
+/// Stores a receive capability in the OS credential manager for restart-safe resume.
+///
+/// This credential intentionally has no filesystem fallback. Resume is disabled
+/// when the secure credential manager is unavailable.
+///
+/// # Errors
+///
+/// Returns an error when the transfer id is invalid or secure storage fails.
+pub fn store_receive_resume_ticket(data_dir: &Path, transfer_id: &str, ticket: &str) -> Result<()> {
+    let entry = receive_resume_entry(data_dir, transfer_id)?;
+    entry
+        .set_password(ticket)
+        .map_err(|_| LightningP2PError::Key("Secure credential storage unavailable".into()))
+}
+
+/// Loads a receive capability from the OS credential manager.
+///
+/// # Errors
+///
+/// Returns an error when the transfer id is invalid or secure storage fails.
+pub fn load_receive_resume_ticket(data_dir: &Path, transfer_id: &str) -> Result<Option<String>> {
+    let entry = receive_resume_entry(data_dir, transfer_id)?;
+    match entry.get_password() {
+        Ok(ticket) => Ok(Some(ticket)),
+        Err(keyring::Error::NoEntry) => Ok(None),
+        Err(_) => Err(LightningP2PError::Key(
+            "Secure credential storage unavailable".into(),
+        )),
+    }
+}
+
+/// Deletes a receive capability from the OS credential manager.
+///
+/// # Errors
+///
+/// Returns an error when the transfer id is invalid or secure storage fails.
+pub fn delete_receive_resume_ticket(data_dir: &Path, transfer_id: &str) -> Result<()> {
+    let entry = receive_resume_entry(data_dir, transfer_id)?;
+    match entry.delete_credential() {
+        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+        Err(_) => Err(LightningP2PError::Key(
+            "Secure credential storage unavailable".into(),
+        )),
     }
 }
 
@@ -269,6 +316,17 @@ fn chat_mesh_keyring_entry(data_dir: &Path) -> Result<keyring::Entry> {
     let account = format!("{CHAT_MESH_KEY_NAME}:{}", data_dir_fingerprint(data_dir));
     keyring::Entry::new(SERVICE_NAME, &account)
         .map_err(|error| LightningP2PError::Key(error.to_string()))
+}
+
+fn receive_resume_entry(data_dir: &Path, transfer_id: &str) -> Result<keyring::Entry> {
+    uuid::Uuid::parse_str(transfer_id)
+        .map_err(|_| LightningP2PError::Key("Invalid receive resume identifier".into()))?;
+    let account = format!(
+        "{RECEIVE_RESUME_KEY_NAME}:{}:{transfer_id}",
+        data_dir_fingerprint(data_dir)
+    );
+    keyring::Entry::new(SERVICE_NAME, &account)
+        .map_err(|_| LightningP2PError::Key("Secure credential storage unavailable".into()))
 }
 
 fn chat_fallback_path(data_dir: &Path) -> PathBuf {

@@ -31,6 +31,8 @@ import { useTransferStore, type TransferEntry } from "../stores/transferStore";
 interface TransferCardProps {
   transfer: TransferEntry;
   onCancel?: (transferId: string) => void;
+  onPause?: (transferId: string) => void;
+  onResume?: (transferId: string) => void;
   onSendAnother?: () => void;
 }
 
@@ -40,6 +42,9 @@ const STAR_CTA_URL = "https://github.com/Kerim-Sabic/lightning-p2p";
 function statusLabel(transfer: TransferEntry): string {
   if (transfer.phase === "cancelled") {
     return "Cancelled";
+  }
+  if (transfer.phase === "paused" || transfer.status === "paused") {
+    return "Paused · ready to resume";
   }
   switch (transfer.status) {
     case "starting":
@@ -165,6 +170,8 @@ function writeStarCtaDismissed(): void {
 export function TransferCard({
   transfer,
   onCancel,
+  onPause,
+  onResume,
   onSendAnother,
 }: TransferCardProps) {
   const transferName = safeDisplayText(transfer.name, "File transfer");
@@ -190,11 +197,19 @@ export function TransferCard({
   const timestamp = formatTimestamp(transfer.timestamp);
   const isActive =
     transfer.status === "starting" || transfer.status === "running";
+  const isPaused = transfer.status === "paused";
+  const canPauseReceive =
+    isActive && transfer.direction === "receive" && transfer.canResume;
+  const canResumeReceive =
+    transfer.direction === "receive" &&
+    transfer.canResume &&
+    (isPaused || transfer.status === "failed");
   const StatusIcon = statusIcon(transfer);
   const errorHint = transfer.appError?.hint ?? failureHelp(transfer);
   const canRetryReceive =
     transfer.status === "failed" &&
     transfer.direction === "receive" &&
+    !transfer.canResume &&
     Boolean(transfer.retryTicket) &&
     (transfer.appError?.retryable ?? true);
 
@@ -205,7 +220,9 @@ export function TransferCard({
 
     if (
       window.confirm(
-        transfer.direction === "send"
+        isPaused
+          ? "Discard this paused receive? Its secure resume key will be deleted."
+          : transfer.direction === "send"
           ? "Stop preparing this share? Content already imported stays in this device's local store."
           : "Cancel this transfer? Partially downloaded data will stay local.",
       )
@@ -325,6 +342,33 @@ export function TransferCard({
               >
                 <StopCircle className="h-3.5 w-3.5" />
                 Cancel
+              </button>
+            ) : null}
+            {canPauseReceive && onPause ? (
+              <button
+                onClick={() => onPause(transfer.transferId)}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-medium text-slate-100/85"
+              >
+                <StopCircle className="h-3.5 w-3.5" />
+                Pause
+              </button>
+            ) : null}
+            {canResumeReceive && onResume ? (
+              <button
+                onClick={() => onResume(transfer.transferId)}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-sky-300/20 bg-sky-400/10 px-3 py-2 text-xs font-semibold text-sky-50"
+              >
+                <TimerReset className="h-3.5 w-3.5" />
+                Resume
+              </button>
+            ) : null}
+            {isPaused && onCancel ? (
+              <button
+                onClick={handleCancel}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-rose-400/15 bg-rose-500/10 px-3 py-2 text-xs font-medium text-rose-100/85"
+              >
+                <StopCircle className="h-3.5 w-3.5" />
+                Discard
               </button>
             ) : null}
           </div>

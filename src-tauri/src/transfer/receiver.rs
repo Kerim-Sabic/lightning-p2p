@@ -17,6 +17,7 @@ use futures_util::{Stream, StreamExt};
 use iroh_blobs::api::downloader::DownloadProgressItem;
 #[cfg(test)]
 use iroh_blobs::ticket::BlobTicket;
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::Window;
@@ -36,7 +37,7 @@ const MAX_DOWNLOAD_ATTEMPTS: u32 = 3;
 const INITIAL_RETRY_BACKOFF: Duration = Duration::from_secs(1);
 
 /// Optional guards applied to incoming data before it can be exported.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReceiveLimits {
     /// Maximum cumulative downloaded bytes.
     pub max_total_bytes: Option<u64>,

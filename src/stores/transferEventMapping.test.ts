@@ -92,6 +92,7 @@ describe("mergeFailedTransferEvent", () => {
       error: null,
       appError: null,
       retryTicket: "fd2:secret-ticket",
+      canResume: false,
     };
     const event: FailedTransferEvent = {
       type: "failed",

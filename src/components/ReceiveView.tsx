@@ -58,6 +58,8 @@ export function ReceiveView({ onNavigateSend }: ReceiveViewProps = {}) {
     (state) => state.startReceiveNearbyShare,
   );
   const cancelTransfer = useTransferStore((state) => state.cancelTransfer);
+  const pauseTransfer = useTransferStore((state) => state.pauseTransfer);
+  const resumeTransfer = useTransferStore((state) => state.resumeTransfer);
   const pendingReceiveTicket = useTransferStore(
     (state) => state.pendingReceiveTicket,
   );
@@ -447,6 +449,8 @@ export function ReceiveView({ onNavigateSend }: ReceiveViewProps = {}) {
               key={transfer.transferId}
               transfer={transfer}
               onCancel={(transferId) => void cancelTransfer(transferId)}
+              onPause={(transferId) => void pauseTransfer(transferId)}
+              onResume={(transferId) => void resumeTransfer(transferId)}
               onSendAnother={onNavigateSend}
             />
           ))

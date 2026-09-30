@@ -99,6 +99,23 @@ impl ShareTicket {
         &self.primary
     }
 
+    /// Re-encodes the parsed capability ticket for secure resume storage.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a multi-provider ticket cannot be encoded.
+    pub fn encode_for_resume(&self) -> Result<String> {
+        if self.providers.len() == 1 && self.label.is_none() && self.size.is_none() {
+            return Ok(self.primary.to_string());
+        }
+        encode_fd2_ticket_with_providers(
+            &self.primary,
+            self.providers.clone(),
+            self.label.as_deref().unwrap_or("Shared content"),
+            self.size.unwrap_or_default(),
+        )
+    }
+
     /// Returns all provider endpoint addresses, preserving ticket order.
     #[must_use]
     pub fn provider_node_addrs(&self) -> Vec<EndpointAddr> {
@@ -323,5 +340,19 @@ mod tests {
             .features()
             .iter()
             .any(|feature| feature == FEATURE_MULTI_PROVIDER));
+    }
+
+    #[test]
+    fn persisted_ticket_encoding_preserves_provider_and_display_metadata() {
+        let ticket = sample_ticket();
+        let original = encode_fd2_ticket(&ticket, "demo.bin", 42).expect("fd2 encodes");
+        let parsed = ShareTicket::parse(&original).expect("ticket parses");
+        let persisted = parsed
+            .encode_for_resume()
+            .expect("ticket encodes for resume");
+        let restored = ShareTicket::parse(&persisted).expect("persisted ticket parses");
+        assert_eq!(restored.primary().hash(), ticket.hash());
+        assert_eq!(restored.label(), Some("demo.bin"));
+        assert_eq!(restored.size(), Some(42));
     }
 }

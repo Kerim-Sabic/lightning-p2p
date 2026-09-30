@@ -3,6 +3,7 @@
 use crate::commands::{command_error, CommandResult};
 use crate::error::AppErrorPayload;
 use crate::storage::history::{self, TransferRecord};
+use crate::storage::resumable_receives::ResumableReceive;
 use crate::transfer::export;
 use crate::transfer::metrics::{RouteKind, TransferStrategy};
 use crate::transfer::progress::{TransferDirection, TransferInfo, TransferPhase};
@@ -49,6 +50,7 @@ pub async fn start_receive(
         window,
         ticket,
         crate::transfer::receiver::ReceiveLimits::default(),
+        None,
         None,
     )
     .await
@@ -154,6 +156,7 @@ pub async fn start_receive_discovered_share(
         ShareTicket::from_blob_ticket(ticket),
         crate::transfer::receiver::ReceiveLimits::default(),
         None,
+        None,
     )
     .await
 }
@@ -165,11 +168,124 @@ pub async fn start_receive_discovered_share(
 /// Returns an error string if the transfer cannot be found.
 #[tauri::command]
 pub async fn cancel_transfer(state: State<'_, AppState>, transfer_id: String) -> CommandResult<()> {
-    if state.transfers.cancel(&transfer_id).await {
-        Ok(())
-    } else {
-        Err(command_error("Transfer not found"))
+    let active = state.transfers.get(&transfer_id).await.is_some();
+    let recoverable = state
+        .resumable_receives
+        .list()
+        .iter()
+        .any(|record| record.transfer.transfer_id == transfer_id);
+    if !active && !recoverable {
+        return Err(command_error("Transfer not found"));
     }
+    if recoverable {
+        if crate::crypto::delete_receive_resume_ticket(&state.data_dir, &transfer_id).is_err() {
+            tracing::warn!("could not remove receive resume credential");
+        }
+        if state.resumable_receives.remove(&transfer_id).is_err() {
+            tracing::warn!("could not remove receive recovery metadata");
+        }
+    }
+    if active && !state.transfers.cancel(&transfer_id).await {
+        return Err(command_error("Transfer is no longer active"));
+    }
+    Ok(())
+}
+
+/// Stops an active receive while keeping its secure resume state.
+///
+/// # Errors
+///
+/// Returns an error when the transfer is not an active, recoverable receive.
+#[tauri::command]
+pub async fn pause_transfer(state: State<'_, AppState>, transfer_id: String) -> CommandResult<()> {
+    let mut record = state
+        .resumable_receives
+        .list()
+        .into_iter()
+        .find(|record| record.transfer.transfer_id == transfer_id)
+        .ok_or_else(|| command_error("This receive cannot be paused safely"))?;
+    let active = state
+        .transfers
+        .get(&transfer_id)
+        .await
+        .ok_or_else(|| command_error("Transfer is no longer active"))?;
+    if active.direction != TransferDirection::Receive || !active.can_resume {
+        return Err(command_error("This receive cannot be paused safely"));
+    }
+    record.transfer = active;
+    record.transfer.phase = TransferPhase::Paused;
+    record.transfer.speed_bps = 0;
+    record.transfer.can_resume = true;
+    state
+        .resumable_receives
+        .save(record)
+        .map_err(command_error)?;
+    if !state.transfers.cancel(&transfer_id).await {
+        return Err(command_error("Transfer is no longer active"));
+    }
+    let stopped = tokio::time::timeout(Duration::from_secs(5), async {
+        while state.transfers.get(&transfer_id).await.is_some() {
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+    })
+    .await
+    .is_ok();
+    if !stopped {
+        return Err(command_error("Receive did not pause in time"));
+    }
+    Ok(())
+}
+
+/// Resumes a persisted receive using its OS-keyring capability.
+///
+/// # Errors
+///
+/// Returns an error if secure credentials are unavailable or the receive
+/// cannot be restarted.
+#[tauri::command]
+pub async fn resume_transfer(
+    window: tauri::Window,
+    state: State<'_, AppState>,
+    transfer_id: String,
+) -> CommandResult<String> {
+    if state.transfers.get(&transfer_id).await.is_some() {
+        return Err(command_error("Transfer is already active"));
+    }
+    let record = state
+        .resumable_receives
+        .list()
+        .into_iter()
+        .find(|record| record.transfer.transfer_id == transfer_id)
+        .ok_or_else(|| command_error("Recoverable receive not found"))?;
+    let Some(secret) = crate::crypto::load_receive_resume_ticket(&state.data_dir, &transfer_id)
+        .map_err(command_error)?
+    else {
+        state
+            .resumable_receives
+            .remove(&transfer_id)
+            .map_err(command_error)?;
+        return Err(command_error("Secure resume credential is unavailable"));
+    };
+    let ticket = match ShareTicket::parse(&secret) {
+        Ok(ticket) => ticket,
+        Err(_error) => {
+            let _ = crate::crypto::delete_receive_resume_ticket(&state.data_dir, &transfer_id);
+            state
+                .resumable_receives
+                .remove(&transfer_id)
+                .map_err(command_error)?;
+            return Err(command_error(AppErrorPayload::invalid_ticket()));
+        }
+    };
+    start_receive_ticket(
+        state,
+        window,
+        ticket,
+        record.limits,
+        record.fallback_file_name.clone(),
+        Some(record),
+    )
+    .await
 }
 
 /// Returns a snapshot of all active transfers.
@@ -179,7 +295,33 @@ pub async fn cancel_transfer(state: State<'_, AppState>, transfer_id: String) ->
 /// Returns an error string if transfer state cannot be read.
 #[tauri::command]
 pub async fn get_active_transfers(state: State<'_, AppState>) -> Result<Vec<TransferInfo>, String> {
-    Ok(state.transfers.list().await)
+    let mut active = state.transfers.list().await;
+    let active_ids = active
+        .iter()
+        .map(|transfer| transfer.transfer_id.clone())
+        .collect::<HashSet<_>>();
+    for record in state.resumable_receives.list() {
+        let mut transfer = record.transfer;
+        if active_ids.contains(&transfer.transfer_id) {
+            if transfer.phase == TransferPhase::Paused {
+                if let Some(existing) = active
+                    .iter_mut()
+                    .find(|current| current.transfer_id == transfer.transfer_id)
+                {
+                    existing.phase = TransferPhase::Paused;
+                    existing.speed_bps = 0;
+                    existing.can_resume = true;
+                }
+            }
+            continue;
+        }
+        transfer.phase = TransferPhase::Paused;
+        transfer.speed_bps = 0;
+        transfer.can_resume = true;
+        active.push(transfer);
+    }
+    active.sort_by(|left, right| left.transfer_id.cmp(&right.transfer_id));
+    Ok(active)
 }
 
 /// Returns persisted transfer history.
@@ -238,6 +380,7 @@ pub(crate) async fn start_receive_from_offer(
         ShareTicket::from_blob_ticket(ticket),
         limits,
         Some(offer_label),
+        None,
     )
     .await
 }
@@ -248,6 +391,7 @@ async fn start_receive_ticket(
     ticket: ShareTicket,
     limits: crate::transfer::receiver::ReceiveLimits,
     fallback_file_name: Option<String>,
+    resume: Option<ResumableReceive>,
 ) -> CommandResult<String> {
     let activity = state.node_supervisor.begin_transfer_activity().await;
     let node = state.get_node().await.map_err(command_error)?;
@@ -256,79 +400,157 @@ async fn start_receive_ticket(
     let profile = settings.transfer_mode.profile();
     export::preflight_destination(&destination).map_err(command_error)?;
 
-    let transfer_id = state.transfers.next_transfer_id("recv");
+    let transfer_id = resume.as_ref().map_or_else(
+        || uuid::Uuid::new_v4().to_string(),
+        |record| record.transfer.transfer_id.clone(),
+    );
     let (cancel_tx, cancel_rx) = watch::channel(false);
-    let topology = ticket.topology();
-    let strategy = if topology.provider_count > 1 {
-        TransferStrategy::QueuedMultiProvider
-    } else {
-        TransferStrategy::QueuedSingleProvider
-    };
-
-    state
-        .transfers
-        .add(
-            TransferInfo {
-                transfer_id: transfer_id.clone(),
-                direction: TransferDirection::Receive,
-                name: ticket
-                    .label()
-                    .map_or_else(|| ticket.primary().hash().to_string(), str::to_string),
-                peer: Some(ticket.primary().addr().id.to_string()),
-                bytes: 0,
-                // The ticket's size is an unverified estimate; the receiver
-                // publishes the actual total after content verification.
-                total: 0,
-                speed_bps: 0,
-                route_kind: RouteKind::Unknown,
-                phase: TransferPhase::Connecting,
-                failure_category: None,
-                output_path: None,
-                connect_ms: 0,
-                download_ms: 0,
-                export_ms: 0,
-                provider_count: topology.provider_count,
-                direct_provider_count: topology.direct_provider_count,
-                relay_provider_count: topology.relay_provider_count,
-                strategy,
-                first_byte_ms: 0,
-                effective_mbps: 0,
-            },
-            Some(cancel_tx),
+    let mut info = receive_transfer_info(&transfer_id, &ticket);
+    if let Some(mut record) = resume {
+        info.can_resume = true;
+        record.transfer = info.clone();
+        state
+            .resumable_receives
+            .save(record)
+            .map_err(command_error)?;
+    } else if let Ok(encoded_ticket) = ticket.encode_for_resume() {
+        if crate::crypto::store_receive_resume_ticket(
+            &state.data_dir,
+            &transfer_id,
+            &encoded_ticket,
         )
-        .await;
+        .is_ok()
+        {
+            info.can_resume = true;
+            let record = ResumableReceive {
+                transfer: info.clone(),
+                limits,
+                fallback_file_name: fallback_file_name.clone(),
+            };
+            if state.resumable_receives.save(record).is_err() {
+                info.can_resume = false;
+                let _ = crate::crypto::delete_receive_resume_ticket(&state.data_dir, &transfer_id);
+            }
+        }
+    }
+    if !state.transfers.try_add(info, Some(cancel_tx)).await {
+        return Err(command_error("Transfer is already active"));
+    }
 
-    let queue = state.transfers.clone();
-    let window_clone = window.clone();
-    let transfer_id_for_task = transfer_id.clone();
-
-    let ctx = crate::transfer::receiver::ReceiveContext {
-        queue,
-        window: window_clone,
-        transfer_id: transfer_id_for_task.clone(),
+    spawn_receive_task(ReceiveLaunch {
+        activity,
+        node,
+        queue: state.transfers.clone(),
+        window,
+        transfer_id: transfer_id.clone(),
         cancel_rx,
-        // Swarm receive runs when the user forced it on in Settings, or by
-        // default on the performance tiers (Extreme, LAN Beast, Warp). The
-        // swarm path auto-falls-back to the sequential download on failure.
+        ticket,
+        destination,
+        profile,
         swarm_enabled: settings.experimental_swarm_receive || profile.swarm_receive_default,
         limits,
         fallback_file_name,
-    };
+        data_dir: state.data_dir.clone(),
+        resume_store: state.resumable_receives.clone(),
+    });
 
+    Ok(transfer_id)
+}
+
+fn receive_transfer_info(transfer_id: &str, ticket: &ShareTicket) -> TransferInfo {
+    let topology = ticket.topology();
+    TransferInfo {
+        transfer_id: transfer_id.to_string(),
+        direction: TransferDirection::Receive,
+        name: ticket
+            .label()
+            .map_or_else(|| ticket.primary().hash().to_string(), str::to_string),
+        peer: Some(ticket.primary().addr().id.to_string()),
+        bytes: 0,
+        total: 0,
+        speed_bps: 0,
+        route_kind: RouteKind::Unknown,
+        phase: TransferPhase::Connecting,
+        failure_category: None,
+        output_path: None,
+        connect_ms: 0,
+        download_ms: 0,
+        export_ms: 0,
+        provider_count: topology.provider_count,
+        direct_provider_count: topology.direct_provider_count,
+        relay_provider_count: topology.relay_provider_count,
+        strategy: if topology.provider_count > 1 {
+            TransferStrategy::QueuedMultiProvider
+        } else {
+            TransferStrategy::QueuedSingleProvider
+        },
+        first_byte_ms: 0,
+        effective_mbps: 0,
+        can_resume: false,
+    }
+}
+
+struct ReceiveLaunch {
+    activity: tokio::sync::OwnedRwLockReadGuard<()>,
+    node: std::sync::Arc<crate::node::LightningP2PNode>,
+    queue: crate::transfer::queue::TransferQueue,
+    window: tauri::Window,
+    transfer_id: String,
+    cancel_rx: watch::Receiver<bool>,
+    ticket: ShareTicket,
+    destination: std::path::PathBuf,
+    profile: crate::transfer::mode::TransferProfile,
+    swarm_enabled: bool,
+    limits: crate::transfer::receiver::ReceiveLimits,
+    fallback_file_name: Option<String>,
+    data_dir: std::path::PathBuf,
+    resume_store: crate::storage::resumable_receives::ResumableReceiveStore,
+}
+
+fn spawn_receive_task(launch: ReceiveLaunch) {
+    let ReceiveLaunch {
+        activity,
+        node,
+        queue,
+        window,
+        transfer_id,
+        cancel_rx,
+        ticket,
+        destination,
+        profile,
+        swarm_enabled,
+        limits,
+        fallback_file_name,
+        data_dir,
+        resume_store,
+    } = launch;
+    let context = crate::transfer::receiver::ReceiveContext {
+        queue,
+        window,
+        transfer_id: transfer_id.clone(),
+        cancel_rx,
+        swarm_enabled,
+        limits,
+        fallback_file_name,
+    };
     tauri::async_runtime::spawn(async move {
         let _activity = activity;
-        if let Err(_err) = crate::transfer::receiver::receive_blob(
+        if crate::transfer::receiver::receive_blob(
             node.as_ref(),
-            ctx,
+            context,
             ticket,
             destination,
             profile,
         )
         .await
+        .is_ok()
         {
-            tracing::error!("receive failed");
+            if crate::crypto::delete_receive_resume_ticket(&data_dir, &transfer_id).is_err() {
+                tracing::warn!("could not remove completed receive credential");
+            }
+            if resume_store.remove(&transfer_id).is_err() {
+                tracing::warn!("could not remove completed receive metadata");
+            }
         }
     });
-
-    Ok(transfer_id)
 }

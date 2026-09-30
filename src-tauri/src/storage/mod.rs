@@ -5,5 +5,6 @@ pub mod db;
 pub mod history;
 pub mod paired_devices;
 pub mod peers;
+pub mod resumable_receives;
 pub mod settings;
 pub mod share_access;

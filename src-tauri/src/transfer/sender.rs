@@ -303,6 +303,7 @@ async fn register_send_preparation(
                 strategy: crate::transfer::metrics::TransferStrategy::Unknown,
                 first_byte_ms: 0,
                 effective_mbps: 0,
+                can_resume: false,
             },
             Some(cancel_tx),
         )

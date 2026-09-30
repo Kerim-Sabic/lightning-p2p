@@ -118,6 +118,54 @@ function sharePath(path: string): SharePathInfo {
 }
 
 describe("active transfer snapshot reconciliation", () => {
+  it("restores a recoverable receive as paused and keeps it paused on cancel event", async () => {
+    vi.mocked(tauri.getActiveTransfers).mockResolvedValue([
+      { ...activeTransfer, phase: "paused", can_resume: true, speed_bps: 0 },
+    ]);
+
+    await useTransferStore.getState().refreshActiveTransfers();
+    expect(receivedTransfer().status).toBe("paused");
+    expect(receivedTransfer().canResume).toBe(true);
+
+    useTransferStore.getState().applyTransferEvent({
+      type: "failed",
+      transfer_id: "recv-1",
+      error: "Transfer cancelled",
+      route_kind: "unknown",
+      phase: "cancelled",
+      failure_category: "cancelled",
+      error_payload: null,
+    });
+    expect(receivedTransfer().status).toBe("paused");
+  });
+
+  it("restores a recoverable transfer as paused and ignores its cancel event", async () => {
+    vi.mocked(tauri.getActiveTransfers).mockResolvedValue([
+      {
+        ...activeTransfer,
+        phase: "paused",
+        can_resume: true,
+        speed_bps: 0,
+      },
+    ]);
+
+    await useTransferStore.getState().refreshActiveTransfers();
+    const transfer = receivedTransfer();
+    expect(transfer.status).toBe("paused");
+    expect(transfer.canResume).toBe(true);
+
+    useTransferStore.getState().applyTransferEvent({
+      type: "failed",
+      transfer_id: transfer.transferId,
+      error: "Transfer cancelled",
+      route_kind: "unknown",
+      phase: "cancelled",
+      failure_category: "cancelled",
+      error_payload: null,
+    });
+    expect(receivedTransfer().status).toBe("paused");
+  });
+
   beforeEach(() => {
     useTransferStore.setState({
       transfers: {},

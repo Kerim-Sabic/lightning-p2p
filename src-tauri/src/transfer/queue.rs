@@ -44,6 +44,19 @@ impl TransferQueue {
         crate::commands::mobile::sync_transfer_queue_foreground_count(count);
     }
 
+    /// Adds a transfer only when its stable identifier is not already active.
+    pub async fn try_add(&self, info: TransferInfo, cancel: Option<watch::Sender<bool>>) -> bool {
+        let mut map = self.active.write().await;
+        if map.contains_key(&info.transfer_id) {
+            return false;
+        }
+        map.insert(info.transfer_id.clone(), QueueEntry { info, cancel });
+        let count = map.len();
+        drop(map);
+        crate::commands::mobile::sync_transfer_queue_foreground_count(count);
+        true
+    }
+
     /// Updates the progress snapshot for an active transfer.
     pub async fn update_progress(
         &self,
@@ -145,6 +158,7 @@ mod tests {
             strategy: crate::transfer::metrics::TransferStrategy::QueuedSingleProvider,
             first_byte_ms: 0,
             effective_mbps: 0,
+            can_resume: false,
         }
     }
 
@@ -174,5 +188,13 @@ mod tests {
         assert!(queue.cancel("recv-1").await);
         rx.changed().await.expect("watch should update");
         assert!(*rx.borrow());
+    }
+
+    #[tokio::test]
+    async fn try_add_rejects_duplicate_active_identifier() {
+        let queue = TransferQueue::new();
+        queue.add(sample_info(), None).await;
+        assert!(!queue.try_add(sample_info(), None).await);
+        assert_eq!(queue.list().await.len(), 1);
     }
 }

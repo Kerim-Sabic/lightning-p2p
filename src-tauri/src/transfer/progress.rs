@@ -46,6 +46,8 @@ pub enum TransferPhase {
     Failed,
     /// The user cancelled the transfer.
     Cancelled,
+    /// The receive is safely stored and can be resumed later.
+    Paused,
 }
 
 impl TransferPhase {
@@ -61,6 +63,7 @@ impl TransferPhase {
             6 => Self::Failed,
             7 => Self::Cancelled,
             8 => Self::Saving,
+            9 => Self::Paused,
             _ => Self::Preparing,
         }
     }
@@ -78,6 +81,7 @@ impl TransferPhase {
             Self::Failed => 6,
             Self::Cancelled => 7,
             Self::Saving => 8,
+            Self::Paused => 9,
         }
     }
 }
@@ -147,6 +151,9 @@ pub struct TransferInfo {
     pub first_byte_ms: u64,
     /// Effective transfer throughput in megabits per second.
     pub effective_mbps: u64,
+    /// The receiver has a secure, persisted capability for retry or resume.
+    #[serde(default)]
+    pub can_resume: bool,
 }
 
 /// Event emitted to the frontend over Tauri IPC.

@@ -116,7 +116,11 @@ export function useTransfer(): void {
     const store = useTransferStore.getState();
     store.applyTransferEvent(event);
 
-    if (event.type === "completed" || event.type === "failed") {
+    if (
+      event.type === "started" ||
+      event.type === "completed" ||
+      event.type === "failed"
+    ) {
       void store.refreshActiveTransfers();
     }
     if (event.type === "completed" || event.type === "share_prepared") {

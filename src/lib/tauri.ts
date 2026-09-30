@@ -63,7 +63,8 @@ export type TransferPhase =
   | "saving"
   | "completed"
   | "failed"
-  | "cancelled";
+  | "cancelled"
+  | "paused";
 export type FailureCategory =
   | "invalid_ticket"
   | "destination"
@@ -194,6 +195,7 @@ export interface ActiveTransfer {
   strategy: TransferStrategy;
   first_byte_ms: number;
   effective_mbps: number;
+  can_resume?: boolean;
 }
 
 export interface TransferRecord {
@@ -1105,6 +1107,16 @@ export async function setNearbyPeerBlocked(
 export async function cancelTransfer(transferId: string): Promise<void> {
   requireNativeRuntime("Transfer cancellation");
   await invoke("cancel_transfer", { transferId });
+}
+
+export async function pauseTransfer(transferId: string): Promise<void> {
+  requireNativeRuntime("Pausing a receive");
+  await invoke("pause_transfer", { transferId });
+}
+
+export async function resumeTransfer(transferId: string): Promise<string> {
+  requireNativeRuntime("Resuming a receive");
+  return invoke<string>("resume_transfer", { transferId });
 }
 
 export async function getActiveTransfers(): Promise<ActiveTransfer[]> {

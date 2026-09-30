@@ -30,7 +30,7 @@ import { useNearbyShareStore } from "./nearbyShareStore";
 import { mergeFailedTransferEvent } from "./transferEventMapping";
 
 export type TransferStatus =
-  "starting" | "running" | "prepared" | "completed" | "failed";
+  "starting" | "running" | "paused" | "prepared" | "completed" | "failed";
 export type UpdatePhase =
   | "idle"
   | "checking"
@@ -85,6 +85,7 @@ export interface TransferEntry {
   error: string | null;
   appError: AppError | null;
   retryTicket: string | null;
+  canResume: boolean;
 }
 
 export interface UpdateState {
@@ -145,6 +146,8 @@ interface TransferStore {
   startReceiveNearbyShare: (share: NearbyShare) => Promise<string | null>;
   reshare: (hash: string) => Promise<string | null>;
   cancelTransfer: (transferId: string) => Promise<void>;
+  pauseTransfer: (transferId: string) => Promise<void>;
+  resumeTransfer: (transferId: string) => Promise<void>;
   pickDownloadDir: () => Promise<void>;
   openDownloadDir: () => Promise<void>;
   setAutoUpdateEnabled: (enabled: boolean) => Promise<void>;
@@ -250,6 +253,7 @@ function createTransferEntry(
     error: null,
     appError: null,
     retryTicket,
+    canResume: false,
   };
 }
 
@@ -282,13 +286,19 @@ function mergeActiveTransfer(
     strategy: transfer.strategy,
     firstByteMs: transfer.first_byte_ms,
     effectiveMbps: transfer.effective_mbps,
-    status: current?.status === "starting" ? "starting" : "running",
+    status:
+      transfer.phase === "paused"
+        ? "paused"
+        : current?.status === "starting"
+          ? "starting"
+          : "running",
     hash: current?.hash ?? null,
     size: current?.size ?? null,
     timestamp: current?.timestamp ?? null,
     error: current?.error ?? null,
     appError: current?.appError ?? null,
     retryTicket: current?.retryTicket ?? null,
+    canResume: transfer.can_resume ?? current?.canResume ?? false,
   };
 }
 
@@ -650,8 +660,8 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
         for (const transfer of activeTransfers) {
           const current = state.transfers[transfer.transfer_id];
           if (
-            current &&
-            (current.status === "completed" || current.status === "failed")
+            current?.status === "completed" ||
+            (current?.status === "failed" && !transfer.can_resume)
           ) {
             continue;
           }
@@ -818,8 +828,62 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
   cancelTransfer: async (transferId) => {
     try {
       await tauri.cancelTransfer(transferId);
+      set((state) => {
+        const current = state.transfers[transferId];
+        if (!current) return state;
+        return {
+          transfers: {
+            ...state.transfers,
+            [transferId]: {
+              ...current,
+              status: "failed",
+              phase: "cancelled",
+              speedBps: 0,
+              canResume: false,
+            },
+          },
+        };
+      });
     } catch (error) {
       set(errorState(error));
+    }
+  },
+
+  pauseTransfer: async (transferId) => {
+    try {
+      await tauri.pauseTransfer(transferId);
+      await get().refreshActiveTransfers();
+    } catch (error) {
+      set(errorState(error));
+      await get().refreshActiveTransfers();
+    }
+  },
+
+  resumeTransfer: async (transferId) => {
+    set((state) => {
+      const current = state.transfers[transferId];
+      if (!current) return state;
+      return {
+        transfers: {
+          ...state.transfers,
+          [transferId]: {
+            ...current,
+            status: "starting",
+            phase: "connecting",
+            speedBps: 0,
+            failureCategory: null,
+            error: null,
+            appError: null,
+          },
+        },
+      };
+    });
+    try {
+      await tauri.resumeTransfer(transferId);
+      await get().refreshActiveTransfers();
+    } catch (error) {
+      set(errorState(error));
+      await get().refreshActiveTransfers();
     }
   },
 
@@ -1022,6 +1086,13 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
   applyTransferEvent: (event) => {
     set((state) => {
       const current = state.transfers[event.transfer_id];
+      if (
+        current?.status === "paused" &&
+        event.type === "failed" &&
+        event.failure_category === "cancelled"
+      ) {
+        return state;
+      }
       if (current?.status === "completed" || current?.status === "failed") {
         return state;
       }
@@ -1058,6 +1129,7 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
           error: null,
           appError: null,
           retryTicket: state.transfers[event.transfer_id]?.retryTicket ?? null,
+          canResume: state.transfers[event.transfer_id]?.canResume ?? false,
         };
         return { transfers };
       } else if (event.type === "share_prepared") {
@@ -1162,6 +1234,7 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
           firstByteMs: event.first_byte_ms,
           effectiveMbps: event.effective_mbps,
           status: "completed",
+          canResume: false,
           hash: event.hash,
           size: event.size,
           timestamp: event.timestamp,

@@ -33,6 +33,7 @@ function createFailedTransferEntry(event: FailedTransferEvent): TransferEntry {
     error: null,
     appError: null,
     retryTicket: null,
+    canResume: false,
   };
 }
 

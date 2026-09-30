@@ -31,6 +31,7 @@ function buildTransfer(overrides: Partial<TransferEntry> = {}): TransferEntry {
     error: null,
     appError: null,
     retryTicket: "fd2:secret-retry-ticket",
+    canResume: false,
     ...overrides,
   };
 }

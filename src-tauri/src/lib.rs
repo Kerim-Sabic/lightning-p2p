@@ -26,6 +26,7 @@ use std::sync::{atomic::AtomicBool, Arc};
 use storage::{
     blocked_peers::BlockedPeers,
     paired_devices::PairedDevices,
+    resumable_receives::ResumableReceiveStore,
     settings::{resolve_app_data_dir, SettingsState},
 };
 use tauri::Manager;
@@ -50,6 +51,8 @@ pub struct AppState {
     pub blocked_peers: BlockedPeers,
     /// In-memory registry of active transfers.
     pub transfers: TransferQueue,
+    /// Bounded, non-secret metadata for restart-safe incoming receives.
+    pub resumable_receives: ResumableReceiveStore,
     /// Nearby-share discovery state for LAN-based receive flows.
     pub nearby_shares: NearbyShareRegistry,
     /// Inbox of inbound push-share offers awaiting a user decision.
@@ -108,6 +111,12 @@ impl AppState {
             )
             .expect("temporary chat mesh runtime must initialize")
         });
+        let resumable_receives = ResumableReceiveStore::load(&data_dir).unwrap_or_else(|_error| {
+            tracing::warn!(
+                "could not load receive recovery metadata; resume disabled this session"
+            );
+            ResumableReceiveStore::in_memory()
+        });
         Self {
             data_dir,
             node,
@@ -117,6 +126,7 @@ impl AppState {
             paired_devices,
             blocked_peers,
             transfers: TransferQueue::new(),
+            resumable_receives,
             nearby_shares: NearbyShareRegistry::new(true),
             offer_inbox: OfferInbox::new(),
             ble_polling_active: Arc::new(AtomicBool::new(false)),
@@ -268,6 +278,8 @@ pub fn run() {
             commands::transfer::get_discovered_shares,
             commands::transfer::start_receive_discovered_share,
             commands::transfer::cancel_transfer,
+            commands::transfer::pause_transfer,
+            commands::transfer::resume_transfer,
             commands::transfer::get_active_transfers,
             commands::transfer::get_transfer_history,
             commands::transfer::clear_transfer_history,

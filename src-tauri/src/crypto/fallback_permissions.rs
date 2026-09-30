@@ -4,7 +4,7 @@ use std::io;
 use std::path::Path;
 
 #[cfg(unix)]
-pub(super) fn restrict_private_file(path: &Path) -> io::Result<()> {
+pub(crate) fn restrict_private_file(path: &Path) -> io::Result<()> {
     use std::os::unix::fs::PermissionsExt;
 
     let mut permissions = std::fs::metadata(path)?.permissions();
@@ -13,7 +13,7 @@ pub(super) fn restrict_private_file(path: &Path) -> io::Result<()> {
 }
 
 #[cfg(windows)]
-pub(super) fn restrict_private_file(path: &Path) -> io::Result<()> {
+pub(crate) fn restrict_private_file(path: &Path) -> io::Result<()> {
     use std::{os::windows::ffi::OsStrExt, ptr::null_mut};
     use windows_sys::Win32::Foundation::LocalFree;
     use windows_sys::Win32::Security::{
