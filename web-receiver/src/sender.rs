@@ -20,6 +20,10 @@ use iroh_blobs::store::mem::MemStore;
 use iroh_blobs::ticket::BlobTicket;
 use iroh_blobs::{BlobFormat, BlobsProtocol, Hash};
 use n0_future::{task, SinkExt as _};
+use std::time::Duration;
+
+const ENDPOINT_START_TIMEOUT: Duration = Duration::from_secs(30);
+const RELAY_CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Chunks buffered between the JS reader and the hashing store before
 /// backpressure parks the producer (bounds extra memory during import).
@@ -55,10 +59,15 @@ impl Sharer {
     ///
     /// Returns a message if the endpoint cannot bind.
     pub async fn spawn() -> Result<Self, String> {
-        let endpoint = Endpoint::builder(presets::N0)
-            .bind()
-            .await
-            .map_err(|e| e.to_string())?;
+        let endpoint = tokio::time::timeout(
+            ENDPOINT_START_TIMEOUT,
+            Endpoint::builder(presets::N0).bind(),
+        )
+        .await
+        .map_err(|_| {
+            "The transfer engine could not start within 30 seconds. Check your connection, then try again.".to_owned()
+        })?
+        .map_err(|e| e.to_string())?;
         let store = MemStore::new();
         let blobs = BlobsProtocol::new(&store, None);
         let router = Router::builder(endpoint.clone())
@@ -213,7 +222,11 @@ impl Sharer {
         // tag keeps the collection protected even if that ever changes.
         std::mem::forget(tag);
 
-        self.endpoint.online().await;
+        tokio::time::timeout(RELAY_CONNECT_TIMEOUT, self.endpoint.online())
+            .await
+            .map_err(|_| {
+                "The relay did not respond within 30 seconds. Check your connection, then try publishing again.".to_owned()
+            })?;
         let addr = self.endpoint.addr();
         let ticket = BlobTicket::new(addr, root, BlobFormat::HashSeq);
         Ok(fd2_encode(&ticket, label, self.total_bytes))

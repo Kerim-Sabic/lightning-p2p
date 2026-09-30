@@ -83,19 +83,40 @@ const MODULE_URL = `${import.meta.env.BASE_URL}webrx/web_receiver.js?v=${WEBRX_V
 const WASM_URL = `${import.meta.env.BASE_URL}webrx/web_receiver_bg.wasm?v=${WEBRX_VERSION}`;
 
 let modulePromise: Promise<WasmModule> | null = null;
+const ENGINE_LOAD_TIMEOUT_MS = 45_000;
+
+function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  message: string,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timeoutId = window.setTimeout(
+      () => reject(new Error(message)),
+      timeoutMs,
+    );
+    promise.then(resolve, reject).finally(() => window.clearTimeout(timeoutId));
+  });
+}
 
 /** Loads and initializes the WASM module exactly once. */
 async function loadModule(): Promise<WasmModule> {
   if (!modulePromise) {
-    modulePromise = (async () => {
+    const loading = (async () => {
       const mod = (await import(/* @vite-ignore */ MODULE_URL)) as WasmModule;
       await mod.default({ module_or_path: WASM_URL });
       return mod;
-    })().catch((error) => {
+    })();
+    const bounded = withTimeout(
+      loading,
+      ENGINE_LOAD_TIMEOUT_MS,
+      "Loading the browser transfer engine timed out. Check your connection, then try again.",
+    ).catch((error: unknown) => {
       // Reset so a later retry can re-attempt the download.
-      modulePromise = null;
+      if (modulePromise === bounded) modulePromise = null;
       throw error;
     });
+    modulePromise = bounded;
   }
   return modulePromise;
 }

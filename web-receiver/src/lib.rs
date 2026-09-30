@@ -27,6 +27,7 @@ use iroh_blobs::format::collection::{Collection, CollectionMeta};
 use iroh_blobs::store::mem::MemStore;
 use iroh_blobs::{hashseq::HashSeq, ticket::BlobTicket, Hash};
 use n0_future::StreamExt;
+use std::time::Duration;
 use std::{future::Future, sync::Mutex};
 use ticket::ParsedTicket;
 
@@ -36,6 +37,7 @@ pub mod wasm;
 const MAX_COLLECTION_ENTRIES: usize = 10_000;
 const MAX_HASH_SEQUENCE_BYTES: u64 = (MAX_COLLECTION_ENTRIES as u64 + 1) * 32;
 const MAX_COLLECTION_METADATA_BYTES: u64 = 8 * 1024 * 1024;
+const ENDPOINT_START_TIMEOUT: Duration = Duration::from_secs(30);
 
 struct StreamAttemptError {
     message: String,
@@ -85,11 +87,17 @@ impl Receiver {
     /// Returns a message if the endpoint cannot bind.
     pub async fn spawn() -> Result<Self, String> {
         let lookup = MemoryLookup::new();
-        let endpoint = Endpoint::builder(presets::N0)
-            .address_lookup(lookup.clone())
-            .bind()
-            .await
-            .map_err(|e| e.to_string())?;
+        let endpoint = tokio::time::timeout(
+            ENDPOINT_START_TIMEOUT,
+            Endpoint::builder(presets::N0)
+                .address_lookup(lookup.clone())
+                .bind(),
+        )
+        .await
+        .map_err(|_| {
+            "The receive engine could not start within 30 seconds. Check your connection, then try again.".to_owned()
+        })?
+        .map_err(|e| e.to_string())?;
         Ok(Self {
             endpoint,
             lookup,
