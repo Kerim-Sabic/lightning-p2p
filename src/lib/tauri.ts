@@ -1353,7 +1353,7 @@ export async function resolveAndroidUris(paths: string[]): Promise<string[]> {
   try {
     return await invoke<string[]>("resolve_content_uris", { uris: paths });
   } catch (error) {
-    console.error("resolve_content_uris failed", error);
+    console.error("resolve_content_uris failed");
     const appError = normalizeAppError(error);
     if (appError.source !== "unknown") {
       throw appError;
@@ -1378,8 +1378,8 @@ export async function drainPendingSharedFiles(): Promise<string[]> {
   }
   try {
     return await invoke<string[]>("take_pending_shared_files");
-  } catch (error) {
-    console.error("take_pending_shared_files failed", error);
+  } catch {
+    console.error("take_pending_shared_files failed");
     return [];
   }
 }
@@ -1395,8 +1395,8 @@ export async function drainPendingSharedTicket(): Promise<string | null> {
   try {
     const result = await invoke<string | null>("take_pending_shared_ticket");
     return result ?? null;
-  } catch (error) {
-    console.error("take_pending_shared_ticket failed", error);
+  } catch {
+    console.error("take_pending_shared_ticket failed");
     return null;
   }
 }
@@ -1414,8 +1414,8 @@ export async function startBleDiscovery(nodeIdHex: string): Promise<boolean> {
     return await invoke<boolean>("start_ble_discovery", {
       nodeIdPrefixHex: nodeIdHex,
     });
-  } catch (error) {
-    console.error("start_ble_discovery failed", error);
+  } catch {
+    console.error("start_ble_discovery failed");
     return false;
   }
 }
@@ -1427,8 +1427,8 @@ export async function stopBleDiscovery(): Promise<void> {
   }
   try {
     await invoke("stop_ble_discovery");
-  } catch (error) {
-    console.error("stop_ble_discovery failed", error);
+  } catch {
+    console.error("stop_ble_discovery failed");
   }
 }
 

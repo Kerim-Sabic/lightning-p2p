@@ -15,7 +15,7 @@ These notes are implementation-facing and complement the public [SECURITY.md](..
 Treat these as sensitive when sharing diagnostics or support bundles:
 
 - receive tickets, links, QR codes, clipboard contents, and custom-scheme deep links
-- runtime logs, because they can include persistent NodeIds, content hashes, file sizes, and route status
+- local CLI output from `lightning send`, which intentionally prints the receive ticket and may include local paths
 - sled database files containing history and peer metadata
 - blob store contents
 - `iroh-secret-key.hex` fallback identity files
@@ -51,7 +51,7 @@ Android imports use user-granted `content://` URIs and stage into the app cache 
 
 ## Current Security TODOs
 
-- Keep ticket strings out of runtime logs; current tests cover diagnostic redaction, not every logging call.
+- Keep capability tickets, stable peer IDs, content hashes, and filesystem paths out of production logs. Runtime log fields have been audited and reduced to static events and non-sensitive counters; recheck when adding logs.
 - Validate the configured web and Tauri CSP against packaged builds and the deployed receive/send pages.
 - Validate Android document-picker, share-intent, and MediaStore save flows on supported OS versions after removing broad media read permissions.
 - Document that custom-scheme deep links carry the receive ticket to the operating system and may be retained by OS/app history or logs.
