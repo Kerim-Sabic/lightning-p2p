@@ -85,23 +85,48 @@ pub async fn export_ticket(
     })
 }
 
-/// On Android, move a single-file export from app-private staging into the
-/// public `MediaStore` collection that matches its MIME bucket. The original
-/// staged file is deleted on successful publish. Returns a synthetic
-/// `Pictures/Lightning P2P/foo.jpg` descriptor path for UI display.
-///
-/// Folder transfers stay in app-private staging in v0.4.6; per-file publish
-/// for folders lands in a follow-up release.
+/// On Android, move verified exports from app-private staging into public
+/// MediaStore collections. Folder trees are published below Downloads with
+/// their relative paths preserved. Staged content is retained if publishing
+/// fails so a verified receive is not discarded.
 ///
 /// On non-Android targets this is an identity pass-through.
 #[cfg(target_os = "android")]
-async fn publish_to_public_storage(staged_path: PathBuf, recursive: bool) -> PathBuf {
-    if recursive {
-        tracing::info!(
-            path = %staged_path.display(),
-            "folder transfer kept in app-private staging; per-file publish lands in v0.4.7"
-        );
-        return staged_path;
+async fn publish_to_public_storage(staged_path: PathBuf, _recursive: bool) -> PathBuf {
+    let is_directory = match tokio::fs::metadata(&staged_path).await {
+        Ok(metadata) => metadata.is_dir(),
+        Err(error) => {
+            tracing::warn!(%error, path = %staged_path.display(), "could not inspect verified Android staging output");
+            return staged_path;
+        }
+    };
+    if is_directory {
+        let Some(folder_name) = staged_path.file_name().and_then(|name| name.to_str()) else {
+            tracing::warn!(path = %staged_path.display(), "received folder has no usable name");
+            return staged_path;
+        };
+        let staged_path_string = staged_path.to_string_lossy().into_owned();
+        let folder_name = folder_name.to_owned();
+        return match tokio::task::spawn_blocking(move || {
+            android_bridge::publish_folder_to_mediastore(&staged_path_string, &folder_name)
+        })
+        .await
+        {
+            Ok(Ok(published_path)) => {
+                if let Err(error) = tokio::fs::remove_dir_all(&staged_path).await {
+                    tracing::warn!(%error, path = %staged_path.display(), "could not remove staged folder after MediaStore publish");
+                }
+                PathBuf::from(published_path)
+            }
+            Ok(Err(error)) => {
+                tracing::warn!(%error, "MediaStore folder publish failed; keeping verified staging copy");
+                staged_path
+            }
+            Err(error) => {
+                tracing::warn!(%error, "MediaStore folder publish task failed; keeping verified staging copy");
+                staged_path
+            }
+        };
     }
 
     let file_name = match staged_path.file_name().and_then(|n| n.to_str()) {

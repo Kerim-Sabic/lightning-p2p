@@ -1,7 +1,9 @@
 package com.lightningp2p.app
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class ContentUriResolverTest {
@@ -18,5 +20,16 @@ class ContentUriResolverTest {
     fun pendingMediaStoreRowMustBeFinalizedBeforeReceiveCanSucceed() {
         assertFalse(ContentUriResolver.hasPublishedMediaStoreRow(0))
         assertTrue(ContentUriResolver.hasPublishedMediaStoreRow(1))
+    }
+
+    @Test
+    fun folderPublishKeepsFilesInsideItsDownloadsTree() {
+        assertEquals(
+            "Download/Lightning P2P/Photos/2026/Trips/",
+            ContentUriResolver.safeMediaStoreRelativePath("Photos", "2026/Trips"),
+        )
+        assertThrows(IllegalArgumentException::class.java) {
+            ContentUriResolver.safeMediaStoreRelativePath("Photos", "../outside")
+        }
     }
 }

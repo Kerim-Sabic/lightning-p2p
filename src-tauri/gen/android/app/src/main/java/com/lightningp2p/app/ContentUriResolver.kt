@@ -13,6 +13,7 @@ import java.io.File
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
+import java.nio.file.Files
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicReference
 
@@ -74,7 +75,7 @@ object ContentUriResolver {
         }
     }
 
-    private fun resolveToCache(context: Context, uri: Uri): String {
+    private fun resolveToCache(context: Context, uri: Uri): File {
         val displayName = queryDisplayName(context, uri) ?: "shared-${UUID.randomUUID()}.bin"
         val safeName = displayName.replace(Regex("[/\\\\]"), "_")
         val stagingDir = File(context.cacheDir, STAGING_DIR).also {
@@ -94,7 +95,7 @@ object ContentUriResolver {
             outFile.delete()
             throw error
         }
-        return outFile.absolutePath
+        return outFile
     }
 
     private fun queryDisplayName(context: Context, uri: Uri): String? {
@@ -135,7 +136,7 @@ object ContentUriResolver {
             val output = resolver.openOutputStream(uri)
                 ?: throw IllegalStateException("Could not open output stream for $uri")
             output.use { sink ->
-                staged.inputStream().use { source -> copyLarge(source, sink) }
+                staged.inputStream().use { source -> copyLarge(context, source, sink) }
             }
             val clearPending = ContentValues().apply {
                 put(MediaStore.MediaColumns.IS_PENDING, 0)
@@ -173,6 +174,84 @@ object ContentUriResolver {
         return copied
     }
 
+    /** Publishes a fully verified folder tree into Downloads without exposing partial files. */
+    @JvmStatic
+    fun publishFolderToMediaStore(
+        context: Context,
+        stagedPath: String,
+        folderName: String,
+    ): String {
+        val stagedRoot = File(stagedPath)
+        if (Files.isSymbolicLink(stagedRoot.toPath())) {
+            throw IOException("The received folder is an unsafe link.")
+        }
+        val root = stagedRoot.canonicalFile
+        require(root.isDirectory) { "Staged folder does not exist: $stagedPath" }
+        val safeFolderName = safeFilename(folderName)
+        val collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI
+        val resolver = context.contentResolver
+        val pendingUris = mutableListOf<Uri>()
+        val reservedNames = mutableSetOf<String>()
+
+        try {
+            val entries = root.walkTopDown().toList().drop(1)
+            if (entries.any { Files.isSymbolicLink(it.toPath()) }) {
+                throw IOException("The received folder contains an unsafe link.")
+            }
+            val files = entries.filter { it.isFile }
+            if (files.isEmpty()) throw IOException("The received folder is empty.")
+
+            for (file in files) {
+                val canonicalFile = file.canonicalFile
+                if (!canonicalFile.path.startsWith(root.path + File.separator)) {
+                    throw IOException("The received folder contains an unsafe path.")
+                }
+                val relative = root.toPath().relativize(canonicalFile.toPath())
+                val relativeParent = relative.parent?.toString().orEmpty()
+                val relativeDir = safeMediaStoreRelativePath(safeFolderName, relativeParent)
+                val filename = safeFilename(canonicalFile.name)
+                val displayName = uniqueDisplayName(context, collection, relativeDir, filename) { name ->
+                    "$relativeDir\u0000$name" in reservedNames
+                }
+                reservedNames.add("$relativeDir\u0000$displayName")
+                val mime = android.webkit.MimeTypeMap.getSingleton()
+                    .getMimeTypeFromExtension(displayName.substringAfterLast('.', "").lowercase())
+                    ?: "application/octet-stream"
+                val values = ContentValues().apply {
+                    put(MediaStore.MediaColumns.DISPLAY_NAME, displayName)
+                    put(MediaStore.MediaColumns.MIME_TYPE, mime)
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, relativeDir)
+                    put(MediaStore.MediaColumns.IS_PENDING, 1)
+                }
+                val uri = resolver.insert(collection, values)
+                    ?: throw IOException("MediaStore could not create a folder file entry.")
+                pendingUris.add(uri)
+                val output = resolver.openOutputStream(uri)
+                    ?: throw IOException("Could not open a folder file output stream.")
+                output.use { sink -> canonicalFile.inputStream().use { source -> copyLarge(context, source, sink) } }
+            }
+
+            val clearPending = ContentValues().apply {
+                put(MediaStore.MediaColumns.IS_PENDING, 0)
+            }
+            for (uri in pendingUris) {
+                if (!hasPublishedMediaStoreRow(resolver.update(uri, clearPending, null, null))) {
+                    throw IOException("MediaStore did not finalize the received folder.")
+                }
+            }
+            return "Downloads/Lightning P2P/$safeFolderName"
+        } catch (error: Throwable) {
+            pendingUris.forEach { uri ->
+                try {
+                    resolver.delete(uri, null, null)
+                } catch (_: Throwable) {
+                    // Best-effort removal of entries from this failed folder publish.
+                }
+            }
+            throw error
+        }
+    }
+
     internal fun hasSpaceForChunk(availableBytes: Long, chunkBytes: Int): Boolean {
         return chunkBytes >= 0 && availableBytes >= MIN_FREE_SPACE_BYTES &&
             chunkBytes.toLong() <= availableBytes - MIN_FREE_SPACE_BYTES
@@ -190,6 +269,7 @@ object ContentUriResolver {
         collection: Uri,
         relativeDir: String,
         filename: String,
+        isReserved: (String) -> Boolean = { false },
     ): String {
         val dot = filename.lastIndexOf('.')
         val hasExtension = dot > 0 && dot < filename.lastIndex - 1
@@ -197,11 +277,22 @@ object ContentUriResolver {
         val extension = if (hasExtension) filename.substring(dot) else ""
         var candidate = filename
         var suffix = 1
-        while (mediaNameExists(context, collection, relativeDir, candidate)) {
+        while (mediaNameExists(context, collection, relativeDir, candidate) || isReserved(candidate)) {
             candidate = "$stem ($suffix)$extension"
             suffix++
         }
         return candidate
+    }
+
+    internal fun safeMediaStoreRelativePath(folderName: String, relativeParent: String): String {
+        val segments = buildList {
+            add(folderName)
+            addAll(relativeParent.split('/', '\\').filter(String::isNotBlank))
+        }
+        require(segments.all { it != "." && it != ".." && !it.any(Char::isISOControl) }) {
+            "The received folder contains an unsafe path."
+        }
+        return "${Environment.DIRECTORY_DOWNLOADS}/$MEDIASTORE_SUBDIR/${segments.joinToString("/")}/"
     }
 
     private fun mediaNameExists(

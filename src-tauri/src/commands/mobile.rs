@@ -222,6 +222,37 @@ pub(crate) mod android {
         .map_err(|e| e.to_string())
     }
 
+    pub fn publish_folder_to_mediastore(
+        staged_path: &str,
+        folder_name: &str,
+    ) -> Result<String, String> {
+        let vm = jvm()?;
+        vm.attach_current_thread(|env| -> BridgeResult<String> {
+            let context = context_obj(env)?;
+            let staged_j = env.new_string(staged_path)?;
+            let folder_j = env.new_string(folder_name)?;
+            let class = load_app_class(env, RESOLVER_CLASS_DOTTED)?;
+            let raw = env.call_static_method(
+                class,
+                jni_str!("publishFolderToMediaStore"),
+                jni_sig!("(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;"),
+                &[
+                    JValue::Object(&context),
+                    JValue::Object(&staged_j),
+                    JValue::Object(&folder_j),
+                ],
+            );
+            let result = match raw {
+                Ok(result) => result,
+                Err(error) => return Err(drain_exception(env, &error)),
+            };
+            let object = result.l().map_err(BridgeError::from)?;
+            let value: JString<'_> = env.cast_local::<JString>(object)?;
+            Ok(value.try_to_string(env)?)
+        })
+        .map_err(|error| error.to_string())
+    }
+
     pub fn take_pending_shared_files() -> Result<Vec<String>, String> {
         let vm = jvm()?;
         vm.attach_current_thread(|env| -> BridgeResult<Vec<String>> {
