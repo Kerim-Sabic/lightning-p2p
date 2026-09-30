@@ -26,7 +26,7 @@ use iroh_blobs::api::proto::BlobStatus;
 use iroh_blobs::format::collection::{Collection, CollectionMeta};
 use iroh_blobs::store::mem::MemStore;
 use iroh_blobs::{hashseq::HashSeq, ticket::BlobTicket, Hash};
-use n0_future::StreamExt;
+use n0_future::{time::timeout, StreamExt};
 use std::time::Duration;
 use std::{future::Future, sync::Mutex};
 use ticket::ParsedTicket;
@@ -87,7 +87,7 @@ impl Receiver {
     /// Returns a message if the endpoint cannot bind.
     pub async fn spawn() -> Result<Self, String> {
         let lookup = MemoryLookup::new();
-        let endpoint = tokio::time::timeout(
+        let endpoint = timeout(
             ENDPOINT_START_TIMEOUT,
             Endpoint::builder(presets::N0)
                 .address_lookup(lookup.clone())

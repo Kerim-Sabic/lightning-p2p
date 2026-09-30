@@ -19,7 +19,7 @@ use iroh_blobs::format::collection::Collection;
 use iroh_blobs::store::mem::MemStore;
 use iroh_blobs::ticket::BlobTicket;
 use iroh_blobs::{BlobFormat, BlobsProtocol, Hash};
-use n0_future::{task, SinkExt as _};
+use n0_future::{task, time::timeout, SinkExt as _};
 use std::time::Duration;
 
 const ENDPOINT_START_TIMEOUT: Duration = Duration::from_secs(30);
@@ -59,7 +59,7 @@ impl Sharer {
     ///
     /// Returns a message if the endpoint cannot bind.
     pub async fn spawn() -> Result<Self, String> {
-        let endpoint = tokio::time::timeout(
+        let endpoint = timeout(
             ENDPOINT_START_TIMEOUT,
             Endpoint::builder(presets::N0).bind(),
         )
@@ -222,7 +222,7 @@ impl Sharer {
         // tag keeps the collection protected even if that ever changes.
         std::mem::forget(tag);
 
-        tokio::time::timeout(RELAY_CONNECT_TIMEOUT, self.endpoint.online())
+        timeout(RELAY_CONNECT_TIMEOUT, self.endpoint.online())
             .await
             .map_err(|_| {
                 "The relay did not respond within 30 seconds. Check your connection, then try publishing again.".to_owned()

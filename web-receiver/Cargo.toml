@@ -37,7 +37,6 @@ postcard = { version = "1", features = ["alloc"] }
 # Same crate + styling as the desktop app's render_ticket_qr command.
 qrcode = { version = "0.14", default-features = false, features = ["svg"] }
 tracing = "0.1"
-tokio = { version = "1", features = ["time"] }
 
 [dev-dependencies]
 # Native-only: drives the ignored end-to-end loopback test (tests/loopback.rs).
