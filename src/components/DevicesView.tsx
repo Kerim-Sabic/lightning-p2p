@@ -48,15 +48,24 @@ function networkLabel(onlineState: string): string {
 export function DevicesView() {
   const nodeStatus = useTransferStore((state) => state.nodeStatus);
   const settings = useTransferStore((state) => state.settings);
+  const platformProfile = useTransferStore((state) => state.platformProfile);
   const setError = useTransferStore((state) => state.setError);
   const devices = useNearbyDeviceStore((state) => state.devices);
   const diagnosticState = useNearbyDiagnosticStore((state) => state.state);
   const recordOutbound = useIncomingOfferStore((state) => state.recordOutbound);
   const nativeRuntime = isDesktopRuntime();
   const localDiscoveryEnabled = settings?.local_discovery_enabled ?? true;
+  const bluetoothDiscoverySupported =
+    platformProfile.capabilities.bluetooth_discovery;
+  const bluetoothDiscoveryEnabled =
+    bluetoothDiscoverySupported &&
+    (settings?.bluetooth_discovery_enabled ?? false);
+  const discoveryEnabled =
+    localDiscoveryEnabled || bluetoothDiscoveryEnabled;
   const networkLikelyBlocked =
     diagnosticState === "likely_blocked" &&
     localDiscoveryEnabled &&
+    !bluetoothDiscoveryEnabled &&
     devices.length === 0;
   const [busyNodeId, setBusyNodeId] = useState<string | null>(null);
   const [localIdentity, setLocalIdentity] =
@@ -212,10 +221,11 @@ export function DevicesView() {
               Tap a nearby device to send
             </h1>
             <p className="meta-copy mt-3 max-w-[58ch]">
-              Discovered peers appear here as soon as they're seen on the local
-              Wi-Fi/LAN. Picking files pushes them to that device; the receiver
-              taps to accept before any bytes move. Bluetooth proximity
-              discovery is staged for v0.5.0.
+              Devices appear here when an enabled discovery method finds them.
+              Choose a peer and its receiver must accept before files move.
+              Bluetooth discovery is available on supported platforms; it
+              helps find peers but does not verify identity or measure exact
+              distance.
             </p>
 
             <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-400">
@@ -249,9 +259,10 @@ export function DevicesView() {
               </div>
             </div>
             <p className="text-xs leading-6 text-slate-500">
-              Other devices running Lightning P2P on the same trusted network
-              see this name and node id. Pick a device, choose files, the
-              receiver accepts. Offers auto-expire after one minute.
+              Nearby peers may see this name and stable device identifier
+              through enabled discovery methods. Discovery does not establish
+              trust. Offers expire after one minute if the receiver does not
+              respond.
             </p>
           </div>
         </div>
@@ -268,18 +279,26 @@ export function DevicesView() {
           </div>
           <div className="flex items-center gap-2 text-xs text-slate-400">
             <ScanSearch className="h-4 w-4 text-sky-200/80" />
-            {localDiscoveryEnabled
-              ? "Scanning the local network"
-              : "Turn on nearby discovery in Settings"}
+            {localDiscoveryEnabled && bluetoothDiscoveryEnabled
+              ? "Local network and Bluetooth discovery enabled"
+              : localDiscoveryEnabled
+                ? "Local network discovery enabled"
+                : bluetoothDiscoveryEnabled
+                  ? "Bluetooth discovery enabled"
+                  : "Turn on nearby discovery in Settings"}
           </div>
         </div>
 
         <div className="mt-4 space-y-3">
-          {!localDiscoveryEnabled ? (
+          {!discoveryEnabled ? (
             <EmptyState
               icon={ScanSearch}
               title="Nearby discovery is off"
-              copy="Enable local discovery in Settings to see nearby devices appear automatically."
+              copy={
+                bluetoothDiscoverySupported
+                  ? "Enable local network or Bluetooth discovery in Settings to find devices automatically."
+                  : "Enable local network discovery in Settings to find devices automatically."
+              }
             />
           ) : devices.length === 0 ? (
             networkLikelyBlocked ? (
@@ -298,7 +317,11 @@ export function DevicesView() {
               <EmptyState
                 icon={Radar}
                 title="Looking for nearby devices..."
-                copy="Open Lightning P2P on the other device too — they'll appear here within a second once both apps are on the same trusted Wi-Fi/LAN."
+                copy={
+                  bluetoothDiscoveryEnabled && !localDiscoveryEnabled
+                    ? "Open Lightning on another supported device with Bluetooth discovery enabled. Discovery can be affected by permissions, radio state, and the environment."
+                    : "Open Lightning on another device with a compatible discovery method enabled. Devices appear when discovery can reach them; a nearby result is not proof of identity or trust."
+                }
               />
             )
           ) : (
