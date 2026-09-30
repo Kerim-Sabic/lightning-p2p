@@ -50,6 +50,10 @@ export function DevicesView() {
   const settings = useTransferStore((state) => state.settings);
   const platformProfile = useTransferStore((state) => state.platformProfile);
   const setError = useTransferStore((state) => state.setError);
+  const prepareShareSelection = useTransferStore(
+    (state) => state.prepareShareSelection,
+  );
+  const shareSelection = useTransferStore((state) => state.shareSelection);
   const devices = useNearbyDeviceStore((state) => state.devices);
   const diagnosticState = useNearbyDiagnosticStore((state) => state.state);
   const recordOutbound = useIncomingOfferStore((state) => state.recordOutbound);
@@ -177,20 +181,23 @@ export function DevicesView() {
 
   const handleSend = async (device: NearbyDevice): Promise<void> => {
     setError(null);
-    let paths: string[];
-    try {
-      paths = await pickShareFiles();
-    } catch (error) {
-      setError(error instanceof Error ? error.message : "File picker failed");
-      return;
-    }
-
-    if (paths.length === 0) {
-      return;
-    }
-
     setBusyNodeId(device.node_id);
     try {
+      let paths = shareSelection.map((item) => item.path);
+      if (paths.length === 0) {
+        paths = await pickShareFiles();
+        if (paths.length === 0) return;
+        await prepareShareSelection(paths);
+        const prepared = useTransferStore.getState();
+        paths = prepared.shareSelection.map((item) => item.path);
+        if (paths.length === 0) {
+          setError(
+            prepared.error ?? "Lightning could not prepare those files.",
+          );
+          return;
+        }
+      }
+
       const offerId = await offerShareToPeer(device.node_id, paths);
       recordOutbound({
         offerId,
