@@ -10,7 +10,6 @@ use iroh::{EndpointAddr, EndpointId};
 use iroh_blobs::BlobFormat;
 use std::path::PathBuf;
 use std::str::FromStr;
-use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{Emitter, State};
 
 /// Returns the current list of nearby devices visible to this node.
@@ -194,8 +193,5 @@ pub async fn respond_to_offer(
 }
 
 fn generate_offer_id() -> String {
-    let stamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |d| d.as_micros());
-    format!("offer-{stamp:x}")
+    format!("offer-{}", uuid::Uuid::new_v4())
 }

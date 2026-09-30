@@ -75,6 +75,7 @@ qrcode = "0.14"
 rand = "0.8"
 sha2 = "0.10"
 socket2 = "0.6"
+uuid = { version = "1", features = ["v4"] }
 tauri-plugin-os = "2.3.2"
 tauri-plugin-clipboard-manager = "2.3.2"
 tauri-plugin-barcode-scanner = "2.4.4"
@@ -100,7 +101,6 @@ windows-sys = { version = "0.61", features = [
 [target.'cfg(target_os = "android")'.dependencies]
 jni = "0.22"
 ndk-context = "0.1"
-uuid = { version = "1", features = ["v4"] }
 
 [features]
 default = ["custom-protocol"]

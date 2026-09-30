@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     sync::Arc,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 use tauri::{AppHandle, Emitter};
 use tokio::sync::{oneshot, Mutex};
@@ -29,6 +29,9 @@ pub const NEARBY_OFFER_RESOLVED_EVENT: &str = "nearby-offer-resolved";
 pub const OFFER_DECISION_TIMEOUT: Duration = Duration::from_secs(60);
 const MAX_PENDING_OFFERS: usize = 64;
 const MAX_PENDING_OFFERS_PER_PEER: usize = 4;
+const MAX_SEEN_OFFER_IDS: usize = 4096;
+const MAX_SEEN_OFFER_IDS_PER_PEER: usize = 128;
+const OFFER_REPLAY_WINDOW: Duration = Duration::from_secs(10 * 60);
 const MAX_OFFER_ID_BYTES: usize = 128;
 const MAX_DEVICE_NAME_BYTES: usize = 128;
 const MAX_OFFER_LABEL_BYTES: usize = 512;
@@ -123,8 +126,8 @@ pub enum OfferRejection {
     /// The protocol handler is gone (likely because the connection dropped).
     #[error("Offer connection has closed")]
     HandlerDropped,
-    /// The inbox already has this identifier or has reached a safety limit.
-    #[error("Offer inbox is full or the offer identifier is already pending")]
+    /// The inbox has a duplicate/replayed identifier or reached a safety limit.
+    #[error("Offer inbox is full or the identifier is duplicate or replayed")]
     CapacityOrDuplicate,
     /// The offer contains a field that is too large or empty.
     #[error("Offer contains invalid or oversized metadata")]
@@ -134,7 +137,15 @@ pub enum OfferRejection {
 /// In-memory inbox of inbound offers waiting for a user decision.
 #[derive(Debug, Clone, Default)]
 pub struct OfferInbox {
-    pending: Arc<Mutex<HashMap<String, PendingOffer>>>,
+    state: Arc<Mutex<OfferInboxState>>,
+}
+
+#[derive(Debug, Default)]
+struct OfferInboxState {
+    pending: HashMap<String, PendingOffer>,
+    /// IDs are reserved on first receipt, not just while awaiting consent, so
+    /// an authenticated peer cannot replay a resolved offer during this window.
+    seen_until: HashMap<(String, String), Instant>,
 }
 
 impl OfferInbox {
@@ -146,8 +157,9 @@ impl OfferInbox {
 
     /// Returns the current pending offers as a frontend-safe snapshot.
     pub async fn snapshot(&self) -> Vec<IncomingOffer> {
-        let guard = self.pending.lock().await;
+        let guard = self.state.lock().await;
         let mut snapshot = guard
+            .pending
             .values()
             .map(|pending| pending.offer.clone())
             .collect::<Vec<_>>();
@@ -161,7 +173,7 @@ impl OfferInbox {
     /// # Errors
     ///
     /// Returns `OfferRejection` if metadata is invalid, the identifier is
-    /// already pending, or the global/per-peer inbox limit has been reached.
+    /// duplicate/replayed inside the replay window, or a safety limit is hit.
     pub async fn record(
         &self,
         offer: IncomingOffer,
@@ -180,18 +192,33 @@ impl OfferInbox {
             offer: offer.clone(),
             responder: tx,
         };
-        let mut guard = self.pending.lock().await;
+        let mut guard = self.state.lock().await;
+        let now = Instant::now();
+        guard.seen_until.retain(|_, expires| *expires > now);
+        let replay_key = (offer.sender_node_id.clone(), offer.offer_id.clone());
         let peer_offers = guard
+            .pending
             .values()
             .filter(|pending| pending.offer.sender_node_id == offer.sender_node_id)
             .count();
-        if guard.len() >= MAX_PENDING_OFFERS
+        let peer_seen = guard
+            .seen_until
+            .keys()
+            .filter(|(peer_id, _)| peer_id == &offer.sender_node_id)
+            .count();
+        if guard.pending.len() >= MAX_PENDING_OFFERS
             || peer_offers >= MAX_PENDING_OFFERS_PER_PEER
-            || guard.contains_key(&offer.offer_id)
+            || guard.pending.contains_key(&offer.offer_id)
+            || guard.seen_until.contains_key(&replay_key)
+            || guard.seen_until.len() >= MAX_SEEN_OFFER_IDS
+            || peer_seen >= MAX_SEEN_OFFER_IDS_PER_PEER
         {
             return Err(OfferRejection::CapacityOrDuplicate);
         }
-        guard.insert(offer.offer_id.clone(), pending);
+        guard
+            .seen_until
+            .insert(replay_key, now + OFFER_REPLAY_WINDOW);
+        guard.pending.insert(offer.offer_id.clone(), pending);
         Ok(rx)
     }
 
@@ -208,8 +235,8 @@ impl OfferInbox {
         decision: OfferDecision,
     ) -> std::result::Result<(), OfferRejection> {
         let pending = {
-            let mut guard = self.pending.lock().await;
-            guard.remove(offer_id)
+            let mut guard = self.state.lock().await;
+            guard.pending.remove(offer_id)
         };
         let pending = pending.ok_or(OfferRejection::NotFound)?;
         pending
@@ -223,8 +250,8 @@ impl OfferInbox {
     /// Used when the protocol handler's await completes (e.g. timeout) and the
     /// pending state should be cleared even if no decision arrived.
     pub async fn drop_offer(&self, offer_id: &str) {
-        let mut guard = self.pending.lock().await;
-        guard.remove(offer_id);
+        let mut guard = self.state.lock().await;
+        guard.pending.remove(offer_id);
     }
 }
 
@@ -420,6 +447,29 @@ mod tests {
             original.try_recv().expect("decision arrives"),
             OfferDecision::Accepted
         );
+    }
+
+    #[tokio::test]
+    async fn inbox_rejects_resolved_offer_replay_from_same_peer() {
+        let inbox = OfferInbox::new();
+        let mut decision = inbox
+            .record(sample_offer("single-use"))
+            .await
+            .expect("record initial offer");
+        inbox
+            .resolve("single-use", OfferDecision::Accepted)
+            .await
+            .expect("resolve initial offer");
+        assert_eq!(
+            decision.try_recv().expect("decision delivered"),
+            OfferDecision::Accepted
+        );
+
+        assert!(matches!(
+            inbox.record(sample_offer("single-use")).await,
+            Err(OfferRejection::CapacityOrDuplicate)
+        ));
+        assert!(inbox.snapshot().await.is_empty());
     }
 
     #[tokio::test]
