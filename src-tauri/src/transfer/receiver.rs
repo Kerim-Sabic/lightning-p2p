@@ -273,8 +273,14 @@ async fn receive_core(
     }
     let export_started_at = Instant::now();
     let primary = ticket.primary();
-    let export_summary =
-        export::export_ticket(node.blobs_client(), primary, &destination, tracked_total).await?;
+    let export_summary = export::export_ticket(
+        node.blobs_client(),
+        primary,
+        &destination,
+        tracked_total,
+        cancel_rx,
+    )
+    .await?;
     let export_ms = elapsed_ms(export_started_at.elapsed());
     let effective_mbps = effective_mbps(export_summary.size, download_ms);
     let metrics = TransferMetrics {

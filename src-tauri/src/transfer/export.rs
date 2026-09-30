@@ -13,6 +13,7 @@ use iroh_blobs::ticket::BlobTicket;
 use iroh_blobs::Hash;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
+use tokio::sync::watch;
 
 #[cfg(target_os = "android")]
 use super::mime::bucket_for;
@@ -44,7 +45,9 @@ pub async fn export_ticket(
     ticket: &BlobTicket,
     destination: &Path,
     known_size: Option<u64>,
+    cancel_rx: &mut watch::Receiver<bool>,
 ) -> Result<ExportSummary> {
+    ensure_not_cancelled(cancel_rx)?;
     preflight_destination(destination)?;
     let label = resolve_label(store, ticket).await?;
     let size = match known_size {
@@ -53,9 +56,9 @@ pub async fn export_ticket(
     };
     ensure_enough_space(destination, size)?;
     let output_path = if ticket.recursive() {
-        export_collection(store, ticket, destination, &label).await?
+        export_collection(store, ticket, destination, &label, cancel_rx).await?
     } else {
-        export_blob(store, ticket, destination).await?
+        export_blob(store, ticket, destination, cancel_rx).await?
     };
 
     let output_path = publish_to_public_storage(output_path, ticket.recursive()).await;
@@ -160,7 +163,12 @@ pub async fn resolve_label(store: &Store, ticket: &BlobTicket) -> Result<String>
     ))
 }
 
-async fn export_blob(store: &Store, ticket: &BlobTicket, destination: &Path) -> Result<PathBuf> {
+async fn export_blob(
+    store: &Store,
+    ticket: &BlobTicket,
+    destination: &Path,
+    cancel_rx: &mut watch::Receiver<bool>,
+) -> Result<PathBuf> {
     // Write to a `.part` sibling first, then rename onto the final name. A
     // crash mid-write leaves a clearly partial `.part` file in the destination
     // and never a half-written file at the final name. The `.part` is created
@@ -170,17 +178,22 @@ async fn export_blob(store: &Store, ticket: &BlobTicket, destination: &Path) -> 
     let base_path = destination.join(ticket.hash().to_string());
     let temp_path = part_path_for(&base_path);
 
-    let export_result = store
-        .blobs()
-        .export(ticket.hash(), &temp_path)
-        .await
-        .map_err(|error| blob_error(&error));
+    let export_result = tokio::select! {
+        biased;
+        () = wait_for_cancellation(cancel_rx) => Err(cancelled_error()),
+        result = store.blobs().export(ticket.hash(), &temp_path) => {
+            result.map_err(|error| blob_error(&error))
+        }
+    };
 
     if let Err(error) = export_result {
         let _ = tokio::fs::remove_file(&temp_path).await;
         return Err(error);
     }
 
+    ensure_not_cancelled(cancel_rx).inspect_err(|_| {
+        let _ = std::fs::remove_file(&temp_path);
+    })?;
     publish_staged_file(&temp_path, &base_path).await
 }
 
@@ -200,15 +213,22 @@ async fn export_collection(
     ticket: &BlobTicket,
     destination: &Path,
     label: &str,
+    cancel_rx: &mut watch::Receiver<bool>,
 ) -> Result<PathBuf> {
     let staging_dir = create_collection_staging_dir(destination, ticket.hash()).await?;
 
     // iroh-blobs 1.0 has no collection-export helper, so load the collection
     // and export each child to `staging/<name>` (creating parent dirs for
     // nested names).
-    let export_result = export_collection_children(store, ticket.hash(), &staging_dir).await;
+    let export_result =
+        export_collection_children(store, ticket.hash(), &staging_dir, cancel_rx).await;
 
     if let Err(error) = export_result {
+        let _ = tokio::fs::remove_dir_all(&staging_dir).await;
+        return Err(error);
+    }
+
+    if let Err(error) = ensure_not_cancelled(cancel_rx) {
         let _ = tokio::fs::remove_dir_all(&staging_dir).await;
         return Err(error);
     }
@@ -236,20 +256,51 @@ async fn create_collection_staging_dir(destination: &Path, hash: Hash) -> Result
     ))
 }
 
-async fn export_collection_children(store: &Store, root: Hash, staging_dir: &Path) -> Result<()> {
+async fn export_collection_children(
+    store: &Store,
+    root: Hash,
+    staging_dir: &Path,
+    cancel_rx: &mut watch::Receiver<bool>,
+) -> Result<()> {
     let collection = Collection::load(root, store)
         .await
         .map_err(|error| blob_error(&error))?;
     for (name, hash) in collection.iter() {
+        ensure_not_cancelled(cancel_rx)?;
         let safe_relative_path = safe_collection_entry_path(name)?;
         let target = prepare_staging_file_target(staging_dir, &safe_relative_path).await?;
-        store
-            .blobs()
-            .export(*hash, &target)
-            .await
-            .map_err(|error| blob_error(&error))?;
+        tokio::select! {
+            biased;
+            () = wait_for_cancellation(cancel_rx) => return Err(cancelled_error()),
+            result = store.blobs().export(*hash, &target) => {
+                result.map_err(|error| blob_error(&error))?;
+            }
+        }
     }
     Ok(())
+}
+
+fn ensure_not_cancelled(cancel_rx: &watch::Receiver<bool>) -> Result<()> {
+    if *cancel_rx.borrow() {
+        Err(cancelled_error())
+    } else {
+        Ok(())
+    }
+}
+
+async fn wait_for_cancellation(cancel_rx: &mut watch::Receiver<bool>) {
+    loop {
+        if *cancel_rx.borrow() {
+            return;
+        }
+        if cancel_rx.changed().await.is_err() {
+            std::future::pending::<()>().await;
+        }
+    }
+}
+
+fn cancelled_error() -> LightningP2PError {
+    LightningP2PError::Other("Cancelled".into())
 }
 
 async fn prepare_staging_file_target(staging_dir: &Path, relative: &Path) -> Result<PathBuf> {
@@ -495,6 +546,26 @@ mod tests {
         assert_eq!(tokio::fs::read(existing).await.unwrap(), b"keep");
         assert_eq!(tokio::fs::read(published).await.unwrap(), b"new");
         assert!(!staged.exists());
+    }
+
+    #[tokio::test]
+    async fn cancelled_blob_export_does_not_publish_a_file() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store = iroh_blobs::store::mem::MemStore::new();
+        let hash = store.add_bytes(b"payload".to_vec()).await.unwrap().hash;
+        let ticket = BlobTicket::new(
+            iroh::EndpointAddr::new(iroh::SecretKey::from_bytes(&[1; 32]).public()),
+            hash,
+            iroh_blobs::BlobFormat::Raw,
+        );
+        let (_cancel_tx, mut cancel_rx) = watch::channel(true);
+
+        assert!(
+            export_blob(store.as_ref(), &ticket, dir.path(), &mut cancel_rx)
+                .await
+                .is_err()
+        );
+        assert_eq!(read_dir_entries(dir.path()).await.unwrap().len(), 0);
     }
 
     #[tokio::test]
