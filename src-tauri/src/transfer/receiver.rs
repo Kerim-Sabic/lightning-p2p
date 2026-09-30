@@ -313,6 +313,10 @@ async fn receive_core(
         limits,
         fallback_file_name,
     } = options;
+    // Fail before network activity if the selected save location is invalid.
+    // Export repeats this check immediately before publishing to cover changes
+    // made while the transfer is in flight.
+    export::preflight_destination(&destination)?;
     let download_started_at = Instant::now();
     let download = download_with_retry(
         node,
