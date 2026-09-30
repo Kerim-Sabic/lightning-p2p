@@ -112,8 +112,16 @@ export function DevicesView() {
 
   useEffect(() => {
     if (!readySession) return;
-    const timer = window.setInterval(() => setClockMs(Date.now()), 250);
-    return () => window.clearInterval(timer);
+    const tick = (): void => setClockMs(Date.now());
+    const interval = window.setInterval(tick, 1000);
+    const expiry = window.setTimeout(
+      tick,
+      Math.max(0, readySession.expiresAtMs - Date.now()),
+    );
+    return () => {
+      window.clearInterval(interval);
+      window.clearTimeout(expiry);
+    };
   }, [readySession]);
 
   useEffect(() => {
