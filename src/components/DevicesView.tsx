@@ -17,6 +17,7 @@ import {
 } from "react";
 import { attachAsyncUnlisten } from "../hooks/asyncSubscription";
 import { safeDisplayText } from "../lib/safeDisplayText";
+import { getNearbyDiscoveryStatus } from "../lib/nearbyDiscoveryStatus";
 import {
   getLocalDeviceIdentity,
   getDevicePairingCode,
@@ -132,11 +133,14 @@ export function DevicesView() {
     bluetoothDiscoverySupported &&
     (settings?.bluetooth_discovery_enabled ?? false);
   const discoveryEnabled = localDiscoveryEnabled || bluetoothDiscoveryEnabled;
+  const nearbyDiscoveryStatus = getNearbyDiscoveryStatus({
+    localEnabled: localDiscoveryEnabled,
+    bluetoothEnabled: bluetoothDiscoveryEnabled,
+    lanActive: nodeStatus.lan_discovery_active,
+    diagnosticState,
+  });
   const networkLikelyBlocked =
-    diagnosticState === "likely_blocked" &&
-    localDiscoveryEnabled &&
-    !bluetoothDiscoveryEnabled &&
-    devices.length === 0;
+    nearbyDiscoveryStatus === "network_blocked" && devices.length === 0;
   const [busyNodeId, setBusyNodeId] = useState<string | null>(null);
   const [localIdentity, setLocalIdentity] =
     useState<LocalDeviceIdentity | null>(null);
@@ -496,6 +500,12 @@ export function DevicesView() {
                     Use Send to generate a QR or paste-ticket instead.
                   </div>
                 }
+              />
+            ) : nearbyDiscoveryStatus === "lan_unavailable" ? (
+              <EmptyState
+                icon={WifiOff}
+                title="Local discovery is not active"
+                copy="Lightning has not started local network discovery yet. Check Settings or use Send to create a QR code or receive link while it reconnects."
               />
             ) : (
               <EmptyState

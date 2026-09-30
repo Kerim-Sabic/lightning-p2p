@@ -27,6 +27,7 @@ import {
 import { formatBytes } from "../lib/format";
 import { safeDisplayText } from "../lib/safeDisplayText";
 import { groupNearbyDevices } from "../lib/nearbyDeviceGroups";
+import { getNearbyDiscoveryStatus } from "../lib/nearbyDiscoveryStatus";
 import {
   arrivalDirectionFromSenderFlick,
   classifyFlickDirection,
@@ -244,6 +245,12 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
     (settings?.bluetooth_discovery_enabled ?? false);
   const discoveryEnabled =
     localDiscoveryEnabled || bluetoothDiscoveryEnabled;
+  const nearbyDiscoveryStatus = getNearbyDiscoveryStatus({
+    localEnabled: localDiscoveryEnabled,
+    bluetoothEnabled: bluetoothDiscoveryEnabled,
+    lanActive: nodeStatus.lan_discovery_active,
+    diagnosticState: "searching",
+  });
   const visibleToNearbyPeers =
     Boolean(shareTicket) &&
     (nodeStatus.lan_discovery_active || bleDiscoveryStatus.advertising);
@@ -941,9 +948,11 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
           </p>
         ) : (
           <p className="meta-copy mt-4">
-            {bluetoothDiscoveryEnabled && !localDiscoveryEnabled
+            {nearbyDiscoveryStatus === "bluetooth_only"
               ? "No Bluetooth peers found yet. Check that Bluetooth is on, permissions are granted, and Lightning is open on a supported device."
-              : "No nearby devices found yet. Open Lightning on another device with a compatible discovery method enabled. Some networks block local discovery."}{" "}
+              : nearbyDiscoveryStatus === "lan_unavailable"
+                ? "Local network discovery is not active yet. Check Settings or use the receive link above."
+                : "No nearby devices found yet. Open Lightning on another device with a compatible discovery method enabled. Some networks block local discovery."}{" "}
             You can also create a receive link above.
           </p>
         )}

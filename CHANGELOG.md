@@ -4,16 +4,24 @@ All notable changes to Lightning P2P are documented here. The project follows se
 
 ## [Unreleased]
 
+## [0.9.11] - 2026-09-30 ("Reliable Handoff and Recovery")
+
 ### Added
 
 - Incoming transfers can be paused and resumed after an app restart. Resume
   tickets stay in the OS credential store; local recovery metadata preserves
   the original receive limits and is removed after completion or discard.
+- Nearby Flick handoffs preview the sender's relative screen direction on the
+  receiving device without sharing precise location.
 
 ### Fixed
 
 - Reject Windows superscript COM/LPT device-name aliases during cross-platform
   receive path validation.
+- Avoid false network-block warnings when local discovery has not started, and
+  make simultaneous destination probes collision-safe.
+- Keep Unix disk-space preflight checks warning-free across 32-bit and 64-bit
+  libc counter types.
 
 ## [0.9.10] - 2026-09-30 ("Directional Flick Handoff")
 

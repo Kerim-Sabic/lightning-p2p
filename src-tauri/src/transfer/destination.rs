@@ -239,16 +239,20 @@ fn available_disk_space(path: &Path) -> Option<u64> {
     // writable storage for the duration of the synchronous libc call.
     let mut space = unsafe { std::mem::zeroed::<libc::statvfs>() };
     // SAFETY: both pointers satisfy statvfs' C ABI requirements.
-    if unsafe { libc::statvfs(path.as_ptr(), &mut space) } != 0 {
+    if unsafe { libc::statvfs(path.as_ptr(), &raw mut space) } != 0 {
         tracing::warn!(
             error = %std::io::Error::last_os_error(),
             "Could not query free disk space for receive destination"
         );
         return None;
     }
-    u64::try_from(space.f_bavail)
-        .ok()?
-        .checked_mul(u64::try_from(space.f_frsize).ok()?)
+    // Keep checked conversions for 32-bit Unix targets; on 64-bit targets libc
+    // aliases both counters to u64, so Clippy sees these as identity casts.
+    #[allow(clippy::useless_conversion)]
+    let available_blocks = u64::try_from(space.f_bavail).ok()?;
+    #[allow(clippy::useless_conversion)]
+    let block_size = u64::try_from(space.f_frsize).ok()?;
+    available_blocks.checked_mul(block_size)
 }
 
 #[cfg(test)]
