@@ -69,6 +69,11 @@ const SendView = lazy(() =>
     default: module.SendView,
   })),
 );
+const TransferTray = lazy(() =>
+  import("./components/TransferTray").then((module) => ({
+    default: module.TransferTray,
+  })),
+);
 const SettingsView = lazy(() =>
   import("./components/SettingsView").then((module) => ({
     default: module.SettingsView,
@@ -292,6 +297,10 @@ function NativeAppShell({ runtimeKind }: NativeAppShellProps) {
     handleNavigate("receive");
   }, [handleNavigate]);
 
+  const handleNavigateToActivity = useCallback((): void => {
+    handleNavigate("history");
+  }, [handleNavigate]);
+
   const content = useMemo(() => {
     switch (view) {
       case "devices":
@@ -348,6 +357,10 @@ function NativeAppShell({ runtimeKind }: NativeAppShellProps) {
             <MobileTabBar currentView={view} onNavigate={handleNavigate} />
           ) : null}
         </div>
+        <TransferTray
+          mobileRuntime={mobileRuntime}
+          onNavigateActivity={handleNavigateToActivity}
+        />
       </div>
       <OfferPrompt />
     </div>
