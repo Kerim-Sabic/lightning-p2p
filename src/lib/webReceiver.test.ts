@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   BrowserReceiver,
   saveReceivedFileStreaming,
+  supportsStreamingReceiveApi,
 } from "./webReceiver";
 
 afterEach(() => {
@@ -60,5 +61,22 @@ describe("saveReceivedFileStreaming", () => {
     await expect(saving).rejects.toMatchObject({ name: "AbortError" });
     expect(abort).toHaveBeenCalledOnce();
     expect(write).toHaveBeenCalledOnce();
+  });
+});
+
+describe("supportsStreamingReceiveApi", () => {
+  it("requires both manifest and streamed blob methods", () => {
+    expect(
+      supportsStreamingReceiveApi({
+        prepare_streamed_collection: vi.fn(),
+        stream_blob_to: vi.fn(),
+      }),
+    ).toBe(true);
+    expect(
+      supportsStreamingReceiveApi({
+        prepare_streamed_collection: vi.fn(),
+      }),
+    ).toBe(false);
+    expect(supportsStreamingReceiveApi(undefined)).toBe(false);
   });
 });

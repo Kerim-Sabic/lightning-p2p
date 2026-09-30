@@ -11,6 +11,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import {
   BrowserReceiver,
+  browserStreamingReceiveSupported,
   type CollectionFile,
   hasSaveFilePicker,
   inspectTicket,
@@ -50,6 +51,7 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [status, setStatus] = useState("");
   const [info, setInfo] = useState<TicketInfo | null>(null);
+  const [streamingAvailable, setStreamingAvailable] = useState(false);
   const [sizeVerified, setSizeVerified] = useState(false);
   const [files, setFiles] = useState<CollectionFile[]>([]);
   const [savedFileKeys, setSavedFileKeys] = useState<Set<string>>(new Set());
@@ -75,17 +77,22 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
     };
   }, [receiver]);
 
-  const refused =
-    info != null && info.size > REFUSE_BYTES && !hasSaveFilePicker();
+  const canStreamToDisk = hasSaveFilePicker() && streamingAvailable;
+  const refused = info != null && info.size > REFUSE_BYTES && !canStreamToDisk;
   const heavy =
-    info != null && info.size > WARN_BYTES && !hasSaveFilePicker() && !refused;
+    info != null && info.size > WARN_BYTES && !canStreamToDisk && !refused;
 
   const beginInspect = async () => {
     setPhase("inspecting");
     setError(null);
     setSizeVerified(false);
     try {
-      setInfo(await inspectTicket(ticket));
+      const [ticketInfo, canStream] = await Promise.all([
+        inspectTicket(ticket),
+        browserStreamingReceiveSupported(),
+      ]);
+      setInfo(ticketInfo);
+      setStreamingAvailable(canStream);
       setPhase("ready");
     } catch (err) {
       setError(describe(err));
@@ -138,7 +145,7 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
       } else {
         if (info && info.size > REFUSE_BYTES) {
           throw new Error(
-            "This browser cannot stream this large transfer to disk. Use the native app or a supported browser with the file save picker.",
+            "This browser or its cached receive engine cannot stream this large transfer to disk. Use the native app, or reload the page to update browser support.",
           );
         }
         setStatus("Receiving and verifying (BLAKE3)…");
@@ -301,9 +308,9 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
                 {refused && (
                   <p className="mt-3 flex items-start gap-2 text-[12px] leading-5 text-[color:var(--proof-amber)]">
                     <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                    This ticket advertises more than 128&nbsp;MiB. Browser
-                    receive has a conservative memory limit; use the native app
-                    for this transfer.
+                    This browser cannot stream this transfer to disk. Use the
+                    native app or reload after the browser receive engine has
+                    updated.
                   </p>
                 )}
                 {heavy && (
@@ -315,7 +322,7 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
                     transfer.
                   </p>
                 )}
-                {info.size > WARN_BYTES && hasSaveFilePicker() && !refused && (
+                {info.size > WARN_BYTES && canStreamToDisk && !refused && (
                   <p className="mt-3 text-[12px] leading-5 text-[color:var(--soft-copy)]">
                     This browser can stream verified chunks to a file you
                     choose. Make sure the destination has enough free space.

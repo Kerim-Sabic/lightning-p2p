@@ -67,7 +67,13 @@ interface WasmModule {
   default: (init?: { module_or_path: string }) => Promise<unknown>;
   inspect_ticket: (ticket: string) => string;
   render_qr_svg?: (text: string) => string;
-  WebReceiver: { spawn: () => Promise<WebReceiverInstance> };
+  WebReceiver: {
+    spawn: () => Promise<WebReceiverInstance>;
+    prototype?: Pick<
+      WebReceiverInstance,
+      "prepare_streamed_collection" | "stream_blob_to"
+    >;
+  };
   WebSender: { spawn: () => Promise<WebSenderInstance> };
 }
 
@@ -108,6 +114,27 @@ export async function inspectTicket(ticket: string): Promise<TicketInfo> {
   const mod = await loadModule();
   const parsed = JSON.parse(mod.inspect_ticket(ticket)) as TicketInfo;
   return { label: parsed.label ?? "", size: Number(parsed.size ?? 0) };
+}
+
+/** True when the loaded cached WASM engine supports bounded streamed receive. */
+export async function browserStreamingReceiveSupported(): Promise<boolean> {
+  const mod = await loadModule();
+  return supportsStreamingReceiveApi(mod.WebReceiver.prototype);
+}
+
+/** Checks optional methods exposed by the current wasm-bindgen receiver class. */
+export function supportsStreamingReceiveApi(
+  receiverPrototype:
+    | Pick<
+        WebReceiverInstance,
+        "prepare_streamed_collection" | "stream_blob_to"
+      >
+    | undefined,
+): boolean {
+  return (
+    typeof receiverPrototype?.prepare_streamed_collection === "function" &&
+    typeof receiverPrototype.stream_blob_to === "function"
+  );
 }
 
 /**
