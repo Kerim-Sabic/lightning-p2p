@@ -2,5 +2,6 @@
 
 pub mod db;
 pub mod history;
+pub mod paired_devices;
 pub mod peers;
 pub mod settings;

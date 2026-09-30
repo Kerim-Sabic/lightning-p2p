@@ -1,4 +1,5 @@
 import {
+  Check,
   LaptopMinimal,
   QrCode,
   Radar,
@@ -9,11 +10,17 @@ import {
 import { useEffect, useState } from "react";
 import {
   getLocalDeviceIdentity,
+  getDevicePairingCode,
   isDesktopRuntime,
+  listPairedDevices,
   offerShareToPeer,
   pickShareFiles,
+  pairVerifiedDevice,
+  removePairedDevice,
+  renamePairedDevice,
   type LocalDeviceIdentity,
   type NearbyDevice,
+  type PairedDevice,
 } from "../lib/tauri";
 import { useIncomingOfferStore } from "../stores/incomingOfferStore";
 import { useNearbyDeviceStore } from "../stores/nearbyDeviceStore";
@@ -54,6 +61,16 @@ export function DevicesView() {
   const [busyNodeId, setBusyNodeId] = useState<string | null>(null);
   const [localIdentity, setLocalIdentity] =
     useState<LocalDeviceIdentity | null>(null);
+  const [pairedDevices, setPairedDevices] = useState<PairedDevice[]>([]);
+  const [pairingCandidate, setPairingCandidate] = useState<NearbyDevice | null>(
+    null,
+  );
+  const [pairingCode, setPairingCode] = useState<string | null>(null);
+  const [pairingName, setPairingName] = useState("");
+  const [codesConfirmed, setCodesConfirmed] = useState(false);
+  const [savingPair, setSavingPair] = useState(false);
+  const [renamingNodeId, setRenamingNodeId] = useState<string | null>(null);
+  const [renamingValue, setRenamingValue] = useState("");
 
   useEffect(() => {
     if (!nativeRuntime) {
@@ -72,6 +89,82 @@ export function DevicesView() {
       active = false;
     };
   }, [nativeRuntime, nodeStatus.node_id]);
+
+  useEffect(() => {
+    if (!nativeRuntime) return;
+    let active = true;
+    void listPairedDevices()
+      .then((saved) => {
+        if (active) setPairedDevices(saved);
+      })
+      .catch((error: unknown) => {
+        if (active)
+          setError(
+            error instanceof Error
+              ? error.message
+              : "Could not load saved devices",
+          );
+      });
+    return () => {
+      active = false;
+    };
+  }, [nativeRuntime, setError]);
+
+  const beginPairing = async (device: NearbyDevice): Promise<void> => {
+    setError(null);
+    try {
+      const code = await getDevicePairingCode(device.node_id);
+      setPairingCandidate(device);
+      setPairingCode(code);
+      setPairingName(device.device_name);
+      setCodesConfirmed(false);
+    } catch (error) {
+      setError(
+        error instanceof Error ? error.message : "Could not verify this device",
+      );
+    }
+  };
+
+  const confirmPairing = async (): Promise<void> => {
+    if (!pairingCandidate || !pairingCode || !codesConfirmed) return;
+    setSavingPair(true);
+    try {
+      const saved = await pairVerifiedDevice(
+        pairingCandidate.node_id,
+        pairingName,
+      );
+      setPairedDevices(saved);
+      setPairingCandidate(null);
+      setPairingCode(null);
+    } catch (error) {
+      setError(
+        error instanceof Error ? error.message : "Could not save this device",
+      );
+    } finally {
+      setSavingPair(false);
+    }
+  };
+
+  const revokeDevice = async (nodeId: string): Promise<void> => {
+    try {
+      setPairedDevices(await removePairedDevice(nodeId));
+    } catch (error) {
+      setError(
+        error instanceof Error ? error.message : "Could not remove this device",
+      );
+    }
+  };
+
+  const saveRename = async (nodeId: string): Promise<void> => {
+    try {
+      setPairedDevices(await renamePairedDevice(nodeId, renamingValue));
+      setRenamingNodeId(null);
+    } catch (error) {
+      setError(
+        error instanceof Error ? error.message : "Could not rename this device",
+      );
+    }
+  };
 
   const handleSend = async (device: NearbyDevice): Promise<void> => {
     setError(null);
@@ -210,17 +303,233 @@ export function DevicesView() {
             )
           ) : (
             devices.map((device) => (
-              <DeviceCard
-                key={device.node_id}
-                device={device}
-                busy={busyNodeId === device.node_id}
-                disabled={!nativeRuntime}
-                onSend={(target) => void handleSend(target)}
-              />
+              <div key={device.node_id} className="space-y-2">
+                <DeviceCard
+                  device={device}
+                  busy={busyNodeId === device.node_id}
+                  disabled={!nativeRuntime}
+                  onSend={(target) => void handleSend(target)}
+                />
+                {pairedDevices.some(
+                  (saved) => saved.node_id === device.node_id,
+                ) ? (
+                  <p className="px-4 text-xs font-medium text-blue-200">
+                    Verified device
+                  </p>
+                ) : (
+                  <>
+                    {pairedDevices.some(
+                      (saved) => saved.name === device.device_name,
+                    ) ? (
+                      <p className="px-4 text-xs text-amber-200">
+                        This name now appears with a different cryptographic
+                        identity. Verify it again before trusting.
+                      </p>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="ml-4 rounded-full border border-white/10 px-3 py-1.5 text-xs font-medium text-slate-200 hover:border-blue-300/40 hover:text-white"
+                      onClick={() => void beginPairing(device)}
+                    >
+                      Verify as my device
+                    </button>
+                  </>
+                )}
+              </div>
             ))
           )}
         </div>
       </section>
+
+      <section className="glass-panel p-5" aria-labelledby="my-devices-title">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="page-eyebrow">Your devices</p>
+            <h2
+              id="my-devices-title"
+              className="mt-1 text-lg font-semibold text-white"
+            >
+              My Devices
+            </h2>
+          </div>
+          <span className="chrome-pill">{pairedDevices.length} verified</span>
+        </div>
+        <p className="meta-copy mt-2">
+          Saved identities make familiar devices easy to recognize. Incoming
+          offers still ask for your approval.
+        </p>
+        {pairedDevices.length === 0 ? (
+          <p className="mt-4 rounded-2xl border border-white/[0.08] bg-white/[0.025] px-4 py-4 text-sm text-slate-400">
+            Verify a nearby device to add it here. Compare the verification code
+            on both devices in person.
+          </p>
+        ) : (
+          <ul className="mt-4 space-y-2">
+            {pairedDevices.map((device) => (
+              <li
+                key={device.node_id}
+                className="flex flex-wrap items-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.025] px-4 py-3"
+              >
+                {renamingNodeId === device.node_id ? (
+                  <form
+                    className="flex min-w-0 flex-1 gap-2"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      void saveRename(device.node_id);
+                    }}
+                  >
+                    <input
+                      autoFocus
+                      value={renamingValue}
+                      onChange={(event) => setRenamingValue(event.target.value)}
+                      maxLength={64}
+                      aria-label="Device name"
+                      className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none focus:border-blue-300/60"
+                    />
+                    <button
+                      className="glass-button px-3 py-2 text-xs"
+                      type="submit"
+                    >
+                      Save
+                    </button>
+                    <button
+                      className="glass-button px-3 py-2 text-xs"
+                      type="button"
+                      onClick={() => setRenamingNodeId(null)}
+                    >
+                      Cancel
+                    </button>
+                  </form>
+                ) : (
+                  <>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-white">
+                        {device.name}
+                      </p>
+                      <p className="mt-1 truncate font-mono text-[11px] text-slate-500">
+                        {device.node_id}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className="glass-button px-3 py-2 text-xs"
+                      onClick={() => {
+                        setRenamingNodeId(device.node_id);
+                        setRenamingValue(device.name);
+                      }}
+                    >
+                      Rename
+                    </button>
+                    <button
+                      type="button"
+                      className="glass-button px-3 py-2 text-xs text-rose-200"
+                      onClick={() => void revokeDevice(device.node_id)}
+                    >
+                      Remove
+                    </button>
+                  </>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {pairingCandidate && pairingCode ? (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4"
+          role="presentation"
+          tabIndex={-1}
+          onKeyDown={(event) => {
+            if (event.key === "Escape" && !savingPair) {
+              setPairingCandidate(null);
+              setPairingCode(null);
+            }
+          }}
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !savingPair) {
+              setPairingCandidate(null);
+              setPairingCode(null);
+            }
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="pair-device-title"
+            className="w-full max-w-md rounded-3xl border border-white/10 bg-[#181b21] p-6 shadow-2xl"
+          >
+            <p className="page-eyebrow">Verify identity</p>
+            <h2
+              id="pair-device-title"
+              className="mt-2 text-xl font-semibold text-white"
+            >
+              Is this your device?
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-slate-300">
+              On <strong>{pairingCandidate.device_name}</strong>, open Devices
+              and verify this device too. Compare the code in person before
+              saving.
+            </p>
+            <p className="my-5 rounded-2xl border border-blue-300/20 bg-blue-400/[0.08] py-4 text-center font-mono text-2xl font-semibold tracking-[0.18em] text-blue-100">
+              {pairingCode}
+            </p>
+            <label
+              className="block text-xs font-medium text-slate-300"
+              htmlFor="paired-device-name"
+            >
+              Name on this device
+            </label>
+            <input
+              autoFocus
+              id="paired-device-name"
+              value={pairingName}
+              onChange={(event) => setPairingName(event.target.value)}
+              maxLength={64}
+              className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm text-white outline-none focus:border-blue-300/60"
+            />
+            <p className="mt-3 text-xs leading-5 text-slate-500">
+              The code is derived from both authenticated public device
+              identities. A saved identity does not enable automatic receiving.
+            </p>
+            <label className="mt-4 flex cursor-pointer items-start gap-3 text-sm leading-5 text-slate-200">
+              <input
+                type="checkbox"
+                checked={codesConfirmed}
+                onChange={(event) => setCodesConfirmed(event.target.checked)}
+                className="mt-1 accent-blue-500"
+              />
+              <span>I compared both codes in person and they match.</span>
+            </label>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                disabled={savingPair}
+                onClick={() => {
+                  setPairingCandidate(null);
+                  setPairingCode(null);
+                }}
+                className="glass-button px-4 py-2.5 text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={
+                  savingPair ||
+                  !codesConfirmed ||
+                  pairingName.trim().length === 0
+                }
+                onClick={() => void confirmPairing()}
+                className="btn-primary inline-flex items-center gap-2"
+              >
+                <Check className="h-4 w-4" />
+                {savingPair ? "Saving…" : "Save verified device"}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }

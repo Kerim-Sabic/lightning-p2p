@@ -23,7 +23,10 @@ use node::{
     NodeSupervisor, OfferInbox,
 };
 use std::sync::{atomic::AtomicBool, Arc};
-use storage::settings::{resolve_app_data_dir, SettingsState};
+use storage::{
+    paired_devices::PairedDevices,
+    settings::{resolve_app_data_dir, SettingsState},
+};
 use tauri::Manager;
 use tokio::sync::{Mutex, RwLock};
 use transfer::queue::TransferQueue;
@@ -40,6 +43,8 @@ pub struct AppState {
     pub node_supervisor: NodeSupervisor,
     /// Persisted user settings shared across sessions.
     pub settings: SettingsState,
+    /// Persisted user-confirmed public device identities.
+    pub paired_devices: PairedDevices,
     /// In-memory registry of active transfers.
     pub transfers: TransferQueue,
     /// Nearby-share discovery state for LAN-based receive flows.
@@ -64,6 +69,10 @@ impl AppState {
     /// cannot be initialized.
     #[must_use]
     pub fn new(data_dir: std::path::PathBuf, settings: SettingsState) -> Self {
+        let paired_devices = PairedDevices::load(&data_dir).unwrap_or_else(|error| {
+            tracing::error!(%error, "could not load saved devices; using an in-memory empty list");
+            PairedDevices::in_memory(&data_dir)
+        });
         let node = Arc::new(RwLock::new(None));
         let node_runtime = Arc::new(RwLock::new(NodeRuntimeStatus::starting()));
         let node_supervisor =
@@ -97,6 +106,7 @@ impl AppState {
             node_runtime,
             node_supervisor,
             settings,
+            paired_devices,
             transfers: TransferQueue::new(),
             nearby_shares: NearbyShareRegistry::new(true),
             offer_inbox: OfferInbox::new(),
@@ -193,6 +203,7 @@ fn spawn_node_startup(handle: tauri::AppHandle) {
 ///
 /// Panics if Tauri fails to build (unrecoverable).
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
+#[allow(clippy::too_many_lines)]
 pub fn run() {
     telemetry::init_tracing();
 
@@ -262,6 +273,11 @@ pub fn run() {
             commands::peer::get_node_status,
             commands::peer::get_node_supervisor_status,
             commands::peer::get_local_device_identity,
+            commands::peer::get_device_pairing_code,
+            commands::peer::list_paired_devices,
+            commands::peer::pair_verified_device,
+            commands::peer::rename_paired_device,
+            commands::peer::remove_paired_device,
             commands::platform::get_platform_profile,
             commands::settings::get_app_settings,
             commands::settings::get_download_dir,

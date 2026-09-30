@@ -431,6 +431,12 @@ export interface LocalDeviceIdentity {
   node_id: string;
 }
 
+export interface PairedDevice {
+  node_id: string;
+  name: string;
+  verified_at: number;
+}
+
 export interface UpdateCheckResult {
   current_version: string;
   available: boolean;
@@ -774,6 +780,41 @@ export async function getLocalDeviceIdentity(): Promise<LocalDeviceIdentity | nu
     return null;
   }
   return invoke<LocalDeviceIdentity>("get_local_device_identity");
+}
+
+export async function getDevicePairingCode(
+  remoteNodeId: string,
+): Promise<string> {
+  requireNativeRuntime("Device verification");
+  return invoke<string>("get_device_pairing_code", { remoteNodeId });
+}
+
+export async function listPairedDevices(): Promise<PairedDevice[]> {
+  if (!isTauri()) return [];
+  return invoke<PairedDevice[]>("list_paired_devices");
+}
+
+export async function pairVerifiedDevice(
+  nodeId: string,
+  name: string,
+): Promise<PairedDevice[]> {
+  requireNativeRuntime("Saving a verified device");
+  return invoke<PairedDevice[]>("pair_verified_device", { nodeId, name });
+}
+
+export async function renamePairedDevice(
+  nodeId: string,
+  name: string,
+): Promise<PairedDevice[]> {
+  requireNativeRuntime("Renaming a saved device");
+  return invoke<PairedDevice[]>("rename_paired_device", { nodeId, name });
+}
+
+export async function removePairedDevice(
+  nodeId: string,
+): Promise<PairedDevice[]> {
+  requireNativeRuntime("Removing a saved device");
+  return invoke<PairedDevice[]>("remove_paired_device", { nodeId });
 }
 
 export async function getNodeStatus(): Promise<NodeStatus> {

@@ -2,6 +2,7 @@
 
 use crate::node::nearby_protocol::local_device_name;
 use crate::node::{NodeRuntimeStatus, NodeSupervisorStatus};
+use crate::storage::paired_devices::{comparison_code, PairedDevice};
 use crate::AppState;
 use serde::Serialize;
 use tauri::State;
@@ -76,4 +77,88 @@ pub async fn get_local_device_identity(
         short_node_id,
         node_id,
     })
+}
+
+/// Returns the short, symmetric comparison code for the local and remote public identities.
+///
+/// # Errors
+///
+/// Returns an error if the node is unavailable or the remote identity is invalid.
+#[tauri::command]
+pub async fn get_device_pairing_code(
+    state: State<'_, AppState>,
+    remote_node_id: String,
+) -> Result<String, String> {
+    let node = state.get_node().await.map_err(String::from)?;
+    comparison_code(&node.node_id().to_string(), &remote_node_id).map_err(String::from)
+}
+
+/// Lists device identities explicitly verified and saved on this device.
+///
+/// # Errors
+///
+/// Returns an error if application state cannot be read.
+#[tauri::command]
+pub async fn list_paired_devices(state: State<'_, AppState>) -> Result<Vec<PairedDevice>, String> {
+    Ok(state.paired_devices.list().await)
+}
+
+/// Saves a public peer identity after the user confirmed its code in person.
+///
+/// # Errors
+///
+/// Returns an error if either identity is invalid or the updated device list cannot be saved.
+#[tauri::command]
+pub async fn pair_verified_device(
+    state: State<'_, AppState>,
+    node_id: String,
+    name: String,
+) -> Result<Vec<PairedDevice>, String> {
+    let local_id = state
+        .get_node()
+        .await
+        .map_err(String::from)?
+        .node_id()
+        .to_string();
+    comparison_code(&local_id, &node_id).map_err(String::from)?;
+    state
+        .paired_devices
+        .pair(&node_id, &name)
+        .await
+        .map_err(String::from)
+}
+
+/// Changes only the local display name of a saved device.
+///
+/// # Errors
+///
+/// Returns an error if the device is not saved or the updated list cannot be saved.
+#[tauri::command]
+pub async fn rename_paired_device(
+    state: State<'_, AppState>,
+    node_id: String,
+    name: String,
+) -> Result<Vec<PairedDevice>, String> {
+    state
+        .paired_devices
+        .rename(&node_id, &name)
+        .await
+        .map_err(String::from)
+}
+
+/// Removes a saved peer identity from this device.
+///
+/// # Errors
+///
+/// Returns an error if the updated list cannot be saved.
+#[tauri::command]
+pub async fn remove_paired_device(
+    state: State<'_, AppState>,
+    node_id: String,
+) -> Result<Vec<PairedDevice>, String> {
+    state
+        .paired_devices
+        .remove(&node_id)
+        .await
+        .map_err(String::from)
 }

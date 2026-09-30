@@ -302,6 +302,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
     if (
       !event.isPrimary ||
       event.button !== 0 ||
+      event.pointerType === "mouse" ||
       shareSelection.length === 0 ||
       devices.length === 0 ||
       busyNodeId !== null
