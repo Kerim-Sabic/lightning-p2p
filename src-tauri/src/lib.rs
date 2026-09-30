@@ -282,6 +282,7 @@ pub fn run() {
             commands::nearby::respond_to_offer,
             commands::nearby::set_nearby_peer_blocked,
             commands::nearby::get_blocked_nearby_peers,
+            commands::nearby::set_ready_to_catch,
             commands::diagnostics::get_network_diagnostics,
             commands::diagnostics::get_ble_discovery_status,
             commands::diagnostics::collect_diagnostic_bundle,

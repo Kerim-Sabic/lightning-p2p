@@ -1,5 +1,6 @@
 import {
   Check,
+  Clock3,
   LaptopMinimal,
   QrCode,
   Radar,
@@ -18,6 +19,7 @@ import {
   pairVerifiedDevice,
   removePairedDevice,
   renamePairedDevice,
+  setReadyToCatch,
   type LocalDeviceIdentity,
   type NearbyDevice,
   type PairedDevice,
@@ -84,6 +86,50 @@ export function DevicesView() {
   const [savingPair, setSavingPair] = useState(false);
   const [renamingNodeId, setRenamingNodeId] = useState<string | null>(null);
   const [renamingValue, setRenamingValue] = useState("");
+  const [readySession, setReadySession] = useState<{
+    nodeId: string;
+    expiresAtMs: number;
+  } | null>(null);
+  const [clockMs, setClockMs] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!readySession) return;
+    const timer = window.setInterval(() => setClockMs(Date.now()), 250);
+    return () => window.clearInterval(timer);
+  }, [readySession]);
+
+  useEffect(() => {
+    if (readySession && readySession.expiresAtMs <= clockMs) {
+      setReadySession(null);
+    }
+  }, [clockMs, readySession]);
+
+  useEffect(() => {
+    if (!readySession) return;
+    return () => {
+      void setReadyToCatch(readySession.nodeId, false).catch(() => undefined);
+    };
+  }, [readySession]);
+
+  useEffect(() => {
+    const clearConsumedSession = (event: Event): void => {
+      const nodeId = (event as CustomEvent<{ nodeId?: string }>).detail?.nodeId;
+      if (nodeId) {
+        setReadySession((current) =>
+          current?.nodeId === nodeId ? null : current,
+        );
+      }
+    };
+    window.addEventListener(
+      "lightning-ready-to-catch-consumed",
+      clearConsumedSession,
+    );
+    return () =>
+      window.removeEventListener(
+        "lightning-ready-to-catch-consumed",
+        clearConsumedSession,
+      );
+  }, []);
 
   useEffect(() => {
     if (!nativeRuntime) {
@@ -161,9 +207,28 @@ export function DevicesView() {
   const revokeDevice = async (nodeId: string): Promise<void> => {
     try {
       setPairedDevices(await removePairedDevice(nodeId));
+      setReadySession(null);
     } catch (error) {
       setError(
         error instanceof Error ? error.message : "Could not remove this device",
+      );
+    }
+  };
+
+  const toggleReadyToCatch = async (nodeId: string): Promise<void> => {
+    try {
+      if (readySession?.nodeId === nodeId) {
+        await setReadyToCatch(nodeId, false);
+        setReadySession(null);
+        return;
+      }
+      const expiresAt = await setReadyToCatch(nodeId, true);
+      if (expiresAt !== null) {
+        setReadySession({ nodeId, expiresAtMs: expiresAt * 1000 });
+      }
+    } catch (error) {
+      setError(
+        error instanceof Error ? error.message : "Could not enable Ready to Catch",
       );
     }
   };
@@ -386,8 +451,29 @@ export function DevicesView() {
         </div>
         <p className="meta-copy mt-2">
           Saved identities make familiar devices easy to recognize. Incoming
-          offers still ask for your approval.
+          offers ask for your approval unless you open a short Ready to Catch
+          session for one verified device.
         </p>
+        {readySession ? (
+          <div className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl border border-sky-300/20 bg-sky-400/[0.07] px-4 py-3">
+            <Clock3 className="h-4 w-4 text-sky-200" />
+            <p className="min-w-0 flex-1 text-xs leading-5 text-sky-50/85">
+              Ready to Catch from{" "}
+              <strong>
+                {pairedDevices.find((device) => device.node_id === readySession.nodeId)?.name ?? "verified device"}
+              </strong>{" "}
+              for {Math.max(0, Math.ceil((readySession.expiresAtMs - clockMs) / 1000))}s.
+              One supported file up to 100 MiB. Received files never open automatically.
+            </p>
+            <button
+              type="button"
+              className="glass-button min-h-9 px-3 py-1.5 text-xs"
+              onClick={() => void toggleReadyToCatch(readySession.nodeId)}
+            >
+              Cancel
+            </button>
+          </div>
+        ) : null}
         {pairedDevices.length === 0 ? (
           <p className="mt-4 rounded-2xl border border-white/[0.08] bg-white/[0.025] px-4 py-4 text-sm text-slate-400">
             Verify a nearby device to add it here. Compare the verification code
@@ -440,6 +526,15 @@ export function DevicesView() {
                         {device.node_id}
                       </p>
                     </div>
+                    <button
+                      type="button"
+                      className={`glass-button px-3 py-2 text-xs ${readySession?.nodeId === device.node_id ? "border-sky-300/40 text-sky-100" : ""}`}
+                      onClick={() => void toggleReadyToCatch(device.node_id)}
+                    >
+                      {readySession?.nodeId === device.node_id
+                        ? "Cancel Catch"
+                        : "Ready to Catch · 30s"}
+                    </button>
                     <button
                       type="button"
                       className="glass-button px-3 py-2 text-xs"

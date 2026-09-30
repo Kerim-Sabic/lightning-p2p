@@ -35,6 +35,8 @@ const OFFER_REPLAY_WINDOW: Duration = Duration::from_secs(10 * 60);
 const MAX_OFFER_ID_BYTES: usize = 128;
 const MAX_DEVICE_NAME_BYTES: usize = 128;
 const MAX_OFFER_LABEL_BYTES: usize = 512;
+const READY_TO_CATCH_WINDOW: Duration = Duration::from_secs(30);
+const READY_TO_CATCH_MAX_BYTES: u64 = 100 * 1024 * 1024;
 
 /// On-wire offer payload exchanged via the nearby ALPN.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -95,6 +97,8 @@ pub struct IncomingOffer {
     pub blob_format: super::nearby_protocol::WireBlobFormat,
     /// Unix timestamp when the offer was received.
     pub received_at_unix: u64,
+    /// True when this offer fits the receiver's active, peer-bound catch session.
+    pub ready_to_catch: bool,
 }
 
 /// Frontend-facing payload emitted when the sender's outbound offer resolves.
@@ -147,9 +151,17 @@ pub struct OfferInbox {
 struct OfferInboxState {
     pending: HashMap<String, PendingOffer>,
     blocked_peers: HashSet<String>,
+    ready_to_catch: Option<ReadyToCatchSession>,
     /// IDs are reserved on first receipt, not just while awaiting consent, so
     /// an authenticated peer cannot replay a resolved offer during this window.
     seen_until: HashMap<(String, String), Instant>,
+}
+
+#[derive(Debug)]
+struct ReadyToCatchSession {
+    peer_id: String,
+    expires_at: Instant,
+    claimed_offer_id: Option<String>,
 }
 
 impl OfferInbox {
@@ -169,6 +181,66 @@ impl OfferInbox {
             .collect::<Vec<_>>();
         snapshot.sort_by_key(|offer| std::cmp::Reverse(offer.received_at_unix));
         snapshot
+    }
+
+    /// Opens a one-off automatic receive window for one explicitly paired peer.
+    pub async fn arm_ready_to_catch(&self, peer_id: String) -> u64 {
+        let expires_at = Instant::now() + READY_TO_CATCH_WINDOW;
+        self.state.lock().await.ready_to_catch = Some(ReadyToCatchSession {
+            peer_id,
+            expires_at,
+            claimed_offer_id: None,
+        });
+        unix_timestamp().saturating_add(READY_TO_CATCH_WINDOW.as_secs())
+    }
+
+    /// Revokes the currently armed receive window.
+    pub async fn cancel_ready_to_catch(&self, peer_id: &str) {
+        let mut guard = self.state.lock().await;
+        if guard
+            .ready_to_catch
+            .as_ref()
+            .is_some_and(|session| session.peer_id == peer_id)
+        {
+            guard.ready_to_catch = None;
+        }
+    }
+
+    /// Tests whether an offer can use the current scoped catch window.
+    pub async fn is_ready_to_catch(&self, offer: &IncomingOffer) -> bool {
+        let mut guard = self.state.lock().await;
+        let eligible = ready_to_catch_matches(&mut guard.ready_to_catch, offer);
+        if eligible {
+            if let Some(session) = guard.ready_to_catch.as_mut() {
+                session.claimed_offer_id = Some(offer.offer_id.clone());
+            }
+        }
+        if let Some(pending) = guard.pending.get_mut(&offer.offer_id) {
+            pending.offer.ready_to_catch = eligible;
+        }
+        eligible
+    }
+
+    /// Atomically consumes the one-off catch authorization for an offer.
+    pub async fn claim_ready_to_catch(&self, offer: &IncomingOffer) -> bool {
+        let mut guard = self.state.lock().await;
+        let Some(session) = guard.ready_to_catch.as_ref() else {
+            return false;
+        };
+        if session.expires_at <= Instant::now()
+            || session.peer_id != offer.sender_node_id
+            || session.claimed_offer_id.as_deref() != Some(offer.offer_id.as_str())
+            || offer.size > READY_TO_CATCH_MAX_BYTES
+            || offer.blob_format != super::nearby_protocol::WireBlobFormat::Raw
+            || is_risky_executable_label(&offer.label)
+        {
+            return false;
+        }
+        if !offer.ready_to_catch {
+            return false;
+        }
+        guard.ready_to_catch = None;
+        true
     }
 
     /// Records a new pending offer and returns the receiver side of the
@@ -272,6 +344,13 @@ impl OfferInbox {
                 guard.blocked_peers.remove(&node_id);
             }
             if blocked {
+                if guard
+                    .ready_to_catch
+                    .as_ref()
+                    .is_some_and(|session| session.peer_id == node_id)
+                {
+                    guard.ready_to_catch = None;
+                }
                 let ids = guard
                     .pending
                     .iter()
@@ -295,6 +374,44 @@ impl OfferInbox {
         let mut guard = self.state.lock().await;
         guard.blocked_peers.extend(peers);
     }
+}
+
+fn ready_to_catch_matches(
+    session: &mut Option<ReadyToCatchSession>,
+    offer: &IncomingOffer,
+) -> bool {
+    let Some(active) = session.as_mut() else {
+        return false;
+    };
+    if active.expires_at <= Instant::now() {
+        *session = None;
+        return false;
+    }
+    active.peer_id == offer.sender_node_id
+        && active.claimed_offer_id.is_none()
+        && offer.size <= READY_TO_CATCH_MAX_BYTES
+        && offer.blob_format == super::nearby_protocol::WireBlobFormat::Raw
+        && !is_risky_executable_label(&offer.label)
+}
+
+fn is_risky_executable_label(label: &str) -> bool {
+    let extension = label.rsplit('.').next().unwrap_or_default();
+    !matches!(
+        extension.to_ascii_lowercase().as_str(),
+        "csv"
+            | "gif"
+            | "jpeg"
+            | "jpg"
+            | "json"
+            | "md"
+            | "mp3"
+            | "mp4"
+            | "pdf"
+            | "png"
+            | "txt"
+            | "wav"
+            | "webp"
+    )
 }
 
 /// Handler invoked by the nearby protocol when an `OfferShare` request arrives.
@@ -325,6 +442,7 @@ pub async fn handle_offer_request(
         blob_hash: request.blob_hash,
         blob_format: request.blob_format,
         received_at_unix: unix_timestamp(),
+        ready_to_catch: false,
     };
 
     let receiver = match inbox.record(offer.clone()).await {
@@ -337,6 +455,8 @@ pub async fn handle_offer_request(
             });
         }
     };
+    let mut offer = offer;
+    offer.ready_to_catch = inbox.is_ready_to_catch(&offer).await;
     if let Err(error) = app_handle.emit(NEARBY_OFFER_RECEIVED_EVENT, offer) {
         // The connection is still open but the UI never saw the offer — best
         // we can do is auto-reject so the sender stops waiting.
@@ -412,6 +532,7 @@ mod tests {
             blob_hash: "abc".into(),
             blob_format: super::super::nearby_protocol::WireBlobFormat::Raw,
             received_at_unix: 0,
+            ready_to_catch: false,
         }
     }
 
@@ -581,5 +702,53 @@ mod tests {
             inbox.record(future).await,
             Err(OfferRejection::Blocked)
         ));
+    }
+
+    #[tokio::test]
+    async fn ready_to_catch_is_peer_bound_bounded_and_single_use() {
+        let inbox = OfferInbox::new();
+        let peer = iroh::SecretKey::from_bytes(&[11; 32]).public().to_string();
+        let mut matching = sample_offer("catch-1");
+        matching.sender_node_id = peer.clone();
+        matching.label = "photo.png".into();
+        inbox.arm_ready_to_catch(peer).await;
+        assert!(inbox.is_ready_to_catch(&matching).await);
+        matching.ready_to_catch = true;
+        assert!(inbox.claim_ready_to_catch(&matching).await);
+        assert!(!inbox.is_ready_to_catch(&matching).await);
+
+        let mut different_peer = sample_offer("catch-2");
+        different_peer.sender_node_id = "another-peer".into();
+        inbox
+            .arm_ready_to_catch(matching.sender_node_id.clone())
+            .await;
+        assert!(!inbox.is_ready_to_catch(&different_peer).await);
+
+        matching.label = "installer.exe".into();
+        assert!(!inbox.is_ready_to_catch(&matching).await);
+        matching.label = "photo.png".into();
+        matching.size = READY_TO_CATCH_MAX_BYTES + 1;
+        assert!(!inbox.is_ready_to_catch(&matching).await);
+    }
+
+    #[tokio::test]
+    async fn ready_to_catch_reserves_at_most_one_offer() {
+        let inbox = OfferInbox::new();
+        let peer = iroh::SecretKey::from_bytes(&[12; 32]).public().to_string();
+        inbox.arm_ready_to_catch(peer.clone()).await;
+        let mut first = sample_offer("first-catch");
+        first.sender_node_id = peer.clone();
+        first.label = "photo.png".into();
+        let mut second = sample_offer("second-catch");
+        second.sender_node_id = peer;
+        second.label = "notes.txt".into();
+        drop(inbox.record(first.clone()).await.expect("first offer"));
+        drop(inbox.record(second.clone()).await.expect("second offer"));
+
+        assert!(inbox.is_ready_to_catch(&first).await);
+        first.ready_to_catch = true;
+        assert!(!inbox.is_ready_to_catch(&second).await);
+        assert!(inbox.claim_ready_to_catch(&first).await);
+        assert!(!inbox.claim_ready_to_catch(&second).await);
     }
 }

@@ -79,6 +79,15 @@ impl PairedDevices {
         devices
     }
 
+    /// Returns whether a public peer identity has been explicitly verified.
+    pub async fn contains(&self, node_id: &str) -> bool {
+        self.devices
+            .read()
+            .await
+            .iter()
+            .any(|device| device.node_id == node_id)
+    }
+
     /// Saves a peer after the user has compared the short code in person.
     ///
     /// # Errors

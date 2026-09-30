@@ -418,6 +418,7 @@ export interface IncomingOffer {
   blob_hash: string;
   blob_format: WireBlobFormat;
   received_at_unix: number;
+  ready_to_catch: boolean;
 }
 
 export interface OfferResolved {
@@ -1037,9 +1038,18 @@ export async function offerShareToPeer(
 export async function respondToOffer(
   offerId: string,
   accept: boolean,
+  autoCatch = false,
 ): Promise<string | null> {
   requireNativeRuntime("Responding to a nearby offer");
-  return invoke<string | null>("respond_to_offer", { offerId, accept });
+  return invoke<string | null>("respond_to_offer", { offerId, accept, autoCatch });
+}
+
+export async function setReadyToCatch(
+  nodeId: string,
+  enabled: boolean,
+): Promise<number | null> {
+  requireNativeRuntime("Ready to Catch");
+  return invoke<number | null>("set_ready_to_catch", { nodeId, enabled });
 }
 
 export async function getBlockedNearbyPeers(): Promise<string[]> {

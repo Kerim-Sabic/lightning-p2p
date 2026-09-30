@@ -140,6 +140,36 @@ pub async fn get_blocked_nearby_peers(state: State<'_, AppState>) -> Result<Vec<
     Ok(state.blocked_peers.list().await)
 }
 
+/// Arms or revokes a 30-second, one-file receive session for a verified device.
+///
+/// # Errors
+///
+/// Returns an error if the device identity is invalid or is not paired.
+#[tauri::command]
+pub async fn set_ready_to_catch(
+    state: State<'_, AppState>,
+    node_id: String,
+    enabled: bool,
+) -> CommandResult<Option<u64>> {
+    let peer =
+        EndpointId::from_str(&node_id).map_err(|_| command_error("Invalid device identity."))?;
+    let peer_id = peer.to_string();
+    if enabled {
+        if !state.paired_devices.contains(&peer_id).await {
+            return Err(command_error(
+                "Verify this device before enabling Ready to Catch.",
+            ));
+        }
+        Ok(Some(state.offer_inbox.arm_ready_to_catch(peer_id).await))
+    } else {
+        state
+            .offer_inbox
+            .cancel_ready_to_catch(&peer.to_string())
+            .await;
+        Ok(None)
+    }
+}
+
 /// Blocks or unblocks a nearby sender by its authenticated endpoint identity.
 /// Blocking immediately rejects that peer's pending offers as well.
 ///
@@ -179,6 +209,7 @@ pub async fn respond_to_offer(
     state: State<'_, AppState>,
     offer_id: String,
     accept: bool,
+    auto_catch: bool,
 ) -> CommandResult<Option<String>> {
     // Snapshot the offer payload before resolving so we still have it after
     // the inbox releases its lock.
@@ -187,6 +218,29 @@ pub async fn respond_to_offer(
         .into_iter()
         .find(|offer| offer.offer_id == offer_id)
         .ok_or_else(|| command_error("Offer is no longer pending."))?;
+
+    if auto_catch && !accept {
+        let _ = state
+            .offer_inbox
+            .resolve(&offer_id, OfferDecision::Rejected)
+            .await;
+        return Err(command_error(
+            "Ready to Catch can only accept an authorized offer.",
+        ));
+    }
+    if auto_catch
+        && (!state.paired_devices.contains(&offer.sender_node_id).await
+            || !offer.ready_to_catch
+            || !state.offer_inbox.claim_ready_to_catch(&offer).await)
+    {
+        let _ = state
+            .offer_inbox
+            .resolve(&offer_id, OfferDecision::Rejected)
+            .await;
+        return Err(command_error(
+            "Ready to Catch expired or no longer matches this offer.",
+        ));
+    }
 
     let inbox = state.offer_inbox.clone();
     if !accept {

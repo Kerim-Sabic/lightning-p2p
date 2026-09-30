@@ -12,6 +12,7 @@ function offer(offerId: string, senderNodeId: string): IncomingOffer {
     blob_hash: "verified-later",
     blob_format: "raw",
     received_at_unix: 1,
+    ready_to_catch: false,
   };
 }
 

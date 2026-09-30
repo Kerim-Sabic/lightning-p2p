@@ -156,9 +156,11 @@ pub async fn remove_paired_device(
     state: State<'_, AppState>,
     node_id: String,
 ) -> Result<Vec<PairedDevice>, String> {
-    state
+    state.offer_inbox.cancel_ready_to_catch(&node_id).await;
+    let devices = state
         .paired_devices
         .remove(&node_id)
         .await
-        .map_err(String::from)
+        .map_err(String::from)?;
+    Ok(devices)
 }

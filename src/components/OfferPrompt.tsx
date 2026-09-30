@@ -1,5 +1,5 @@
 import { Check, Inbox, LaptopMinimal, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { formatBytes } from "../lib/format";
 import { respondToOffer, setNearbyPeerBlocked } from "../lib/tauri";
 import { useIncomingOfferStore } from "../stores/incomingOfferStore";
@@ -15,8 +15,35 @@ export function OfferPrompt() {
   );
   const setError = useTransferStore((state) => state.setError);
   const [pending, setPending] = useState(false);
+  const autoCatchStarted = useRef<string | null>(null);
 
   const offer = queue[0];
+
+  useEffect(() => {
+    if (!offer?.ready_to_catch || autoCatchStarted.current === offer.offer_id) {
+      return;
+    }
+    autoCatchStarted.current = offer.offer_id;
+    setPending(true);
+    void respondToOffer(offer.offer_id, true, true)
+      .then(() => dismissIncoming(offer.offer_id))
+      .catch((error: unknown) => {
+        setError(
+          error instanceof Error
+            ? error.message
+            : "Ready to Catch could not receive this offer",
+        );
+        dismissIncoming(offer.offer_id);
+      })
+      .finally(() => {
+        setPending(false);
+        window.dispatchEvent(
+          new CustomEvent("lightning-ready-to-catch-consumed", {
+            detail: { nodeId: offer.sender_node_id },
+          }),
+        );
+      });
+  }, [dismissIncoming, offer, setError]);
 
   if (!offer) {
     return null;
@@ -66,7 +93,9 @@ export function OfferPrompt() {
             <Inbox className="h-5 w-5 text-emerald-200" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="page-eyebrow">Incoming offer</p>
+            <p className="page-eyebrow">
+              {offer.ready_to_catch ? "Ready to Catch · receiving" : "Incoming offer"}
+            </p>
             <h2
               id="offer-prompt-title"
               className="mt-1 truncate text-lg font-semibold text-white"
