@@ -355,6 +355,7 @@ export async function saveReceivedFileStreaming(
   receiver: BrowserReceiver,
   file: CollectionFile,
   onProgress?: (receivedBytes: number) => void,
+  signal?: AbortSignal,
 ): Promise<number> {
   if (!receiver.supportsStreamingReceive() || !hasSaveFilePicker())
     throw new Error("This browser cannot stream received files to disk.");
@@ -368,13 +369,24 @@ export async function saveReceivedFileStreaming(
     const written = await receiver.streamBlobTo(
       file.hash,
       file.size,
-      (chunk) => writable.write(chunk),
+      async (chunk) => {
+        if (signal?.aborted) {
+          throw new DOMException("File save cancelled.", "AbortError");
+        }
+        await writable.write(chunk);
+        if (signal?.aborted) {
+          throw new DOMException("File save cancelled.", "AbortError");
+        }
+      },
       onProgress,
     );
     if (written !== file.size)
       throw new Error(
         "The received file size did not match its verified manifest.",
       );
+    if (signal?.aborted) {
+      throw new DOMException("File save cancelled.", "AbortError");
+    }
     await writable.close();
     return written;
   } catch (error) {
@@ -382,6 +394,9 @@ export async function saveReceivedFileStreaming(
       await writable.abort();
     } catch {
       // The stream already failed; discard any unpublished partial file.
+    }
+    if (signal?.aborted) {
+      throw new DOMException("File save cancelled.", "AbortError");
     }
     throw error;
   }

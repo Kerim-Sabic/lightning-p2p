@@ -60,10 +60,12 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
   const [receiver, setReceiver] = useState<BrowserReceiver | null>(null);
   const [receivedBytes, setReceivedBytes] = useState(0);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const saveAbortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     return () => {
       abortControllerRef.current?.abort();
+      saveAbortControllerRef.current?.abort();
       if (receiver) {
         void receiver
           .cancel()
@@ -190,6 +192,8 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
 
   const save = async (file: CollectionFile, fileKey: string) => {
     if (!receiver) return;
+    const saveController = streamedReceive ? new AbortController() : null;
+    saveAbortControllerRef.current = saveController;
     setSavingFileKey(fileKey);
     setSavingBytes(0);
     try {
@@ -205,6 +209,7 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
               setSavingBytes(count);
             }
           },
+          saveController?.signal,
         );
         setSavingBytes(bytes);
         setReceivedBytes((current) => current + bytes);
@@ -221,8 +226,15 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
       if (!(err instanceof DOMException && err.name === "AbortError"))
         setError(describe(err));
     } finally {
+      if (saveAbortControllerRef.current === saveController) {
+        saveAbortControllerRef.current = null;
+      }
       setSavingFileKey(null);
     }
+  };
+
+  const cancelSave = (): void => {
+    saveAbortControllerRef.current?.abort();
   };
 
   return (
@@ -449,6 +461,15 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
                 <p className="mt-2.5 text-[11px] leading-5 text-[color:var(--muted-copy)]">
                   Saved files land in this browser's Downloads folder.
                 </p>
+              )}
+              {streamedReceive && savingFileKey !== null && (
+                <button
+                  type="button"
+                  onClick={cancelSave}
+                  className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-full border border-white/12 bg-white/[0.04] px-4 py-2.5 text-[12px] font-semibold text-white transition hover:bg-white/[0.08] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--signal-green)]"
+                >
+                  Stop saving this file
+                </button>
               )}
             </Frame>
           )}
