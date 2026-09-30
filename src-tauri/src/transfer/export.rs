@@ -169,14 +169,9 @@ async fn export_blob(
     destination: &Path,
     cancel_rx: &mut watch::Receiver<bool>,
 ) -> Result<PathBuf> {
-    // Write to a `.part` sibling first, then rename onto the final name. A
-    // crash mid-write leaves a clearly partial `.part` file in the destination
-    // and never a half-written file at the final name. The `.part` is created
-    // in the same directory as the final file so the rename is intra-filesystem
-    // and remains atomic. `next_available_path` runs against the FINAL name so
-    // we don't collide with an existing user file.
     let base_path = destination.join(ticket.hash().to_string());
-    let temp_path = part_path_for(&base_path);
+    let staging_dir = create_blob_staging_dir(destination, ticket.hash())?;
+    let temp_path = staging_dir.join(ticket.hash().to_string());
 
     let export_result = tokio::select! {
         biased;
@@ -187,25 +182,58 @@ async fn export_blob(
     };
 
     if let Err(error) = export_result {
-        let _ = tokio::fs::remove_file(&temp_path).await;
+        let _ = tokio::fs::remove_dir_all(&staging_dir).await;
         return Err(error);
     }
 
-    ensure_not_cancelled(cancel_rx).inspect_err(|_| {
-        let _ = std::fs::remove_file(&temp_path);
-    })?;
-    publish_staged_file(&temp_path, &base_path).await
+    if let Err(error) = ensure_not_cancelled(cancel_rx) {
+        let _ = tokio::fs::remove_dir_all(&staging_dir).await;
+        return Err(error);
+    }
+
+    let published = publish_staged_file(&temp_path, &base_path).await;
+    let _ = tokio::fs::remove_dir_all(&staging_dir).await;
+    published
 }
 
-/// Returns a sibling `.part` path next to `final_path`. Used as the temp name
-/// for atomic-write semantics on single-blob exports.
-fn part_path_for(final_path: &Path) -> PathBuf {
-    let mut name = final_path
-        .file_name()
-        .map(std::ffi::OsStr::to_os_string)
-        .unwrap_or_default();
-    name.push(".part");
-    final_path.with_file_name(name)
+/// Creates a fresh private directory for a single-file export. A predictable
+/// sibling `.part` file could be planted as a symlink before `iroh-blobs`
+/// opens it, redirecting the write outside the download folder.
+fn create_blob_staging_dir(destination: &Path, hash: Hash) -> Result<PathBuf> {
+    for _ in 0..64 {
+        let candidate = destination.join(format!(
+            ".lightning-p2p-export-{hash}-{}",
+            uuid::Uuid::new_v4()
+        ));
+        match create_private_directory(&candidate) {
+            Ok(()) => {
+                let metadata = std::fs::symlink_metadata(&candidate)?;
+                if !is_plain_directory(&metadata) {
+                    let _ = std::fs::remove_dir(&candidate);
+                    return Err(unsafe_collection_destination_error());
+                }
+                return Ok(candidate);
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+            Err(error) => return Err(error.into()),
+        }
+    }
+    Err(LightningP2PError::Other(
+        "Could not reserve a safe location for the received file.".into(),
+    ))
+}
+
+#[cfg(unix)]
+fn create_private_directory(path: &Path) -> std::io::Result<()> {
+    use std::os::unix::fs::DirBuilderExt;
+
+    let mut builder = std::fs::DirBuilder::new();
+    builder.mode(0o700).create(path)
+}
+
+#[cfg(not(unix))]
+fn create_private_directory(path: &Path) -> std::io::Result<()> {
+    std::fs::create_dir(path)
 }
 
 async fn export_collection(
@@ -518,21 +546,6 @@ mod tests {
         assert_eq!(label, "download");
     }
 
-    #[test]
-    fn part_path_appends_part_suffix_in_same_directory() {
-        let final_path = PathBuf::from("/tmp/downloads/report.pdf");
-        let temp = part_path_for(&final_path);
-        assert_eq!(temp.parent(), final_path.parent());
-        assert_eq!(temp.file_name().unwrap(), "report.pdf.part");
-    }
-
-    #[test]
-    fn part_path_handles_extensionless_names() {
-        let final_path = PathBuf::from("/tmp/downloads/raw_hash_value");
-        let temp = part_path_for(&final_path);
-        assert_eq!(temp.file_name().unwrap(), "raw_hash_value.part");
-    }
-
     #[tokio::test]
     async fn publishing_a_file_preserves_existing_output() {
         let dir = tempfile::tempdir().expect("tempdir");
@@ -570,6 +583,70 @@ mod tests {
                 .is_err()
         );
         assert_eq!(read_dir_entries(dir.path()).await.unwrap().len(), 0);
+    }
+
+    #[tokio::test]
+    async fn blob_export_leaves_preexisting_predictable_part_file_untouched() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store = iroh_blobs::store::mem::MemStore::new();
+        let content = b"received payload";
+        let hash = store.add_bytes(content.to_vec()).await.unwrap().hash;
+        let planted_part = dir.path().join(format!("{hash}.part"));
+        tokio::fs::write(&planted_part, b"existing user data")
+            .await
+            .expect("preexisting part file");
+        let ticket = BlobTicket::new(
+            iroh::EndpointAddr::new(iroh::SecretKey::from_bytes(&[1; 32]).public()),
+            hash,
+            iroh_blobs::BlobFormat::Raw,
+        );
+        let (_cancel_tx, mut cancel_rx) = watch::channel(false);
+
+        let published = export_blob(store.as_ref(), &ticket, dir.path(), &mut cancel_rx)
+            .await
+            .expect("export safely");
+
+        assert_eq!(
+            tokio::fs::read(&planted_part).await.unwrap(),
+            b"existing user data"
+        );
+        assert_eq!(tokio::fs::read(&published).await.unwrap(), content);
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn blob_export_does_not_follow_a_planted_part_symlink() {
+        use std::os::unix::fs::symlink;
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let outside = dir.path().join("outside.txt");
+        tokio::fs::write(&outside, b"keep this file")
+            .await
+            .expect("outside file");
+        let store = iroh_blobs::store::mem::MemStore::new();
+        let content = b"received payload";
+        let hash = store.add_bytes(content.to_vec()).await.unwrap().hash;
+        let planted_part = dir.path().join(format!("{hash}.part"));
+        symlink(&outside, &planted_part).expect("plant predictable part symlink");
+        let ticket = BlobTicket::new(
+            iroh::EndpointAddr::new(iroh::SecretKey::from_bytes(&[1; 32]).public()),
+            hash,
+            iroh_blobs::BlobFormat::Raw,
+        );
+        let (_cancel_tx, mut cancel_rx) = watch::channel(false);
+
+        let published = export_blob(store.as_ref(), &ticket, dir.path(), &mut cancel_rx)
+            .await
+            .expect("export safely");
+
+        assert_eq!(tokio::fs::read(&outside).await.unwrap(), b"keep this file");
+        assert_eq!(tokio::fs::read(&published).await.unwrap(), content);
+        assert!(tokio::fs::symlink_metadata(&planted_part)
+            .await
+            .unwrap()
+            .file_type()
+            .is_symlink());
+        assert_eq!(read_dir_entries(dir.path()).await.unwrap().len(), 3);
     }
 
     #[tokio::test]
