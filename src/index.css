@@ -1526,6 +1526,127 @@ body.app-hydrated .static-seo-fallback {
   }
 }
 
+/* Explicit Light must win even when the operating system prefers Dark. */
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="light"] .app-shell {
+    border-color: var(--border-subtle);
+    background: var(--canvas-0);
+  }
+
+  :root[data-theme="light"] .app-shell-mobile {
+    background: var(--canvas-0);
+  }
+
+  :root[data-theme="light"] .window-chrome,
+  :root[data-theme="light"] .glass-panel,
+  :root[data-theme="light"] .hero-panel,
+  :root[data-theme="light"] .sidebar-card {
+    border-color: var(--border-subtle);
+    background: var(--surface-0);
+  }
+
+  :root[data-theme="light"] .glass-subtle,
+  :root[data-theme="light"] .glass-icon,
+  :root[data-theme="light"] .glass-button,
+  :root[data-theme="light"] .chrome-pill,
+  :root[data-theme="light"] .stat-card {
+    border-color: var(--border-subtle);
+    background: var(--surface-1);
+  }
+
+  :root[data-theme="light"] .glass-button:hover {
+    border-color: var(--border-strong);
+    background: var(--surface-hover);
+  }
+
+  :root[data-theme="light"] .glass-input {
+    border-color: var(--border-strong);
+    background: var(--surface-0);
+    color: var(--fg-primary);
+  }
+
+  :root[data-theme="light"] .window-control-button {
+    border-color: var(--border-subtle);
+    background: var(--surface-1);
+    color: var(--fg-secondary);
+  }
+
+  :root[data-theme="light"] .window-control-button:hover {
+    background: var(--surface-hover);
+    color: var(--fg-primary);
+  }
+
+  :root[data-theme="light"] .mobile-tab-bar,
+  :root[data-theme="light"] .bottom-sheet-panel {
+    border-color: var(--border-subtle);
+    background: var(--surface-0);
+    color: var(--fg-primary);
+  }
+
+  :root[data-theme="light"] .bottom-sheet-grabber {
+    background: rgba(21, 23, 28, 0.18);
+  }
+
+  :root[data-theme="light"] .app-shell .page-copy,
+  :root[data-theme="light"] .app-shell .meta-copy {
+    color: var(--fg-secondary);
+  }
+
+  :root[data-theme="light"] .app-shell :focus-visible {
+    outline-color: #244fe8;
+  }
+
+  :root[data-theme="light"] .app-shell .text-white,
+  :root[data-theme="light"] .app-shell .text-slate-100,
+  :root[data-theme="light"] .app-shell .text-slate-200 {
+    color: var(--fg-primary) !important;
+  }
+
+  :root[data-theme="light"] .app-shell .text-slate-300,
+  :root[data-theme="light"] .app-shell .text-slate-400,
+  :root[data-theme="light"] .app-shell .text-slate-500,
+  :root[data-theme="light"] .app-shell .text-slate-600 {
+    color: var(--fg-muted) !important;
+  }
+
+  :root[data-theme="light"] .app-shell .text-sky-100,
+  :root[data-theme="light"] .app-shell .text-sky-200,
+  :root[data-theme="light"] .app-shell .text-blue-100,
+  :root[data-theme="light"] .app-shell .text-blue-200 {
+    color: #244fe8 !important;
+  }
+
+  :root[data-theme="light"] .app-shell [class*="border-white/"] {
+    border-color: var(--border-subtle) !important;
+  }
+
+  :root[data-theme="light"] .app-shell [class*="bg-white/"] {
+    background-color: rgba(21, 23, 28, 0.035) !important;
+  }
+
+  :root[data-theme="light"] .app-shell [class*="bg-black/20"],
+  :root[data-theme="light"] .app-shell [class*="bg-black/25"],
+  :root[data-theme="light"] .app-shell [class*="bg-black/30"],
+  :root[data-theme="light"] .app-shell [class*="bg-black/40"] {
+    background-color: var(--surface-1) !important;
+  }
+
+  :root[data-theme="light"] .app-shell .text-amber-200,
+  :root[data-theme="light"] .app-shell .text-amber-300 {
+    color: var(--proof-amber) !important;
+  }
+
+  :root[data-theme="light"] .app-shell .text-emerald-200,
+  :root[data-theme="light"] .app-shell .text-emerald-300 {
+    color: #176445 !important;
+  }
+
+  :root[data-theme="light"] .app-shell .text-rose-200,
+  :root[data-theme="light"] .app-shell .text-rose-300 {
+    color: #a82a38 !important;
+  }
+}
+
 /* ─────────────────────────────────────────────────────────────────────────────
  * Cinematic instrument motion vocabulary — v0.5.1 redesign.
  *
