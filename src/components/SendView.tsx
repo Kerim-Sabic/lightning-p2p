@@ -126,6 +126,10 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
   );
   const nodeStatus = useTransferStore((state) => state.nodeStatus);
   const settings = useTransferStore((state) => state.settings);
+  const platformProfile = useTransferStore((state) => state.platformProfile);
+  const bleDiscoveryStatus = useTransferStore(
+    (state) => state.bleDiscoveryStatus,
+  );
   const pickShareFiles = useTransferStore((state) => state.pickShareFiles);
   const pickShareFolder = useTransferStore((state) => state.pickShareFolder);
   const prepareShareSelection = useTransferStore(
@@ -154,7 +158,16 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
     [shareSelection],
   );
   const localDiscoveryEnabled = settings?.local_discovery_enabled ?? true;
-  const visibleOnNetwork = Boolean(shareTicket) && localDiscoveryEnabled;
+  const bluetoothDiscoverySupported =
+    platformProfile.capabilities.bluetooth_discovery;
+  const bluetoothDiscoveryEnabled =
+    bluetoothDiscoverySupported &&
+    (settings?.bluetooth_discovery_enabled ?? false);
+  const discoveryEnabled =
+    localDiscoveryEnabled || bluetoothDiscoveryEnabled;
+  const visibleToNearbyPeers =
+    Boolean(shareTicket) &&
+    (nodeStatus.lan_discovery_active || bleDiscoveryStatus.advertising);
   const receiveHandoffLink = shareTicket
     ? createReceiveHandoffLink(shareTicket)
     : null;
@@ -511,11 +524,11 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
                   Network {networkLabel(nodeStatus.online_state)}
                 </span>
                 <span className="chrome-pill">
-                  {visibleOnNetwork
-                    ? "Visible on this network"
-                    : localDiscoveryEnabled
-                      ? "Nearby discovery ready"
-                      : "Manual code only"}
+                  {visibleToNearbyPeers
+                    ? "Visible to nearby peers"
+                    : discoveryEnabled
+                      ? "Nearby discovery enabled"
+                      : "Manual link only"}
                 </span>
               </div>
               <button
@@ -720,18 +733,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
           <p className="meta-copy mt-4">
             Open the native app to send files to nearby devices.
           </p>
-        ) : settings?.local_discovery_enabled === false ? (
-          <p className="meta-copy mt-4">
-            Nearby discovery is off. Turn it on in Settings, or choose files to
-            create a receive link.
-          </p>
-        ) : devices.length === 0 ? (
-          <p className="meta-copy mt-4">
-            No devices found yet. Open Lightning on the other device and connect
-            both devices to the same network. You can also create a receive link
-            above.
-          </p>
-        ) : (
+        ) : devices.length > 0 ? (
           <div className="mt-4 grid gap-2 sm:grid-cols-2">
             {devices.map((device) => (
               <button
@@ -776,15 +778,17 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
                     {dropTargetNodeId === device.node_id
                       ? `Release to send to ${device.device_name}`
                       : busyNodeId === device.node_id
-                        ? "Sending offer…"
+                        ? "Preparing and offering…"
                         : device.transport === "ble"
                           ? "Bluetooth nearby"
-                          : "On your local network"}
+                          : device.transport === "both"
+                            ? "Wi-Fi and Bluetooth"
+                            : "On your local network"}
                   </span>
                 </span>
                 <span className="shrink-0 text-xs font-semibold text-sky-200">
                   {busyNodeId === device.node_id
-                    ? "Sending"
+                    ? "Working"
                     : shareSelection.length > 0
                       ? "Send"
                       : "Choose files"}
@@ -792,6 +796,20 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
               </button>
             ))}
           </div>
+        ) : !discoveryEnabled ? (
+          <p className="meta-copy mt-4">
+            Nearby discovery is off. Turn on local network discovery
+            {bluetoothDiscoverySupported
+              ? " or Bluetooth discovery"
+              : ""} in Settings, or choose files to create a receive link.
+          </p>
+        ) : (
+          <p className="meta-copy mt-4">
+            {bluetoothDiscoveryEnabled && !localDiscoveryEnabled
+              ? "No Bluetooth peers found yet. Check that Bluetooth is on, permissions are granted, and Lightning is open on a supported device."
+              : "No nearby devices found yet. Open Lightning on another device with a compatible discovery method enabled. Some networks block local discovery."}{" "}
+            You can also create a receive link above.
+          </p>
         )}
       </section>
 
@@ -825,23 +843,23 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
 
               <div
                 className={`rounded-[20px] border px-4 py-3 text-sm ${
-                  visibleOnNetwork
+                  visibleToNearbyPeers
                     ? "border-emerald-400/18 bg-emerald-500/10 text-emerald-50"
                     : "border-white/8 bg-white/[0.03] text-slate-300"
                 }`}
               >
                 <p className="metric-label">
-                  {visibleOnNetwork
+                  {visibleToNearbyPeers
                     ? "Nearby discovery is active"
-                    : localDiscoveryEnabled
-                      ? "Share link is ready"
+                    : discoveryEnabled
+                      ? "Share link is ready; discovery is starting"
                       : "Nearby discovery is disabled"}
                 </p>
                 <p className="mt-2 leading-6">
-                  {visibleOnNetwork
-                    ? "Receivers on the same LAN should see this share automatically while it stays active."
-                    : localDiscoveryEnabled
-                      ? "If the receiver does not appear automatically, send them this receive link."
+                  {visibleToNearbyPeers
+                    ? "Peers found through the active discovery methods may see this share while you stay online. If the receiver does not appear, send them this receive link."
+                    : discoveryEnabled
+                      ? "Discovery is enabled but not active yet. Send the receive link if the receiver does not appear automatically."
                       : "Receivers will need the share link, raw ticket, or QR code explicitly."}
                 </p>
               </div>
