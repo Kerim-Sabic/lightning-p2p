@@ -17,12 +17,15 @@ import {
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
   type DragEvent,
   type KeyboardEvent,
   type MouseEvent,
+  type PointerEvent as ReactPointerEvent,
 } from "react";
 import { formatBytes } from "../lib/format";
+import { isDeliberateFlick } from "../lib/flickGesture";
 import { createReceiveHandoffLink } from "../lib/shareLinks";
 import { attachAsyncUnlisten } from "../hooks/asyncSubscription";
 import {
@@ -93,6 +96,25 @@ function displayReceiveLink(link: string): string {
   return link.replace(/(#t=).+$/u, "$1[hidden ticket]");
 }
 
+interface FlickTargetSnapshot {
+  nodeId: string;
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+  centerX: number;
+  centerY: number;
+}
+
+interface ActiveFlick {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  startedAt: number;
+  targets: FlickTargetSnapshot[];
+  element: HTMLElement;
+}
+
 export function SendView({ onNavigateReceive }: SendViewProps) {
   const clearShareSelection = useTransferStore(
     (state) => state.clearShareSelection,
@@ -123,6 +145,9 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
   const [showRawTicket, setShowRawTicket] = useState(false);
   const [busyNodeId, setBusyNodeId] = useState<string | null>(null);
   const [dropTargetNodeId, setDropTargetNodeId] = useState<string | null>(null);
+  const [flickHint, setFlickHint] = useState<string | null>(null);
+  const recipientSurfaceRef = useRef<HTMLElement | null>(null);
+  const activeFlickRef = useRef<ActiveFlick | null>(null);
 
   const selectionSize = useMemo(
     () => shareSelection.reduce((total, item) => total + item.size, 0),
@@ -261,6 +286,142 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
       setBusyNodeId(null);
     }
   };
+
+  const cancelFlick = (): void => {
+    const active = activeFlickRef.current;
+    if (active?.element.hasPointerCapture(active.pointerId)) {
+      active.element.releasePointerCapture(active.pointerId);
+    }
+    activeFlickRef.current = null;
+    setDropTargetNodeId(null);
+  };
+
+  const handleFlickPointerDown = (
+    event: ReactPointerEvent<HTMLButtonElement>,
+  ): void => {
+    if (
+      !event.isPrimary ||
+      event.button !== 0 ||
+      shareSelection.length === 0 ||
+      devices.length === 0 ||
+      busyNodeId !== null
+    ) {
+      return;
+    }
+    const targets = Array.from(
+      recipientSurfaceRef.current?.querySelectorAll<HTMLElement>(
+        "[data-flick-target]",
+      ) ?? [],
+    ).flatMap((element) => {
+      const nodeId = element.dataset.flickTarget;
+      if (!nodeId) return [];
+      const rect = element.getBoundingClientRect();
+      return [
+        {
+          nodeId,
+          left: rect.left,
+          right: rect.right,
+          top: rect.top,
+          bottom: rect.bottom,
+          centerX: rect.left + rect.width / 2,
+          centerY: rect.top + rect.height / 2,
+        },
+      ];
+    });
+    if (targets.length === 0) return;
+
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    activeFlickRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startedAt: performance.now(),
+      targets,
+      element: event.currentTarget,
+    };
+    setFlickHint("Flick toward a device to send");
+  };
+
+  const handleFlickPointerMove = (
+    event: ReactPointerEvent<HTMLButtonElement>,
+  ): void => {
+    const active = activeFlickRef.current;
+    if (!active || active.pointerId !== event.pointerId) return;
+    const target = active.targets.find(
+      (candidate) =>
+        event.clientX >= candidate.left &&
+        event.clientX <= candidate.right &&
+        event.clientY >= candidate.top &&
+        event.clientY <= candidate.bottom,
+    );
+    setDropTargetNodeId(target?.nodeId ?? null);
+  };
+
+  const handleFlickPointerUp = (
+    event: ReactPointerEvent<HTMLButtonElement>,
+  ): void => {
+    const active = activeFlickRef.current;
+    if (!active || active.pointerId !== event.pointerId) return;
+    activeFlickRef.current = null;
+    setDropTargetNodeId(null);
+    setFlickHint(null);
+    if (active.element.hasPointerCapture(active.pointerId)) {
+      active.element.releasePointerCapture(active.pointerId);
+    }
+
+    const atSystemEdge =
+      event.clientX < 24 ||
+      event.clientX > window.innerWidth - 24 ||
+      event.clientY < 24 ||
+      event.clientY > window.innerHeight - 24;
+    if (atSystemEdge) return;
+    const target = active.targets.find(
+      (candidate) =>
+        event.clientX >= candidate.left &&
+        event.clientX <= candidate.right &&
+        event.clientY >= candidate.top &&
+        event.clientY <= candidate.bottom,
+    );
+    if (!target) return;
+    const device = devices.find(
+      (candidate) => candidate.node_id === target.nodeId,
+    );
+    if (!device) {
+      setError("That device is no longer nearby. Choose a device again.");
+      return;
+    }
+    const elapsedMs = performance.now() - active.startedAt;
+    if (
+      isDeliberateFlick({
+        dx: event.clientX - active.startX,
+        dy: event.clientY - active.startY,
+        elapsedMs,
+        targetX: target.centerX - active.startX,
+        targetY: target.centerY - active.startY,
+      })
+    ) {
+      void handleSendToDevice(device);
+    }
+  };
+
+  useEffect(() => {
+    const cancel = (): void => {
+      if (!activeFlickRef.current) return;
+      cancelFlick();
+      setFlickHint(null);
+    };
+    window.addEventListener("blur", cancel);
+    window.addEventListener("resize", cancel);
+    window.addEventListener("orientationchange", cancel);
+    window.addEventListener("scroll", cancel, true);
+    return () => {
+      window.removeEventListener("blur", cancel);
+      window.removeEventListener("resize", cancel);
+      window.removeEventListener("orientationchange", cancel);
+      window.removeEventListener("scroll", cancel, true);
+    };
+  }, []);
 
   const handleSelectionDragStart = (event: DragEvent<HTMLDivElement>): void => {
     if (shareSelection.length === 0 || mobileRuntime) {
@@ -445,6 +606,32 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
                   Drag the file stack onto a nearby device, or choose Send.
                 </p>
               ) : null}
+              {nativeRuntime && devices.length > 0 ? (
+                <button
+                  type="button"
+                  aria-label="Flick toward a nearby device to send the staged files"
+                  onPointerDown={handleFlickPointerDown}
+                  onPointerMove={handleFlickPointerMove}
+                  onPointerUp={handleFlickPointerUp}
+                  onPointerCancel={() => {
+                    cancelFlick();
+                    setFlickHint(null);
+                  }}
+                  onLostPointerCapture={() => {
+                    if (activeFlickRef.current) {
+                      cancelFlick();
+                      setFlickHint(null);
+                    }
+                  }}
+                  style={{ touchAction: "none" }}
+                  className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-full border border-[var(--accent)]/35 bg-[var(--accent)]/10 px-4 text-xs font-semibold text-blue-100 transition hover:bg-[var(--accent)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300"
+                >
+                  <span aria-hidden="true" className="text-base">
+                    ↗
+                  </span>
+                  {flickHint ?? "Flick to a device"}
+                </button>
+              ) : null}
             </div>
 
             <div className="flex flex-wrap gap-2">
@@ -509,6 +696,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
       ) : null}
 
       <section
+        ref={recipientSurfaceRef}
         className="glass-panel p-5"
         aria-labelledby="nearby-recipient-title"
       >
@@ -547,6 +735,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
             {devices.map((device) => (
               <button
                 key={device.node_id}
+                data-flick-target={device.node_id}
                 type="button"
                 onClick={() => void handleSendToDevice(device)}
                 onDragOver={(event) => {
