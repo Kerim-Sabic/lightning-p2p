@@ -20,12 +20,16 @@ import { useNearbyDeviceStore } from "../stores/nearbyDeviceStore";
 import { useNearbyDiagnosticStore } from "../stores/nearbyDiagnosticStore";
 import { useNearbyShareStore } from "../stores/nearbyShareStore";
 import { useTransferStore } from "../stores/transferStore";
-import { attachAsyncUnlisten } from "./asyncSubscription";
+import {
+  attachAsyncUnlisten,
+  createSingleFlightRunner,
+} from "./asyncSubscription";
 
 const FAST_NODE_STATUS_POLL_MS = 2500;
 const STABLE_NODE_STATUS_POLL_MS = 12000;
 const RELAY_NODE_STATUS_POLL_MS = 7000;
 const HIDDEN_NODE_STATUS_POLL_MS = 30000;
+const runHydrationOnce = createSingleFlightRunner<unknown>();
 
 function nextNodeStatusPollMs(onlineState: NodeOnlineState): number {
   switch (onlineState) {
@@ -48,62 +52,64 @@ function errorMessage(error: unknown): string {
 export function useTransfer(): void {
   const setError = useTransferStore((state) => state.setError);
   const inTauriRuntime = isTauri();
-  const hydrateApp = useEffectEvent(async () => {
-    const store = useTransferStore.getState();
+  const hydrateApp = useEffectEvent(() =>
+    runHydrationOnce(async () => {
+      const store = useTransferStore.getState();
 
-    const runHydrationStep = async (
-      name: string,
-      action: () => Promise<void>,
-    ): Promise<void> => {
-      recordFrontendDiagnostic(`hydrate:${name}:start`);
-      try {
-        await action();
-        recordFrontendDiagnostic(`hydrate:${name}:ok`);
-      } catch (error) {
-        const message = errorMessage(error);
-        recordFrontendDiagnostic(`hydrate:${name}:failed:${message}`);
-        store.setError(message);
+      const runHydrationStep = async (
+        name: string,
+        action: () => Promise<void>,
+      ): Promise<void> => {
+        recordFrontendDiagnostic(`hydrate:${name}:start`);
+        try {
+          await action();
+          recordFrontendDiagnostic(`hydrate:${name}:ok`);
+        } catch (error) {
+          const message = errorMessage(error);
+          recordFrontendDiagnostic(`hydrate:${name}:failed:${message}`);
+          store.setError(message);
+        }
+      };
+
+      recordFrontendDiagnostic("hydrate:start");
+      await Promise.all([
+        runHydrationStep("platform-profile", store.refreshPlatformProfile),
+        runHydrationStep("node-status", store.refreshNodeStatus),
+        runHydrationStep(
+          "node-supervisor-status",
+          store.refreshNodeSupervisorStatus,
+        ),
+        runHydrationStep("ble-status", store.refreshBleDiscoveryStatus),
+        runHydrationStep("settings", store.refreshSettings),
+        runHydrationStep("active-transfers", store.refreshActiveTransfers),
+        runHydrationStep("history", store.refreshHistory),
+        runHydrationStep("nearby-shares", () =>
+          useNearbyShareStore.getState().refreshShares(),
+        ),
+        runHydrationStep("nearby-devices", () =>
+          useNearbyDeviceStore.getState().refreshDevices(),
+        ),
+      ]);
+      recordFrontendDiagnostic("hydrate:complete");
+
+      const settings = useTransferStore.getState().settings;
+      if (settings?.auto_update_enabled && !isMobileRuntime()) {
+        await useTransferStore.getState().checkForUpdates(true);
       }
-    };
-
-    recordFrontendDiagnostic("hydrate:start");
-    await Promise.all([
-      runHydrationStep("platform-profile", store.refreshPlatformProfile),
-      runHydrationStep("node-status", store.refreshNodeStatus),
-      runHydrationStep(
-        "node-supervisor-status",
-        store.refreshNodeSupervisorStatus,
-      ),
-      runHydrationStep("ble-status", store.refreshBleDiscoveryStatus),
-      runHydrationStep("settings", store.refreshSettings),
-      runHydrationStep("active-transfers", store.refreshActiveTransfers),
-      runHydrationStep("history", store.refreshHistory),
-      runHydrationStep("nearby-shares", () =>
-        useNearbyShareStore.getState().refreshShares(),
-      ),
-      runHydrationStep("nearby-devices", () =>
-        useNearbyDeviceStore.getState().refreshDevices(),
-      ),
-    ]);
-    recordFrontendDiagnostic("hydrate:complete");
-
-    const settings = useTransferStore.getState().settings;
-    if (settings?.auto_update_enabled && !isMobileRuntime()) {
-      await useTransferStore.getState().checkForUpdates(true);
-    }
-    const latest = useTransferStore.getState();
-    if (
-      latest.settings?.bluetooth_discovery_enabled &&
-      latest.platformProfile.capabilities.bluetooth_discovery &&
-      latest.nodeStatus.node_id
-    ) {
-      const started = await startBleDiscovery(latest.nodeStatus.node_id);
-      recordFrontendDiagnostic(
-        `hydrate:ble-autostart:${started ? "ok" : "not-started"}`,
-      );
-      await latest.refreshBleDiscoveryStatus();
-    }
-  });
+      const latest = useTransferStore.getState();
+      if (
+        latest.settings?.bluetooth_discovery_enabled &&
+        latest.platformProfile.capabilities.bluetooth_discovery &&
+        latest.nodeStatus.node_id
+      ) {
+        const started = await startBleDiscovery(latest.nodeStatus.node_id);
+        recordFrontendDiagnostic(
+          `hydrate:ble-autostart:${started ? "ok" : "not-started"}`,
+        );
+        await latest.refreshBleDiscoveryStatus();
+      }
+    }),
+  );
 
   const handleTransferEvent = useEffectEvent((event: TransferEvent) => {
     const store = useTransferStore.getState();
@@ -132,7 +138,7 @@ export function useTransfer(): void {
       return;
     }
 
-    void hydrateApp();
+    void hydrateApp().catch((error: unknown) => setError(errorMessage(error)));
   }, [hydrateApp, inTauriRuntime, setError]);
 
   useEffect(() => {
