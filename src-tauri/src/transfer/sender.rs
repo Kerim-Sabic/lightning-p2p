@@ -2,7 +2,7 @@
 
 use crate::error::{LightningP2PError, Result};
 use crate::node::LightningP2PNode;
-use crate::storage::history::{self, TransferRecord};
+use crate::storage::history::{self, TransferRecord, TransferRecordStatus};
 use crate::transfer::metrics::TransferMetrics;
 use crate::transfer::mode::TransferProfile;
 use crate::transfer::progress::{
@@ -550,6 +550,7 @@ fn save_send_record(node: &LightningP2PNode, outcome: &ShareOutcome) -> Result<(
             peer: None,
             timestamp: unix_timestamp(),
             direction: TransferDirection::Send,
+            status: Some(TransferRecordStatus::SharePrepared),
         },
     )
 }

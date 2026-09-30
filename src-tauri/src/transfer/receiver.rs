@@ -2,7 +2,7 @@
 
 use crate::error::{AppErrorPayload, LightningP2PError, Result};
 use crate::node::LightningP2PNode;
-use crate::storage::history::{self, TransferRecord};
+use crate::storage::history::{self, TransferRecord, TransferRecordStatus};
 use crate::storage::peers::{self, PeerRecord};
 use crate::transfer::export;
 use crate::transfer::metrics::{RouteKind, TransferMetrics, TransferStrategy};
@@ -698,6 +698,7 @@ fn save_receive_record_no_flush(node: &LightningP2PNode, summary: &ReceiveSummar
             peer: Some(summary.peer.clone()),
             timestamp: unix_timestamp(),
             direction: TransferDirection::Receive,
+            status: Some(TransferRecordStatus::Completed),
         },
     )
 }

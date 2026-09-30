@@ -201,6 +201,7 @@ export interface TransferRecord {
   peer: string | null;
   timestamp: number;
   direction: TransferDirection;
+  status: "completed" | "share_prepared";
 }
 
 export interface SharePathInfo {

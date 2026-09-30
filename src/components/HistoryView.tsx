@@ -17,7 +17,13 @@ import { EmptyState } from "./EmptyState";
 
 type DirectionFilter = "all" | "send" | "receive";
 
-function directionTone(direction: "send" | "receive"): string {
+function directionTone(
+  direction: "send" | "receive",
+  status: "completed" | "share_prepared",
+): string {
+  if (status === "share_prepared") {
+    return "border-amber-400/15 bg-amber-500/8 text-amber-100";
+  }
   return direction === "send"
     ? "border-sky-400/15 bg-sky-500/8 text-sky-200"
     : "border-emerald-400/15 bg-emerald-500/8 text-emerald-200";
@@ -57,6 +63,7 @@ export function HistoryView() {
           record.hash,
           record.peer ?? "",
           record.direction,
+          record.status,
         ];
 
         return searchableValues.some((value) =>
@@ -67,21 +74,21 @@ export function HistoryView() {
   );
 
   const totals = useMemo(() => {
-    let sentCount = 0;
+    let sharesPreparedCount = 0;
     let receivedCount = 0;
     let totalBytes = 0;
 
     for (const record of history) {
       totalBytes += record.size;
-      if (record.direction === "send") {
-        sentCount += 1;
-      } else {
+      if (record.status === "share_prepared") {
+        sharesPreparedCount += 1;
+      } else if (record.direction === "receive") {
         receivedCount += 1;
       }
     }
 
     return {
-      sentCount,
+      sharesPreparedCount,
       receivedCount,
       totalBytes,
     };
@@ -151,18 +158,18 @@ export function HistoryView() {
               History
             </div>
             <h1 className="page-title mt-6 max-w-[12ch]">
-              Review what moved and re-share it fast
+              Review saved files and prepared shares
             </h1>
             <p className="page-copy mt-4 max-w-[60ch]">
-              Transfer history is a working surface, not just a log. Filter by
-              direction, find past items quickly, and regenerate a ticket for
-              any stored send without reimporting the content.
+              Received files are marked complete after verification and saving.
+              Outgoing shares stay marked as prepared until delivery is
+              confirmed, and can be shared again from here.
             </p>
 
             <div className="hero-metrics mt-7 grid gap-3 sm:grid-cols-3">
               <div className="stat-card">
-                <p className="metric-label">Sends</p>
-                <p className="metric-value">{totals.sentCount}</p>
+                <p className="metric-label">Shares prepared</p>
+                <p className="metric-value">{totals.sharesPreparedCount}</p>
               </div>
               <div className="stat-card">
                 <p className="metric-label">Receives</p>
@@ -187,11 +194,11 @@ export function HistoryView() {
                 Searchable log
               </div>
               <h2 className="mt-4 text-[1.55rem] font-semibold leading-tight tracking-[-0.03em] text-white">
-                Find the right transfer quickly
+                Find the right item quickly
               </h2>
               <p className="meta-copy mt-3">
-                Search by filename, hash, peer, or direction. Re-share only
-                reuses stored content that is already in the local blob store.
+                Search by filename, hash, peer, direction, or state. Re-share
+                only uses content still stored on this device.
               </p>
             </div>
           </div>
@@ -221,7 +228,7 @@ export function HistoryView() {
                   {value === "all"
                     ? "All transfers"
                     : value === "send"
-                      ? "Sends only"
+                      ? "Share activity only"
                       : "Receives only"}
                 </button>
               ))}
@@ -280,7 +287,7 @@ export function HistoryView() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-sm font-medium text-slate-200">
             <History className="h-4 w-4 text-violet-200" />
-            Transfer log
+            Recent activity
           </div>
           <button
             onClick={() => void handleClearHistory()}
@@ -297,12 +304,12 @@ export function HistoryView() {
             icon={history.length === 0 ? Clock3 : Search}
             title={
               history.length === 0
-                ? "No transfers yet"
+                ? "No activity yet"
                 : "No matching transfers"
             }
             copy={
               history.length === 0
-                ? "Sent and received files show up here with route, speed, and a one-tap re-share."
+                ? "Completed receives and prepared outgoing shares show up here."
                 : "Adjust the filters or complete a new transfer to populate the history."
             }
           />
@@ -322,9 +329,12 @@ export function HistoryView() {
                       <span
                         className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-0.5 text-[10px] uppercase tracking-[0.22em] ${directionTone(
                           record.direction,
+                          record.status,
                         )}`}
                       >
-                        {record.direction}
+                        {record.status === "share_prepared"
+                          ? "Share prepared"
+                          : record.direction}
                       </span>
                       <span className="text-xs text-slate-500">
                         {formatTimestamp(record.timestamp)}

@@ -7,7 +7,18 @@ use serde::{Deserialize, Serialize};
 
 const TREE_NAME: &str = "transfer_history";
 
-/// A record of a completed transfer.
+/// Whether an outgoing item is a prepared share or a verified completed transfer.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TransferRecordStatus {
+    /// The received file was verified and saved to its destination.
+    Completed,
+    /// Content was imported and a share ticket was prepared; remote delivery
+    /// has not been confirmed.
+    SharePrepared,
+}
+
+/// A record of a completed receive or a prepared outgoing share.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TransferRecord {
     /// BLAKE3 hash of the transferred blob.
@@ -22,6 +33,10 @@ pub struct TransferRecord {
     pub timestamp: u64,
     /// Transfer direction.
     pub direction: TransferDirection,
+    /// Transfer completion state. Missing values from older databases are
+    /// inferred from the direction during history loading.
+    #[serde(default)]
+    pub status: Option<TransferRecordStatus>,
 }
 
 /// Saves a transfer record to history and flushes to disk.
@@ -59,7 +74,13 @@ pub fn load_all(db: &StorageDb) -> Result<Vec<TransferRecord>> {
     let mut records = Vec::new();
     for entry in &tree {
         let (_, value) = entry?;
-        let record: TransferRecord = serde_json::from_slice(&value)?;
+        let mut record: TransferRecord = serde_json::from_slice(&value)?;
+        if record.status.is_none() {
+            record.status = Some(match record.direction {
+                TransferDirection::Send => TransferRecordStatus::SharePrepared,
+                TransferDirection::Receive => TransferRecordStatus::Completed,
+            });
+        }
         records.push(record);
     }
     records.sort_by_key(|record| std::cmp::Reverse(record.timestamp));
@@ -118,6 +139,7 @@ mod tests {
             peer: Some("peer-1".into()),
             timestamp: 1_700_000_000,
             direction: TransferDirection::Send,
+            status: Some(TransferRecordStatus::SharePrepared),
         };
         save_record(&db, &record).expect("record should save");
         let records = load_all(&db).expect("records should load");
@@ -135,6 +157,7 @@ mod tests {
             peer: None,
             timestamp: 1_700_000_000,
             direction: TransferDirection::Send,
+            status: Some(TransferRecordStatus::SharePrepared),
         };
         let newest = TransferRecord {
             hash: "abc123".into(),
@@ -143,6 +166,7 @@ mod tests {
             peer: None,
             timestamp: 1_700_000_100,
             direction: TransferDirection::Send,
+            status: Some(TransferRecordStatus::SharePrepared),
         };
         save_record_no_flush(&db, &oldest).expect("oldest should save");
         save_record(&db, &newest).expect("newest should save");
@@ -163,11 +187,31 @@ mod tests {
             peer: Some("peer-1".into()),
             timestamp: 1_700_000_000,
             direction: TransferDirection::Send,
+            status: Some(TransferRecordStatus::SharePrepared),
         };
         save_record(&db, &record).expect("record should save");
         clear_all(&db).expect("history should clear");
 
         let records = load_all(&db).expect("records should load");
         assert!(records.is_empty());
+    }
+
+    #[test]
+    fn legacy_outgoing_records_are_marked_as_prepared_shares() {
+        let (db, _dir) = temp_db();
+        let tree = db.tree(TREE_NAME).expect("history tree");
+        let legacy = serde_json::json!({
+            "hash": "abc123",
+            "filename": "test.txt",
+            "size": 3,
+            "peer": null,
+            "timestamp": 1_700_000_000,
+            "direction": "send"
+        });
+        tree.insert(b"legacy", serde_json::to_vec(&legacy).expect("legacy json"))
+            .expect("save legacy");
+
+        let records = load_all(&db).expect("load history");
+        assert_eq!(records[0].status, Some(TransferRecordStatus::SharePrepared));
     }
 }
