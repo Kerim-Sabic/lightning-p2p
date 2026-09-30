@@ -8,6 +8,8 @@ interface NearbyShareStore {
   clearShares: () => void;
 }
 
+let nearbySharesRequestSequence = 0;
+
 function sameShares(left: NearbyShare[], right: NearbyShare[]): boolean {
   if (left.length !== right.length) {
     return false;
@@ -34,17 +36,31 @@ function sameShares(left: NearbyShare[], right: NearbyShare[]): boolean {
   });
 }
 
-export const useNearbyShareStore = create<NearbyShareStore>((set) => ({
+export const useNearbyShareStore = create<NearbyShareStore>((set, get) => ({
   shares: [],
 
   refreshShares: async () => {
+    const requestSequence = ++nearbySharesRequestSequence;
+    const baselineShares = get().shares;
     const shares = await getDiscoveredShares();
-    set((state) => (sameShares(state.shares, shares) ? state : { shares }));
+    set((state) => {
+      if (
+        requestSequence !== nearbySharesRequestSequence ||
+        state.shares !== baselineShares
+      ) {
+        return state;
+      }
+      return sameShares(state.shares, shares) ? state : { shares };
+    });
   },
 
   applySharesUpdated: (shares) => {
+    nearbySharesRequestSequence += 1;
     set((state) => (sameShares(state.shares, shares) ? state : { shares }));
   },
 
-  clearShares: () => set({ shares: [] }),
+  clearShares: () => {
+    nearbySharesRequestSequence += 1;
+    set({ shares: [] });
+  },
 }));
