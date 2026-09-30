@@ -155,7 +155,9 @@ pub(crate) async fn download_collection(
         .map(|addr| addr.id)
         .collect();
     let root = ticket.primary().hash();
-    let tracker = SwarmTracker::new(ticket.size().filter(|&size| size > 0));
+    // Ticket size is unauthenticated sender metadata. Report an unknown total
+    // until the received content has been fully verified and measured locally.
+    let tracker = SwarmTracker::new(None);
 
     // Stage 1: the HashSeq root is a tiny blob listing child hashes.
     fetch_blob(

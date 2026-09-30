@@ -267,8 +267,11 @@ async fn receive_core(
         return Err(LightningP2PError::Other("Cancelled".into()));
     }
 
-    let tracked_total = progress.map(|p| p.snapshot().1);
+    // The ticket's size is only a sender-provided estimate. Recompute from
+    // the fully verified local blobs before disk preflight and final progress.
+    let verified_size = export::ticket_size(node.blobs_client(), ticket.primary()).await?;
     if let Some(progress) = progress {
+        progress.set(verified_size, verified_size);
         progress.set_phase(TransferPhase::Verifying);
     }
     let export_started_at = Instant::now();
@@ -277,7 +280,7 @@ async fn receive_core(
         node.blobs_client(),
         primary,
         &destination,
-        tracked_total,
+        Some(verified_size),
         cancel_rx,
     )
     .await?;
@@ -447,7 +450,9 @@ async fn download_to_store(
         .map_err(|error| blob_error(&error))?;
 
     let route_kind = infer_route_kind(ticket);
-    let total = ticket.size().unwrap_or(0);
+    // The ticket size is unauthenticated metadata; leave total unknown until
+    // the downloaded blob has been verified and measured locally.
+    let total = 0;
     let started_at = Instant::now();
     let idle_timeout = profile.idle_timeout.max(MIN_DOWNLOAD_IDLE_TIMEOUT);
     let mut lifecycle = DownloadLifecycle {

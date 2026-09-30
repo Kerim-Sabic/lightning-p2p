@@ -369,7 +369,7 @@ fn summarize_names<'a>(names: impl Iterator<Item = &'a str>) -> String {
     }
 }
 
-async fn ticket_size(store: &Store, ticket: &BlobTicket) -> Result<u64> {
+pub(crate) async fn ticket_size(store: &Store, ticket: &BlobTicket) -> Result<u64> {
     if !ticket.recursive() {
         return blob_size(store, ticket.hash()).await;
     }
@@ -379,7 +379,11 @@ async fn ticket_size(store: &Store, ticket: &BlobTicket) -> Result<u64> {
         .map_err(|error| blob_error(&error))?;
     let mut total = 0u64;
     for (_name, hash) in collection.iter() {
-        total += blob_size(store, *hash).await?;
+        total = total
+            .checked_add(blob_size(store, *hash).await?)
+            .ok_or_else(|| {
+                LightningP2PError::Other("The received collection is too large to export.".into())
+            })?;
     }
     Ok(total)
 }
@@ -566,6 +570,27 @@ mod tests {
                 .is_err()
         );
         assert_eq!(read_dir_entries(dir.path()).await.unwrap().len(), 0);
+    }
+
+    #[tokio::test]
+    async fn collection_size_uses_verified_file_blobs_only() {
+        let store = iroh_blobs::store::mem::MemStore::new();
+        let first = store.add_bytes(b"first".to_vec()).await.unwrap();
+        let second = store.add_bytes(b"second file".to_vec()).await.unwrap();
+        let root = Collection::from_iter([
+            ("first.txt".to_string(), first.hash),
+            ("second.txt".to_string(), second.hash),
+        ])
+        .store(store.as_ref())
+        .await
+        .unwrap();
+        let ticket = BlobTicket::new(
+            iroh::EndpointAddr::new(iroh::SecretKey::from_bytes(&[1; 32]).public()),
+            root.hash(),
+            iroh_blobs::BlobFormat::HashSeq,
+        );
+
+        assert_eq!(ticket_size(store.as_ref(), &ticket).await.unwrap(), 16);
     }
 
     #[tokio::test]

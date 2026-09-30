@@ -49,6 +49,7 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [status, setStatus] = useState("");
   const [info, setInfo] = useState<TicketInfo | null>(null);
+  const [sizeVerified, setSizeVerified] = useState(false);
   const [files, setFiles] = useState<CollectionFile[]>([]);
   const [savedHashes, setSavedHashes] = useState<Set<string>>(new Set());
   const [streamedReceive, setStreamedReceive] = useState(false);
@@ -79,6 +80,7 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
   const beginInspect = async () => {
     setPhase("inspecting");
     setError(null);
+    setSizeVerified(false);
     try {
       setInfo(await inspectTicket(ticket));
       setPhase("ready");
@@ -95,6 +97,7 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
     setFiles([]);
     setSavedHashes(new Set());
     setStreamedReceive(false);
+    setSizeVerified(false);
     const controller = new AbortController();
     abortControllerRef.current = controller;
     let lastUiUpdate = 0;
@@ -124,6 +127,7 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
         setInfo((current) =>
           current ? { ...current, size: verifiedSize } : current,
         );
+        setSizeVerified(true);
         setFiles(files);
         setReceivedBytes(latestBytes);
         setStatus("Choose a file to stream it to disk.");
@@ -146,7 +150,16 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
         });
         setReceivedBytes(latestBytes);
         setStatus("Reading files…");
-        setFiles(await rx.listCollection(root));
+        const receivedFiles = await rx.listCollection(root);
+        const verifiedSize = receivedFiles.reduce(
+          (sum, file) => sum + file.size,
+          0,
+        );
+        setInfo((current) =>
+          current ? { ...current, size: verifiedSize } : current,
+        );
+        setSizeVerified(true);
+        setFiles(receivedFiles);
         setPhase("done");
       }
     } catch (err) {
@@ -265,8 +278,11 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
                   >
                     {info.label || "Shared files"}
                   </p>
-                  <p className="shrink-0 font-mono text-[12px] text-[var(--signal-green)]">
-                    {formatBytes(info.size)}
+                  <p className="shrink-0 text-right text-[11px] text-[color:var(--muted-copy)]">
+                    {sizeVerified ? "Verified" : "Sender estimate"}
+                    <span className="ml-1.5 font-mono text-[12px] text-[var(--signal-green)]">
+                      {formatBytes(info.size)}
+                    </span>
                   </p>
                 </div>
                 {refused && (

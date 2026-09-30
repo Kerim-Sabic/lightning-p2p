@@ -242,7 +242,9 @@ async fn start_receive_ticket(
                     .map_or_else(|| ticket.primary().hash().to_string(), str::to_string),
                 peer: Some(ticket.primary().addr().id.to_string()),
                 bytes: 0,
-                total: ticket.size().unwrap_or(0),
+                // The ticket's size is an unverified estimate; the receiver
+                // publishes the actual total after content verification.
+                total: 0,
                 speed_bps: 0,
                 route_kind: RouteKind::Unknown,
                 phase: TransferPhase::Connecting,
