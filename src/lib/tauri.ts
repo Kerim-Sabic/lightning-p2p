@@ -825,6 +825,17 @@ export async function removePairedDevice(
   return invoke<PairedDevice[]>("remove_paired_device", { nodeId });
 }
 
+export function onPairedDevicesUpdated(
+  callback: (devices: PairedDevice[]) => void,
+): Promise<UnlistenFn> {
+  if (!isDesktopRuntime()) {
+    return Promise.resolve(() => {});
+  }
+  return listen<PairedDevice[]>("paired-devices-updated", ({ payload }) => {
+    callback(payload);
+  });
+}
+
 export async function getNodeStatus(): Promise<NodeStatus> {
   if (!isDesktopRuntime()) {
     return browserNodeStatus;
@@ -1056,7 +1067,11 @@ export async function respondToOffer(
   autoCatch = false,
 ): Promise<string | null> {
   requireNativeRuntime("Responding to a nearby offer");
-  return invoke<string | null>("respond_to_offer", { offerId, accept, autoCatch });
+  return invoke<string | null>("respond_to_offer", {
+    offerId,
+    accept,
+    autoCatch,
+  });
 }
 
 export async function setReadyToCatch(

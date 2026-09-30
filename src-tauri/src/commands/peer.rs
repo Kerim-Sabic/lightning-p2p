@@ -8,6 +8,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 
 const SHORT_NODE_ID_LEN: usize = 12;
+const PAIRED_DEVICES_UPDATED_EVENT: &str = "paired-devices-updated";
 
 /// Frontend-facing identity for the *local* device — surfaced in the Devices
 /// view header so users can confirm they are visible (and as which name) to
@@ -110,6 +111,7 @@ pub async fn list_paired_devices(state: State<'_, AppState>) -> Result<Vec<Paire
 /// Returns an error if either identity is invalid or the updated device list cannot be saved.
 #[tauri::command]
 pub async fn pair_verified_device(
+    app: AppHandle,
     state: State<'_, AppState>,
     node_id: String,
     name: String,
@@ -121,11 +123,13 @@ pub async fn pair_verified_device(
         .node_id()
         .to_string();
     comparison_code(&local_id, &node_id).map_err(String::from)?;
-    state
+    let devices = state
         .paired_devices
         .pair(&node_id, &name)
         .await
-        .map_err(String::from)
+        .map_err(String::from)?;
+    emit_paired_devices_updated(&app, &devices);
+    Ok(devices)
 }
 
 /// Changes only the local display name of a saved device.
@@ -135,15 +139,18 @@ pub async fn pair_verified_device(
 /// Returns an error if the device is not saved or the updated list cannot be saved.
 #[tauri::command]
 pub async fn rename_paired_device(
+    app: AppHandle,
     state: State<'_, AppState>,
     node_id: String,
     name: String,
 ) -> Result<Vec<PairedDevice>, String> {
-    state
+    let devices = state
         .paired_devices
         .rename(&node_id, &name)
         .await
-        .map_err(String::from)
+        .map_err(String::from)?;
+    emit_paired_devices_updated(&app, &devices);
+    Ok(devices)
 }
 
 /// Removes a saved peer identity from this device.
@@ -163,6 +170,7 @@ pub async fn remove_paired_device(
         .remove(&node_id)
         .await
         .map_err(String::from)?;
+    emit_paired_devices_updated(&app, &devices);
     if let Some(shares) = state
         .nearby_shares
         .clear_discovered_shares_for(&node_id)
@@ -173,4 +181,10 @@ pub async fn remove_paired_device(
         }
     }
     Ok(devices)
+}
+
+fn emit_paired_devices_updated(app: &AppHandle, devices: &[PairedDevice]) {
+    if let Err(error) = app.emit(PAIRED_DEVICES_UPDATED_EVENT, devices) {
+        tracing::warn!(%error, "could not publish paired-device update");
+    }
 }

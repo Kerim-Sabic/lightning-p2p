@@ -9,11 +9,13 @@ import {
   WifiOff,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { attachAsyncUnlisten } from "../hooks/asyncSubscription";
 import {
   getLocalDeviceIdentity,
   getDevicePairingCode,
   isDesktopRuntime,
   listPairedDevices,
+  onPairedDevicesUpdated,
   offerShareToPeer,
   pickShareFiles,
   pairVerifiedDevice,
@@ -167,6 +169,19 @@ export function DevicesView() {
     return () => {
       active = false;
     };
+  }, [nativeRuntime, setError]);
+
+  useEffect(() => {
+    if (!nativeRuntime) return;
+    return attachAsyncUnlisten(
+      onPairedDevicesUpdated((saved) => setPairedDevices(saved)),
+      (error: unknown) =>
+        setError(
+          error instanceof Error
+            ? error.message
+            : "Could not subscribe to saved device updates",
+        ),
+    );
   }, [nativeRuntime, setError]);
 
   const beginPairing = async (device: NearbyDevice): Promise<void> => {

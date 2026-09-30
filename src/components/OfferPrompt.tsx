@@ -1,8 +1,10 @@
 import { Check, Inbox, LaptopMinimal, X } from "lucide-react";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { attachAsyncUnlisten } from "../hooks/asyncSubscription";
 import { formatBytes } from "../lib/format";
 import {
   listPairedDevices,
+  onPairedDevicesUpdated,
   respondToOffer,
   setNearbyPeerBlocked,
   type PairedDevice,
@@ -27,6 +29,7 @@ export function OfferPrompt() {
     failed: boolean;
   } | null>(null);
   const autoCatchStarted = useRef<string | null>(null);
+  const pairedLookupRevision = useRef(0);
   const dialogRef = useRef<HTMLElement>(null);
   const acceptButtonRef = useRef<HTMLButtonElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
@@ -34,6 +37,25 @@ export function OfferPrompt() {
   const offer = queue[0];
   const offerId = offer?.offer_id;
   const readyToCatch = offer?.ready_to_catch ?? false;
+
+  useEffect(
+    () =>
+      attachAsyncUnlisten(
+        onPairedDevicesUpdated((devices) => {
+          pairedLookupRevision.current += 1;
+          setPairedLookup((current) =>
+            current ? { ...current, devices, failed: false } : current,
+          );
+        }),
+        (error: unknown) =>
+          setError(
+            error instanceof Error
+              ? error.message
+              : "Could not subscribe to saved device updates",
+          ),
+      ),
+    [setError],
+  );
 
   useEffect(() => {
     if (offerId) {
@@ -59,14 +81,15 @@ export function OfferPrompt() {
   useEffect(() => {
     if (!offerId) return;
     let active = true;
+    const revision = pairedLookupRevision.current;
     void listPairedDevices().then(
       (devices) => {
-        if (active) {
+        if (active && revision === pairedLookupRevision.current) {
           setPairedLookup({ offerId, devices, failed: false });
         }
       },
       () => {
-        if (active) {
+        if (active && revision === pairedLookupRevision.current) {
           setPairedLookup({ offerId, devices: null, failed: true });
         }
       },

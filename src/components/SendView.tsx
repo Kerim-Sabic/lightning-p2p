@@ -35,6 +35,7 @@ import {
   isMobileRuntime,
   offerShareToPeer,
   onWindowDragDropEvent,
+  onPairedDevicesUpdated,
   pickShareFiles as pickShareFilesFromDialog,
   listPairedDevices,
   renderTicketQr,
@@ -179,6 +180,21 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
       active = false;
     };
   }, [nativeRuntime]);
+
+  useEffect(() => {
+    if (!nativeRuntime) return;
+    return attachAsyncUnlisten(
+      onPairedDevicesUpdated((paired) => {
+        setVerifiedNodeIds(new Set(paired.map((device) => device.node_id)));
+      }),
+      (error: unknown) =>
+        setError(
+          error instanceof Error
+            ? error.message
+            : "Could not subscribe to saved device updates",
+        ),
+    );
+  }, [nativeRuntime, setError]);
 
   const selectionSize = useMemo(
     () => shareSelection.reduce((total, item) => total + item.size, 0),
