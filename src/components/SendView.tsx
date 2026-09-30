@@ -504,6 +504,8 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
 
   return (
     <div className="space-y-4">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.08fr)_minmax(320px,0.92fr)]">
+        <div className="min-w-0 space-y-4">
       <section
         className={`glass-panel drop-zone ${isDragActive ? "drop-zone-active" : ""}`}
       >
@@ -732,6 +734,8 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
         </section>
       ) : null}
 
+        </div>
+        <aside className="min-w-0 xl:sticky xl:top-4 xl:self-start">
       <section
         ref={recipientSurfaceRef}
         className="glass-panel p-5"
@@ -846,6 +850,8 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
           </p>
         )}
       </section>
+        </aside>
+      </div>
 
       {shareTicket ? (
         <section className="glass-panel p-5">
