@@ -617,7 +617,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
 
       {isPreparingSelection && shareSelection.length === 0 ? (
         <section
-          className="glass-panel flex items-center gap-3 p-5"
+          className="glass-panel flex flex-wrap items-center gap-3 p-5"
           aria-live="polite"
         >
           <Loader2 className="h-4 w-4 animate-spin text-sky-300" />
@@ -629,6 +629,13 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
               Scanning files and folders before staging them for share.
             </p>
           </div>
+          <button
+            type="button"
+            onClick={clearShareSelection}
+            className="glass-button ml-auto min-h-11 px-4 text-sm text-slate-100"
+          >
+            Cancel
+          </button>
         </section>
       ) : null}
 
