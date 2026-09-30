@@ -8,6 +8,8 @@ interface NearbyDeviceStore {
   clearDevices: () => void;
 }
 
+let nearbyDevicesRequestSequence = 0;
+
 function sameDevices(left: NearbyDevice[], right: NearbyDevice[]): boolean {
   if (left.length !== right.length) {
     return false;
@@ -31,17 +33,31 @@ function sameDevices(left: NearbyDevice[], right: NearbyDevice[]): boolean {
   });
 }
 
-export const useNearbyDeviceStore = create<NearbyDeviceStore>((set) => ({
+export const useNearbyDeviceStore = create<NearbyDeviceStore>((set, get) => ({
   devices: [],
 
   refreshDevices: async () => {
+    const requestSequence = ++nearbyDevicesRequestSequence;
+    const baselineDevices = get().devices;
     const devices = await getNearbyDevices();
-    set((state) => (sameDevices(state.devices, devices) ? state : { devices }));
+    set((state) => {
+      if (
+        requestSequence !== nearbyDevicesRequestSequence ||
+        state.devices !== baselineDevices
+      ) {
+        return state;
+      }
+      return sameDevices(state.devices, devices) ? state : { devices };
+    });
   },
 
   applyDevicesUpdated: (devices) => {
+    nearbyDevicesRequestSequence += 1;
     set((state) => (sameDevices(state.devices, devices) ? state : { devices }));
   },
 
-  clearDevices: () => set({ devices: [] }),
+  clearDevices: () => {
+    nearbyDevicesRequestSequence += 1;
+    set({ devices: [] });
+  },
 }));
