@@ -50,7 +50,7 @@ function handoffTicket(): HandoffTicket {
 }
 function sourceLabel(source: TicketSource): string {
   switch (source) {
-    case "fragment": return "Ticket pulled from the URL fragment — never sent to the website server.";
+    case "fragment": return "Ticket read from the URL fragment; page scripts can access it.";
     case "storage":  return "Ticket restored from this browser session.";
     case "missing":  return "Waiting for a receive ticket.";
   }
@@ -140,7 +140,7 @@ export function ReceiveHandoffPage() {
                 Open this transfer in <span className="text-[var(--signal-green)]">Lightning P2P</span>.
               </h1>
               <p className="hero-rise hero-rise--stagger-2 mt-6 max-w-[56ch] text-pretty text-[16.5px] leading-[1.65] text-[color:var(--soft-copy)]">
-                The ticket stays in the URL fragment, which means it never reaches the website server. If the native app is installed, the transfer should open there in about a second.
+                Browsers omit the ticket fragment from the HTTP page request, though code running on this page can read it. If the native app is installed, the transfer should open there in about a second.
               </p>
               <div className="hero-rise hero-rise--stagger-3 mt-9 flex flex-wrap items-center gap-3">
                 <button
@@ -165,7 +165,7 @@ export function ReceiveHandoffPage() {
               </div>
               <div className="hero-rise hero-rise--stagger-4 mt-8 flex flex-wrap gap-x-6 gap-y-2 text-[12px] text-[color:var(--muted-copy)]">
                 <span className="inline-flex items-center gap-1.5"><FileCheck2 className="h-3.5 w-3.5 text-[var(--signal-green)]" /> BLAKE3 verified at receive</span>
-                <span className="inline-flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5 text-[var(--signal-green)]" /> Capability token, never a server upload</span>
+                <span className="inline-flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5 text-[var(--signal-green)]" /> Capability link; no cloud file upload</span>
               </div>
 
               {showBrowserReceive && handoff.ticket && (
@@ -189,7 +189,7 @@ export function ReceiveHandoffPage() {
                           </span>
                         </div>
                         <p className="mt-1.5 text-[12.5px] leading-6 text-[color:var(--soft-copy)]">
-                          When someone sends you a Lightning P2P link, a <span className="font-semibold text-white">Receive in this browser</span> button appears right here. The same Rust engine runs in this tab as WebAssembly and pulls the files straight from the sender — BLAKE3-verified, never through a server. Ask the sender for their <code className="font-mono text-[11px] text-white/82">/receive#t=…</code> link to try it.
+                          When someone sends you a Lightning P2P link, a <span className="font-semibold text-white">Receive in this browser</span> button appears right here. The same Rust engine runs in this tab as WebAssembly and receives BLAKE3-verified bytes from the sender. An encrypted relay may carry traffic when a direct route is blocked; it does not store the files. Ask the sender for their <code className="font-mono text-[11px] text-white/82">/receive#t=…</code> link to try it.
                         </p>
                       </div>
                     </div>
@@ -274,7 +274,7 @@ export function ReceiveHandoffPage() {
               <p className="text-[11px] font-bold uppercase tracking-[0.26em] text-[var(--signal-green)]">How the handoff works</p>
               <h2 className="font-display mt-3 text-[22px] font-bold tracking-[-0.012em] text-white">Receive links keep the ticket out of server logs.</h2>
               <p className="mt-3 text-[13.5px] leading-7 text-[color:var(--soft-copy)]">
-                Lightning P2P receive URLs are <code className="font-mono text-[12px] text-white/82">/receive#t=&lt;ticket&gt;</code>. Browsers don't send the fragment in HTTP requests, so the ticket never reaches a web server. From here you can open the native app via the <code className="font-mono text-[12px] text-white/82">lightning-p2p://</code> scheme, or receive right in this tab — the same Rust engine runs as WebAssembly and pulls the files directly from the sender, BLAKE3-verified, no server in the middle.
+                Lightning P2P receive URLs are <code className="font-mono text-[12px] text-white/82">/receive#t=&lt;ticket&gt;</code>. Browsers don't send the fragment in HTTP requests, so the ticket is not included in the page request. From here you can open the native app via the <code className="font-mono text-[12px] text-white/82">lightning-p2p://</code> scheme, or receive right in this tab — the same Rust engine runs as WebAssembly and verifies the bytes with BLAKE3. An encrypted relay may forward traffic; it does not host the files.
               </p>
             </article>
             <aside className="rounded-2xl border border-white/8 bg-white/[0.03] p-6">

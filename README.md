@@ -109,8 +109,8 @@ drop files → share the /receive link  →     open link → "Receive in this b
 ```
 
 - **Not a JS reimplementation** — the identical `iroh` + `iroh-blobs` core, compiled to WebAssembly ([`web-receiver/`](web-receiver/)).
-- **No server in the middle** — the ticket stays in the URL fragment (never sent to the site), the bytes go peer → tab over the iroh relay.
-- **Honest limits** — browsers can't hole-punch (relay-only) and files live in tab memory (use the app past ~2 GB). The tab must stay open while sharing.
+- **No cloud file hosting** — the ticket stays in the URL fragment and is not included in the page request. Browser peers use an encrypted iroh relay because browsers cannot hole-punch; the relay forwards traffic but does not host files.
+- **Honest limits** — browser sending is memory-backed, warns past 500 MiB, and refuses past 2 GiB. Browser receiving currently has a 128 MiB aggregate memory limit. Keep the tab open while sharing or receiving; use the native app for larger transfers.
 
 ---
 
@@ -118,7 +118,7 @@ drop files → share the /receive link  →     open link → "Receive in this b
 
 | ✓ Best fit | ✗ Not for |
 | --- | --- |
-| Moving large builds, databases, media between desktops | Browser shares beyond ~2 GB (tabs are memory-bound; the app streams from disk without limits) |
+| Moving large builds, databases, media between desktops | Browser send shares beyond 2 GiB or browser receives beyond 128 MiB (both browser paths are memory-backed; use the native app for large transfers) |
 | Desktop ↔ Android sideload testing | iOS (planned, not shipped) |
 | Sharing without cloud accounts, upload caps, or hosted retention | AirDrop protocol compatibility |
 | Open-source workflows that need inspectable artifacts + checksums | Phone-to-phone NFC writing (NFC receive only) |
@@ -225,10 +225,10 @@ flowchart LR
 2. Rust engine imports content into the local iroh-blobs store.
 3. A receive ticket is generated (`NodeId + content hash + format`).
 4. Receiver opens a **QR**, **HTTPS handoff link**, **deep link**, or pastes the raw ticket.
-5. iroh dials **direct QUIC**; falls back to **relay-assisted** route when NAT blocks the path.
+5. iroh dials **direct QUIC**; falls back to an **encrypted relay-assisted** route when NAT blocks the path. The relay carries traffic and is not cloud file storage.
 6. iroh-blobs streams **BLAKE3-verified** bytes to the destination.
 
-Handoff URLs use `/receive#t=<ticket>` — the ticket lives in the URL fragment, so it **never reaches the website server**.
+Handoff URLs use `/receive#t=<ticket>` — browsers omit URL fragments from HTTP requests, so the ticket is not included in the page request. Scripts running on the page can still read it.
 
 ---
 

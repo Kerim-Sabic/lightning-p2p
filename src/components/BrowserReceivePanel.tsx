@@ -175,8 +175,9 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
           </div>
           <p className="mt-1.5 text-[12.5px] leading-6 text-[color:var(--soft-copy)]">
             No install. The same Rust engine runs as WebAssembly in this tab and
-            pulls the files directly from the sender — BLAKE3-verified, never
-            through a server.
+            pulls the files from the sender over an encrypted connection. A
+            relay may forward encrypted traffic when a direct route is blocked;
+            it does not host the files. Received bytes are BLAKE3-verified.
           </p>
         </div>
       </div>

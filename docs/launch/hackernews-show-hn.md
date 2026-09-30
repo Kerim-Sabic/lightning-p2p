@@ -27,7 +27,7 @@ The thing I'm proudest of in this release: you can receive a file in any
 browser with nothing installed. The receive page runs the exact same Rust
 transfer engine (iroh + iroh-blobs) compiled to WebAssembly, dials the
 sender directly over iroh's relay, and verifies BLAKE3 in the tab. There is
-no HTTP file server in the middle — the bytes never touch our infrastructure.
+no cloud file hosting — an encrypted relay may forward traffic when direct connectivity fails.
 
 It started because I kept hitting the same wall: a 6 GB video from a Windows
 laptop to an Android phone in another country. WeTransfer uploads and retains

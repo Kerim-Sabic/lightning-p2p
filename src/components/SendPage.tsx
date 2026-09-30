@@ -27,7 +27,7 @@ import {
 } from "../lib/webReceiver";
 
 // Shares live in tab memory (MemStore), so gate before importing: soft-warn
-// past 500 MB, hard-refuse past ~2 GB — same limits as browser receive.
+// past 500 MiB and hard-refuse past 2 GiB.
 const WARN_BYTES = 500 * 1024 * 1024;
 const REFUSE_BYTES = 2 * 1024 * 1024 * 1024;
 
@@ -257,7 +257,7 @@ export function SendPage() {
             Share files <span className="text-[var(--signal-green)]">straight from this tab.</span>
           </h1>
           <p className="hero-rise hero-rise--stagger-2 mt-5 max-w-[58ch] text-pretty text-[15.5px] leading-[1.65] text-[color:var(--soft-copy)]">
-            The Rust engine runs in this page as WebAssembly and serves your files directly to whoever opens your link — their browser, app, or terminal. Nothing uploads to a server; <strong className="font-semibold text-white">keep this tab open</strong> until they finish.
+            The Rust engine runs in this page as WebAssembly and serves your files to whoever opens your link — their browser, app, or terminal. No cloud file upload is used. An encrypted relay may forward traffic if a direct route is blocked; <strong className="font-semibold text-white">keep this tab open</strong> until they finish.
           </p>
 
           {!supported && (

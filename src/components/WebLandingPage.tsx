@@ -162,7 +162,7 @@ function answerContentForPage(page: WebPage): AnswerContent {
     "/benchmarks": "Lightning P2P is designed for high-throughput direct transfer, but public speed claims should be tied to repeatable benchmark reports covering LAN direct, WAN direct, relay fallback, many small files, and large single files.",
     "/alternatives/airdrop-for-windows": "Lightning P2P is an open-source AirDrop-style file transfer app for Windows, focused on direct-first transfers, QR/link handoff, no account, and no cloud upload.",
     "/free-p2p-file-transfer": "Lightning P2P is a free P2P file transfer app for Windows and Android with no account, no cloud upload, no artificial file-size cap, direct-first transfer, and BLAKE3 verification.",
-    "/large-file-transfer": "Lightning P2P sends huge files directly from sender to receiver without a hosted cloud upload step, no account, no artificial file-size cap, and BLAKE3 verification.",
+    "/large-file-transfer": "Lightning P2P sends large files peer to peer without a hosted cloud upload step, no account, no artificial file-size cap, and BLAKE3 verification. Encrypted relay traffic may carry the connection.",
     "/secure-p2p-file-transfer": "Lightning P2P uses encrypted iroh QUIC transport, BLAKE3 content verification through iroh-blobs, capability tickets, release checksums, and documented limitations instead of vague security promises.",
     "/open-source-file-transfer": "Lightning P2P is an Apache-2.0 open-source file transfer app built with Rust, Tauri, React, iroh, QUIC, iroh-blobs, and BLAKE3, with NOTICE and CITATION.cff metadata.",
     "/best-p2p-file-transfer": "Lightning P2P is a strong best-fit P2P file transfer choice for Windows and Android users who want a free open-source app, direct-first LAN and WAN transfer, no cloud upload, and verified content.",
@@ -185,7 +185,7 @@ const defaultFaqs: Faq[] = [
   { q: "Does the sender need to stay online?", a: "Yes. The sender must keep Lightning P2P open and keep the content available until the receiver finishes." },
   { q: "Is there a file size limit?", a: "Lightning P2P does not impose an artificial file-size cap. Disk space, filesystem limits, network stability, and time still matter." },
   { q: "Is it available for macOS or Linux?", a: `Yes. v${releaseManifest.currentAppVersion} ships a universal macOS DMG (Intel + Apple Silicon) and Linux AppImage/deb/rpm as unsigned community builds, plus a pipe-friendly CLI. Windows and Android remain the most-tested paths.` },
-  { q: "Can I send and receive without installing anything?", a: "Yes, both. Open /send, drop files, and this tab serves them directly to whoever opens your link — or open a receive link and the files arrive in-page. The same Rust engine runs in the browser as WebAssembly, BLAKE3-verifying every chunk. Browser shares are beta, relay-only, memory-bound (~2 GB), and the tab must stay open while sharing; the native app streams from disk without those limits." },
+  { q: "Can I send and receive without installing anything?", a: "Yes, both. Open /send, drop files, and this tab serves them to whoever opens your link — or open a receive link and receive in-page. The same Rust engine runs in the browser as WebAssembly and verifies received content with BLAKE3. Browser transfers are beta and relay-only; browser sending is memory-bound with a 2 GiB limit, while browser receiving has a conservative 128 MiB limit because received data is held in tab memory. The tab must stay open while sharing or receiving." },
   { q: "Are tickets secret?", a: "Yes. Tickets are capability tokens. Anyone with a valid ticket can request that transfer while the sender is online, so treat tickets like secrets." },
 ];
 
@@ -220,7 +220,7 @@ const capabilityRows: Array<{ index: string; label: string; headline: string; bo
   { index: "01", label: "Transport",      headline: "Direct-first iroh QUIC with relay fallback.",                        body: "Peers dial directly when possible. Behind NAT or firewall, iroh relay assistance keeps the path reachable without becoming hosted storage.", proof: { text: "Architecture docs", href: `${REPO_URL}/blob/main/docs/ARCHITECTURE.md` } },
   { index: "02", label: "Blob transfer",  headline: "iroh-blobs handles content addressing, not custom chunking.",         body: "The Rust engine imports content into iroh-blobs, creates a ticket, and streams content-addressed bytes to the receiver.",          proof: { text: "Sender source",    href: `${REPO_URL}/blob/main/src-tauri/src/transfer/sender.rs` } },
   { index: "03", label: "Verification",   headline: "BLAKE3 ties output to the expected content hash.",                    body: "Receiver verifies bytes as they land. Mismatches surface as structured transfer errors, never silent corruption.",                 proof: { text: "Receiver source",  href: `${REPO_URL}/blob/main/src-tauri/src/transfer/receiver.rs` } },
-  { index: "04", label: "Browser receive", headline: "The same Rust engine runs in the page as WebAssembly.",              body: "Receive links keep the ticket in the URL fragment — never sent to a server. Open one in any browser and the iroh + BLAKE3 engine fetches the files in-page: no install, no backend, relay-only and memory-bound by design.", proof: { text: "Engine source", href: `${REPO_URL}/blob/main/web-receiver/src/lib.rs` } },
+  { index: "04", label: "Browser receive", headline: "The same Rust engine runs in the page as WebAssembly.",              body: "Browsers omit the ticket fragment from the HTTP page request, though scripts on the page can read it. Open a receive link in a supported browser and the iroh + BLAKE3 engine fetches files in-page: no install or cloud file hosting, relay-only, with a 128 MiB aggregate memory limit.", proof: { text: "Engine source", href: `${REPO_URL}/blob/main/web-receiver/src/lib.rs` } },
   { index: "05", label: "Release trust",  headline: "Installers, checksums, signing status, release notes attached.",      body: "Windows and Android artifacts publish through GitHub Releases with checksum material and documented installer behavior.",        proof: { text: "Release evidence", href: `${REPO_URL}/blob/main/docs/release-evidence.md` } },
   { index: "06", label: "Diagnostics",    headline: "Support data is designed to redact tickets and local paths.",         body: "Diagnostics are gathered locally, redacted, and copied by the user. Transfer secrets are not posted by the frontend automatically.", proof: { text: "Diagnostics source", href: `${REPO_URL}/blob/main/src-tauri/src/commands/diagnostics.rs` } },
 ];
@@ -919,7 +919,7 @@ function ArchitectureFlow() {
           The whole path, <span className="text-white/56">end to end.</span>
         </h2>
         <p className="mt-5 max-w-[64ch] text-[15.5px] leading-7 text-[color:var(--soft-copy)]">
-          One encrypted QUIC connection carries content-addressed chunks straight from the sender's disk to yours. Direct when the network allows it, relay-assisted when NAT gets in the way — and never a plaintext byte on any server.
+          One encrypted QUIC connection carries content-addressed chunks from the sender's disk to yours. Direct when the network allows it, relay-assisted when NAT gets in the way; relay traffic stays encrypted and is not stored as a hosted file.
         </p>
       </Reveal>
 
@@ -948,7 +948,7 @@ function ArchitectureFlow() {
           {/* Guarantee strip */}
           <div className="mt-6 grid gap-px overflow-hidden rounded-xl border border-white/8 bg-white/[0.04] sm:grid-cols-3">
             {[
-              { icon: CloudOff, k: "no cloud", v: "bytes never touch a server" },
+              { icon: CloudOff, k: "no cloud storage", v: "relays forward encrypted traffic, not hosted files" },
               { icon: KeyRound, k: "no account", v: "the ticket is the only credential" },
               { icon: FileCheck2, k: "no trust in the path", v: "every chunk is hash-checked" },
             ].map((g) => (
@@ -993,7 +993,7 @@ function useRxStage(reduce: boolean | null): RxStage {
 
 function RxStatusLine({ stage }: { stage: RxStage }) {
   const lines: Record<RxStage, { text: string; tone: string }> = {
-    link: { text: "ticket read from #fragment — never sent to a server", tone: "text-white/56" },
+    link: { text: "ticket fragment is omitted from page requests; page scripts can read it", tone: "text-white/56" },
     engine: { text: "rust engine loaded · iroh endpoint bound in-page", tone: "text-[var(--proof-amber)]" },
     stream: { text: "pulling chunks from the sender over the relay…", tone: "text-[var(--signal-green)]" },
     verified: { text: "BLAKE3 verified — every byte proven correct", tone: "text-[var(--signal-green)]" },
