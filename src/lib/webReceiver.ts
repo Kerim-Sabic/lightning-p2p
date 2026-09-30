@@ -3,9 +3,9 @@
 // lazily from `/webrx/` on first use so it never touches the initial page
 // budget — nothing here runs until the visitor opts into browser receive.
 //
-// The engine is relay-only (browsers cannot hole-punch) and memory-bound (the
-// blob lives in WASM memory), which is why the UI gates on size before calling
-// `fetch`. See docs/browser-receiver-spike.md.
+// The engine is relay-only (browsers cannot hole-punch). Browsers with the
+// File System Access API stream verified chunks directly to disk; the
+// compatibility path keeps a strict in-memory size limit.
 
 import { WEBRX_VERSION } from "./webrxVersion";
 
@@ -42,6 +42,15 @@ interface WebReceiverInstance {
     offset: number,
     len: number,
   ): Promise<Uint8Array>;
+  prepare_streamed_collection?(
+    ticket: string,
+    progress_callback: (receivedBytes: number) => boolean,
+  ): Promise<string>;
+  stream_blob_to?(
+    hashHex: string,
+    expectedSize: number,
+    chunk_callback: (chunk: Uint8Array) => Promise<void>,
+  ): Promise<number>;
   free(): void;
 }
 interface WebSenderInstance {
@@ -113,7 +122,7 @@ export async function renderQrSvg(text: string): Promise<string> {
   return mod.render_qr_svg(text);
 }
 
-/** A live browser receiver: a bound iroh endpoint plus an in-memory store. */
+/** A live browser receiver bound to an iroh endpoint. */
 export class BrowserReceiver {
   private stopped = false;
 
@@ -184,6 +193,44 @@ export class BrowserReceiver {
   /** True when the engine supports slice reads for streamed saves. */
   supportsRangedReads(): boolean {
     return typeof this.inner.read_blob_range === "function";
+  }
+
+  /** True when this engine can verify and stream blobs directly to a sink. */
+  supportsStreamingReceive(): boolean {
+    return (
+      typeof this.inner.prepare_streamed_collection === "function" &&
+      typeof this.inner.stream_blob_to === "function"
+    );
+  }
+
+  /** Loads bounded collection metadata without downloading file payloads. */
+  async prepareStreamedCollection(
+    ticket: string,
+    onProgress: (receivedBytes: number) => boolean,
+  ): Promise<CollectionFile[]> {
+    if (!this.inner.prepare_streamed_collection)
+      throw new Error("engine version without streamed receive");
+    const raw = await this.inner.prepare_streamed_collection(
+      ticket,
+      onProgress,
+    );
+    const parsed = JSON.parse(raw) as CollectionFile[];
+    return parsed.map((file) => ({
+      name: file.name,
+      hash: file.hash,
+      size: Number(file.size),
+    }));
+  }
+
+  /** Streams a Bao-verified blob to an async sink with per-chunk backpressure. */
+  async streamBlobTo(
+    hashHex: string,
+    expectedSize: number,
+    onChunk: (chunk: Uint8Array) => Promise<void>,
+  ): Promise<number> {
+    if (!this.inner.stream_blob_to)
+      throw new Error("engine version without streamed receive");
+    return this.inner.stream_blob_to(hashHex, expectedSize, onChunk);
   }
 }
 
@@ -265,7 +312,12 @@ export function receiveLinkForTicket(ticket: string): string {
 
 /** True when the browser exposes the File System Access save picker (Chromium). */
 export function hasSaveFilePicker(): boolean {
-  return typeof window !== "undefined" && "showSaveFilePicker" in window;
+  return (
+    typeof window !== "undefined" &&
+    window.isSecureContext &&
+    typeof (window as Window & { showSaveFilePicker?: unknown })
+      .showSaveFilePicker === "function"
+  );
 }
 
 // Slice size for streamed saves: big enough to keep disk writes efficient,
@@ -290,6 +342,39 @@ export async function saveReceivedFile(
     if (streamed) return;
   }
   await saveBytes(file.name, await receiver.readBlob(file.hash));
+}
+
+/** Saves a file while Rust streams authenticated chunks straight to disk. */
+export async function saveReceivedFileStreaming(
+  receiver: BrowserReceiver,
+  file: CollectionFile,
+): Promise<number> {
+  if (!receiver.supportsStreamingReceive() || !hasSaveFilePicker())
+    throw new Error("This browser cannot stream received files to disk.");
+  const safeName = file.name.split(/[\\/]/).pop() || "download";
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handle = await (window as any).showSaveFilePicker({
+    suggestedName: safeName,
+  });
+  const writable = await handle.createWritable();
+  try {
+    const written = await receiver.streamBlobTo(file.hash, file.size, (chunk) =>
+      writable.write(chunk),
+    );
+    if (written !== file.size)
+      throw new Error(
+        "The received file size did not match its verified manifest.",
+      );
+    await writable.close();
+    return written;
+  } catch (error) {
+    try {
+      await writable.abort();
+    } catch {
+      // The stream already failed; discard any unpublished partial file.
+    }
+    throw error;
+  }
 }
 
 /**

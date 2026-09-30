@@ -8,6 +8,7 @@ use crate::Receiver;
 use iroh_blobs::Hash;
 use std::str::FromStr;
 use wasm_bindgen::prelude::*;
+use wasm_bindgen_futures::JsFuture;
 
 /// Installs a readable panic hook so a Rust panic surfaces in the JS console
 /// instead of an opaque `unreachable` trap. Call once on module load.
@@ -77,6 +78,82 @@ impl WebReceiver {
             .await
             .map_err(|e| JsError::new(&e))?;
         Ok(hash.to_string())
+    }
+
+    /// Fetches only the bounded collection metadata and returns authenticated
+    /// file names and sizes. Payloads are streamed separately to a JS sink.
+    #[wasm_bindgen]
+    pub async fn prepare_streamed_collection(
+        &self,
+        ticket: String,
+        progress_callback: js_sys::Function,
+    ) -> Result<String, JsError> {
+        let entries = self
+            .inner
+            .prepare_streamed_collection(&ticket, |bytes| {
+                progress_callback
+                    .call1(&JsValue::NULL, &JsValue::from_f64(bytes as f64))
+                    .ok()
+                    .and_then(|value| value.as_bool())
+                    .unwrap_or(false)
+            })
+            .await
+            .map_err(|error| JsError::new(&error))?;
+        let json: Vec<String> = entries
+            .iter()
+            .map(|entry| {
+                format!(
+                    "{{\"name\":{},\"hash\":\"{}\",\"size\":{}}}",
+                    serde_json::to_string(&entry.name).unwrap_or_else(|_| "\"\"".into()),
+                    entry.hash,
+                    entry.size
+                )
+            })
+            .collect();
+        Ok(format!("[{}]", json.join(",")))
+    }
+
+    /// Streams authenticated Bao leaves to the supplied async JS sink. The
+    /// promise returned by the sink is awaited before the next leaf is read,
+    /// giving file writes real backpressure.
+    #[wasm_bindgen]
+    pub async fn stream_blob_to(
+        &self,
+        hash_hex: String,
+        expected_size: f64,
+        chunk_callback: js_sys::Function,
+    ) -> Result<f64, JsError> {
+        if !expected_size.is_finite() || expected_size < 0.0 {
+            return Err(JsError::new("invalid expected file size"));
+        }
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let expected_size = expected_size.min(u64::MAX as f64) as u64;
+        let hash = Hash::from_str(&hash_hex).map_err(|error| JsError::new(&error.to_string()))?;
+        let callback = chunk_callback.clone();
+        let received = self
+            .inner
+            .stream_blob_to(hash, expected_size, move |chunk| {
+                let callback = callback.clone();
+                async move {
+                    let chunk = js_sys::Uint8Array::from(chunk.as_slice());
+                    let result = callback.call1(&JsValue::NULL, &chunk).map_err(|error| {
+                        error
+                            .as_string()
+                            .unwrap_or_else(|| "file sink write failed".into())
+                    })?;
+                    let result = JsFuture::from(js_sys::Promise::resolve(&result))
+                        .await
+                        .map_err(|error| {
+                            error
+                                .as_string()
+                                .unwrap_or_else(|| "file sink write failed".into())
+                        })?;
+                    Ok(result.as_bool() != Some(false))
+                }
+            })
+            .await
+            .map_err(|error| JsError::new(&error))?;
+        Ok(received as f64)
     }
 
     /// Closes the endpoint to interrupt a running receive immediately.

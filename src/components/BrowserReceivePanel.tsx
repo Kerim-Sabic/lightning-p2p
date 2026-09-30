@@ -15,6 +15,7 @@ import {
   hasSaveFilePicker,
   inspectTicket,
   saveReceivedFile,
+  saveReceivedFileStreaming,
   type TicketInfo,
 } from "../lib/webReceiver";
 
@@ -50,6 +51,7 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
   const [info, setInfo] = useState<TicketInfo | null>(null);
   const [files, setFiles] = useState<CollectionFile[]>([]);
   const [savedHashes, setSavedHashes] = useState<Set<string>>(new Set());
+  const [streamedReceive, setStreamedReceive] = useState(false);
   const [savingHash, setSavingHash] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [receiver, setReceiver] = useState<BrowserReceiver | null>(null);
@@ -68,8 +70,10 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
     };
   }, [receiver]);
 
-  const refused = info != null && info.size > REFUSE_BYTES;
-  const heavy = info != null && info.size > WARN_BYTES && !refused;
+  const refused =
+    info != null && info.size > REFUSE_BYTES && !hasSaveFilePicker();
+  const heavy =
+    info != null && info.size > WARN_BYTES && !hasSaveFilePicker() && !refused;
 
   const beginInspect = async () => {
     setPhase("inspecting");
@@ -87,6 +91,9 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
     setPhase("receiving");
     setError(null);
     setReceivedBytes(0);
+    setFiles([]);
+    setSavedHashes(new Set());
+    setStreamedReceive(false);
     const controller = new AbortController();
     abortControllerRef.current = controller;
     let lastUiUpdate = 0;
@@ -100,20 +107,47 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
         await rx.cancel();
         throw new Error("Browser receive cancelled.");
       }
-      setStatus("Receiving and verifying (BLAKE3)…");
-      const root = await rx.fetch(ticket, REFUSE_BYTES, (bytes) => {
-        latestBytes = bytes;
-        const now = performance.now();
-        if (now - lastUiUpdate >= 150 || bytes >= REFUSE_BYTES) {
-          lastUiUpdate = now;
-          setReceivedBytes(bytes);
+      if (hasSaveFilePicker() && rx.supportsStreamingReceive()) {
+        setStreamedReceive(true);
+        setStatus("Verifying the share manifest…");
+        const files = await rx.prepareStreamedCollection(ticket, (bytes) => {
+          latestBytes = bytes;
+          const now = performance.now();
+          if (now - lastUiUpdate >= 150) {
+            lastUiUpdate = now;
+            setReceivedBytes(bytes);
+          }
+          return !controller.signal.aborted;
+        });
+        const verifiedSize = files.reduce((sum, file) => sum + file.size, 0);
+        setInfo((current) =>
+          current ? { ...current, size: verifiedSize } : current,
+        );
+        setFiles(files);
+        setReceivedBytes(latestBytes);
+        setStatus("Choose a file to stream it to disk.");
+        setPhase("done");
+      } else {
+        if (info && info.size > REFUSE_BYTES) {
+          throw new Error(
+            "This browser cannot stream this large transfer to disk. Use the native app or a supported browser with the file save picker.",
+          );
         }
-        return !controller.signal.aborted;
-      });
-      setReceivedBytes(latestBytes);
-      setStatus("Reading files…");
-      setFiles(await rx.listCollection(root));
-      setPhase("done");
+        setStatus("Receiving and verifying (BLAKE3)…");
+        const root = await rx.fetch(ticket, REFUSE_BYTES, (bytes) => {
+          latestBytes = bytes;
+          const now = performance.now();
+          if (now - lastUiUpdate >= 150 || bytes >= REFUSE_BYTES) {
+            lastUiUpdate = now;
+            setReceivedBytes(bytes);
+          }
+          return !controller.signal.aborted;
+        });
+        setReceivedBytes(latestBytes);
+        setStatus("Reading files…");
+        setFiles(await rx.listCollection(root));
+        setPhase("done");
+      }
     } catch (err) {
       rx?.stop();
       setReceiver(null);
@@ -143,7 +177,12 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
     if (!receiver) return;
     setSavingHash(file.hash);
     try {
-      await saveReceivedFile(receiver, file);
+      if (streamedReceive) {
+        const bytes = await saveReceivedFileStreaming(receiver, file);
+        setReceivedBytes((current) => current + bytes);
+      } else {
+        await saveReceivedFile(receiver, file);
+      }
       const nextSavedHashes = new Set(savedHashes).add(file.hash);
       setSavedHashes(nextSavedHashes);
       if (nextSavedHashes.size >= files.length) {
@@ -233,6 +272,12 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
                     transfer.
                   </p>
                 )}
+                {info.size > WARN_BYTES && hasSaveFilePicker() && !refused && (
+                  <p className="mt-3 text-[12px] leading-5 text-[color:var(--soft-copy)]">
+                    This browser can stream verified chunks to a file you
+                    choose. Make sure the destination has enough free space.
+                  </p>
+                )}
                 <p className="mt-3 text-[11px] leading-5 text-[color:var(--muted-copy)]">
                   Sender identity is not verified by the link. Confirm who
                   shared it before saving files.
@@ -245,7 +290,11 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
                 className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-[var(--signal-green)] px-5 py-3 text-[13.5px] font-semibold text-[var(--text-ink)] transition hover:brightness-[1.04] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Download className="h-4 w-4" />{" "}
-                {heavy ? "Receive anyway" : "Receive here"}
+                {heavy
+                  ? "Receive anyway"
+                  : info.size > REFUSE_BYTES
+                    ? "Receive and stream to disk"
+                    : "Receive here"}
               </button>
             </Frame>
           )}
@@ -254,8 +303,11 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
             <Frame key="receiving" reduce={reduce}>
               <Busy label={status} />
               <p className="mt-3 text-center text-[11px] text-[color:var(--muted-copy)]">
-                {formatBytes(receivedBytes)} received and verified so far. The
-                sender must stay online.
+                {formatBytes(receivedBytes)}{" "}
+                {streamedReceive
+                  ? "of the collection manifest verified so far. Files stream as you save them."
+                  : "received and verified so far."}{" "}
+                The sender must stay online.
               </p>
               <div
                 className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/[0.06]"
@@ -295,8 +347,10 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
                 transition={{ type: "spring", stiffness: 360, damping: 22 }}
                 className="flex items-center gap-2 rounded-lg border border-[color:var(--signal-green)]/25 bg-[color:var(--signal-green)]/10 px-3 py-2 text-[12.5px] font-semibold text-[var(--signal-green)]"
               >
-                <ShieldCheck className="h-4 w-4" /> BLAKE3 verified — bytes are
-                proven correct.
+                <ShieldCheck className="h-4 w-4" />
+                {streamedReceive
+                  ? "Share manifest verified — file contents verify as you save them."
+                  : "BLAKE3 verified — bytes are proven correct."}
               </motion.div>
               <ul className="mt-3 space-y-2">
                 {files.map((file, index) => {

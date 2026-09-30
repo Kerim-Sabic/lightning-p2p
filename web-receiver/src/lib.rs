@@ -14,25 +14,33 @@ pub mod qr;
 pub mod sender;
 pub mod ticket;
 
+use bao_tree::io::BaoContentItem;
+use bytes::Bytes;
 use iroh::address_lookup::memory::MemoryLookup;
 use iroh::endpoint::presets;
 use iroh::Endpoint;
 use iroh_blobs::api::downloader::DownloadProgressItem;
 use iroh_blobs::api::proto::BlobStatus;
-use iroh_blobs::format::collection::Collection;
+use iroh_blobs::format::collection::{Collection, CollectionMeta};
 use iroh_blobs::store::mem::MemStore;
-use iroh_blobs::Hash;
+use iroh_blobs::{hashseq::HashSeq, ticket::BlobTicket, Hash};
 use n0_future::StreamExt;
+use std::{future::Future, sync::Mutex};
 use ticket::ParsedTicket;
 
 #[cfg(target_arch = "wasm32")]
 pub mod wasm;
+
+const MAX_COLLECTION_ENTRIES: usize = 10_000;
+const MAX_HASH_SEQUENCE_BYTES: u64 = (MAX_COLLECTION_ENTRIES as u64 + 1) * 32;
+const MAX_COLLECTION_METADATA_BYTES: u64 = 8 * 1024 * 1024;
 
 /// A running browser receiver: an iroh endpoint plus an in-memory blob store.
 pub struct Receiver {
     endpoint: Endpoint,
     lookup: MemoryLookup,
     store: MemStore,
+    streaming_providers: Mutex<Vec<BlobTicket>>,
 }
 
 /// Metadata shown before a fetch so the UI can gate on size.
@@ -72,6 +80,7 @@ impl Receiver {
             endpoint,
             lookup,
             store: MemStore::new(),
+            streaming_providers: Mutex::new(Vec::new()),
         })
     }
 
@@ -104,6 +113,113 @@ impl Receiver {
     /// Closes the endpoint so any in-flight browser receive is cancelled.
     pub async fn cancel(&self) {
         self.endpoint.close().await;
+    }
+
+    /// Downloads only the bounded collection manifest and authenticates each
+    /// entry's size. File bodies are fetched later by `stream_blob_to`, which
+    /// yields each Bao-verified leaf before awaiting the writable sink.
+    pub async fn prepare_streamed_collection<F>(
+        &self,
+        ticket_str: &str,
+        mut on_progress: F,
+    ) -> Result<Vec<CollectionEntry>, String>
+    where
+        F: FnMut(u64) -> bool,
+    {
+        let parsed = ticket::parse(ticket_str)?;
+        let primary = parsed.primary();
+        if primary.format() != iroh_blobs::BlobFormat::HashSeq {
+            return Err("This ticket does not contain a supported file collection.".into());
+        }
+        self.register_providers(&parsed);
+        *self
+            .streaming_providers
+            .lock()
+            .map_err(|_| "browser receive provider state is unavailable")? =
+            parsed.providers.clone();
+
+        let connection = self.connect_stream_provider().await?;
+        let (root_bytes, root_size) = read_bounded_blob(
+            connection.clone(),
+            primary.hash(),
+            MAX_HASH_SEQUENCE_BYTES,
+            &mut on_progress,
+        )
+        .await?;
+        if root_size != root_bytes.len() as u64 {
+            return Err("The collection index length did not match its verified size.".into());
+        }
+        let links = HashSeq::try_from(Bytes::from(root_bytes))
+            .map_err(|error| format!("invalid collection index: {error}"))?;
+        if links.is_empty() || links.len() > MAX_COLLECTION_ENTRIES + 1 {
+            return Err("The collection contains too many files or no metadata.".into());
+        }
+        let meta_hash = links.get(0).ok_or("collection metadata is missing")?;
+        let (meta_bytes, _) = read_bounded_blob(
+            connection.clone(),
+            meta_hash,
+            MAX_COLLECTION_METADATA_BYTES,
+            &mut on_progress,
+        )
+        .await?;
+        let meta: CollectionMeta = postcard::from_bytes(&meta_bytes)
+            .map_err(|error| format!("invalid collection metadata: {error}"))?;
+        if !meta.check_header() || meta.names().len() + 1 != links.len() {
+            return Err("The collection metadata does not match its file index.".into());
+        }
+
+        let mut entries = Vec::with_capacity(meta.names().len());
+        for (name, hash) in meta.names().iter().zip(links.into_iter().skip(1)) {
+            if name.is_empty() || name.len() > 4096 || name.chars().any(char::is_control) {
+                return Err("The collection contains an invalid file name.".into());
+            }
+            let (size, _) = iroh_blobs::get::request::get_verified_size(&connection, &hash)
+                .await
+                .map_err(|error| format!("could not verify file size: {error}"))?;
+            entries.push(CollectionEntry {
+                name: name.clone(),
+                hash,
+                size,
+            });
+        }
+        Ok(entries)
+    }
+
+    /// Streams one content-addressed blob directly to a sink. Each leaf is
+    /// passed to the sink only after iroh-blobs has verified its Bao proof.
+    /// The caller must publish the destination only after this method returns
+    /// successfully and the observed length equals `expected_size`.
+    pub async fn stream_blob_to<F, Fut>(
+        &self,
+        hash: Hash,
+        expected_size: u64,
+        mut on_chunk: F,
+    ) -> Result<u64, String>
+    where
+        F: FnMut(Vec<u8>) -> Fut,
+        Fut: Future<Output = Result<bool, String>>,
+    {
+        let providers = self
+            .streaming_providers
+            .lock()
+            .map_err(|_| "browser receive provider state is unavailable")?
+            .clone();
+        let mut last_error = "the sender is unreachable".to_owned();
+        for provider in providers {
+            let connection = match self
+                .endpoint
+                .connect(provider.addr().clone(), iroh_blobs::ALPN)
+                .await
+            {
+                Ok(connection) => connection,
+                Err(error) => {
+                    last_error = error.to_string();
+                    continue;
+                }
+            };
+            return stream_verified_blob(connection, hash, expected_size, &mut on_chunk).await;
+        }
+        Err(last_error)
     }
 
     /// Downloads while enforcing an aggregate byte ceiling from actual transport progress.
@@ -229,6 +345,104 @@ impl Receiver {
             self.lookup.add_endpoint_info(provider.addr().clone());
         }
     }
+
+    async fn connect_stream_provider(&self) -> Result<iroh::endpoint::Connection, String> {
+        let providers = self
+            .streaming_providers
+            .lock()
+            .map_err(|_| "browser receive provider state is unavailable")?
+            .clone();
+        let mut last_error = "the sender is unreachable".to_owned();
+        for provider in providers {
+            match self
+                .endpoint
+                .connect(provider.addr().clone(), iroh_blobs::ALPN)
+                .await
+            {
+                Ok(connection) => return Ok(connection),
+                Err(error) => last_error = error.to_string(),
+            }
+        }
+        Err(last_error)
+    }
+}
+
+async fn read_bounded_blob<F>(
+    connection: iroh::endpoint::Connection,
+    hash: Hash,
+    max_bytes: u64,
+    on_progress: &mut F,
+) -> Result<(Vec<u8>, u64), String>
+where
+    F: FnMut(u64) -> bool,
+{
+    let mut stream = iroh_blobs::get::request::get_blob(connection, hash);
+    let mut bytes = Vec::new();
+    let mut received = 0_u64;
+    while let Some(item) = stream.next().await {
+        match item {
+            iroh_blobs::get::request::GetBlobItem::Item(BaoContentItem::Leaf(leaf)) => {
+                received = received
+                    .checked_add(leaf.data.len() as u64)
+                    .ok_or("collection metadata size overflow")?;
+                if received > max_bytes {
+                    return Err("The collection metadata exceeds the safe browser limit.".into());
+                }
+                if !on_progress(received) {
+                    return Err("Browser receive cancelled.".into());
+                }
+                bytes.extend_from_slice(&leaf.data);
+            }
+            iroh_blobs::get::request::GetBlobItem::Item(_) => {}
+            iroh_blobs::get::request::GetBlobItem::Done(_) => {
+                return Ok((bytes, received));
+            }
+            iroh_blobs::get::request::GetBlobItem::Error(error) => {
+                return Err(error.to_string());
+            }
+        }
+    }
+    Err("The sender stopped before the collection metadata was verified.".into())
+}
+
+async fn stream_verified_blob<F, Fut>(
+    connection: iroh::endpoint::Connection,
+    hash: Hash,
+    expected_size: u64,
+    on_chunk: &mut F,
+) -> Result<u64, String>
+where
+    F: FnMut(Vec<u8>) -> Fut,
+    Fut: Future<Output = Result<bool, String>>,
+{
+    let mut stream = iroh_blobs::get::request::get_blob(connection, hash);
+    let mut received = 0_u64;
+    while let Some(item) = stream.next().await {
+        match item {
+            iroh_blobs::get::request::GetBlobItem::Item(BaoContentItem::Leaf(leaf)) => {
+                received = received
+                    .checked_add(leaf.data.len() as u64)
+                    .ok_or("received file size overflow")?;
+                if received > expected_size {
+                    return Err("Received bytes exceed the authenticated file size.".into());
+                }
+                if !on_chunk(leaf.data.to_vec()).await? {
+                    return Err("Browser receive cancelled.".into());
+                }
+            }
+            iroh_blobs::get::request::GetBlobItem::Item(_) => {}
+            iroh_blobs::get::request::GetBlobItem::Done(_) => {
+                if received != expected_size {
+                    return Err("The verified file length does not match its manifest.".into());
+                }
+                return Ok(received);
+            }
+            iroh_blobs::get::request::GetBlobItem::Error(error) => {
+                return Err(error.to_string());
+            }
+        }
+    }
+    Err("The sender stopped before the file was fully verified.".into())
 }
 
 /// Provider endpoint ids the downloader may dial for the content.

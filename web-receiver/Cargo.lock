@@ -3865,6 +3865,7 @@ dependencies = [
 name = "web-receiver"
 version = "0.9.0"
 dependencies = [
+ "bao-tree",
  "base64",
  "bytes",
  "console_error_panic_hook",
@@ -3874,6 +3875,7 @@ dependencies = [
  "iroh-blobs",
  "js-sys",
  "n0-future",
+ "postcard",
  "qrcode",
  "serde",
  "serde_json",

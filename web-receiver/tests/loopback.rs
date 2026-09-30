@@ -9,6 +9,7 @@
 //! infrastructure. Run explicitly with:
 //!   cargo test --test loopback -- --ignored
 
+use std::sync::{Arc, Mutex};
 use web_receiver::sender::Sharer;
 use web_receiver::Receiver;
 
@@ -83,6 +84,35 @@ async fn browser_engine_share_and_fetch_round_trip() {
     assert_eq!(info.size, (payload_a.len() + payload_b.len()) as u64);
 
     let receiver = Receiver::spawn().await.expect("receiver spawn");
+    let streaming_receiver = Receiver::spawn().await.expect("streaming receiver");
+    let streamed_entries = streaming_receiver
+        .prepare_streamed_collection(&ticket, |_| true)
+        .await
+        .expect("read verified collection manifest");
+    assert_eq!(streamed_entries.len(), 2);
+    let streamed_a = streamed_entries
+        .iter()
+        .find(|entry| entry.name == "blob-a.bin")
+        .expect("streamed a");
+    assert_eq!(streamed_a.size, payload_a.len() as u64);
+    let output = Arc::new(Mutex::new(Vec::new()));
+    let output_writer = output.clone();
+    let streamed_size = streaming_receiver
+        .stream_blob_to(streamed_a.hash, streamed_a.size, move |chunk| {
+            let output_writer = output_writer.clone();
+            async move {
+                output_writer
+                    .lock()
+                    .expect("sink mutex")
+                    .extend_from_slice(&chunk);
+                Ok(true)
+            }
+        })
+        .await
+        .expect("stream verified file into sink");
+    assert_eq!(streamed_size, payload_a.len() as u64);
+    assert_eq!(*output.lock().expect("sink mutex"), payload_a);
+
     // The ticket advertises one byte but the collection contains over half a
     // megabyte. The receiver must stop on observed transport progress.
     let parsed = web_receiver::ticket::parse(&ticket).expect("parse original ticket");
