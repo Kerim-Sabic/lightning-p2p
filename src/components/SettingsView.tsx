@@ -12,11 +12,14 @@ import {
   Globe,
   HardDriveDownload,
   LoaderCircle,
+  Monitor,
+  Moon,
   Radar,
   RefreshCw,
   ScanSearch,
   Settings2,
   ShieldCheck,
+  Sun,
   Trash2,
   Waypoints,
 } from "lucide-react";
@@ -34,6 +37,7 @@ import {
   setNearbyPeerBlocked,
   writeClipboardText,
 } from "../lib/tauri";
+import { useAppearanceStore } from "../stores/appearanceStore";
 import { useTransferStore, type UpdateState } from "../stores/transferStore";
 
 function statusPill(onlineState: NodeStatus["online_state"]): string {
@@ -194,6 +198,10 @@ const ANDROID_SIGNING_FINGERPRINT =
   "5F:A0:D6:63:46:FF:9C:91:1B:18:D1:2A:5F:77:F1:F0:9B:2D:E2:A7:69:A0:97:68:6C:FC:FA:43:BD:86:29:16";
 
 export function SettingsView() {
+  const appearancePreference = useAppearanceStore((state) => state.preference);
+  const setAppearancePreference = useAppearanceStore(
+    (state) => state.setPreference,
+  );
   const settings = useTransferStore((state) => state.settings);
   const downloadDir = useTransferStore((state) => state.downloadDir);
   const nodeStatus = useTransferStore((state) => state.nodeStatus);
@@ -327,6 +335,46 @@ export function SettingsView() {
 
   return (
     <div className="space-y-5">
+      <section
+        className="glass-panel flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between"
+        aria-labelledby="appearance-title"
+      >
+        <div>
+          <h2
+            id="appearance-title"
+            className="text-base font-semibold text-white"
+          >
+            Appearance
+          </h2>
+          <p className="meta-copy mt-1">
+            Match your device or choose a theme for Lightning.
+          </p>
+        </div>
+        <div className="grid grid-cols-3 gap-1 rounded-2xl border border-[var(--border-subtle)] bg-[var(--canvas-1)] p-1 sm:min-w-[300px]">
+          {(
+            [
+              { value: "system", label: "System", Icon: Monitor },
+              { value: "light", label: "Light", Icon: Sun },
+              { value: "dark", label: "Dark", Icon: Moon },
+            ] as const
+          ).map(({ value, label, Icon }) => {
+            const selected = appearancePreference === value;
+            return (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={selected}
+                onClick={() => setAppearancePreference(value)}
+                className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-3 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] ${selected ? "bg-[var(--surface-2)] text-[var(--fg-primary)] shadow-sm" : "text-[var(--fg-secondary)] hover:bg-[var(--surface-1)]"}`}
+              >
+                <Icon className="h-4 w-4" aria-hidden="true" />
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
       <section className="grid gap-4 xl:grid-cols-[1.24fr_0.76fr]">
         <header className="glass-panel hero-panel relative overflow-hidden p-8">
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_86%_18%,rgba(56,189,248,0.08),transparent_24%),radial-gradient(circle_at_12%_100%,rgba(148,163,184,0.05),transparent_28%)]" />
@@ -955,10 +1003,10 @@ export function SettingsView() {
         </p>
         <p className="mt-2 text-[11px] leading-6 text-slate-500">
           Honest scope: the congestion controller switch is evidence-based
-          (upstream iroh measured loss-based CUBIC far below BBR on real
-          network paths), while window, stream, and parallelism sizing encode
-          design intent. On same-machine loopback the modes measure within
-          sample noise; end-to-end LAN/WAN validation lands in v0.6.
+          (upstream iroh measured loss-based CUBIC far below BBR on real network
+          paths), while window, stream, and parallelism sizing encode design
+          intent. On same-machine loopback the modes measure within sample
+          noise; end-to-end LAN/WAN validation lands in v0.6.
         </p>
 
         <div className="mt-4 flex items-center justify-between rounded-[24px] border border-white/8 bg-black/20 px-4 py-4">
