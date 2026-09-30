@@ -141,7 +141,9 @@ pub async fn send_files(
 pub async fn create_share(node: &LightningP2PNode, paths: Vec<PathBuf>) -> Result<ShareOutcome> {
     let plan = build_share_plan(paths)?;
     let profile = crate::transfer::TransferMode::platform_default().profile();
-    create_share_with_plan(node, plan, None, profile).await
+    let outcome = create_share_with_plan(node, plan, None, profile).await?;
+    node.authorize_public_share(outcome.hash).await?;
+    Ok(outcome)
 }
 
 async fn create_share_with_plan(

@@ -5,3 +5,4 @@ pub mod history;
 pub mod paired_devices;
 pub mod peers;
 pub mod settings;
+pub mod share_access;

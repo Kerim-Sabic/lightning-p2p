@@ -4,12 +4,14 @@
 //! lookup, and wires up the iroh-blobs 0.103 protocol + persistent store for
 //! content-addressed transfers.
 
+use super::blob_access::{AuthorizedBlobsProtocol, BlobAccessController};
 use super::chat_protocol::ChatProtocol;
 use super::status::NodeRuntimeStatus;
 use super::NearbyShareProtocol;
 use crate::crypto::load_or_create_secret_key;
 use crate::error::{LightningP2PError, Result};
 use crate::storage::db::StorageDb;
+use crate::storage::share_access;
 use crate::transfer::metrics::RouteKind;
 use crate::transfer::mode::{CongestionAlgorithm, TransferProfile};
 use crate::transfer::TransferMode;
@@ -18,8 +20,9 @@ use iroh::endpoint::{ControllerFactory, MtuDiscoveryConfig, QuicTransportConfig,
 use iroh::protocol::Router;
 use iroh::{Endpoint, EndpointAddr, EndpointId, RelayMap, RelayMode, RelayUrl, TransportAddr};
 use iroh_blobs::api::Store;
+use iroh_blobs::format::collection::Collection;
 use iroh_blobs::store::fs::FsStore;
-use iroh_blobs::BlobsProtocol;
+use iroh_blobs::Hash;
 #[cfg(not(target_os = "ios"))]
 use iroh_mdns_address_lookup::MdnsAddressLookup;
 use noq_proto::congestion::{Bbr3Config, CubicConfig};
@@ -56,6 +59,7 @@ pub struct LightningP2PNode {
     lan_discovery_active: Arc<AtomicBool>,
     /// Local sled database.
     db: StorageDb,
+    blob_access: BlobAccessController,
 }
 
 impl LightningP2PNode {
@@ -106,7 +110,10 @@ impl LightningP2PNode {
         );
 
         let store = load_blob_store(&data_dir).await?;
-        let blobs = BlobsProtocol::new(&store, None);
+        let db = open_storage_db(&data_dir)?;
+        let blob_access =
+            BlobAccessController::with_public_hashes(share_access::load_public_hashes(&db)?);
+        let blobs = AuthorizedBlobsProtocol::new(store.as_ref(), blob_access.clone());
         let mut router_builder = Router::builder(endpoint.clone()).accept(iroh_blobs::ALPN, blobs);
         if let Some(protocol) = nearby_protocol {
             router_builder =
@@ -117,8 +124,6 @@ impl LightningP2PNode {
                 router_builder.accept(super::chat_protocol::CHAT_PROTOCOL_ALPN, protocol);
         }
         let router = router_builder.spawn();
-        let db = open_storage_db(&data_dir)?;
-
         Ok(Self {
             endpoint,
             store,
@@ -127,6 +132,7 @@ impl LightningP2PNode {
             mdns,
             lan_discovery_active: Arc::new(AtomicBool::new(false)),
             db,
+            blob_access,
         })
     }
 
@@ -136,6 +142,52 @@ impl LightningP2PNode {
         for addr in addrs {
             self.lookup.add_endpoint_info(addr);
         }
+    }
+
+    /// Grants a bearer ticket to a share the user explicitly published.
+    pub(crate) async fn authorize_public_share(&self, root: Hash) -> Result<()> {
+        let hashes = self.share_hashes(root).await?;
+        if !self.blob_access.can_publish_public(&hashes) {
+            return Err(LightningP2PError::Other(
+                "Too many public shares are active on this device. Clear old app data before sharing more.".into(),
+            ));
+        }
+        share_access::authorize_public_hashes(&self.db, &hashes)?;
+        if !self.blob_access.publish_public(&hashes) {
+            return Err(LightningP2PError::Other(
+                "Too many public shares are active on this device.".into(),
+            ));
+        }
+        Ok(())
+    }
+
+    /// Grants a nearby receiver temporary access to an accepted share.
+    pub(crate) async fn authorize_private_peer(&self, peer: EndpointId, root: Hash) -> Result<()> {
+        let hashes = self.share_hashes(root).await?;
+        if !self.blob_access.authorize_peer(peer, &hashes) {
+            return Err(LightningP2PError::Other(
+                "Too many nearby transfers are pending. Try again shortly.".into(),
+            ));
+        }
+        Ok(())
+    }
+
+    pub(crate) async fn revoke_private_peer(&self, peer: EndpointId, root: Hash) {
+        if let Ok(hashes) = self.share_hashes(root).await {
+            self.blob_access.revoke_peer(peer, &hashes);
+        }
+    }
+
+    async fn share_hashes(&self, root: Hash) -> Result<Vec<Hash>> {
+        let collection = Collection::load(root, self.blobs_client())
+            .await
+            .map_err(|error| LightningP2PError::Blob(error.to_string()))?;
+        let mut hashes = Vec::new();
+        hashes.push(root);
+        hashes.extend(collection.iter().map(|(_name, hash)| *hash));
+        hashes.sort_unstable();
+        hashes.dedup();
+        Ok(hashes)
     }
 
     /// Returns a clone of the LAN mDNS address lookup for the discovery loop

@@ -242,10 +242,7 @@ async fn export_collection_children(store: &Store, root: Hash, staging_dir: &Pat
         .map_err(|error| blob_error(&error))?;
     for (name, hash) in collection.iter() {
         let safe_relative_path = safe_collection_entry_path(name)?;
-        let target = staging_dir.join(safe_relative_path);
-        if let Some(parent) = target.parent() {
-            tokio::fs::create_dir_all(parent).await?;
-        }
+        let target = prepare_staging_file_target(staging_dir, &safe_relative_path).await?;
         store
             .blobs()
             .export(*hash, &target)
@@ -253,6 +250,58 @@ async fn export_collection_children(store: &Store, root: Hash, staging_dir: &Pat
             .map_err(|error| blob_error(&error))?;
     }
     Ok(())
+}
+
+async fn prepare_staging_file_target(staging_dir: &Path, relative: &Path) -> Result<PathBuf> {
+    let root_metadata = tokio::fs::symlink_metadata(staging_dir).await?;
+    if !is_plain_directory(&root_metadata) {
+        return Err(unsafe_collection_destination_error());
+    }
+
+    let mut current = staging_dir.to_path_buf();
+    if let Some(parent) = relative.parent() {
+        for component in parent.components() {
+            let std::path::Component::Normal(name) = component else {
+                return Err(unsafe_collection_destination_error());
+            };
+            current.push(name);
+            match tokio::fs::create_dir(&current).await {
+                Ok(()) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                    let metadata = tokio::fs::symlink_metadata(&current).await?;
+                    if !is_plain_directory(&metadata) {
+                        return Err(unsafe_collection_destination_error());
+                    }
+                }
+                Err(error) => return Err(error.into()),
+            }
+        }
+    }
+    let file_name = relative
+        .file_name()
+        .ok_or_else(unsafe_collection_destination_error)?;
+    current.push(file_name);
+    Ok(current)
+}
+
+fn is_plain_directory(metadata: &std::fs::Metadata) -> bool {
+    if !metadata.file_type().is_dir() || metadata.file_type().is_symlink() {
+        return false;
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0400;
+        metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT == 0
+    }
+    #[cfg(not(windows))]
+    {
+        true
+    }
+}
+
+fn unsafe_collection_destination_error() -> LightningP2PError {
+    LightningP2PError::Other("The shared folder contains an unsafe file path.".into())
 }
 
 fn summarize_names<'a>(names: impl Iterator<Item = &'a str>) -> String {
@@ -477,5 +526,41 @@ mod tests {
             b"new"
         );
         assert!(!staged.exists());
+    }
+
+    #[tokio::test]
+    async fn collection_staging_rejects_a_file_in_a_parent_position() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let stage = dir.path().join("stage");
+        tokio::fs::create_dir(&stage).await.expect("stage");
+        tokio::fs::write(stage.join("nested"), b"not a directory")
+            .await
+            .expect("parent blocker");
+
+        assert!(
+            prepare_staging_file_target(&stage, Path::new("nested/file.txt"))
+                .await
+                .is_err()
+        );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn collection_staging_rejects_a_symlinked_parent() {
+        use std::os::unix::fs::symlink;
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let stage = dir.path().join("stage");
+        let outside = dir.path().join("outside");
+        tokio::fs::create_dir(&stage).await.expect("stage");
+        tokio::fs::create_dir(&outside).await.expect("outside");
+        symlink(&outside, stage.join("nested")).expect("symlink");
+
+        assert!(
+            prepare_staging_file_target(&stage, Path::new("nested/file.txt"))
+                .await
+                .is_err()
+        );
+        assert!(!outside.join("file.txt").exists());
     }
 }

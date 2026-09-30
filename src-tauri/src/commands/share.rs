@@ -46,6 +46,9 @@ pub async fn create_share(
     let outcome = crate::transfer::sender::send_files(node.as_ref(), window, paths, profile)
         .await
         .map_err(command_error)?;
+    node.authorize_public_share(outcome.hash)
+        .await
+        .map_err(command_error)?;
     let ticket = encode_fd2_ticket(&outcome.ticket, &outcome.label, outcome.total_size)
         .map_err(command_error)?;
     state
@@ -93,6 +96,10 @@ pub async fn get_ticket(state: State<'_, AppState>, hash: String) -> CommandResu
             "Shared content is no longer available locally",
         ));
     }
+
+    node.authorize_public_share(hash)
+        .await
+        .map_err(command_error)?;
 
     let node_addr = node.ticket_addr().await.map_err(command_error)?;
     let record =

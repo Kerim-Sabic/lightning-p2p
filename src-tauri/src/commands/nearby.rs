@@ -3,7 +3,7 @@
 use crate::commands::{command_error, CommandResult};
 use crate::node::nearby_offer::{emit_offer_resolved, OfferDecision, OfferShareMessage};
 use crate::node::nearby_protocol::{local_device_name, send_offer, WireBlobFormat};
-use crate::node::{ActiveShare, NearbyDevice};
+use crate::node::NearbyDevice;
 use crate::storage::peers;
 use crate::AppState;
 use iroh::{EndpointAddr, EndpointId};
@@ -83,18 +83,6 @@ pub async fn offer_share_to_peer(
         .await
         .map_err(String::from)?;
 
-    // Mirror the new share into the active-share registry so any other peer
-    // can also pull it via the standard list flow.
-    state
-        .nearby_shares
-        .publish_share(ActiveShare::new(
-            outcome.label.clone(),
-            outcome.hash,
-            BlobFormat::HashSeq,
-            outcome.total_size,
-        ))
-        .await;
-
     let offer_id = generate_offer_id();
     let sender_node_id = node.node_id();
 
@@ -114,9 +102,22 @@ pub async fn offer_share_to_peer(
         blob_format: WireBlobFormat::HashSeq,
     };
 
-    let decision = send_offer(node.endpoint(), target_addr, message)
+    // The user's explicit recipient selection is the sender-side grant.
+    // Bound it to this identity and content, and revoke it if the recipient
+    // declines or the offer cannot be delivered.
+    node.authorize_private_peer(target_node_id, outcome.hash)
         .await
         .map_err(String::from)?;
+    let decision = match send_offer(node.endpoint(), target_addr, message).await {
+        Ok(decision) => decision,
+        Err(error) => {
+            node.revoke_private_peer(target_node_id, outcome.hash).await;
+            return Err(String::from(error));
+        }
+    };
+    if decision != OfferDecision::Accepted {
+        node.revoke_private_peer(target_node_id, outcome.hash).await;
+    }
 
     emit_offer_resolved(&app_handle, offer_id.clone(), target_node_id, decision)
         .map_err(String::from)?;
