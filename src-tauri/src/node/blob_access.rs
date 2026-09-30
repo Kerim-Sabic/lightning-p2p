@@ -104,7 +104,16 @@ impl BlobAccessController {
         rules
             .private_grants
             .retain(|_, grant| grant.expires_at > now);
-        rules.public_hashes.contains(&hash) || rules.private_grants.contains_key(&(peer, hash))
+        if rules.public_hashes.contains(&hash) {
+            return true;
+        }
+        if let Some(grant) = rules.private_grants.get_mut(&(peer, hash)) {
+            // Keep an actively used private share available through long
+            // transfers while still expiring grants after an idle interval.
+            grant.expires_at = now + PRIVATE_GRANT_TTL;
+            return true;
+        }
+        false
     }
 
     pub(crate) fn with_public_hashes(hashes: impl IntoIterator<Item = Hash>) -> Self {
@@ -274,6 +283,32 @@ mod tests {
 
         assert!(!controller.allows(peer, hash));
         assert!(controller.read().private_grants.is_empty());
+    }
+
+    #[test]
+    fn active_private_grants_refresh_the_idle_expiry() {
+        let controller = BlobAccessController::default();
+        let peer = test_peer(1);
+        let hash = Hash::from([7; 32]);
+        controller.authorize_peer(peer, &[hash]);
+        let expected_minimum = Instant::now() + PRIVATE_GRANT_TTL;
+        controller
+            .write()
+            .private_grants
+            .get_mut(&(peer, hash))
+            .expect("grant exists")
+            .expires_at = Instant::now() + Duration::from_secs(1);
+
+        assert!(controller.allows(peer, hash));
+        assert!(
+            controller
+                .read()
+                .private_grants
+                .get(&(peer, hash))
+                .expect("active grant remains")
+                .expires_at
+                >= expected_minimum
+        );
     }
 
     #[tokio::test]
