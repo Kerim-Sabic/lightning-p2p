@@ -35,6 +35,7 @@ const OFFER_REPLAY_WINDOW: Duration = Duration::from_secs(10 * 60);
 const MAX_OFFER_ID_BYTES: usize = 128;
 const MAX_DEVICE_NAME_BYTES: usize = 128;
 const MAX_OFFER_LABEL_BYTES: usize = 512;
+const MAX_OFFER_FILE_COUNT: u32 = 10_000;
 const READY_TO_CATCH_WINDOW: Duration = Duration::from_secs(30);
 const READY_TO_CATCH_MAX_BYTES: u64 = 100 * 1024 * 1024;
 
@@ -55,6 +56,9 @@ pub struct OfferShareMessage {
     pub blob_hash: String,
     /// Wire format of the offered blob.
     pub blob_format: super::nearby_protocol::WireBlobFormat,
+    /// Number of files in the collection when known. Optional for old peers.
+    #[serde(default)]
+    pub file_count: Option<u32>,
 }
 
 /// On-wire decision returned by the receiver.
@@ -95,6 +99,8 @@ pub struct IncomingOffer {
     pub blob_hash: String,
     /// Wire format of the offered blob.
     pub blob_format: super::nearby_protocol::WireBlobFormat,
+    /// Number of files in the collection when known. Missing for legacy peers.
+    pub file_count: Option<u32>,
     /// Unix timestamp when the offer was received.
     pub received_at_unix: u64,
     /// True when this offer fits the receiver's active, peer-bound catch session.
@@ -231,7 +237,7 @@ impl OfferInbox {
             || session.peer_id != offer.sender_node_id
             || session.claimed_offer_id.as_deref() != Some(offer.offer_id.as_str())
             || offer.size > READY_TO_CATCH_MAX_BYTES
-            || offer.blob_format != super::nearby_protocol::WireBlobFormat::Raw
+            || !is_single_file_offer(offer)
             || is_risky_executable_label(&offer.label)
         {
             return false;
@@ -259,6 +265,13 @@ impl OfferInbox {
             || offer.sender_device_name.len() > MAX_DEVICE_NAME_BYTES
             || offer.label.is_empty()
             || offer.label.len() > MAX_OFFER_LABEL_BYTES
+            || offer
+                .file_count
+                .is_some_and(|count| count == 0 || count > MAX_OFFER_FILE_COUNT)
+            || matches!(
+                (offer.blob_format, offer.file_count),
+                (super::nearby_protocol::WireBlobFormat::Raw, Some(count)) if count != 1
+            )
         {
             return Err(OfferRejection::InvalidMetadata);
         }
@@ -390,8 +403,17 @@ fn ready_to_catch_matches(
     active.peer_id == offer.sender_node_id
         && active.claimed_offer_id.is_none()
         && offer.size <= READY_TO_CATCH_MAX_BYTES
-        && offer.blob_format == super::nearby_protocol::WireBlobFormat::Raw
+        && is_single_file_offer(offer)
         && !is_risky_executable_label(&offer.label)
+}
+
+fn is_single_file_offer(offer: &IncomingOffer) -> bool {
+    use super::nearby_protocol::WireBlobFormat::{HashSeq, Raw};
+
+    match offer.blob_format {
+        Raw => matches!(offer.file_count, None | Some(1)),
+        HashSeq => offer.file_count == Some(1),
+    }
 }
 
 fn is_risky_executable_label(label: &str) -> bool {
@@ -441,6 +463,7 @@ pub async fn handle_offer_request(
         size: request.size,
         blob_hash: request.blob_hash,
         blob_format: request.blob_format,
+        file_count: request.file_count,
         received_at_unix: unix_timestamp(),
         ready_to_catch: false,
     };
@@ -531,6 +554,7 @@ mod tests {
             size: 42,
             blob_hash: "abc".into(),
             blob_format: super::super::nearby_protocol::WireBlobFormat::Raw,
+            file_count: Some(1),
             received_at_unix: 0,
             ready_to_catch: false,
         }
@@ -675,6 +699,13 @@ mod tests {
         offer.offer_id = "valid".into();
         offer.label = "x".repeat(MAX_OFFER_LABEL_BYTES + 1);
         assert!(matches!(
+            inbox.record(offer.clone()).await,
+            Err(OfferRejection::InvalidMetadata)
+        ));
+        offer.offer_id = "too-many-files".into();
+        offer.label = "okay.txt".into();
+        offer.file_count = Some(MAX_OFFER_FILE_COUNT + 1);
+        assert!(matches!(
             inbox.record(offer).await,
             Err(OfferRejection::InvalidMetadata)
         ));
@@ -711,6 +742,7 @@ mod tests {
         let mut matching = sample_offer("catch-1");
         matching.sender_node_id = peer.clone();
         matching.label = "photo.png".into();
+        matching.file_count = None;
         inbox.arm_ready_to_catch(peer).await;
         assert!(inbox.is_ready_to_catch(&matching).await);
         matching.ready_to_catch = true;
@@ -729,6 +761,53 @@ mod tests {
         matching.label = "photo.png".into();
         matching.size = READY_TO_CATCH_MAX_BYTES + 1;
         assert!(!inbox.is_ready_to_catch(&matching).await);
+    }
+
+    #[tokio::test]
+    async fn ready_to_catch_accepts_only_known_single_file_collections() {
+        let inbox = OfferInbox::new();
+        let mut multi_file = sample_offer("multi-file");
+        multi_file.blob_format = super::super::nearby_protocol::WireBlobFormat::HashSeq;
+        multi_file.file_count = Some(2);
+        inbox
+            .arm_ready_to_catch(multi_file.sender_node_id.clone())
+            .await;
+        assert!(!inbox.is_ready_to_catch(&multi_file).await);
+
+        let inbox = OfferInbox::new();
+        let mut one_file = sample_offer("one-file");
+        one_file.label = "demo.txt".into();
+        one_file.blob_format = super::super::nearby_protocol::WireBlobFormat::HashSeq;
+        one_file.file_count = Some(1);
+        inbox
+            .arm_ready_to_catch(one_file.sender_node_id.clone())
+            .await;
+        assert!(inbox.is_ready_to_catch(&one_file).await);
+        one_file.ready_to_catch = true;
+        assert!(inbox.claim_ready_to_catch(&one_file).await);
+    }
+
+    #[test]
+    fn old_offer_payloads_decode_without_file_count() {
+        let message = OfferShareMessage {
+            offer_id: "offer".into(),
+            sender_device_name: "Sender".into(),
+            sender_node_id: "untrusted-field".into(),
+            label: "file.txt".into(),
+            size: 12,
+            blob_hash: "hash".into(),
+            blob_format: super::super::nearby_protocol::WireBlobFormat::Raw,
+            file_count: None,
+        };
+        let mut legacy = serde_json::to_value(message).expect("serialize offer");
+        legacy
+            .as_object_mut()
+            .expect("offer serializes as an object")
+            .remove("file_count");
+
+        let decoded: OfferShareMessage =
+            serde_json::from_value(legacy).expect("decode legacy offer");
+        assert_eq!(decoded.file_count, None);
     }
 
     #[tokio::test]

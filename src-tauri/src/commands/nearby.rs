@@ -106,6 +106,7 @@ pub async fn offer_share_to_peer(
         size: outcome.total_size,
         blob_hash: outcome.hash.to_string(),
         blob_format: WireBlobFormat::HashSeq,
+        file_count: Some(outcome.file_count),
     };
 
     // The user's explicit recipient selection is the sender-side grant.

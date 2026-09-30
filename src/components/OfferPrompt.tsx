@@ -1,7 +1,12 @@
 import { Check, Inbox, LaptopMinimal, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { formatBytes } from "../lib/format";
-import { respondToOffer, setNearbyPeerBlocked } from "../lib/tauri";
+import {
+  listPairedDevices,
+  respondToOffer,
+  setNearbyPeerBlocked,
+  type PairedDevice,
+} from "../lib/tauri";
 import { useIncomingOfferStore } from "../stores/incomingOfferStore";
 import { useTransferStore } from "../stores/transferStore";
 
@@ -14,10 +19,37 @@ export function OfferPrompt() {
     (state) => state.dismissFromPeer,
   );
   const setError = useTransferStore((state) => state.setError);
+  const downloadDir = useTransferStore((state) => state.downloadDir);
   const [pending, setPending] = useState(false);
+  const [pairedLookup, setPairedLookup] = useState<{
+    offerId: string;
+    devices: PairedDevice[] | null;
+    failed: boolean;
+  } | null>(null);
   const autoCatchStarted = useRef<string | null>(null);
 
   const offer = queue[0];
+  const offerId = offer?.offer_id;
+
+  useEffect(() => {
+    if (!offerId) return;
+    let active = true;
+    void listPairedDevices().then(
+      (devices) => {
+        if (active) {
+          setPairedLookup({ offerId, devices, failed: false });
+        }
+      },
+      () => {
+        if (active) {
+          setPairedLookup({ offerId, devices: null, failed: true });
+        }
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [offerId]);
 
   useEffect(() => {
     if (!offer?.ready_to_catch || autoCatchStarted.current === offer.offer_id) {
@@ -48,6 +80,30 @@ export function OfferPrompt() {
   if (!offer) {
     return null;
   }
+
+  const pairedDevices =
+    pairedLookup?.offerId === offer.offer_id ? pairedLookup.devices : null;
+  const pairedSender =
+    pairedDevices?.find((device) => device.node_id === offer.sender_node_id) ??
+    null;
+  const trustLabel =
+    pairedLookup?.offerId !== offer.offer_id
+      ? "Checking device trust"
+      : pairedLookup.failed
+        ? "Trust status unavailable"
+        : pairedSender
+          ? "Verified device"
+          : "Unverified sender";
+  const senderName =
+    pairedSender?.name || offer.sender_device_name || "Nearby device";
+  const fileCountLabel =
+    offer.file_count != null && offer.file_count > 0
+      ? `${offer.file_count} file${offer.file_count === 1 ? "" : "s"}`
+      : "File count unknown";
+  const folderName = downloadDir
+    ?.replace(/[\\/]+$/, "")
+    .split(/[\\/]/)
+    .pop();
 
   const handleRespond = async (accept: boolean): Promise<void> => {
     setPending(true);
@@ -94,14 +150,26 @@ export function OfferPrompt() {
           </div>
           <div className="min-w-0 flex-1">
             <p className="page-eyebrow">
-              {offer.ready_to_catch ? "Ready to Catch · receiving" : "Incoming offer"}
+              {offer.ready_to_catch
+                ? "Ready to Catch · receiving"
+                : "Incoming offer"}
             </p>
             <h2
               id="offer-prompt-title"
               className="mt-1 truncate text-lg font-semibold text-white"
             >
-              {offer.sender_device_name} wants to send you a file
+              {senderName} wants to share
             </h2>
+            <p
+              className={`mt-1.5 inline-flex min-h-7 items-center rounded-full border px-2.5 text-[11px] font-semibold ${
+                pairedSender
+                  ? "border-[color:var(--signal-green)]/30 bg-[color:var(--signal-green)]/10 text-[var(--signal-green)]"
+                  : "border-[color:var(--proof-amber)]/30 bg-[color:var(--proof-amber)]/10 text-[var(--proof-amber)]"
+              }`}
+              role="status"
+            >
+              {trustLabel}
+            </p>
           </div>
         </header>
 
@@ -114,8 +182,14 @@ export function OfferPrompt() {
               {offer.label}
             </p>
             <p className="mt-1 text-xs text-slate-400">
-              Sender estimates {formatBytes(offer.size)} · Name supplied by
-              sender · Peer{" "}
+              Sender estimates {fileCountLabel} · {formatBytes(offer.size)}
+              <br />
+              Save to {folderName || "your configured receive folder"}
+              <br />
+              {pairedSender
+                ? "Name verified by your saved device pairing"
+                : "Sender name is self-reported and may be spoofed"}
+              · Peer{" "}
               <span className="font-mono">
                 {offer.sender_node_id.slice(0, 12)}…
               </span>

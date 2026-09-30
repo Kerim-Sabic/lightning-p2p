@@ -81,6 +81,8 @@ pub struct ShareOutcome {
     pub label: String,
     /// Total size of source files.
     pub total_size: u64,
+    /// Number of source files included in the collection.
+    pub file_count: u32,
 }
 
 /// Adds files or directories to the local blob store and returns a share ticket.
@@ -246,6 +248,9 @@ async fn create_share_with_plan(
     profile: TransferProfile,
     cancel_rx: Option<watch::Receiver<bool>>,
 ) -> Result<ShareOutcome> {
+    let file_count = u32::try_from(plan.sources.len()).map_err(|_| {
+        LightningP2PError::Other("The share contains too many files to describe.".into())
+    })?;
     let imported = import_sources(node.blobs_client(), &plan, progress, profile, cancel_rx).await?;
     let hash = persist_collection(node.blobs_client(), imported).await?;
     let ticket = build_ticket(node, hash).await?;
@@ -259,6 +264,7 @@ async fn create_share_with_plan(
         ticket,
         label: plan.label,
         total_size: plan.total_size,
+        file_count,
     })
 }
 

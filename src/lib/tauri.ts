@@ -417,6 +417,7 @@ export interface IncomingOffer {
   size: number;
   blob_hash: string;
   blob_format: WireBlobFormat;
+  file_count?: number | null;
   received_at_unix: number;
   ready_to_catch: boolean;
 }
