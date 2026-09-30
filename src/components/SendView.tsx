@@ -14,6 +14,7 @@ import {
   Trash2,
   Upload,
   Video,
+  X,
 } from "lucide-react";
 import {
   useEffect,
@@ -120,6 +121,9 @@ interface ActiveFlick {
 export function SendView({ onNavigateReceive }: SendViewProps) {
   const clearShareSelection = useTransferStore(
     (state) => state.clearShareSelection,
+  );
+  const removeShareSelectionItem = useTransferStore(
+    (state) => state.removeShareSelectionItem,
   );
   const cancelTransfer = useTransferStore((state) => state.cancelTransfer);
   const createShare = useTransferStore((state) => state.createShare);
@@ -572,7 +576,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
             >
               <button
                 onClick={() => void pickShareFiles()}
-                disabled={!nativeRuntime}
+                disabled={!nativeRuntime || isPreparingSelection || isSharing}
                 className={
                   mobileRuntime
                     ? "mobile-hero-cta"
@@ -587,7 +591,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
               {!mobileRuntime ? (
                 <button
                   onClick={() => void pickShareFolder()}
-                  disabled={!nativeRuntime}
+                  disabled={!nativeRuntime || isPreparingSelection || isSharing}
                   className="glass-button inline-flex items-center justify-center gap-2 px-5 py-3 text-sm text-slate-100"
                 >
                   <Folder className="h-4 w-4" />
@@ -675,7 +679,17 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
 
             <div className="flex flex-wrap gap-2">
               <button
+                type="button"
+                onClick={() => void pickShareFiles(true)}
+                disabled={isPreparingSelection || isSharing || !nativeRuntime}
+                className="glass-button inline-flex items-center gap-2 px-4 py-2.5 text-sm text-slate-100"
+              >
+                <File className="h-4 w-4" />
+                {isPreparingSelection ? "Adding files…" : "Add files"}
+              </button>
+              <button
                 onClick={clearShareSelection}
+                disabled={isSharing}
                 className="glass-button inline-flex items-center gap-2 px-4 py-2.5 text-sm text-slate-100"
               >
                 <Trash2 className="h-4 w-4" />
@@ -724,8 +738,20 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
                       {item.is_dir ? "Folder" : "File"}
                     </p>
                   </div>
-                  <div className="text-sm font-medium tabular-nums text-slate-300/78">
-                    {formatBytes(item.size)}
+                  <div className="flex shrink-0 items-center gap-2">
+                    <span className="text-sm font-medium tabular-nums text-slate-300/78">
+                      {formatBytes(item.size)}
+                    </span>
+                    <button
+                      type="button"
+                      aria-label={`Remove ${item.name} from selection`}
+                      title={`Remove ${item.name}`}
+                      onClick={() => removeShareSelectionItem(item.path)}
+                      disabled={isSharing}
+                      className="grid h-10 w-10 place-items-center rounded-full text-slate-400 transition hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+                    >
+                      <X className="h-4 w-4" aria-hidden="true" />
+                    </button>
                   </div>
                 </div>
               );

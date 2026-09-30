@@ -1,9 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { ActiveTransfer, TransferEvent } from "../lib/tauri";
+import type {
+  ActiveTransfer,
+  SharePathInfo,
+  TransferEvent,
+} from "../lib/tauri";
 
 vi.mock("../lib/tauri", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/tauri")>();
-  return { ...actual, getActiveTransfers: vi.fn() };
+  return {
+    ...actual,
+    getActiveTransfers: vi.fn(),
+    describeSharePaths: vi.fn(),
+  };
 });
 
 import * as tauri from "../lib/tauri";
@@ -84,10 +92,27 @@ function receivedTransfer() {
   return transfer;
 }
 
+function sharePath(path: string): SharePathInfo {
+  return {
+    path,
+    name: path.split(/[\\/]/u).at(-1) ?? path,
+    size: 10,
+    is_dir: false,
+  };
+}
+
 describe("active transfer snapshot reconciliation", () => {
   beforeEach(() => {
-    useTransferStore.setState({ transfers: {}, error: null, appError: null });
+    useTransferStore.setState({
+      transfers: {},
+      error: null,
+      appError: null,
+      shareSelection: [],
+      shareTicket: null,
+      isPreparingSelection: false,
+    });
     vi.mocked(tauri.getActiveTransfers).mockReset();
+    vi.mocked(tauri.describeSharePaths).mockReset();
   });
 
   it("does not let an in-flight snapshot roll back newer progress events", async () => {
@@ -171,5 +196,54 @@ describe("active transfer snapshot reconciliation", () => {
     await olderRefresh;
 
     expect(receivedTransfer().bytes).toBe(60);
+  });
+});
+
+describe("share selection editing", () => {
+  beforeEach(() => {
+    useTransferStore.setState({
+      shareSelection: [],
+      shareTicket: null,
+      isPreparingSelection: false,
+    });
+    vi.mocked(tauri.describeSharePaths).mockReset();
+  });
+
+  it("appends unique paths and removes only the requested item", async () => {
+    vi.mocked(tauri.describeSharePaths).mockImplementation(async (paths) =>
+      paths.map(sharePath),
+    );
+    await useTransferStore.getState().prepareShareSelection(["first.txt"]);
+    await useTransferStore
+      .getState()
+      .prepareShareSelection(["second.txt", "first.txt"], "append");
+
+    expect(
+      useTransferStore.getState().shareSelection.map((item) => item.path),
+    ).toEqual(["first.txt", "second.txt"]);
+
+    useTransferStore.getState().removeShareSelectionItem("first.txt");
+    expect(
+      useTransferStore.getState().shareSelection.map((item) => item.path),
+    ).toEqual(["second.txt"]);
+  });
+
+  it("ignores an older file description after selection is cleared", async () => {
+    let resolveDescription: ((items: SharePathInfo[]) => void) | undefined;
+    vi.mocked(tauri.describeSharePaths).mockReturnValue(
+      new Promise((resolve) => {
+        resolveDescription = resolve;
+      }),
+    );
+
+    const preparation = useTransferStore
+      .getState()
+      .prepareShareSelection(["stale.txt"]);
+    useTransferStore.getState().clearShareSelection();
+    resolveDescription?.([sharePath("stale.txt")]);
+    await preparation;
+
+    expect(useTransferStore.getState().shareSelection).toEqual([]);
+    expect(useTransferStore.getState().isPreparingSelection).toBe(false);
   });
 });

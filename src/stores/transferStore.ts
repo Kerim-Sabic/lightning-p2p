@@ -43,6 +43,7 @@ export type UpdatePhase =
 type ProgressTransferEvent = Extract<TransferEvent, { type: "progress" }>;
 
 let activeTransfersRequestSequence = 0;
+let shareSelectionRequestSequence = 0;
 
 export interface TransferEntry {
   transferId: string;
@@ -110,9 +111,13 @@ interface TransferStore {
   setAppError: (error: unknown | null) => void;
   clearError: () => void;
   clearShareSelection: () => void;
-  prepareShareSelection: (paths: string[]) => Promise<void>;
-  pickShareFiles: () => Promise<void>;
-  pickShareFolder: () => Promise<void>;
+  removeShareSelectionItem: (path: string) => void;
+  prepareShareSelection: (
+    paths: string[],
+    behavior?: "replace" | "append",
+  ) => Promise<void>;
+  pickShareFiles: (append?: boolean) => Promise<void>;
+  pickShareFolder: (append?: boolean) => Promise<void>;
   refreshNodeStatus: () => Promise<void>;
   refreshNodeSupervisorStatus: () => Promise<void>;
   refreshBleDiscoveryStatus: () => Promise<void>;
@@ -425,6 +430,8 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
     return current;
   },
   clearShareSelection: () => {
+    if (get().isSharing) return;
+    shareSelectionRequestSequence += 1;
     set({
       shareSelection: [],
       shareTicket: null,
@@ -438,7 +445,30 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
     }
   },
 
-  prepareShareSelection: async (paths) => {
+  removeShareSelectionItem: (path) => {
+    if (get().isSharing) return;
+    shareSelectionRequestSequence += 1;
+    set((state) => ({
+      shareSelection: state.shareSelection.filter((item) => item.path !== path),
+      shareTicket: null,
+      isSharing: false,
+      isPreparingSelection: false,
+    }));
+    if (tauri.isDesktopRuntime()) {
+      void tauri.clearActiveShare().catch((error: unknown) => {
+        set(errorState(error));
+      });
+    }
+  },
+
+  prepareShareSelection: async (paths, behavior = "replace") => {
+    if (get().isSharing) return;
+    const requestSequence = ++shareSelectionRequestSequence;
+    const previousSelection = get().shareSelection;
+    const requestedPaths =
+      behavior === "append"
+        ? [...previousSelection.map((item) => item.path), ...paths]
+        : paths;
     set({
       error: null,
       appError: null,
@@ -451,38 +481,45 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
       if (tauri.isDesktopRuntime()) {
         await tauri.clearActiveShare();
       }
-      const shareSelection = await tauri.describeSharePaths(uniquePaths(paths));
+      const shareSelection = await tauri.describeSharePaths(
+        uniquePaths(requestedPaths),
+      );
+      if (requestSequence !== shareSelectionRequestSequence) return;
       set({ shareSelection, isPreparingSelection: false });
     } catch (error) {
+      if (requestSequence !== shareSelectionRequestSequence) return;
       set({
         ...errorState(error),
-        shareSelection: [],
+        shareSelection: behavior === "append" ? previousSelection : [],
         isPreparingSelection: false,
       });
     }
   },
 
-  pickShareFiles: async () => {
+  pickShareFiles: async (append = false) => {
     try {
       const files = await tauri.pickShareFiles();
       if (files.length === 0) {
         return;
       }
 
-      await get().prepareShareSelection(files);
+      await get().prepareShareSelection(files, append ? "append" : "replace");
     } catch (error) {
       set(errorState(error));
     }
   },
 
-  pickShareFolder: async () => {
+  pickShareFolder: async (append = false) => {
     try {
       const folder = await tauri.pickShareFolder();
       if (!folder) {
         return;
       }
 
-      await get().prepareShareSelection([folder]);
+      await get().prepareShareSelection(
+        [folder],
+        append ? "append" : "replace",
+      );
     } catch (error) {
       set(errorState(error));
     }
@@ -637,6 +674,7 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
   },
 
   createShare: async () => {
+    if (get().isSharing || get().isPreparingSelection) return;
     const paths = get().shareSelection.map((item) => item.path);
     if (paths.length === 0) {
       return;
