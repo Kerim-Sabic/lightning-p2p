@@ -48,7 +48,7 @@ Fallback path:
 - Unix writes use restrictive mode at creation time.
 - Windows ACL hardening should be added if fallback is kept for production.
 
-Android imports use user-granted `content://` URIs and stage into the app cache; received media is published through scoped `MediaStore` APIs. The manifest no longer requests broad shared-media read permissions or declares a `FileProvider`. Physical-device coverage is still needed for the supported document-picker, share-intent, and save flows.
+Android imports use user-granted `content://` URIs and stage into the app cache while preserving a 128 MiB free-space reserve; failed imports remove partial staged files. Received media is published through scoped `MediaStore` APIs. The manifest no longer requests broad shared-media read permissions or declares a `FileProvider`. Physical-device coverage is still needed for the supported document-picker, share-intent, and save flows.
 
 ## Current Security TODOs
 

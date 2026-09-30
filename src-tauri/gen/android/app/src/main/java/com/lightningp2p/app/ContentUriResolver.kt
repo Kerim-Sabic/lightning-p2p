@@ -8,7 +8,9 @@ import android.os.Environment
 import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.provider.OpenableColumns
+import android.os.StatFs
 import java.io.File
+import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 import java.util.UUID
@@ -34,6 +36,7 @@ object ContentUriResolver {
     private const val STAGING_DIR = "shared-staging"
     private const val MEDIASTORE_SUBDIR = "Lightning P2P"
     private const val COPY_BUFFER_BYTES = 1024 * 1024
+    private const val MIN_FREE_SPACE_BYTES = 128L * 1024 * 1024
 
     private val pendingSharedFiles = AtomicReference<List<String>>(emptyList())
     private val pendingSharedTicket = AtomicReference<String?>(null)
@@ -55,25 +58,41 @@ object ContentUriResolver {
 
     @JvmStatic
     fun resolveContentUris(context: Context, uris: Array<String>): Array<String> {
-        return uris.map { uri ->
-            if (!uri.startsWith("content://")) {
-                uri
-            } else {
-                resolveToCache(context, Uri.parse(uri))
+        val stagedFiles = mutableListOf<File>()
+        try {
+            return uris.map { uri ->
+                if (!uri.startsWith("content://")) {
+                    uri
+                } else {
+                    resolveToCache(context, Uri.parse(uri)).also { stagedFiles.add(it) }.absolutePath
+                }
             }
-        }.toTypedArray()
+                .toTypedArray()
+        } catch (error: Throwable) {
+            stagedFiles.forEach { it.delete() }
+            throw error
+        }
     }
 
     private fun resolveToCache(context: Context, uri: Uri): String {
         val displayName = queryDisplayName(context, uri) ?: "shared-${UUID.randomUUID()}.bin"
         val safeName = displayName.replace(Regex("[/\\\\]"), "_")
-        val stagingDir = File(context.cacheDir, STAGING_DIR).also { it.mkdirs() }
+        val stagingDir = File(context.cacheDir, STAGING_DIR).also {
+            if (!it.isDirectory && !it.mkdirs()) {
+                throw IOException("Could not prepare temporary storage for the shared file.")
+            }
+        }
         val outFile = File(stagingDir, "${UUID.randomUUID()}-$safeName")
         val resolver = context.contentResolver
         val input = resolver.openInputStream(uri)
-            ?: throw IllegalStateException("Could not open input stream for $uri")
-        input.use { source ->
-            outFile.outputStream().use { sink -> copyLarge(source, sink) }
+            ?: throw IllegalStateException("Could not open the selected shared file.")
+        try {
+            input.use { source ->
+                outFile.outputStream().use { sink -> copyLarge(context, source, sink) }
+            }
+        } catch (error: Throwable) {
+            outFile.delete()
+            throw error
         }
         return outFile.absolutePath
     }
@@ -133,16 +152,27 @@ object ContentUriResolver {
         }
     }
 
-    private fun copyLarge(source: InputStream, sink: OutputStream): Long {
+    private fun copyLarge(context: Context, source: InputStream, sink: OutputStream): Long {
         val buffer = ByteArray(COPY_BUFFER_BYTES)
         var copied = 0L
         while (true) {
             val read = source.read(buffer)
             if (read < 0) break
+            val availableBytes = StatFs(context.cacheDir.absolutePath).availableBytes
+            if (!hasSpaceForChunk(availableBytes, read)) {
+                throw IOException(
+                    "Lightning P2P stopped importing to preserve at least 128 MiB of free storage. Free space and try again.",
+                )
+            }
             sink.write(buffer, 0, read)
             copied += read.toLong()
         }
         return copied
+    }
+
+    internal fun hasSpaceForChunk(availableBytes: Long, chunkBytes: Int): Boolean {
+        return chunkBytes >= 0 && availableBytes >= MIN_FREE_SPACE_BYTES &&
+            chunkBytes.toLong() <= availableBytes - MIN_FREE_SPACE_BYTES
     }
 
     private fun safeFilename(filename: String): String {
