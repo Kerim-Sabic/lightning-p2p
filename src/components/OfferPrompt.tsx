@@ -1,5 +1,5 @@
 import { Check, Inbox, LaptopMinimal, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { formatBytes } from "../lib/format";
 import {
   listPairedDevices,
@@ -27,9 +27,34 @@ export function OfferPrompt() {
     failed: boolean;
   } | null>(null);
   const autoCatchStarted = useRef<string | null>(null);
+  const dialogRef = useRef<HTMLElement>(null);
+  const acceptButtonRef = useRef<HTMLButtonElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
 
   const offer = queue[0];
   const offerId = offer?.offer_id;
+  const readyToCatch = offer?.ready_to_catch ?? false;
+
+  useEffect(() => {
+    if (offerId) {
+      if (
+        previousFocusRef.current === null &&
+        document.activeElement instanceof HTMLElement
+      ) {
+        previousFocusRef.current = document.activeElement;
+      }
+      const acceptButton = acceptButtonRef.current;
+      if (readyToCatch || acceptButton?.disabled) {
+        dialogRef.current?.focus();
+      } else {
+        (acceptButton ?? dialogRef.current)?.focus();
+      }
+      return;
+    }
+
+    previousFocusRef.current?.focus();
+    previousFocusRef.current = null;
+  }, [offerId, readyToCatch]);
 
   useEffect(() => {
     if (!offerId) return;
@@ -136,6 +161,35 @@ export function OfferPrompt() {
     }
   };
 
+  const handleDialogKeyDown = (event: KeyboardEvent<HTMLElement>): void => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      if (!pending && !offer.ready_to_catch) void handleRespond(false);
+      return;
+    }
+    if (event.key !== "Tab") return;
+
+    const focusable = Array.from(
+      event.currentTarget.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ),
+    );
+    if (focusable.length === 0) {
+      event.preventDefault();
+      event.currentTarget.focus();
+      return;
+    }
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last?.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first?.focus();
+    }
+  };
+
   return (
     <div
       className="fixed inset-0 z-[1000] flex items-end justify-center bg-black/60 p-4 backdrop-blur-sm sm:items-center"
@@ -143,7 +197,12 @@ export function OfferPrompt() {
       aria-modal="true"
       aria-labelledby="offer-prompt-title"
     >
-      <article className="glass-panel w-full max-w-md p-5 shadow-2xl">
+      <article
+        ref={dialogRef}
+        tabIndex={-1}
+        onKeyDown={handleDialogKeyDown}
+        className="glass-panel w-full max-w-md p-5 shadow-2xl"
+      >
         <header className="flex items-start gap-3">
           <div className="glass-icon h-12 w-12 rounded-[18px]">
             <Inbox className="h-5 w-5 text-emerald-200" />
@@ -212,6 +271,7 @@ export function OfferPrompt() {
           </button>
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <button
+              ref={acceptButtonRef}
               type="button"
               onClick={() => void handleRespond(false)}
               disabled={pending || offer.ready_to_catch}
