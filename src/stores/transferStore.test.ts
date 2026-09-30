@@ -162,6 +162,14 @@ describe("active transfer snapshot reconciliation", () => {
     expect(receivedTransfer().bytes).toBe(100);
   });
 
+  it("ignores late progress after a transfer completes", () => {
+    useTransferStore.getState().applyTransferEvent(completedEvent());
+    useTransferStore.getState().applyTransferEvent(progressEvent(40));
+
+    expect(receivedTransfer().status).toBe("completed");
+    expect(receivedTransfer().bytes).toBe(100);
+  });
+
   it("keeps cancelled share preparation distinct from receiver completion", () => {
     useTransferStore.getState().applyTransferEvent({
       type: "started",

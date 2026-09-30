@@ -1021,6 +1021,11 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
 
   applyTransferEvent: (event) => {
     set((state) => {
+      const current = state.transfers[event.transfer_id];
+      if (current?.status === "completed" || current?.status === "failed") {
+        return state;
+      }
+
       if (event.type === "started") {
         const transfers = { ...state.transfers };
         transfers[event.transfer_id] = {
