@@ -30,8 +30,18 @@ const FLICK_ARRIVAL_OFFSETS: Record<FlickDirection, [number, number]> = {
   up_right: [26, -26],
 };
 
-function directionLabel(direction: FlickDirection): string {
-  return direction.replace("_", " ");
+function arrivalLabel(direction: FlickDirection): string {
+  const labels: Record<FlickDirection, string> = {
+    right: "from the right",
+    down_right: "from the lower right",
+    down: "from below",
+    down_left: "from the lower left",
+    left: "from the left",
+    up_left: "from the upper left",
+    up: "from above",
+    up_right: "from the upper right",
+  };
+  return labels[direction];
 }
 
 export function OfferPrompt() {
@@ -317,8 +327,14 @@ export function OfferPrompt() {
             >
               <File className="h-3.5 w-3.5" />
             </span>
-            <span>
-              Gesture cue · sender flicked {directionLabel(flickDirection)}
+            <span className="text-center">
+              <span className="block font-medium text-slate-200">
+                Arriving {arrivalLabel(flickDirection)} · approximate
+              </span>
+              <span className="mt-0.5 block text-[10px] text-slate-500">
+                Direction comes from the sender’s flick; device location isn’t
+                used.
+              </span>
             </span>
           </div>
         ) : null}
