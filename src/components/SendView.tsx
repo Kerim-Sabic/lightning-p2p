@@ -722,7 +722,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
               {nativeRuntime && devices.length > 0 ? (
                 <button
                   type="button"
-                  aria-label="Flick toward a nearby device to send; its screen shows the file arriving from that direction"
+                  aria-label="Flick toward a nearby device to send; its screen shows the file arriving from your approximate side"
                   onPointerDown={handleFlickPointerDown}
                   onPointerMove={handleFlickPointerMove}
                   onPointerUp={handleFlickPointerUp}

@@ -7,7 +7,10 @@ import {
   type KeyboardEvent,
 } from "react";
 import { attachAsyncUnlisten } from "../hooks/asyncSubscription";
-import type { FlickDirection } from "../lib/flickGesture";
+import {
+  arrivalDirectionFromSenderFlick,
+  type FlickDirection,
+} from "../lib/flickGesture";
 import { formatBytes } from "../lib/format";
 import { safeDisplayText } from "../lib/safeDisplayText";
 import {
@@ -189,8 +192,11 @@ export function OfferPrompt() {
     .split(/[\\/]/)
     .pop();
   const flickDirection = offer.flick_direction ?? null;
-  const flickOffset = flickDirection
-    ? FLICK_ARRIVAL_OFFSETS[flickDirection]
+  const flickArrivalDirection = flickDirection
+    ? arrivalDirectionFromSenderFlick(flickDirection)
+    : null;
+  const flickOffset = flickArrivalDirection
+    ? FLICK_ARRIVAL_OFFSETS[flickArrivalDirection]
     : null;
   const flickArrivalStyle = flickOffset
     ? ({
@@ -322,7 +328,7 @@ export function OfferPrompt() {
           </div>
         </div>
 
-        {flickDirection ? (
+        {flickArrivalDirection ? (
           <div className="mt-3 flex items-center justify-center gap-2 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-xs text-slate-300">
             <span
               className="flick-arrival-file grid h-7 w-7 place-items-center rounded-lg border border-sky-300/20 bg-sky-300/10 text-sky-100"
@@ -333,10 +339,10 @@ export function OfferPrompt() {
             </span>
             <span className="text-center">
               <span className="block font-medium text-slate-200">
-                Arriving {arrivalLabel(flickDirection)} · approximate
+                Arriving {arrivalLabel(flickArrivalDirection)} · approximate
               </span>
               <span className="mt-0.5 block text-[10px] text-slate-500">
-                The sender’s flick gives a rough side cue; no location data is
+                The flick hints at the sender’s side; no location data is
                 used.
               </span>
             </span>

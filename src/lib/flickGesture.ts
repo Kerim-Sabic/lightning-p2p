@@ -16,6 +16,17 @@ export type FlickDirection =
   | "up"
   | "up_right";
 
+const OPPOSITE_FLICK_DIRECTION: Record<FlickDirection, FlickDirection> = {
+  right: "left",
+  down_right: "up_left",
+  down: "up",
+  down_left: "up_right",
+  left: "right",
+  up_left: "down_right",
+  up: "down",
+  up_right: "down_left",
+};
+
 const FLICK_DIRECTIONS: readonly FlickDirection[] = [
   "right",
   "down_right",
@@ -26,6 +37,13 @@ const FLICK_DIRECTIONS: readonly FlickDirection[] = [
   "up",
   "up_right",
 ];
+
+/** Maps the sender's destination direction to the side the sender is on. */
+export function arrivalDirectionFromSenderFlick(
+  direction: FlickDirection,
+): FlickDirection {
+  return OPPOSITE_FLICK_DIRECTION[direction];
+}
 
 export const MIN_FLICK_DISTANCE_PX = 48;
 export const MIN_FLICK_VELOCITY_PX_PER_MS = 0.65;
