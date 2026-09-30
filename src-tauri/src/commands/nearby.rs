@@ -155,41 +155,51 @@ pub async fn respond_to_offer(
         .find(|offer| offer.offer_id == offer_id)
         .ok_or_else(|| command_error("Offer is no longer pending."))?;
 
-    let decision = if accept {
-        OfferDecision::Accepted
-    } else {
-        OfferDecision::Rejected
-    };
-
-    state
-        .offer_inbox
-        .resolve(&offer_id, decision)
-        .await
-        .map_err(|err| command_error(err.to_string()))?;
-
+    let inbox = state.offer_inbox.clone();
     if !accept {
+        inbox
+            .resolve(&offer_id, OfferDecision::Rejected)
+            .await
+            .map_err(|err| command_error(err.to_string()))?;
         return Ok(None);
     }
 
-    let sender_node_id = EndpointId::from_str(&offer.sender_node_id)
-        .map_err(|err| command_error(format!("Invalid sender node id: {err}")))?;
-    let hash = iroh_blobs::Hash::from_str(&offer.blob_hash)
-        .map_err(|err| command_error(format!("Invalid blob hash: {err}")))?;
-    let blob_format: BlobFormat = offer.blob_format.blob_format();
+    let transfer_queue = state.transfers.clone();
+    let start_result = async {
+        let sender_node_id = EndpointId::from_str(&offer.sender_node_id)
+            .map_err(|err| command_error(format!("Invalid sender node id: {err}")))?;
+        let hash = iroh_blobs::Hash::from_str(&offer.blob_hash)
+            .map_err(|err| command_error(format!("Invalid blob hash: {err}")))?;
+        let blob_format: BlobFormat = offer.blob_format.blob_format();
 
-    let node = state.get_node().await.map_err(command_error)?;
-    let node_addr = state
-        .nearby_shares
-        .node_addr_for_device(&sender_node_id)
-        .await
-        .unwrap_or_else(|| EndpointAddr::new(sender_node_id));
+        let node = state.get_node().await.map_err(command_error)?;
+        let node_addr = state
+            .nearby_shares
+            .node_addr_for_device(&sender_node_id)
+            .await
+            .unwrap_or_else(|| EndpointAddr::new(sender_node_id));
 
-    let ticket = iroh_blobs::ticket::BlobTicket::new(node_addr, hash, blob_format);
+        let ticket = iroh_blobs::ticket::BlobTicket::new(node_addr, hash, blob_format);
+        crate::commands::transfer::start_receive_from_offer(state, window, node, ticket).await
+    }
+    .await;
 
-    let transfer_id =
-        crate::commands::transfer::start_receive_from_offer(state, window, node, ticket).await?;
-
-    Ok(Some(transfer_id))
+    match start_result {
+        Ok(transfer_id) => {
+            if let Err(error) = inbox.resolve(&offer_id, OfferDecision::Accepted).await {
+                let _ = transfer_queue.cancel(&transfer_id).await;
+                return Err(command_error(error.to_string()));
+            }
+            Ok(Some(transfer_id))
+        }
+        Err(error) => {
+            // A malformed ticket or local setup failure must never be reported
+            // as an accepted offer. Best-effort rejection also releases the
+            // sender's temporary peer-bound blob grant.
+            let _ = inbox.resolve(&offer_id, OfferDecision::Rejected).await;
+            Err(error)
+        }
+    }
 }
 
 fn generate_offer_id() -> String {
