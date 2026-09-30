@@ -122,8 +122,12 @@ export function TransferTray({
         aria-hidden="true"
         className={`pointer-events-none ${
           mobileRuntime
-            ? "h-[calc(9rem+env(safe-area-inset-bottom))]"
-            : "h-36"
+            ? expanded
+              ? "h-[calc(35vh+5rem+env(safe-area-inset-bottom))]"
+              : "h-[calc(9rem+env(safe-area-inset-bottom))]"
+            : expanded
+              ? "h-[calc(35vh+5rem)]"
+              : "h-36"
         }`}
       />
       <aside
