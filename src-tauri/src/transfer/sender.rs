@@ -316,8 +316,11 @@ async fn import_sources(
         .map(|(index, source)| {
             import_source(store, source, index, plan.total_size, progress.clone())
         });
-    let mut pending =
-        stream::iter(tasks).buffer_unordered(import_parallelism(plan.sources.len(), profile));
+    let mut pending = stream::iter(tasks).buffer_unordered(import_parallelism(
+        plan.sources.len(),
+        plan.total_size,
+        profile,
+    ));
     let mut imported = Vec::with_capacity(plan.sources.len());
 
     while let Some(item) = pending.next().await {
@@ -328,15 +331,41 @@ async fn import_sources(
     Ok(imported.into_iter().map(|item| item.source).collect())
 }
 
-fn import_parallelism(source_count: usize, profile: TransferProfile) -> usize {
+fn import_parallelism(source_count: usize, total_size: u64, profile: TransferProfile) -> usize {
     // Import is I/O-bound (disk read + hashing handled by iroh-blobs in async tasks),
     // so CPU count is a poor proxy — NVMe can comfortably absorb many in-flight imports.
     // Resolution order:
     //   1. `LIGHTNING_P2P_IMPORT_PARALLELISM` env var (bench tuning escape hatch)
     //   2. the active TransferProfile's `import_parallelism`
     //   3. hard floor of 1, hard ceiling of MAX_IMPORT_PARALLELISM
-    let cap = env_import_parallelism_cap().unwrap_or(profile.import_parallelism);
+    let cap = env_import_parallelism_cap().unwrap_or_else(|| {
+        if profile.mode == crate::transfer::TransferMode::SmartAuto {
+            let cores = std::thread::available_parallelism().map_or(2, std::num::NonZeroUsize::get);
+            smart_auto_import_parallelism(source_count, total_size, cores)
+        } else {
+            profile.import_parallelism
+        }
+    });
     compute_import_parallelism(source_count, cap.min(MAX_IMPORT_PARALLELISM))
+}
+
+/// Adapts only the bounded import fanout from observable CPU and payload shape.
+/// Large files use fewer simultaneous hashing pipelines; small-file batches can
+/// use up to twice the available parallelism, with an eight-job ceiling.
+fn smart_auto_import_parallelism(source_count: usize, total_size: u64, cores: usize) -> usize {
+    if source_count <= 1 {
+        return 1;
+    }
+    let cores = cores.max(1);
+    let average_file_size = total_size / source_count as u64;
+    let cap = if average_file_size >= 64 * 1024 * 1024 || total_size >= 1024 * 1024 * 1024 {
+        cores.min(4)
+    } else if average_file_size <= 4 * 1024 * 1024 {
+        cores.saturating_mul(2).min(8)
+    } else {
+        cores.min(8)
+    };
+    source_count.min(cap.max(1))
 }
 
 fn env_import_parallelism_cap() -> Option<usize> {
@@ -500,6 +529,16 @@ mod tests {
         assert_eq!(compute_import_parallelism(256, 4), 4);
         assert_eq!(compute_import_parallelism(1, 4), 1);
         assert_eq!(compute_import_parallelism(10, 0), 1);
+    }
+
+    #[test]
+    fn smart_auto_scales_imports_to_workload_and_available_cores() {
+        const MB: u64 = 1024 * 1024;
+        assert_eq!(smart_auto_import_parallelism(100, 100 * MB, 2), 4);
+        assert_eq!(smart_auto_import_parallelism(100, 8 * 1024 * MB, 16), 4);
+        assert_eq!(smart_auto_import_parallelism(100, 100 * MB, 1), 2);
+        assert_eq!(smart_auto_import_parallelism(1, 8 * 1024 * MB, 16), 1);
+        assert_eq!(smart_auto_import_parallelism(3, 6 * MB, 12), 3);
     }
 
     #[test]
