@@ -44,6 +44,8 @@ type ProgressTransferEvent = Extract<TransferEvent, { type: "progress" }>;
 
 let activeTransfersRequestSequence = 0;
 let nodeStatusRequestSequence = 0;
+let historyRequestSequence = 0;
+let historyClearInFlight = false;
 let shareSelectionRequestSequence = 0;
 let activeSharePathScanId: string | null = null;
 
@@ -667,10 +669,19 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
   },
 
   refreshHistory: async () => {
+    if (historyClearInFlight) return;
+    const requestSequence = ++historyRequestSequence;
     try {
       const history = await tauri.getTransferHistory();
-      set({ history });
+      if (
+        requestSequence === historyRequestSequence &&
+        !historyClearInFlight
+      ) {
+        set({ history });
+      }
     } catch (error) {
+      if (requestSequence !== historyRequestSequence || historyClearInFlight)
+        return;
       const appError = normalizeAppError(error);
       const message = messageFromAppError(appError);
       if (!isNodePendingError(message, appError)) {
@@ -680,11 +691,17 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
   },
 
   clearTransferHistory: async () => {
+    if (historyClearInFlight) return;
+    historyClearInFlight = true;
+    historyRequestSequence += 1;
     try {
       await tauri.clearTransferHistory();
+      historyRequestSequence += 1;
       set({ history: [] });
     } catch (error) {
       set(errorState(error));
+    } finally {
+      historyClearInFlight = false;
     }
   },
 

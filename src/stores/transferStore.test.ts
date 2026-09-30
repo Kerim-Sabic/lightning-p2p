@@ -4,6 +4,7 @@ import type {
   NodeStatus,
   SharePathInfo,
   TransferEvent,
+  TransferRecord,
 } from "../lib/tauri";
 
 vi.mock("../lib/tauri", async (importOriginal) => {
@@ -12,6 +13,8 @@ vi.mock("../lib/tauri", async (importOriginal) => {
     ...actual,
     getActiveTransfers: vi.fn(),
     getNodeStatus: vi.fn(),
+    getTransferHistory: vi.fn(),
+    clearTransferHistory: vi.fn(),
     describeSharePaths: vi.fn(),
     cancelSharePathScan: vi.fn().mockResolvedValue(true),
   };
@@ -41,6 +44,16 @@ const activeTransfer: ActiveTransfer = {
   strategy: "queued_single_provider",
   first_byte_ms: 12,
   effective_mbps: 0,
+};
+
+const savedHistoryRecord: TransferRecord = {
+  hash: "history-hash",
+  filename: "payload.txt",
+  size: 10,
+  peer: "peer-1",
+  timestamp: 1,
+  direction: "receive",
+  status: "completed",
 };
 
 function progressEvent(bytes: number): TransferEvent {
@@ -115,6 +128,8 @@ describe("active transfer snapshot reconciliation", () => {
       isPreparingSelection: false,
     });
     vi.mocked(tauri.getActiveTransfers).mockReset();
+    vi.mocked(tauri.getTransferHistory).mockReset();
+    vi.mocked(tauri.clearTransferHistory).mockReset();
     vi.mocked(tauri.describeSharePaths).mockReset();
     vi.mocked(tauri.cancelSharePathScan).mockReset();
     vi.mocked(tauri.cancelSharePathScan).mockResolvedValue(true);
@@ -239,6 +254,26 @@ describe("node status snapshot reconciliation", () => {
     await olderRefresh;
 
     expect(useTransferStore.getState().nodeStatus).toEqual(directStatus);
+  });
+});
+
+describe("transfer history snapshot reconciliation", () => {
+  it("does not restore a stale snapshot after history is cleared", async () => {
+    let resolveHistory: ((records: TransferRecord[]) => void) | undefined;
+    vi.mocked(tauri.getTransferHistory).mockReturnValue(
+      new Promise((resolve) => {
+        resolveHistory = resolve;
+      }),
+    );
+    vi.mocked(tauri.clearTransferHistory).mockResolvedValue(undefined);
+    useTransferStore.setState({ history: [savedHistoryRecord] });
+
+    const staleRefresh = useTransferStore.getState().refreshHistory();
+    await useTransferStore.getState().clearTransferHistory();
+    resolveHistory?.([savedHistoryRecord]);
+    await staleRefresh;
+
+    expect(useTransferStore.getState().history).toEqual([]);
   });
 });
 
