@@ -211,16 +211,26 @@ pub async fn receive_blob(
             progress.set(summary.size, summary.size);
             progress.set_metrics(summary.metrics);
             progress.set_phase(TransferPhase::Completed);
-            sampler.finish().await?;
-            save_peer_no_flush(node, &summary.peer)?;
-            save_receive_record_no_flush(node, &summary)?;
-            node.db().flush()?;
-            reporter.emit_completed(
-                summary.hash,
+            if let Err(error) = sampler.finish().await {
+                tracing::warn!(%error, transfer_id, "could not emit final receive progress");
+            }
+            if let Err(error) = reporter.emit_completed(
+                summary.hash.clone(),
                 summary.size,
                 summary.metrics,
                 Some(summary.output_path.to_string_lossy().to_string()),
-            )?;
+            ) {
+                tracing::warn!(%error, transfer_id, "could not emit completed receive event");
+            }
+            if let Err(error) = save_peer_no_flush(node, &summary.peer) {
+                tracing::warn!(%error, transfer_id, "could not update received peer history");
+            }
+            if let Err(error) = save_receive_record_no_flush(node, &summary) {
+                tracing::warn!(%error, transfer_id, "could not save receive history record");
+            }
+            if let Err(error) = node.db().flush() {
+                tracing::warn!(%error, transfer_id, "could not flush receive history");
+            }
             Ok(())
         }
         Err(error) => {
