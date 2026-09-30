@@ -20,6 +20,8 @@ use tokio::sync::{oneshot, Mutex};
 
 /// Tauri event emitted to the frontend when a remote peer offers a share.
 pub const NEARBY_OFFER_RECEIVED_EVENT: &str = "nearby-offer-received";
+/// Tauri event emitted when an offer expires or its connection closes.
+pub const NEARBY_OFFER_CLOSED_EVENT: &str = "nearby-offer-closed";
 /// Tauri event emitted on the sender side when its outbound offer is resolved.
 pub const NEARBY_OFFER_RESOLVED_EVENT: &str = "nearby-offer-resolved";
 
@@ -116,6 +118,13 @@ pub struct OfferResolvedEvent {
     pub outcome: OfferDecision,
     /// Receiver's iroh node identifier, in hex.
     pub receiver_node_id: String,
+}
+
+/// Frontend payload used to remove an offer whose request handler is inactive.
+#[derive(Debug, Clone, Serialize)]
+pub struct OfferClosedEvent {
+    /// Offer identifier.
+    pub offer_id: String,
 }
 
 /// Internal record describing an offer awaiting a user decision.
@@ -495,13 +504,18 @@ pub async fn handle_offer_request(
     let decision = tokio::select! {
         _ = connection.closed() => {
             inbox.drop_offer(&request.offer_id).await;
+            emit_offer_closed(app_handle, request.offer_id.clone());
             OfferDecision::Rejected
         }
         result = tokio::time::timeout(OFFER_DECISION_TIMEOUT, receiver) => match result {
             Ok(Ok(decision)) => decision,
-            Ok(Err(_)) => OfferDecision::Rejected,
+            Ok(Err(_)) => {
+                emit_offer_closed(app_handle, request.offer_id.clone());
+                OfferDecision::Rejected
+            }
             Err(_) => {
                 inbox.drop_offer(&request.offer_id).await;
+                emit_offer_closed(app_handle, request.offer_id.clone());
                 OfferDecision::Expired
             }
         }
@@ -511,6 +525,12 @@ pub async fn handle_offer_request(
         offer_id: request.offer_id,
         decision,
     })
+}
+
+fn emit_offer_closed(app_handle: &AppHandle, offer_id: String) {
+    if let Err(error) = app_handle.emit(NEARBY_OFFER_CLOSED_EVENT, OfferClosedEvent { offer_id }) {
+        tracing::warn!("failed to emit nearby-offer-closed: {error}");
+    }
 }
 
 /// Emits the `nearby-offer-resolved` event to the frontend on the sender side.

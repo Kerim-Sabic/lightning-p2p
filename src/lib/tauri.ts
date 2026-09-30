@@ -429,6 +429,10 @@ export interface OfferResolved {
   receiver_node_id: string;
 }
 
+export interface OfferClosed {
+  offer_id: string;
+}
+
 export interface LocalDeviceIdentity {
   device_name: string;
   short_node_id: string;
@@ -1528,6 +1532,18 @@ export function onIncomingOffer(
   }
 
   return listen<IncomingOffer>("nearby-offer-received", ({ payload }) => {
+    callback(payload);
+  });
+}
+
+export function onIncomingOfferClosed(
+  callback: (offer: OfferClosed) => void,
+): Promise<UnlistenFn> {
+  if (!isDesktopRuntime()) {
+    return Promise.resolve(() => {});
+  }
+
+  return listen<OfferClosed>("nearby-offer-closed", ({ payload }) => {
     callback(payload);
   });
 }

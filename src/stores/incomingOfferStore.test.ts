@@ -32,4 +32,15 @@ describe("incoming offer queue", () => {
     expect(useIncomingOfferStore.getState().queue.map((item) => item.offer_id))
       .toEqual(["other-peer"]);
   });
+
+  it("removes an expired head offer so the next sender can be reviewed", () => {
+    const store = useIncomingOfferStore.getState();
+    store.pushIncoming(offer("expired", "peer-1"));
+    store.pushIncoming(offer("next", "peer-2"));
+
+    store.dismissIncoming("expired");
+
+    expect(useIncomingOfferStore.getState().queue.map((item) => item.offer_id))
+      .toEqual(["next"]);
+  });
 });

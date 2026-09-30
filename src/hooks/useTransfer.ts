@@ -5,6 +5,7 @@ import {
   isMobileRuntime,
   onDiscoveredSharesUpdated,
   onIncomingOffer,
+  onIncomingOfferClosed,
   onNearbyDevicesUpdated,
   onNearbyDiagnosticState,
   onNodeSupervisorStatus,
@@ -244,6 +245,19 @@ export function useTransfer(): void {
     return attachAsyncUnlisten(
       onNearbyDevicesUpdated((devices) => {
         useNearbyDeviceStore.getState().applyDevicesUpdated(devices);
+      }),
+      handleSubscriptionError,
+    );
+  }, [handleSubscriptionError, inTauriRuntime]);
+
+  useEffect(() => {
+    if (!inTauriRuntime) {
+      return;
+    }
+
+    return attachAsyncUnlisten(
+      onIncomingOfferClosed(({ offer_id }) => {
+        useIncomingOfferStore.getState().dismissIncoming(offer_id);
       }),
       handleSubscriptionError,
     );
