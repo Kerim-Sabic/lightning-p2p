@@ -75,6 +75,7 @@ qrcode = "0.14"
 rand = "0.8"
 sha2 = "0.10"
 socket2 = "0.6"
+libc = "0.2"
 uuid = { version = "1", features = ["v4"] }
 tauri-plugin-os = "2.3.2"
 tauri-plugin-clipboard-manager = "2.3.2"

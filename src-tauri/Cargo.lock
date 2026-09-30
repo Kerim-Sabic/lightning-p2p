@@ -3772,6 +3772,7 @@ dependencies = [
  "iroh-mdns-address-lookup",
  "jni 0.22.4",
  "keyring",
+ "libc",
  "mime_guess",
  "n0-future",
  "ndk-context",

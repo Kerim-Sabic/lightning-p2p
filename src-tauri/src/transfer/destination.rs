@@ -58,7 +58,15 @@ pub(crate) fn ensure_enough_space(destination: &Path, size: u64) -> Result<()> {
     let Some(available_bytes) = available_disk_space(destination) else {
         return Ok(());
     };
-    let required = size.saturating_add(DISK_SPACE_HEADROOM_BYTES);
+    ensure_available_space(size, available_bytes)
+}
+
+fn ensure_available_space(size: u64, available_bytes: u64) -> Result<()> {
+    let Some(required) = size.checked_add(DISK_SPACE_HEADROOM_BYTES) else {
+        return Err(LightningP2PError::Other(
+            "Requested transfer size exceeds the supported receive limit.".into(),
+        ));
+    };
     if available_bytes < required {
         return Err(LightningP2PError::Other(format!(
             "Not enough free disk space in the download folder. Required at least {required} bytes, available {available_bytes} bytes."
@@ -213,9 +221,32 @@ fn available_disk_space(path: &Path) -> Option<u64> {
     Some(available_bytes)
 }
 
-#[cfg(not(windows))]
+#[cfg(not(any(windows, unix)))]
 fn available_disk_space(_path: &Path) -> Option<u64> {
     None
+}
+
+#[cfg(unix)]
+fn available_disk_space(path: &Path) -> Option<u64> {
+    use std::ffi::CString;
+    use std::os::unix::ffi::OsStrExt;
+
+    let path = CString::new(path.as_os_str().as_bytes()).ok()?;
+    // SAFETY: `path` is NUL terminated and `space` points to initialized,
+    // writable storage for the duration of the synchronous libc call.
+    let mut space = unsafe { std::mem::zeroed::<libc::statvfs>() };
+    // SAFETY: both pointers satisfy statvfs' C ABI requirements.
+    if unsafe { libc::statvfs(path.as_ptr(), &mut space) } != 0 {
+        tracing::warn!(
+            error = %std::io::Error::last_os_error(),
+            path = %path.to_string_lossy(),
+            "Could not query free disk space for receive destination"
+        );
+        return None;
+    }
+    u64::try_from(space.f_bavail)
+        .ok()?
+        .checked_mul(u64::try_from(space.f_frsize).ok()?)
 }
 
 fn unix_timestamp() -> u64 {
@@ -234,6 +265,16 @@ mod tests {
         assert_eq!(safe_collection_label("   "), "download");
         assert_eq!(safe_collection_label("CON"), "_CON");
         assert_eq!(safe_collection_label("folder. "), "folder");
+    }
+
+    #[test]
+    fn disk_space_preflight_includes_headroom_and_accepts_exact_boundary() {
+        let size = 10_000;
+        let required = size + DISK_SPACE_HEADROOM_BYTES;
+
+        assert!(ensure_available_space(size, required - 1).is_err());
+        assert!(ensure_available_space(size, required).is_ok());
+        assert!(ensure_available_space(u64::MAX, u64::MAX).is_err());
     }
 
     #[test]
