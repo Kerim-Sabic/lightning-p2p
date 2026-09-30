@@ -2,8 +2,7 @@
 
 pub(crate) use super::destination::preflight_destination;
 use super::destination::{
-    ensure_enough_space, safe_collection_entry_path, safe_collection_label, staging_dir_name,
-    suffixed_path,
+    ensure_enough_space, safe_collection_entry_path, safe_collection_label, suffixed_path,
 };
 use crate::error::{LightningP2PError, Result};
 use iroh_blobs::api::proto::BlobStatus;
@@ -170,7 +169,7 @@ async fn export_blob(
     cancel_rx: &mut watch::Receiver<bool>,
 ) -> Result<PathBuf> {
     let base_path = destination.join(ticket.hash().to_string());
-    let staging_dir = create_blob_staging_dir(destination, ticket.hash())?;
+    let staging_dir = create_export_staging_dir(destination, ticket.hash())?;
     let temp_path = staging_dir.join(ticket.hash().to_string());
 
     let export_result = tokio::select! {
@@ -199,7 +198,7 @@ async fn export_blob(
 /// Creates a fresh private directory for a single-file export. A predictable
 /// sibling `.part` file could be planted as a symlink before `iroh-blobs`
 /// opens it, redirecting the write outside the download folder.
-fn create_blob_staging_dir(destination: &Path, hash: Hash) -> Result<PathBuf> {
+fn create_export_staging_dir(destination: &Path, hash: Hash) -> Result<PathBuf> {
     for _ in 0..64 {
         let candidate = destination.join(format!(
             ".lightning-p2p-export-{hash}-{}",
@@ -219,7 +218,7 @@ fn create_blob_staging_dir(destination: &Path, hash: Hash) -> Result<PathBuf> {
         }
     }
     Err(LightningP2PError::Other(
-        "Could not reserve a safe location for the received file.".into(),
+        "Could not reserve a safe location for received content.".into(),
     ))
 }
 
@@ -243,7 +242,7 @@ async fn export_collection(
     label: &str,
     cancel_rx: &mut watch::Receiver<bool>,
 ) -> Result<PathBuf> {
-    let staging_dir = create_collection_staging_dir(destination, ticket.hash()).await?;
+    let staging_dir = create_export_staging_dir(destination, ticket.hash())?;
 
     // iroh-blobs 1.0 has no collection-export helper, so load the collection
     // and export each child to `staging/<name>` (creating parent dirs for
@@ -268,20 +267,6 @@ async fn export_collection(
             Err(error)
         }
     }
-}
-
-async fn create_collection_staging_dir(destination: &Path, hash: Hash) -> Result<PathBuf> {
-    for _ in 0..64 {
-        let candidate = destination.join(staging_dir_name(hash));
-        match tokio::fs::create_dir(&candidate).await {
-            Ok(()) => return Ok(candidate),
-            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
-            Err(error) => return Err(error.into()),
-        }
-    }
-    Err(LightningP2PError::Other(
-        "Could not reserve a safe folder for the received files.".into(),
-    ))
 }
 
 async fn export_collection_children(
@@ -360,6 +345,15 @@ async fn prepare_staging_file_target(staging_dir: &Path, relative: &Path) -> Res
         .file_name()
         .ok_or_else(unsafe_collection_destination_error)?;
     current.push(file_name);
+    match tokio::fs::symlink_metadata(&current).await {
+        Ok(_) => {
+            return Err(LightningP2PError::Other(
+                "The shared folder contains conflicting file paths.".into(),
+            ));
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error.into()),
+    }
     Ok(current)
 }
 
@@ -714,6 +708,24 @@ mod tests {
             prepare_staging_file_target(&stage, Path::new("nested/file.txt"))
                 .await
                 .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn collection_staging_rejects_an_existing_leaf() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let stage = dir.path().join("stage");
+        tokio::fs::create_dir(&stage).await.expect("stage");
+        tokio::fs::write(stage.join("member.txt"), b"first member")
+            .await
+            .expect("existing member");
+
+        assert!(prepare_staging_file_target(&stage, Path::new("member.txt"))
+            .await
+            .is_err());
+        assert_eq!(
+            tokio::fs::read(stage.join("member.txt")).await.unwrap(),
+            b"first member"
         );
     }
 

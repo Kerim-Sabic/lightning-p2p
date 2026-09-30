@@ -1,13 +1,10 @@
 //! Receive destination preflight and safe output path helpers.
 
 use crate::error::{LightningP2PError, Result};
-use iroh_blobs::Hash;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const DISK_SPACE_HEADROOM_BYTES: u64 = 64 * 1024 * 1024;
-static STAGING_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 /// Destination folder preflight result.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -148,14 +145,6 @@ fn is_windows_reserved_name(name: &str) -> bool {
                         .is_some_and(|digit| (b'1'..=b'9').contains(digit))
             })
         })
-}
-
-pub(crate) fn staging_dir_name(hash: Hash) -> String {
-    let sequence = STAGING_SEQUENCE.fetch_add(1, Ordering::Relaxed);
-    format!(
-        ".lightning-p2p-export-{hash}-{}-{sequence:x}",
-        unix_timestamp()
-    )
 }
 
 pub(crate) fn suffixed_path(base: &Path, index: u64) -> PathBuf {
