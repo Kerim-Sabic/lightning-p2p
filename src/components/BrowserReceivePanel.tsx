@@ -293,20 +293,20 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
               <div className="rounded-xl border border-white/8 bg-black/30 p-4">
                 <div className="flex items-baseline justify-between gap-3">
                   <p
-                    className="truncate text-[13px] font-semibold text-white"
+                    className="truncate text-sm font-semibold text-white"
                     title={info.label}
                   >
                     {info.label || "Shared files"}
                   </p>
-                  <p className="shrink-0 text-right text-[11px] text-[color:var(--muted-copy)]">
+                  <p className="shrink-0 text-right text-[13px] text-[color:var(--muted-copy)]">
                     {sizeVerified ? "Verified" : "Sender estimate"}
-                    <span className="ml-1.5 font-mono text-[12px] text-[var(--signal-green)]">
+                    <span className="ml-1.5 font-mono text-[13px] text-[var(--signal-green)]">
                       {formatBytes(info.size)}
                     </span>
                   </p>
                 </div>
                 {refused && (
-                  <p className="mt-3 flex items-start gap-2 text-[12px] leading-5 text-[color:var(--proof-amber)]">
+                  <p className="mt-3 flex items-start gap-2 text-[13px] leading-6 text-[color:var(--proof-amber)]">
                     <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                     This browser cannot stream this transfer to disk. Use the
                     native app or reload after the browser receive engine has
@@ -314,7 +314,7 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
                   </p>
                 )}
                 {heavy && (
-                  <p className="mt-3 flex items-start gap-2 text-[12px] leading-5 text-[color:var(--soft-copy)]">
+                  <p className="mt-3 flex items-start gap-2 text-[13px] leading-6 text-[color:var(--soft-copy)]">
                     <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--proof-amber)]" />
                     Large transfer — received bytes stay in this tab's memory
                     until saved. The ticket size is supplied by the sender;
@@ -323,12 +323,12 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
                   </p>
                 )}
                 {info.size > WARN_BYTES && canStreamToDisk && !refused && (
-                  <p className="mt-3 text-[12px] leading-5 text-[color:var(--soft-copy)]">
+                  <p className="mt-3 text-[13px] leading-6 text-[color:var(--soft-copy)]">
                     This browser can stream verified chunks to a file you
                     choose. Make sure the destination has enough free space.
                   </p>
                 )}
-                <p className="mt-3 text-[11px] leading-5 text-[color:var(--muted-copy)]">
+                <p className="mt-3 text-[13px] leading-6 text-[color:var(--muted-copy)]">
                   Sender identity is not verified by the link. Confirm who
                   shared it before saving files.
                 </p>
@@ -352,7 +352,7 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
           {phase === "receiving" && (
             <Frame key="receiving" reduce={reduce}>
               <Busy label={status} />
-              <p className="mt-3 text-center text-[11px] text-[color:var(--muted-copy)]">
+              <p className="mt-3 text-center text-[13px] leading-6 text-[color:var(--muted-copy)]">
                 {formatBytes(receivedBytes)}{" "}
                 {streamedReceive
                   ? "of the collection manifest verified so far. Files stream as you save them."
@@ -382,7 +382,7 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
               <button
                 type="button"
                 onClick={() => void cancelReceive()}
-                className="mt-3 w-full rounded-full border border-white/12 bg-white/[0.04] px-4 py-2.5 text-[12px] font-semibold text-white hover:bg-white/[0.08]"
+                className="mt-3 min-h-11 w-full rounded-full border border-white/12 bg-white/[0.04] px-4 py-2.5 text-[13px] font-semibold text-white hover:bg-white/[0.08] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--signal-green)]"
               >
                 Cancel receive
               </button>
@@ -395,7 +395,7 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
                 initial={reduce ? false : { scale: 0.92, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 transition={{ type: "spring", stiffness: 360, damping: 22 }}
-                className="flex items-center gap-2 rounded-lg border border-[color:var(--signal-green)]/25 bg-[color:var(--signal-green)]/10 px-3 py-2 text-[12.5px] font-semibold text-[var(--signal-green)]"
+                className="flex items-center gap-2 rounded-lg border border-[color:var(--signal-green)]/25 bg-[color:var(--signal-green)]/10 px-3 py-2 text-sm font-semibold text-[var(--signal-green)]"
               >
                 <ShieldCheck className="h-4 w-4" />
                 {streamedReceive
@@ -421,12 +421,12 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
                       <FileDown className="h-4 w-4 shrink-0 text-[color:var(--soft-copy)]" />
                       <div className="min-w-0 flex-1">
                         <p
-                          className="truncate text-[12.5px] font-medium text-white"
+                          className="truncate text-sm font-medium text-white"
                           title={file.name}
                         >
                           {file.name}
                         </p>
-                        <p className="font-mono text-[10.5px] text-[color:var(--muted-copy)]">
+                        <p className="font-mono text-[13px] text-[color:var(--muted-copy)]">
                           {formatBytes(file.size)}
                         </p>
                       </div>
@@ -439,7 +439,7 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
                             ? `Saving ${file.name}: ${formatBytes(savingBytes)} of ${formatBytes(file.size)}`
                             : `${saved ? "Saved" : "Save"} ${file.name}`
                         }
-                        className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[12px] font-semibold transition disabled:opacity-60 ${
+                        className={`inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full border px-4 py-2 text-[13px] font-semibold transition disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--signal-green)] ${
                           saved
                             ? "border-[color:var(--signal-green)]/40 bg-[color:var(--signal-green)]/14 text-[var(--signal-green)]"
                             : "border-white/12 bg-white/[0.05] text-white hover:bg-white/[0.09]"
@@ -465,7 +465,7 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
                 })}
               </ul>
               {!hasSaveFilePicker() && (
-                <p className="mt-2.5 text-[11px] leading-5 text-[color:var(--muted-copy)]">
+                <p className="mt-2.5 text-[13px] leading-6 text-[color:var(--muted-copy)]">
                   Saved files land in this browser's Downloads folder.
                 </p>
               )}
@@ -484,7 +484,7 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
           {phase === "error" && (
             <Frame key="error" reduce={reduce}>
               <div className="rounded-xl border border-red-400/25 bg-red-500/10 p-4">
-                <p className="flex items-start gap-2 text-[12.5px] leading-6 text-red-200">
+                <p className="flex items-start gap-2 text-sm leading-6 text-red-200">
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                   <span>{error}</span>
                 </p>
@@ -495,7 +495,7 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
                   setPhase("idle");
                   setError(null);
                 }}
-                className="mt-3 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-full border border-white/12 bg-white/[0.04] px-5 py-2.5 text-[13px] font-semibold text-white transition hover:bg-white/[0.08]"
+                className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full border border-white/12 bg-white/[0.04] px-5 py-2.5 text-[13px] font-semibold text-white transition hover:bg-white/[0.08] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--signal-green)]"
               >
                 Try again
               </button>
@@ -513,7 +513,7 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
                   setPhase("idle");
                   setError(null);
                 }}
-                className="mt-3 inline-flex min-h-10 w-full items-center justify-center rounded-full border border-white/12 bg-white/[0.04] px-5 py-2.5 text-[13px] font-semibold text-white transition hover:bg-white/[0.08]"
+                className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-full border border-white/12 bg-white/[0.04] px-5 py-2.5 text-[13px] font-semibold text-white transition hover:bg-white/[0.08] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--signal-green)]"
               >
                 Receive again
               </button>
@@ -546,7 +546,7 @@ function Frame({
 
 function Busy({ label }: { label: string }) {
   return (
-    <div className="flex items-center justify-center gap-2.5 rounded-xl border border-white/8 bg-black/30 px-4 py-3.5 text-[12.5px] font-medium text-[color:var(--soft-copy)]">
+    <div className="flex items-center justify-center gap-2.5 rounded-xl border border-white/8 bg-black/30 px-4 py-3.5 text-sm font-medium text-[color:var(--soft-copy)]">
       <Loader2 className="h-4 w-4 animate-spin text-[var(--signal-green)]" />
       {label}
     </div>
