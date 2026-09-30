@@ -13,4 +13,10 @@ class ContentUriResolverTest {
         assertFalse(ContentUriResolver.hasSpaceForChunk(reserve, 1))
         assertFalse(ContentUriResolver.hasSpaceForChunk(1024, -1))
     }
+
+    @Test
+    fun pendingMediaStoreRowMustBeFinalizedBeforeReceiveCanSucceed() {
+        assertFalse(ContentUriResolver.hasPublishedMediaStoreRow(0))
+        assertTrue(ContentUriResolver.hasPublishedMediaStoreRow(1))
+    }
 }

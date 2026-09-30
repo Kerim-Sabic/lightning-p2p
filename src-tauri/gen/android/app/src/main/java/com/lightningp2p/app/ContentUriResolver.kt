@@ -140,7 +140,10 @@ object ContentUriResolver {
             val clearPending = ContentValues().apply {
                 put(MediaStore.MediaColumns.IS_PENDING, 0)
             }
-            resolver.update(uri, clearPending, null, null)
+            val updatedRows = resolver.update(uri, clearPending, null, null)
+            if (!hasPublishedMediaStoreRow(updatedRows)) {
+                throw IOException("MediaStore did not finalize the received file.")
+            }
             return uri.toString()
         } catch (error: Throwable) {
             try {
@@ -174,6 +177,8 @@ object ContentUriResolver {
         return chunkBytes >= 0 && availableBytes >= MIN_FREE_SPACE_BYTES &&
             chunkBytes.toLong() <= availableBytes - MIN_FREE_SPACE_BYTES
     }
+
+    internal fun hasPublishedMediaStoreRow(updatedRows: Int): Boolean = updatedRows > 0
 
     private fun safeFilename(filename: String): String {
         val clean = filename.replace(Regex("[/\\\\]"), "_").trim()
