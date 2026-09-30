@@ -10,6 +10,7 @@ import {
   LaptopMinimal,
   Link2,
   Loader2,
+  ShieldCheck,
   Trash2,
   Upload,
   Video,
@@ -34,6 +35,7 @@ import {
   offerShareToPeer,
   onWindowDragDropEvent,
   pickShareFiles as pickShareFilesFromDialog,
+  listPairedDevices,
   renderTicketQr,
   type NearbyDevice,
   writeClipboardText,
@@ -149,9 +151,29 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
   const [showRawTicket, setShowRawTicket] = useState(false);
   const [busyNodeId, setBusyNodeId] = useState<string | null>(null);
   const [dropTargetNodeId, setDropTargetNodeId] = useState<string | null>(null);
+  const [verifiedNodeIds, setVerifiedNodeIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [flickHint, setFlickHint] = useState<string | null>(null);
   const recipientSurfaceRef = useRef<HTMLElement | null>(null);
   const activeFlickRef = useRef<ActiveFlick | null>(null);
+
+  useEffect(() => {
+    if (!nativeRuntime) return;
+    let active = true;
+    void listPairedDevices()
+      .then((paired) => {
+        if (active) {
+          setVerifiedNodeIds(new Set(paired.map((device) => device.node_id)));
+        }
+      })
+      .catch(() => {
+        if (active) setVerifiedNodeIds(new Set());
+      });
+    return () => {
+      active = false;
+    };
+  }, [nativeRuntime]);
 
   const selectionSize = useMemo(
     () => shareSelection.reduce((total, item) => total + item.size, 0),
@@ -784,6 +806,17 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
                           : device.transport === "both"
                             ? "Wi-Fi and Bluetooth"
                             : "On your local network"}
+                  </span>
+                  <span
+                    className={`mt-1 inline-flex items-center gap-1 text-[10px] font-medium ${verifiedNodeIds.has(device.node_id) ? "text-emerald-200" : "text-amber-200/85"}`}
+                  >
+                    {verifiedNodeIds.has(device.node_id) ? (
+                      <>
+                        <ShieldCheck className="h-3 w-3" /> Verified by you
+                      </>
+                    ) : (
+                      "Not verified"
+                    )}
                   </span>
                 </span>
                 <span className="shrink-0 text-xs font-semibold text-sky-200">
