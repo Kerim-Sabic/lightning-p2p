@@ -416,8 +416,9 @@ fn is_single_file_offer(offer: &IncomingOffer) -> bool {
     }
 }
 
-fn is_risky_executable_label(label: &str) -> bool {
-    let extension = label.rsplit('.').next().unwrap_or_default();
+pub(crate) fn is_risky_executable_label(label: &str) -> bool {
+    let file_name = label.rsplit(['/', '\\']).next().unwrap_or_default();
+    let extension = file_name.rsplit('.').next().unwrap_or_default();
     !matches!(
         extension.to_ascii_lowercase().as_str(),
         "csv"
@@ -544,6 +545,14 @@ fn unix_timestamp() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ready_to_catch_name_filter_checks_the_final_path_component() {
+        assert!(is_risky_executable_label("folder/payload.EXE"));
+        assert!(is_risky_executable_label("folder\\payload.msi"));
+        assert!(!is_risky_executable_label("folder/notes.txt"));
+        assert!(is_risky_executable_label("README"));
+    }
 
     fn sample_offer(offer_id: &str) -> IncomingOffer {
         IncomingOffer {

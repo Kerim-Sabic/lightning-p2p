@@ -42,6 +42,8 @@ pub struct ReceiveLimits {
     pub max_total_bytes: Option<u64>,
     /// Maximum number of files in a received collection.
     pub max_file_count: Option<usize>,
+    /// Reject file names whose extensions are not on the safe receive list.
+    pub reject_risky_file_names: bool,
 }
 
 impl ReceiveLimits {
@@ -51,15 +53,17 @@ impl ReceiveLimits {
         Self {
             max_total_bytes: Some(100 * 1024 * 1024),
             max_file_count: Some(1),
+            reject_risky_file_names: true,
         }
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 struct ReceiveOptions {
     profile: TransferProfile,
     swarm_enabled: bool,
     limits: ReceiveLimits,
+    fallback_file_name: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -137,6 +141,8 @@ pub struct ReceiveContext {
     pub swarm_enabled: bool,
     /// Optional transfer guards; regular user-accepted receives are unlimited.
     pub limits: ReceiveLimits,
+    /// Sender-provided filename for non-collection offer tickets.
+    pub fallback_file_name: Option<String>,
 }
 
 /// Downloads the content addressed by a ticket using the supplied profile and
@@ -161,6 +167,7 @@ pub async fn receive_blob(
         mut cancel_rx,
         swarm_enabled,
         limits,
+        fallback_file_name,
     } = ctx;
     let peer = ticket.primary().addr().id.to_string();
     let initial_metrics = metrics_for_ticket(&ticket);
@@ -193,6 +200,7 @@ pub async fn receive_blob(
             profile,
             swarm_enabled,
             limits,
+            fallback_file_name,
         },
     )
     .await;
@@ -263,6 +271,7 @@ pub async fn receive_ticket(
             profile,
             swarm_enabled: false,
             limits: ReceiveLimits::default(),
+            fallback_file_name: None,
         },
     )
     .await?;
@@ -292,6 +301,7 @@ async fn receive_core(
         profile,
         swarm_enabled,
         limits,
+        fallback_file_name,
     } = options;
     let download_started_at = Instant::now();
     let download = download_with_retry(
@@ -318,9 +328,20 @@ async fn receive_core(
     // The ticket's size is only a sender-provided estimate. Recompute from
     // the fully verified local blobs before disk preflight and final progress.
     let verified_size = export::ticket_size(node.blobs_client(), ticket.primary()).await?;
-    let verified_file_count =
-        export::ticket_file_count(node.blobs_client(), ticket.primary()).await?;
-    validate_received_limits(verified_size, verified_file_count, limits)?;
+    let verified_file_names =
+        export::ticket_file_names(node.blobs_client(), ticket.primary()).await?;
+    let verified_file_count = if ticket.primary().recursive() {
+        verified_file_names.len()
+    } else {
+        1
+    };
+    validate_received_limits(
+        verified_size,
+        verified_file_count,
+        &verified_file_names,
+        fallback_file_name.as_deref(),
+        limits,
+    )?;
     if let Some(progress) = progress {
         progress.set(verified_size, verified_size);
         progress.set_phase(TransferPhase::Verifying);
@@ -771,7 +792,13 @@ fn blob_error(err: &impl ToString) -> LightningP2PError {
     LightningP2PError::Blob(err.to_string())
 }
 
-fn validate_received_limits(size: u64, file_count: usize, limits: ReceiveLimits) -> Result<()> {
+fn validate_received_limits(
+    size: u64,
+    file_count: usize,
+    file_names: &[String],
+    fallback_file_name: Option<&str>,
+    limits: ReceiveLimits,
+) -> Result<()> {
     if limits.max_total_bytes.is_some_and(|limit| size > limit) {
         return Err(LightningP2PError::Other(receive_limit_error(limits)));
     }
@@ -781,6 +808,23 @@ fn validate_received_limits(size: u64, file_count: usize, limits: ReceiveLimits)
     {
         return Err(LightningP2PError::Other(
             "Automatic receive included more files than allowed.".into(),
+        ));
+    }
+    if limits.max_file_count.is_some() && file_count == 0 {
+        return Err(LightningP2PError::Other(
+            "Automatic receive did not contain a supported file.".into(),
+        ));
+    }
+    let has_risky_file_name = if file_names.is_empty() {
+        fallback_file_name.is_some_and(crate::node::nearby_offer::is_risky_executable_label)
+    } else {
+        file_names
+            .iter()
+            .any(|name| crate::node::nearby_offer::is_risky_executable_label(name))
+    };
+    if limits.reject_risky_file_names && has_risky_file_name {
+        return Err(LightningP2PError::Other(
+            "Ready to Catch cannot receive executable or unrecognized file types.".into(),
         ));
     }
     Ok(())
@@ -821,12 +865,24 @@ mod tests {
     #[test]
     fn ready_to_catch_receive_limits_enforce_actual_size_and_file_count() {
         let limits = ReceiveLimits::ready_to_catch();
-        assert!(validate_received_limits(100 * 1024 * 1024, 1, limits).is_ok());
-        assert!(validate_received_limits(100 * 1024 * 1024 + 1, 1, limits).is_err());
-        assert!(validate_received_limits(1, 2, limits).is_err());
+        assert!(validate_received_limits(100 * 1024 * 1024, 1, &[], None, limits).is_ok());
+        assert!(validate_received_limits(100 * 1024 * 1024 + 1, 1, &[], None, limits).is_err());
+        assert!(validate_received_limits(1, 2, &[], None, limits).is_err());
         assert!(validate_download_progress(100 * 1024 * 1024, limits).is_ok());
         assert!(validate_download_progress(100 * 1024 * 1024 + 1, limits).is_err());
-        assert!(validate_received_limits(u64::MAX, usize::MAX, ReceiveLimits::default()).is_ok());
+        assert!(validate_received_limits(
+            u64::MAX,
+            usize::MAX,
+            &[],
+            None,
+            ReceiveLimits::default()
+        )
+        .is_ok());
+        assert!(
+            validate_received_limits(10, 1, &["folder/payload.EXE".into()], None, limits).is_err()
+        );
+        assert!(validate_received_limits(10, 1, &[], Some("payload.EXE"), limits).is_err());
+        assert!(validate_received_limits(10, 1, &[], Some("notes.txt"), limits).is_ok());
     }
 
     #[test]

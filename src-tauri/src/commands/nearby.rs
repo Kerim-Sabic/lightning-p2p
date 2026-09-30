@@ -274,7 +274,14 @@ pub async fn respond_to_offer(
             .unwrap_or_else(|| EndpointAddr::new(sender_node_id));
 
         let ticket = iroh_blobs::ticket::BlobTicket::new(node_addr, hash, blob_format);
-        crate::commands::transfer::start_receive_from_offer(state, window, ticket, auto_catch).await
+        crate::commands::transfer::start_receive_from_offer(
+            state,
+            window,
+            ticket,
+            auto_catch,
+            offer.label.clone(),
+        )
+        .await
     }
     .await;
 

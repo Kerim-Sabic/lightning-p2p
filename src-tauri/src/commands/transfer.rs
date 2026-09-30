@@ -49,6 +49,7 @@ pub async fn start_receive(
         window,
         ticket,
         crate::transfer::receiver::ReceiveLimits::default(),
+        None,
     )
     .await
 }
@@ -152,6 +153,7 @@ pub async fn start_receive_discovered_share(
         window,
         ShareTicket::from_blob_ticket(ticket),
         crate::transfer::receiver::ReceiveLimits::default(),
+        None,
     )
     .await
 }
@@ -217,13 +219,21 @@ pub(crate) async fn start_receive_from_offer(
     window: tauri::Window,
     ticket: BlobTicket,
     auto_catch: bool,
+    offer_label: String,
 ) -> CommandResult<String> {
     let limits = if auto_catch {
         crate::transfer::receiver::ReceiveLimits::ready_to_catch()
     } else {
         crate::transfer::receiver::ReceiveLimits::default()
     };
-    start_receive_ticket(state, window, ShareTicket::from_blob_ticket(ticket), limits).await
+    start_receive_ticket(
+        state,
+        window,
+        ShareTicket::from_blob_ticket(ticket),
+        limits,
+        auto_catch.then_some(offer_label),
+    )
+    .await
 }
 
 async fn start_receive_ticket(
@@ -231,6 +241,7 @@ async fn start_receive_ticket(
     window: tauri::Window,
     ticket: ShareTicket,
     limits: crate::transfer::receiver::ReceiveLimits,
+    fallback_file_name: Option<String>,
 ) -> CommandResult<String> {
     let activity = state.node_supervisor.begin_transfer_activity().await;
     let node = state.get_node().await.map_err(command_error)?;
@@ -295,6 +306,7 @@ async fn start_receive_ticket(
         // swarm path auto-falls-back to the sequential download on failure.
         swarm_enabled: settings.experimental_swarm_receive || profile.swarm_receive_default,
         limits,
+        fallback_file_name,
     };
 
     tauri::async_runtime::spawn(async move {

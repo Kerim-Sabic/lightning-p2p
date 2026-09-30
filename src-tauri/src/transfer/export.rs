@@ -410,16 +410,16 @@ pub(crate) async fn ticket_size(store: &Store, ticket: &BlobTicket) -> Result<u6
     Ok(total)
 }
 
-/// Returns the number of files represented by a verified ticket.
-pub(crate) async fn ticket_file_count(store: &Store, ticket: &BlobTicket) -> Result<usize> {
+/// Returns the names of files represented by a verified collection ticket.
+pub(crate) async fn ticket_file_names(store: &Store, ticket: &BlobTicket) -> Result<Vec<String>> {
     if !ticket.recursive() {
-        return Ok(1);
+        return Ok(Vec::new());
     }
 
     let collection = Collection::load(ticket.hash(), store)
         .await
         .map_err(|error| blob_error(&error))?;
-    Ok(collection.iter().count())
+    Ok(collection.iter().map(|(name, _)| name.clone()).collect())
 }
 
 async fn move_staged_collection(
