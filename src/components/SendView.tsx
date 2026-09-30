@@ -28,6 +28,7 @@ import { formatBytes } from "../lib/format";
 import { safeDisplayText } from "../lib/safeDisplayText";
 import { groupNearbyDevices } from "../lib/nearbyDeviceGroups";
 import {
+  arrivalDirectionFromSenderFlick,
   classifyFlickDirection,
   isDeliberateFlick,
   type FlickDirection,
@@ -51,6 +52,28 @@ import { useNearbyDeviceStore } from "../stores/nearbyDeviceStore";
 import { useLatestSendTransfer } from "../stores/transferSelectors";
 import { useTransferStore } from "../stores/transferStore";
 import { TransferCard } from "./TransferCard";
+
+const FLICK_DIRECTION_LABELS: Record<FlickDirection, string> = {
+  right: "right",
+  down_right: "down and right",
+  down: "down",
+  down_left: "down and left",
+  left: "left",
+  up_left: "up and left",
+  up: "up",
+  up_right: "up and right",
+};
+
+const FLICK_ARRIVAL_SIDE_LABELS: Record<FlickDirection, string> = {
+  right: "right",
+  down_right: "lower right",
+  down: "bottom",
+  down_left: "lower left",
+  left: "left",
+  up_left: "upper left",
+  up: "top",
+  up_right: "upper right",
+};
 
 interface SendViewProps {
   onNavigateReceive: () => void;
@@ -413,7 +436,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
     };
     setFlickDevices(devices.map((device) => ({ ...device })));
     setFlickVerifiedNodeIds(new Set(verifiedNodeIds));
-    setFlickHint("Flick toward a device to set its arrival side");
+    setFlickHint("Flick toward a device to show its approximate side");
   };
 
   const handleFlickPointerMove = (
@@ -429,6 +452,16 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
         event.clientY <= candidate.bottom,
     );
     setDropTargetNodeId(target?.nodeId ?? null);
+    const direction = classifyFlickDirection(
+      event.clientX - active.startX,
+      event.clientY - active.startY,
+    );
+    if (direction) {
+      const arrivalDirection = arrivalDirectionFromSenderFlick(direction);
+      setFlickHint(
+        `Flick ${FLICK_DIRECTION_LABELS[direction]} · file arrives from the receiver’s ${FLICK_ARRIVAL_SIDE_LABELS[arrivalDirection]}`,
+      );
+    }
   };
 
   const handleFlickPointerUp = (
@@ -743,6 +776,9 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
                     ↗
                   </span>
                   {flickHint ?? "Flick to a device"}
+                  <span className="sr-only" aria-live="polite" aria-atomic="true">
+                    {flickHint}
+                  </span>
                 </button>
               ) : null}
             </div>
