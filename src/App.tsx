@@ -351,16 +351,16 @@ function NativeAppShell({ runtimeKind }: NativeAppShellProps) {
                 onDismiss={clearError}
               />
               {content}
+              <TransferTray
+                mobileRuntime={mobileRuntime}
+                onNavigateActivity={handleNavigateToActivity}
+              />
             </div>
           </main>
           {mobileRuntime ? (
             <MobileTabBar currentView={view} onNavigate={handleNavigate} />
           ) : null}
         </div>
-        <TransferTray
-          mobileRuntime={mobileRuntime}
-          onNavigateActivity={handleNavigateToActivity}
-        />
       </div>
       <OfferPrompt />
     </div>

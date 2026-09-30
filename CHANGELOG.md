@@ -4,6 +4,15 @@ All notable changes to Lightning P2P are documented here. The project follows se
 
 ## [Unreleased]
 
+## [0.9.12] - 2026-10-01 ("Persistent Transfer Activity")
+
+### Added
+
+- Active transfers remain visible across app views in a compact progress tray,
+  with phase, progress, speed, pause state, and a direct route to Activity.
+- Flick handoffs bind incoming offers to authenticated peers so colliding offer
+  identifiers from different senders cannot overwrite one another.
+
 ## [0.9.11] - 2026-09-30 ("Reliable Handoff and Recovery")
 
 ### Added

@@ -13,13 +13,17 @@ linked release evidence.
 - Android v0.5.1 as a signed sideload APK with share-target sends and public
   MediaStore destinations.
 
-### v0.9.11 beta channel
+### v0.9.12 beta channel
 
 - Windows, universal macOS DMG, Linux AppImage/deb/rpm, and CLI artifacts.
 - Lightning Chat in the Windows and Android apps plus the `/chat` Web lounge.
 - Encrypted direct messages, nearby iroh chat, and a Windows Bluetooth mesh.
 - BBR-backed Fast, Extreme, LAN Beast, and Warp profiles.
 - Experimental swarm receive and ticket pre-warming.
+- Active transfer progress remains visible across app views in a persistent
+  tray with phase, speed, pause state, and a shortcut to Activity.
+- Incoming Flick offers are namespaced by authenticated sender identity to
+  prevent offer identifier collisions across peers.
 - Browser send and receive beta using the Rust/WASM transfer engine. Browser
   peers are relay-only and must remain open during transfer. Sending is
   memory-bound with a 2 GiB cap; receive streams to disk where the File System

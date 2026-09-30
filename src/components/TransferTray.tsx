@@ -117,48 +117,58 @@ export function TransferTray({
   const visibleTransfers = expanded ? transfers : transfers.slice(0, 1);
 
   return (
-    <aside
-      aria-label="Transfers"
-      className={`fixed z-40 ${
-        mobileRuntime
-          ? "inset-x-3 bottom-[calc(5.25rem+env(safe-area-inset-bottom))]"
-          : "bottom-4 left-[244px] right-4"
-      }`}
-    >
-      <div className="mx-auto max-w-[1040px] rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-0)] p-2.5 shadow-[0_12px_36px_rgba(0,0,0,0.22)]">
-        <div className="flex items-center gap-2 px-1 pb-2">
-          <p className="min-w-0 flex-1 text-sm font-semibold text-[var(--fg-primary)]">
-            {transfers.length} transfer{transfers.length === 1 ? "" : "s"}
-          </p>
-          {transfers.length > 1 ? (
+    <>
+      <div
+        aria-hidden="true"
+        className={`pointer-events-none ${
+          mobileRuntime
+            ? "h-[calc(9rem+env(safe-area-inset-bottom))]"
+            : "h-36"
+        }`}
+      />
+      <aside
+        aria-label="Transfers"
+        className={`fixed z-40 ${
+          mobileRuntime
+            ? "inset-x-3 bottom-[calc(5.25rem+env(safe-area-inset-bottom))]"
+            : "bottom-4 left-[244px] right-4"
+        }`}
+      >
+        <div className="mx-auto max-w-[1040px] rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-0)] p-2.5 shadow-[0_12px_36px_rgba(0,0,0,0.22)]">
+          <div className="flex items-center gap-2 px-1 pb-2">
+            <p className="min-w-0 flex-1 text-sm font-semibold text-[var(--fg-primary)]">
+              {transfers.length} transfer{transfers.length === 1 ? "" : "s"}
+            </p>
+            {transfers.length > 1 ? (
+              <button
+                type="button"
+                onClick={() => setExpanded((value) => !value)}
+                aria-expanded={expanded}
+                className="inline-flex min-h-11 items-center gap-1 rounded-lg px-2 text-sm font-medium text-[var(--fg-muted)] hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] dark:hover:bg-white/5"
+              >
+                {expanded ? "Show less" : `Show all ${transfers.length}`}
+                {expanded ? (
+                  <ChevronDown className="h-4 w-4" aria-hidden="true" />
+                ) : (
+                  <ChevronUp className="h-4 w-4" aria-hidden="true" />
+                )}
+              </button>
+            ) : null}
             <button
               type="button"
-              onClick={() => setExpanded((value) => !value)}
-              aria-expanded={expanded}
-              className="inline-flex min-h-11 items-center gap-1 rounded-lg px-2 text-sm font-medium text-[var(--fg-muted)] hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] dark:hover:bg-white/5"
+              onClick={onNavigateActivity}
+              className="min-h-11 rounded-lg px-2 text-sm font-semibold text-[var(--accent-primary)] hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] dark:hover:bg-white/5"
             >
-              {expanded ? "Show less" : `Show all ${transfers.length}`}
-              {expanded ? (
-                <ChevronDown className="h-4 w-4" aria-hidden="true" />
-              ) : (
-                <ChevronUp className="h-4 w-4" aria-hidden="true" />
-              )}
+              Activity
             </button>
-          ) : null}
-          <button
-            type="button"
-            onClick={onNavigateActivity}
-            className="min-h-11 rounded-lg px-2 text-sm font-semibold text-[var(--accent-primary)] hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] dark:hover:bg-white/5"
-          >
-            Activity
-          </button>
+          </div>
+          <ul className="grid max-h-[35vh] gap-2 overflow-y-auto">
+            {visibleTransfers.map((transfer) => (
+              <TransferRow key={transfer.transferId} transfer={transfer} />
+            ))}
+          </ul>
         </div>
-        <ul className="grid max-h-[35vh] gap-2 overflow-y-auto">
-          {visibleTransfers.map((transfer) => (
-            <TransferRow key={transfer.transferId} transfer={transfer} />
-          ))}
-        </ul>
-      </div>
-    </aside>
+      </aside>
+    </>
   );
 }
