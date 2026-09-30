@@ -36,6 +36,7 @@ import java.util.concurrent.atomic.AtomicReference
 object ContentUriResolver {
     private const val STAGING_DIR = "shared-staging"
     private const val MEDIASTORE_SUBDIR = "Lightning P2P"
+    private const val DOWNLOADS_DIRECTORY = "Download"
     private const val COPY_BUFFER_BYTES = 1024 * 1024
     private const val MIN_FREE_SPACE_BYTES = 128L * 1024 * 1024
 
@@ -119,7 +120,12 @@ object ContentUriResolver {
 
         val collection = collectionFor(bucket)
         val relativeDir = "${directoryFor(bucket)}/$MEDIASTORE_SUBDIR/"
-        val displayName = uniqueDisplayName(context, collection, relativeDir, safeFilename(filename))
+        val displayName = availableMediaStoreName(
+            context,
+            collection,
+            relativeDir,
+            safeFilename(filename),
+        )
 
         val values = ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, displayName)
@@ -210,9 +216,12 @@ object ContentUriResolver {
                 val relativeParent = relative.parent?.toString().orEmpty()
                 val relativeDir = safeMediaStoreRelativePath(safeFolderName, relativeParent)
                 val filename = safeFilename(canonicalFile.name)
-                val displayName = uniqueDisplayName(context, collection, relativeDir, filename) { name ->
-                    "$relativeDir\u0000$name" in reservedNames
-                }
+                val displayName = availableMediaStoreName(
+                    context,
+                    collection,
+                    relativeDir,
+                    filename,
+                ) { name -> "$relativeDir\u0000$name" in reservedNames }
                 reservedNames.add("$relativeDir\u0000$displayName")
                 val mime = android.webkit.MimeTypeMap.getSingleton()
                     .getMimeTypeFromExtension(displayName.substringAfterLast('.', "").lowercase())
@@ -264,20 +273,24 @@ object ContentUriResolver {
         return clean.ifEmpty { "lightning-p2p-transfer.bin" }
     }
 
-    private fun uniqueDisplayName(
+    private fun availableMediaStoreName(
         context: Context,
         collection: Uri,
         relativeDir: String,
         filename: String,
         isReserved: (String) -> Boolean = { false },
-    ): String {
+    ): String = uniqueDisplayName(filename) { candidate ->
+        mediaNameExists(context, collection, relativeDir, candidate) || isReserved(candidate)
+    }
+
+    internal fun uniqueDisplayName(filename: String, isTaken: (String) -> Boolean): String {
         val dot = filename.lastIndexOf('.')
         val hasExtension = dot > 0 && dot < filename.lastIndex - 1
         val stem = if (hasExtension) filename.substring(0, dot) else filename
         val extension = if (hasExtension) filename.substring(dot) else ""
         var candidate = filename
         var suffix = 1
-        while (mediaNameExists(context, collection, relativeDir, candidate) || isReserved(candidate)) {
+        while (isTaken(candidate)) {
             candidate = "$stem ($suffix)$extension"
             suffix++
         }
@@ -292,7 +305,7 @@ object ContentUriResolver {
         require(segments.all { it != "." && it != ".." && !it.any(Char::isISOControl) }) {
             "The received folder contains an unsafe path."
         }
-        return "${Environment.DIRECTORY_DOWNLOADS}/$MEDIASTORE_SUBDIR/${segments.joinToString("/")}/"
+        return "$DOWNLOADS_DIRECTORY/$MEDIASTORE_SUBDIR/${segments.joinToString("/")}/"
     }
 
     private fun mediaNameExists(

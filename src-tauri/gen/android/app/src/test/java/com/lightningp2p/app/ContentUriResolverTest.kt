@@ -32,4 +32,29 @@ class ContentUriResolverTest {
             ContentUriResolver.safeMediaStoreRelativePath("Photos", "../outside")
         }
     }
+
+    @Test
+    fun folderPublishSuffixesExistingAndSameFolderNameCollisions() {
+        val reserved = mutableSetOf("report.txt", "report (1).txt")
+        val nextName = ContentUriResolver.uniqueDisplayName("report.txt", reserved::contains)
+
+        assertEquals("report (2).txt", nextName)
+        reserved.add(nextName)
+        assertEquals(
+            "report (3).txt",
+            ContentUriResolver.uniqueDisplayName("report.txt", reserved::contains),
+        )
+    }
+
+    @Test
+    fun collisionSuffixPreservesExtensionsAndTreatsDotfilesAsNames() {
+        assertEquals(
+            "archive.tar (1).gz",
+            ContentUriResolver.uniqueDisplayName("archive.tar.gz") { it == "archive.tar.gz" },
+        )
+        assertEquals(
+            ".config (1)",
+            ContentUriResolver.uniqueDisplayName(".config") { it == ".config" },
+        )
+    }
 }
