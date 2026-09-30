@@ -42,6 +42,8 @@ export type UpdatePhase =
 
 type ProgressTransferEvent = Extract<TransferEvent, { type: "progress" }>;
 
+let activeTransfersRequestSequence = 0;
+
 export interface TransferEntry {
   transferId: string;
   direction: TransferDirection;
@@ -571,13 +573,27 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
   },
 
   refreshActiveTransfers: async () => {
+    const requestSequence = ++activeTransfersRequestSequence;
+    const baselineTransfers = get().transfers;
     try {
       const activeTransfers = await tauri.getActiveTransfers();
       set((state) => {
+        // Concurrent startup/event refreshes can resolve out of order. Only
+        // the latest snapshot may reconcile, and an event received while it
+        // was in flight is newer than that snapshot for its transfer.
+        if (requestSequence !== activeTransfersRequestSequence) return state;
         const transfers = { ...state.transfers };
         for (const transfer of activeTransfers) {
+          const current = state.transfers[transfer.transfer_id];
+          if (
+            current &&
+            (current.status === "completed" || current.status === "failed")
+          ) {
+            continue;
+          }
+          if (current !== baselineTransfers[transfer.transfer_id]) continue;
           transfers[transfer.transfer_id] = mergeActiveTransfer(
-            transfers[transfer.transfer_id],
+            current,
             transfer,
           );
         }
