@@ -51,6 +51,8 @@ struct SourceSnapshot {
 /// still honored as the final escape hatch for bench sweeps.
 const MAX_IMPORT_PARALLELISM: usize = 128;
 const MAX_SMART_AUTO_IMPORTS: usize = 8;
+pub(crate) const MAX_SHARE_FILES: usize = 10_000;
+pub(crate) const MAX_SHARE_SCAN_ENTRIES: usize = 50_000;
 static SHARE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 static SMART_AUTO_IMPORT_BUDGET: OnceLock<Semaphore> = OnceLock::new();
 
@@ -99,23 +101,18 @@ pub async fn send_files(
     queue: TransferQueue,
 ) -> Result<ShareOutcome> {
     let _foreground = crate::commands::mobile::TransferForegroundGuard::acquire();
-    let plan = tokio::task::spawn_blocking(move || build_share_plan(paths))
-        .await
-        .map_err(|error| LightningP2PError::Other(error.to_string()))??;
-    let (transfer_id, cancel_rx) =
-        register_send_preparation(&queue, &plan.label, plan.total_size).await;
+    let preparation_label = summarize_selected_paths(&paths);
+    let (transfer_id, cancel_rx) = register_send_preparation(&queue, &preparation_label, 0).await;
     let reporter = EventReporter::new(
         window,
         transfer_id.clone(),
         TransferDirection::Send,
-        plan.label.clone(),
+        preparation_label,
         None,
     );
-    if let Err(error) = reporter.emit_started(
-        plan.total_size,
-        TransferMetrics::default(),
-        TransferPhase::Preparing,
-    ) {
+    if let Err(error) =
+        reporter.emit_started(0, TransferMetrics::default(), TransferPhase::Preparing)
+    {
         queue.remove(&transfer_id).await;
         return Err(error);
     }
@@ -125,6 +122,10 @@ pub async fn send_files(
         profile.progress_interval,
     );
     let progress = sampler.handle();
+
+    let (plan, sampler) =
+        prepare_share_plan(paths, &cancel_rx, &reporter, sampler, &queue, &transfer_id).await?;
+    progress.set(0, plan.total_size);
 
     let mut result = create_share_with_plan(
         node,
@@ -147,6 +148,89 @@ pub async fn send_files(
         }
     }
 
+    finish_share_preparation(
+        node,
+        &queue,
+        &transfer_id,
+        &reporter,
+        &cancel_rx,
+        &progress,
+        result,
+    )
+    .await
+}
+
+async fn prepare_share_plan(
+    paths: Vec<PathBuf>,
+    cancel_rx: &watch::Receiver<bool>,
+    reporter: &EventReporter,
+    sampler: ProgressSampler,
+    queue: &TransferQueue,
+    transfer_id: &str,
+) -> Result<(SharePlan, ProgressSampler)> {
+    let planning_cancel = cancel_rx.clone();
+    let plan_result = tokio::task::spawn_blocking(move || {
+        build_share_plan_with_cancel(paths, Some(&planning_cancel))
+    })
+    .await;
+    let plan = match plan_result {
+        Ok(Ok(plan)) => plan,
+        Ok(Err(error)) => {
+            let category = if *cancel_rx.borrow() {
+                FailureCategory::Cancelled
+            } else {
+                FailureCategory::Unknown
+            };
+            emit_share_preparation_failure(&error, category, reporter, sampler, queue, transfer_id)
+                .await;
+            return Err(error);
+        }
+        Err(error) => {
+            let error = LightningP2PError::Other(error.to_string());
+            emit_share_preparation_failure(
+                &error,
+                FailureCategory::Unknown,
+                reporter,
+                sampler,
+                queue,
+                transfer_id,
+            )
+            .await;
+            return Err(error);
+        }
+    };
+    Ok((plan, sampler))
+}
+
+async fn emit_share_preparation_failure(
+    error: &LightningP2PError,
+    category: FailureCategory,
+    reporter: &EventReporter,
+    sampler: ProgressSampler,
+    queue: &TransferQueue,
+    transfer_id: &str,
+) {
+    let _ = sampler.finish().await;
+    let error_payload = error.to_payload();
+    let error_message = error_payload.message.clone();
+    let _ = reporter.emit_failed_with_payload(
+        &error_message,
+        crate::transfer::metrics::RouteKind::Unknown,
+        Some(category),
+        Some(error_payload),
+    );
+    queue.remove(transfer_id).await;
+}
+
+async fn finish_share_preparation(
+    node: &LightningP2PNode,
+    queue: &TransferQueue,
+    transfer_id: &str,
+    reporter: &EventReporter,
+    cancel_rx: &watch::Receiver<bool>,
+    progress: &ProgressHandle,
+    result: Result<ShareOutcome>,
+) -> Result<ShareOutcome> {
     match result {
         Ok(outcome) => {
             if let Err(error) = save_send_record(node, &outcome) {
@@ -158,16 +242,16 @@ pub async fn send_files(
                     Some(FailureCategory::Unknown),
                     Some(payload),
                 );
-                queue.remove(&transfer_id).await;
+                queue.remove(transfer_id).await;
                 return Err(error);
             }
             if let Err(error) =
                 reporter.emit_share_prepared(outcome.hash.to_string(), outcome.total_size)
             {
-                queue.remove(&transfer_id).await;
+                queue.remove(transfer_id).await;
                 return Err(error);
             }
-            queue.remove(&transfer_id).await;
+            queue.remove(transfer_id).await;
             Ok(outcome)
         }
         Err(error) => {
@@ -183,7 +267,7 @@ pub async fn send_files(
                 }),
                 Some(error_payload),
             );
-            queue.remove(&transfer_id).await;
+            queue.remove(transfer_id).await;
             Err(error)
         }
     }
@@ -273,8 +357,34 @@ async fn create_share_with_plan(
 }
 
 fn build_share_plan(paths: Vec<PathBuf>) -> Result<SharePlan> {
-    let canonical = canonicalize_paths(paths)?;
-    let sources = collect_sources(&canonical)?;
+    build_share_plan_with_cancel(paths, None)
+}
+
+fn summarize_selected_paths(paths: &[PathBuf]) -> String {
+    let mut names = paths
+        .iter()
+        .filter_map(|path| path.file_name())
+        .map(|name| name.to_string_lossy().into_owned())
+        .collect::<Vec<_>>();
+    names.sort();
+    names.dedup();
+    match names.as_slice() {
+        [single] => single.clone(),
+        [] => "Preparing share".into(),
+        _ => format!("{} items", names.len()),
+    }
+}
+
+fn build_share_plan_with_cancel(
+    paths: Vec<PathBuf>,
+    cancel_rx: Option<&watch::Receiver<bool>>,
+) -> Result<SharePlan> {
+    ensure_not_cancelled(cancel_rx)?;
+    if paths.len() > MAX_SHARE_FILES {
+        return Err(too_many_share_files_error());
+    }
+    let canonical = canonicalize_paths(paths, cancel_rx)?;
+    let sources = collect_sources(&canonical, cancel_rx)?;
     let total_size = total_size(&sources)?;
     Ok(SharePlan {
         label: summarize_sources(&sources),
@@ -283,13 +393,17 @@ fn build_share_plan(paths: Vec<PathBuf>) -> Result<SharePlan> {
     })
 }
 
-fn canonicalize_paths(paths: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
+fn canonicalize_paths(
+    paths: Vec<PathBuf>,
+    cancel_rx: Option<&watch::Receiver<bool>>,
+) -> Result<Vec<PathBuf>> {
     if paths.is_empty() {
         return Err(LightningP2PError::Other("No files selected".into()));
     }
     paths
         .into_iter()
         .map(|path| {
+            ensure_not_cancelled(cancel_rx)?;
             #[cfg(target_os = "android")]
             if path.to_string_lossy().starts_with("content://") {
                 // Android's Storage Access Framework hands the picker back
@@ -314,10 +428,15 @@ fn canonicalize_paths(paths: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
         .collect()
 }
 
-fn collect_sources(paths: &[PathBuf]) -> Result<Vec<Source>> {
+fn collect_sources(
+    paths: &[PathBuf],
+    cancel_rx: Option<&watch::Receiver<bool>>,
+) -> Result<Vec<Source>> {
     let mut sources = Vec::new();
+    let mut scanned_entry_count = 0;
     for path in paths {
-        scan_into(path, &mut sources)?;
+        ensure_not_cancelled(cancel_rx)?;
+        scan_into(path, &mut sources, &mut scanned_entry_count, cancel_rx)?;
     }
     if sources.is_empty() {
         return Err(LightningP2PError::Other(
@@ -331,7 +450,13 @@ fn collect_sources(paths: &[PathBuf]) -> Result<Vec<Source>> {
 /// Walks `path` and appends importable [`Source`]s. A file is wrapped under its
 /// own name; a directory is walked recursively with `dirname/relative` names.
 /// Replaces iroh-blobs 0.35's `scan_path` (removed in the 1.0 line).
-fn scan_into(path: &Path, out: &mut Vec<Source>) -> Result<()> {
+fn scan_into(
+    path: &Path,
+    out: &mut Vec<Source>,
+    scanned_entry_count: &mut usize,
+    cancel_rx: Option<&watch::Receiver<bool>>,
+) -> Result<()> {
+    ensure_not_cancelled(cancel_rx)?;
     let name = path
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
@@ -341,27 +466,41 @@ fn scan_into(path: &Path, out: &mut Vec<Source>) -> Result<()> {
         return Err(unsafe_source_path_error());
     }
     if meta.is_file() {
-        out.push(Source {
-            name,
-            path: path.to_path_buf(),
-            snapshot: source_snapshot(path)?,
-        });
+        push_source(
+            out,
+            Source {
+                name,
+                path: path.to_path_buf(),
+                snapshot: source_snapshot(path)?,
+            },
+        )?;
     } else if meta.is_dir() {
-        scan_dir(path, &name, out)?;
+        scan_dir(path, &name, out, scanned_entry_count, cancel_rx)?;
     }
     Ok(())
 }
 
-fn scan_dir(dir: &Path, prefix: &str, out: &mut Vec<Source>) -> Result<()> {
+fn scan_dir(
+    dir: &Path,
+    prefix: &str,
+    out: &mut Vec<Source>,
+    scanned_entry_count: &mut usize,
+    cancel_rx: Option<&watch::Receiver<bool>>,
+) -> Result<()> {
+    ensure_not_cancelled(cancel_rx)?;
     let directory_metadata = fs::symlink_metadata(dir)?;
     if !directory_metadata.is_dir() || is_reparse_point(&directory_metadata) {
         return Err(unsafe_source_path_error());
     }
-    let mut entries = fs::read_dir(dir)?
-        .map(|entry| entry.map(|e| e.path()))
-        .collect::<std::io::Result<Vec<_>>>()?;
+    let mut entries = Vec::new();
+    for entry in fs::read_dir(dir)? {
+        ensure_not_cancelled(cancel_rx)?;
+        record_share_scan_entry(scanned_entry_count)?;
+        entries.push(entry?.path());
+    }
     entries.sort();
     for entry in entries {
+        ensure_not_cancelled(cancel_rx)?;
         let entry_name = entry
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
@@ -372,13 +511,16 @@ fn scan_dir(dir: &Path, prefix: &str, out: &mut Vec<Source>) -> Result<()> {
             return Err(unsafe_source_path_error());
         }
         if meta.is_file() {
-            out.push(Source {
-                name,
-                snapshot: source_snapshot(&entry)?,
-                path: entry,
-            });
+            push_source(
+                out,
+                Source {
+                    name,
+                    snapshot: source_snapshot(&entry)?,
+                    path: entry,
+                },
+            )?;
         } else if meta.is_dir() {
-            scan_dir(&entry, &name, out)?;
+            scan_dir(&entry, &name, out, scanned_entry_count, cancel_rx)?;
         }
     }
     Ok(())
@@ -413,6 +555,40 @@ fn total_size(sources: &[Source]) -> Result<u64> {
             .checked_add(source.snapshot.size)
             .ok_or_else(|| LightningP2PError::Other("Selected files are too large.".into()))
     })
+}
+
+fn push_source(sources: &mut Vec<Source>, source: Source) -> Result<()> {
+    if sources.len() >= MAX_SHARE_FILES {
+        return Err(too_many_share_files_error());
+    }
+    sources.push(source);
+    Ok(())
+}
+
+fn too_many_share_files_error() -> LightningP2PError {
+    LightningP2PError::Other(format!(
+        "A share can contain at most {MAX_SHARE_FILES} files."
+    ))
+}
+
+pub(crate) fn record_share_scan_entry(count: &mut usize) -> Result<()> {
+    *count = count
+        .checked_add(1)
+        .ok_or_else(|| LightningP2PError::Other("Selected folder is too large.".into()))?;
+    if *count > MAX_SHARE_SCAN_ENTRIES {
+        return Err(LightningP2PError::Other(format!(
+            "A share can contain at most {MAX_SHARE_SCAN_ENTRIES} folder entries."
+        )));
+    }
+    Ok(())
+}
+
+fn ensure_not_cancelled(cancel_rx: Option<&watch::Receiver<bool>>) -> Result<()> {
+    if cancel_rx.is_some_and(|receiver| *receiver.borrow()) {
+        Err(transfer_cancelled())
+    } else {
+        Ok(())
+    }
 }
 
 fn source_snapshot(path: &Path) -> Result<SourceSnapshot> {
@@ -781,6 +957,39 @@ mod tests {
         assert!(err.to_string().contains("Duplicate share path name"));
     }
 
+    #[test]
+    fn share_file_count_is_bounded_before_metadata_growth() {
+        let mut sources = (0..MAX_SHARE_FILES)
+            .map(|index| source(&format!("file-{index}.txt")))
+            .collect::<Vec<_>>();
+
+        let error = push_source(&mut sources, source("one-too-many.txt"))
+            .expect_err("share file cap should be enforced");
+        assert!(error.to_string().contains("at most 10000 files"));
+        assert_eq!(sources.len(), MAX_SHARE_FILES);
+    }
+
+    #[test]
+    fn folder_entry_count_is_bounded() {
+        let mut count = MAX_SHARE_SCAN_ENTRIES;
+        assert!(record_share_scan_entry(&mut count).is_err());
+        assert_eq!(count, MAX_SHARE_SCAN_ENTRIES + 1);
+    }
+
+    #[test]
+    fn share_planning_stops_when_cancelled_before_scanning() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("payload.txt");
+        fs::write(&path, b"payload").expect("source");
+        let (cancel_tx, cancel_rx) = watch::channel(false);
+        cancel_tx.send(true).expect("receiver is active");
+
+        let error = build_share_plan_with_cancel(vec![path], Some(&cancel_rx))
+            .err()
+            .expect("cancelled planning should fail");
+        assert_eq!(error.to_string(), "Transfer cancelled");
+    }
+
     #[cfg(unix)]
     #[test]
     fn selected_symlink_is_rejected_before_canonicalization() {
@@ -792,7 +1001,7 @@ mod tests {
         fs::write(&target, b"private target").expect("target");
         symlink(&target, &link).expect("symlink");
 
-        let error = canonicalize_paths(vec![link]).expect_err("symlink root is unsafe");
+        let error = canonicalize_paths(vec![link], None).expect_err("symlink root is unsafe");
         assert!(error.to_string().contains("symbolic link"));
     }
 
@@ -897,6 +1106,6 @@ mod tests {
         fs::write(&outside, b"outside").expect("outside file");
         symlink(&outside, root.join("linked.txt")).expect("symlink");
 
-        assert!(collect_sources(&[root]).is_err());
+        assert!(collect_sources(&[root], None).is_err());
     }
 }

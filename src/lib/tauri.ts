@@ -849,9 +849,18 @@ export async function createShare(paths: string[]): Promise<string> {
 
 export async function describeSharePaths(
   paths: string[],
+  requestId: string,
 ): Promise<SharePathInfo[]> {
   requireNativeRuntime("Share staging");
-  return invoke<SharePathInfo[]>("describe_share_paths", { paths });
+  return invoke<SharePathInfo[]>("describe_share_paths", {
+    paths,
+    requestId,
+  });
+}
+
+export async function cancelSharePathScan(requestId: string): Promise<boolean> {
+  requireNativeRuntime("Share staging");
+  return invoke<boolean>("cancel_share_path_scan", { requestId });
 }
 
 export async function getTicket(hash: string): Promise<string> {

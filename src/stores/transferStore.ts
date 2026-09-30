@@ -45,6 +45,15 @@ type ProgressTransferEvent = Extract<TransferEvent, { type: "progress" }>;
 let activeTransfersRequestSequence = 0;
 let nodeStatusRequestSequence = 0;
 let shareSelectionRequestSequence = 0;
+let activeSharePathScanId: string | null = null;
+
+function cancelActiveSharePathScan(): void {
+  const requestId = activeSharePathScanId;
+  activeSharePathScanId = null;
+  if (requestId) {
+    void tauri.cancelSharePathScan(requestId).catch(() => undefined);
+  }
+}
 
 export interface TransferEntry {
   transferId: string;
@@ -433,6 +442,7 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
   clearShareSelection: () => {
     if (get().isSharing) return;
     shareSelectionRequestSequence += 1;
+    cancelActiveSharePathScan();
     set({
       shareSelection: [],
       shareTicket: null,
@@ -449,6 +459,7 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
   removeShareSelectionItem: (path) => {
     if (get().isSharing) return;
     shareSelectionRequestSequence += 1;
+    cancelActiveSharePathScan();
     set((state) => ({
       shareSelection: state.shareSelection.filter((item) => item.path !== path),
       shareTicket: null,
@@ -465,6 +476,9 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
   prepareShareSelection: async (paths, behavior = "replace") => {
     if (get().isSharing) return;
     const requestSequence = ++shareSelectionRequestSequence;
+    cancelActiveSharePathScan();
+    const requestId = `selection-${requestSequence}`;
+    activeSharePathScanId = requestId;
     const previousSelection = get().shareSelection;
     const requestedPaths =
       behavior === "append"
@@ -484,6 +498,7 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
       }
       const shareSelection = await tauri.describeSharePaths(
         uniquePaths(requestedPaths),
+        requestId,
       );
       if (requestSequence !== shareSelectionRequestSequence) return;
       set({ shareSelection, isPreparingSelection: false });
@@ -494,6 +509,10 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
         shareSelection: behavior === "append" ? previousSelection : [],
         isPreparingSelection: false,
       });
+    } finally {
+      if (activeSharePathScanId === requestId) {
+        activeSharePathScanId = null;
+      }
     }
   },
 

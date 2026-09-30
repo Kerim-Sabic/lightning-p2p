@@ -185,10 +185,8 @@ async fn export_blob(
     suggested_file_name: Option<&str>,
     cancel_rx: &mut watch::Receiver<bool>,
 ) -> Result<PathBuf> {
-    let base_path = destination.join(
-        suggested_file_name
-            .map_or_else(|| ticket.hash().to_string(), str::to_string),
-    );
+    let base_path = destination
+        .join(suggested_file_name.map_or_else(|| ticket.hash().to_string(), str::to_string));
     let staging_dir = create_export_staging_dir(destination, ticket.hash())?;
     let temp_path = staging_dir.join(ticket.hash().to_string());
 

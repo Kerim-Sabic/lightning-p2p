@@ -14,7 +14,14 @@ use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
 use std::str::FromStr;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
 use tauri::State;
+
+const MAX_SHARE_SCAN_ID_BYTES: usize = 128;
+const MAX_ACTIVE_SHARE_PATH_SCANS: usize = 4;
+static SHARE_PATH_SCANS: OnceLock<Mutex<std::collections::HashMap<String, Arc<AtomicBool>>>> =
+    OnceLock::new();
 
 /// Shareable metadata for a selected local path.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -76,16 +83,77 @@ pub async fn create_share(
 ///
 /// Returns an error string if any path cannot be read.
 #[tauri::command]
-pub async fn describe_share_paths(paths: Vec<String>) -> CommandResult<Vec<SharePathInfo>> {
-    tokio::task::spawn_blocking(move || {
+pub async fn describe_share_paths(
+    paths: Vec<String>,
+    request_id: String,
+) -> CommandResult<Vec<SharePathInfo>> {
+    if request_id.is_empty() || request_id.len() > MAX_SHARE_SCAN_ID_BYTES {
+        return Err(command_error("Invalid share scan request."));
+    }
+    let cancelled = Arc::new(AtomicBool::new(false));
+    let scans = SHARE_PATH_SCANS.get_or_init(|| Mutex::new(std::collections::HashMap::new()));
+    {
+        let mut scans = scans
+            .lock()
+            .map_err(|_| command_error("Share scan state is unavailable."))?;
+        if let Some(previous) = scans.get(&request_id) {
+            previous.store(true, Ordering::Relaxed);
+        } else if scans.len() >= MAX_ACTIVE_SHARE_PATH_SCANS {
+            return Err(command_error("Too many share scans are already active."));
+        }
+        scans.insert(request_id.clone(), cancelled.clone());
+    }
+
+    let scan_token = cancelled.clone();
+    let task_result = tokio::task::spawn_blocking(move || {
+        let mut file_count = 0;
+        let mut scanned_entry_count = 0;
         paths
             .into_iter()
-            .map(|path| describe_path(PathBuf::from(path)))
+            .map(|path| {
+                describe_path_with_counts(
+                    PathBuf::from(path),
+                    &mut file_count,
+                    &mut scanned_entry_count,
+                    &scan_token,
+                )
+            })
             .collect::<crate::error::Result<Vec<_>>>()
     })
-    .await
-    .map_err(|error| command_error(error.to_string()))?
-    .map_err(command_error)
+    .await;
+    if let Ok(mut scans) = scans.lock() {
+        if scans
+            .get(&request_id)
+            .is_some_and(|current| Arc::ptr_eq(current, &cancelled))
+        {
+            scans.remove(&request_id);
+        }
+    }
+    task_result
+        .map_err(|error| command_error(error.to_string()))?
+        .map_err(command_error)
+}
+
+/// Cancels a running share selection scan, if its request is still active.
+///
+/// # Errors
+///
+/// Returns an error if the local cancellation registry is unavailable.
+#[allow(clippy::needless_pass_by_value)] // Tauri command arguments are owned values.
+#[tauri::command]
+pub fn cancel_share_path_scan(request_id: String) -> CommandResult<bool> {
+    let Some(scans) = SHARE_PATH_SCANS.get() else {
+        return Ok(false);
+    };
+    let scans = scans
+        .lock()
+        .map_err(|_| command_error("Share scan state is unavailable."))?;
+    if let Some(cancelled) = scans.get(&request_id) {
+        cancelled.store(true, Ordering::Relaxed);
+        Ok(true)
+    } else {
+        Ok(false)
+    }
 }
 
 /// Regenerates a ticket string for locally stored content.
@@ -160,13 +228,37 @@ pub async fn clear_active_share(state: State<'_, AppState>) -> Result<(), String
     Ok(())
 }
 
+#[cfg(test)]
 fn describe_path(path: PathBuf) -> crate::error::Result<SharePathInfo> {
+    let mut file_count = 0;
+    let mut scanned_entry_count = 0;
+    describe_path_with_counts(
+        path,
+        &mut file_count,
+        &mut scanned_entry_count,
+        &AtomicBool::new(false),
+    )
+}
+
+fn describe_path_with_counts(
+    path: PathBuf,
+    file_count: &mut usize,
+    scanned_entry_count: &mut usize,
+    cancelled: &AtomicBool,
+) -> crate::error::Result<SharePathInfo> {
+    ensure_share_scan_active(cancelled)?;
+    let metadata = fs::symlink_metadata(&path)?;
+    if is_reparse_point(&metadata) || !(metadata.is_file() || metadata.is_dir()) {
+        return Err(crate::error::LightningP2PError::Other(
+            "Selected files cannot be symbolic links or reparse points.".into(),
+        ));
+    }
     let absolute = fs::canonicalize(path)?;
     let metadata = fs::metadata(&absolute)?;
     Ok(SharePathInfo {
         path: absolute.to_string_lossy().to_string(),
         name: display_name(&absolute),
-        size: path_size(&absolute)?,
+        size: path_size(&absolute, file_count, scanned_entry_count, cancelled)?,
         is_dir: metadata.is_dir(),
     })
 }
@@ -178,7 +270,13 @@ fn display_name(path: &Path) -> String {
     )
 }
 
-fn path_size(path: &Path) -> crate::error::Result<u64> {
+fn path_size(
+    path: &Path,
+    file_count: &mut usize,
+    scanned_entry_count: &mut usize,
+    cancelled: &AtomicBool,
+) -> crate::error::Result<u64> {
+    ensure_share_scan_active(cancelled)?;
     let metadata = fs::symlink_metadata(path)?;
     if is_reparse_point(&metadata) {
         return Err(crate::error::LightningP2PError::Other(
@@ -186,6 +284,13 @@ fn path_size(path: &Path) -> crate::error::Result<u64> {
         ));
     }
     if metadata.is_file() {
+        if *file_count >= crate::transfer::sender::MAX_SHARE_FILES {
+            return Err(crate::error::LightningP2PError::Other(format!(
+                "A share can contain at most {} files.",
+                crate::transfer::sender::MAX_SHARE_FILES
+            )));
+        }
+        *file_count += 1;
         return Ok(metadata.len());
     }
 
@@ -197,13 +302,30 @@ fn path_size(path: &Path) -> crate::error::Result<u64> {
 
     let mut total = 0u64;
     for entry in fs::read_dir(path)? {
+        ensure_share_scan_active(cancelled)?;
+        crate::transfer::sender::record_share_scan_entry(scanned_entry_count)?;
         total = total
-            .checked_add(path_size(&entry?.path())?)
+            .checked_add(path_size(
+                &entry?.path(),
+                file_count,
+                scanned_entry_count,
+                cancelled,
+            )?)
             .ok_or_else(|| {
                 crate::error::LightningP2PError::Other("Selected folder is too large.".into())
             })?;
     }
     Ok(total)
+}
+
+fn ensure_share_scan_active(cancelled: &AtomicBool) -> crate::error::Result<()> {
+    if cancelled.load(Ordering::Relaxed) {
+        Err(crate::error::LightningP2PError::Other(
+            "Transfer cancelled".into(),
+        ))
+    } else {
+        Ok(())
+    }
 }
 
 fn is_reparse_point(metadata: &fs::Metadata) -> bool {
@@ -241,6 +363,41 @@ mod tests {
     }
 
     #[test]
+    fn cancellation_command_marks_an_active_share_scan() {
+        let request_id = format!("test-{}", uuid::Uuid::new_v4());
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let scans = SHARE_PATH_SCANS.get_or_init(|| Mutex::new(std::collections::HashMap::new()));
+        scans
+            .lock()
+            .expect("scan registry lock")
+            .insert(request_id.clone(), cancelled.clone());
+
+        assert!(cancel_share_path_scan(request_id.clone()).expect("cancel command"));
+        assert!(cancelled.load(Ordering::Relaxed));
+        scans
+            .lock()
+            .expect("scan registry lock")
+            .remove(&request_id);
+    }
+
+    #[test]
+    fn cancelled_share_scan_stops_before_inspecting_path() {
+        let temp_dir = tempfile::tempdir().expect("temp dir should exist");
+        let cancelled = AtomicBool::new(true);
+        let mut file_count = 0;
+        let mut scanned_entry_count = 0;
+
+        let error = describe_path_with_counts(
+            temp_dir.path().to_path_buf(),
+            &mut file_count,
+            &mut scanned_entry_count,
+            &cancelled,
+        )
+        .expect_err("cancelled scan should stop");
+        assert_eq!(error.to_string(), "Transfer cancelled");
+    }
+
+    #[test]
     fn directory_size_counts_nested_files() {
         let temp_dir = tempfile::tempdir().expect("temp dir should exist");
         let nested = temp_dir.path().join("nested");
@@ -265,6 +422,21 @@ mod tests {
         symlink(&outside, root.join("linked.bin")).expect("symlink should be created");
 
         let error = describe_path(root).expect_err("nested symlink must be rejected");
+        assert!(error.to_string().contains("symbolic links"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn selected_root_symlink_is_rejected_before_canonicalization() {
+        use std::os::unix::fs::symlink;
+
+        let temp_dir = tempfile::tempdir().expect("temp dir should exist");
+        let target = temp_dir.path().join("target.bin");
+        let link = temp_dir.path().join("link.bin");
+        fs::write(&target, [1_u8; 7]).expect("file should write");
+        symlink(&target, &link).expect("symlink should be created");
+
+        let error = describe_path(link).expect_err("selected symlink must be rejected");
         assert!(error.to_string().contains("symbolic links"));
     }
 }

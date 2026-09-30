@@ -266,6 +266,7 @@ pub fn run() {
             commands::chat::verify_chat_trust_qr,
             commands::share::create_share,
             commands::share::describe_share_paths,
+            commands::share::cancel_share_path_scan,
             commands::share::get_ticket,
             commands::share::render_ticket_qr,
             commands::share::clear_active_share,

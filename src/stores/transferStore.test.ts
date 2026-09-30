@@ -13,6 +13,7 @@ vi.mock("../lib/tauri", async (importOriginal) => {
     getActiveTransfers: vi.fn(),
     getNodeStatus: vi.fn(),
     describeSharePaths: vi.fn(),
+    cancelSharePathScan: vi.fn().mockResolvedValue(true),
   };
 });
 
@@ -115,6 +116,8 @@ describe("active transfer snapshot reconciliation", () => {
     });
     vi.mocked(tauri.getActiveTransfers).mockReset();
     vi.mocked(tauri.describeSharePaths).mockReset();
+    vi.mocked(tauri.cancelSharePathScan).mockReset();
+    vi.mocked(tauri.cancelSharePathScan).mockResolvedValue(true);
   });
 
   it("does not let an in-flight snapshot roll back newer progress events", async () => {
@@ -279,11 +282,14 @@ describe("share selection editing", () => {
     const preparation = useTransferStore
       .getState()
       .prepareShareSelection(["stale.txt"]);
+    const requestId = vi.mocked(tauri.describeSharePaths).mock.calls[0]?.[1];
     useTransferStore.getState().clearShareSelection();
     resolveDescription?.([sharePath("stale.txt")]);
     await preparation;
 
     expect(useTransferStore.getState().shareSelection).toEqual([]);
     expect(useTransferStore.getState().isPreparingSelection).toBe(false);
+    expect(requestId).toBeDefined();
+    expect(tauri.cancelSharePathScan).toHaveBeenCalledWith(requestId);
   });
 });
