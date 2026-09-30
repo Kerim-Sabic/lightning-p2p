@@ -99,7 +99,9 @@ pub async fn send_files(
     queue: TransferQueue,
 ) -> Result<ShareOutcome> {
     let _foreground = crate::commands::mobile::TransferForegroundGuard::acquire();
-    let plan = build_share_plan(paths)?;
+    let plan = tokio::task::spawn_blocking(move || build_share_plan(paths))
+        .await
+        .map_err(|error| LightningP2PError::Other(error.to_string()))??;
     let (transfer_id, cancel_rx) =
         register_send_preparation(&queue, &plan.label, plan.total_size).await;
     let reporter = EventReporter::new(
@@ -234,7 +236,9 @@ async fn register_send_preparation(
 /// Returns `LightningP2PError` if the paths are invalid, the add operation fails,
 /// or the ticket cannot be generated.
 pub async fn create_share(node: &LightningP2PNode, paths: Vec<PathBuf>) -> Result<ShareOutcome> {
-    let plan = build_share_plan(paths)?;
+    let plan = tokio::task::spawn_blocking(move || build_share_plan(paths))
+        .await
+        .map_err(|error| LightningP2PError::Other(error.to_string()))??;
     let profile = crate::transfer::TransferMode::platform_default().profile();
     let outcome = create_share_with_plan(node, plan, None, profile, None).await?;
     node.authorize_public_share(outcome.hash).await?;
