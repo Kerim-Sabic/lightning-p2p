@@ -13,7 +13,7 @@ linked release evidence.
 - Android v0.5.1 as a signed sideload APK with share-target sends and public
   MediaStore destinations.
 
-### v0.9.12 beta channel
+### v0.9.13 beta channel
 
 - Windows, universal macOS DMG, Linux AppImage/deb/rpm, and CLI artifacts.
 - Lightning Chat in the Windows and Android apps plus the `/chat` Web lounge.
@@ -24,6 +24,9 @@ linked release evidence.
   tray with phase, speed, pause state, and a shortcut to Activity.
 - Incoming Flick offers are namespaced by authenticated sender identity to
   prevent offer identifier collisions across peers.
+- Legacy transfer stores are preserved and the node starts with a compatible
+  store rather than stalling during initialization. Flick gestures work with
+  mouse, touch, and stylus input.
 - Browser send and receive beta using the Rust/WASM transfer engine. Browser
   peers are relay-only and must remain open during transfer. Sending is
   memory-bound with a 2 GiB cap; receive streams to disk where the File System
@@ -35,8 +38,8 @@ linked release evidence.
 
 ### Reliability and recovery
 
-- Make automatic retry state visible and keep verified iroh-blobs data across
-  transient failures.
+- Keep verified iroh-blobs data across transient failures and validate legacy
+  store recovery against an older installed app's real transfer database.
 - Receive pause and restart-safe resume are implemented on `main`; native
   credential-store validation across supported platforms remains.
 - Complete Android folder publishing and collision tests on physical devices.

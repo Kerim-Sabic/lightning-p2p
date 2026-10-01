@@ -4,6 +4,21 @@ All notable changes to Lightning P2P are documented here. The project follows se
 
 ## [Unreleased]
 
+## [0.9.13] - 2026-10-01 ("Reliable Startup and Flick")
+
+### Fixed
+
+- Detect legacy redb v2 transfer stores before iroh opens them, preserve the
+  original store in place, and start a fresh compatible store so transfers do
+  not remain stuck at startup.
+- Keep node startup bounded while allowing slower local store initialization.
+- Enable Flick & Catch with mouse as well as touch and stylus input.
+
+### Added
+
+- Log node startup errors and storage/router readiness boundaries for useful
+  diagnostics.
+
 ## [0.9.12] - 2026-10-01 ("Persistent Transfer Activity")
 
 ### Added
