@@ -24,11 +24,11 @@ function directionTone(
   status: "completed" | "share_prepared",
 ): string {
   if (status === "share_prepared") {
-    return "border-amber-400/15 bg-amber-500/8 text-amber-100";
+    return "border-[var(--proof-amber)]/30 bg-[var(--proof-amber)]/10 text-[var(--proof-amber)]";
   }
   return direction === "send"
-    ? "border-sky-400/15 bg-sky-500/8 text-sky-200"
-    : "border-emerald-400/15 bg-emerald-500/8 text-emerald-200";
+    ? "border-[var(--accent-border)] bg-[var(--accent-subtle)] text-[var(--accent-primary)]"
+    : "border-[var(--state-success)]/30 bg-[var(--state-success)]/10 text-[var(--state-success)]";
 }
 
 export function HistoryView() {
@@ -159,53 +159,60 @@ export function HistoryView() {
   return (
     <div className="space-y-5">
       <section className="grid gap-4 xl:grid-cols-[1.24fr_0.76fr]">
-        <header className="glass-panel hero-panel relative overflow-hidden p-8">
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_84%_18%,rgba(56,189,248,0.08),transparent_24%),radial-gradient(circle_at_12%_100%,rgba(148,163,184,0.05),transparent_26%)]" />
-          <div className="relative">
-            <div className="badge">
-              <Clock3 className="h-3 w-3 text-sky-200" />
+        <header className="rounded-3xl border border-[var(--border-subtle)] bg-[var(--surface-0)] p-6 shadow-sm sm:p-8">
+          <div>
+            <div className="inline-flex min-h-8 items-center gap-2 rounded-full border border-[var(--border-subtle)] bg-[var(--surface-1)] px-3 text-xs font-semibold text-[var(--fg-secondary)]">
+              <Clock3 className="h-3.5 w-3.5 text-[var(--accent-primary)]" aria-hidden="true" />
               History
             </div>
-            <h1 className="page-title mt-6 max-w-[12ch]">
+            <h1 className="mt-4 max-w-[18ch] text-2xl font-semibold tracking-[-0.03em] text-[var(--fg-primary)] sm:text-3xl">
               Review saved files and prepared shares
             </h1>
-            <p className="page-copy mt-4 max-w-[60ch]">
+            <p className="mt-3 max-w-[60ch] text-sm leading-6 text-[var(--fg-secondary)]">
               Received files are marked complete after verification and saving.
               Outgoing shares stay marked as prepared until delivery is
               confirmed, and can be shared again from here.
             </p>
 
-            <div className="hero-metrics mt-7 grid gap-3 sm:grid-cols-3">
-              <div className="stat-card">
-                <p className="metric-label">Shares prepared</p>
-                <p className="metric-value">{totals.sharesPreparedCount}</p>
+            <div className="mt-6 grid gap-3 sm:grid-cols-3">
+              <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-1)] p-4">
+                <p className="text-sm font-medium text-[var(--fg-secondary)]">
+                  Shares prepared
+                </p>
+                <p className="mt-1.5 text-2xl font-semibold tabular-nums text-[var(--fg-primary)]">
+                  {totals.sharesPreparedCount}
+                </p>
               </div>
-              <div className="stat-card">
-                <p className="metric-label">Receives</p>
-                <p className="metric-value">{totals.receivedCount}</p>
+              <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-1)] p-4">
+                <p className="text-sm font-medium text-[var(--fg-secondary)]">
+                  Receives
+                </p>
+                <p className="mt-1.5 text-2xl font-semibold tabular-nums text-[var(--fg-primary)]">
+                  {totals.receivedCount}
+                </p>
               </div>
-              <div className="stat-card">
-                <p className="metric-label">Total volume</p>
-                <p className="metric-value">{formatBytes(totals.totalBytes)}</p>
+              <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-1)] p-4">
+                <p className="text-sm font-medium text-[var(--fg-secondary)]">
+                  Total volume
+                </p>
+                <p className="mt-1.5 text-2xl font-semibold tabular-nums text-[var(--fg-primary)]">
+                  {formatBytes(totals.totalBytes)}
+                </p>
               </div>
             </div>
           </div>
         </header>
 
-        <aside className="glass-panel p-6">
+        <aside className="rounded-3xl border border-[var(--border-subtle)] bg-[var(--surface-0)] p-6 shadow-sm">
           <div className="flex items-start gap-3">
-            <div className="glass-icon h-12 w-12 rounded-2xl">
-              <Filter className="h-5 w-5 text-sky-200" />
+            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-2)]">
+              <Filter className="h-5 w-5 text-[var(--accent-primary)]" />
             </div>
             <div>
-              <div className="badge">
-                <History className="h-3 w-3 text-sky-200" />
-                Searchable log
-              </div>
-              <h2 className="mt-4 text-[1.55rem] font-semibold leading-tight tracking-[-0.03em] text-white">
+              <h2 className="text-base font-semibold text-[var(--fg-primary)]">
                 Find the right item quickly
               </h2>
-              <p className="meta-copy mt-3">
+              <p className="mt-1 text-sm leading-6 text-[var(--fg-secondary)]">
                 Search by filename, hash, peer, direction, or state. Re-share
                 only uses content still stored on this device.
               </p>
@@ -214,12 +221,13 @@ export function HistoryView() {
 
           <div className="mt-5 space-y-3">
             <label className="relative block">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--fg-muted)]" />
               <input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
+                aria-label="Search transfer activity"
                 placeholder="Search filename, peer, or hash"
-                className="glass-input w-full rounded-2xl py-3 pl-10 pr-4 text-sm text-slate-100 placeholder:text-slate-500"
+                className="min-h-11 w-full rounded-xl border border-[var(--border-strong)] bg-[var(--surface-1)] py-2.5 pl-10 pr-4 text-sm text-[var(--fg-primary)] placeholder:text-[var(--fg-muted)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
               />
             </label>
 
@@ -227,17 +235,19 @@ export function HistoryView() {
               {(["all", "send", "receive"] as const).map((value) => (
                 <button
                   key={value}
+                  type="button"
+                  aria-pressed={directionFilter === value}
                   onClick={() => setDirectionFilter(value)}
-                  className={`rounded-2xl border px-4 py-2 text-sm transition-all ${
+                  className={`min-h-11 rounded-xl border px-4 py-2 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] ${
                     directionFilter === value
-                      ? "border-sky-300/20 bg-sky-500/14 text-sky-100"
-                      : "border-white/10 bg-white/[0.04] text-slate-300"
+                      ? "border-[var(--accent-border)] bg-[var(--accent-subtle)] text-[var(--accent-primary)]"
+                      : "border-[var(--border-strong)] bg-[var(--surface-1)] text-[var(--fg-secondary)] hover:bg-[var(--surface-hover)]"
                   }`}
                 >
                   {value === "all"
                     ? "All transfers"
                     : value === "send"
-                      ? "Share activity only"
+                      ? "Shares"
                       : "Receives only"}
                 </button>
               ))}
@@ -252,35 +262,37 @@ export function HistoryView() {
             initial={{ opacity: 0, y: 14, scale: 0.99 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 10, scale: 0.99 }}
-            className="glass-panel p-6"
+            className="rounded-3xl border border-[var(--border-subtle)] bg-[var(--surface-0)] p-5 shadow-sm sm:p-6"
           >
             <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
               <div className="min-w-0">
-                <p className="text-sm font-medium text-white">
+                <p className="text-base font-semibold text-[var(--fg-primary)]">
                   Re-share link ready
                 </p>
-                <p className="mt-2 break-all rounded-2xl border border-emerald-400/16 bg-emerald-500/[0.08] p-4 font-mono text-xs leading-6 text-emerald-50/90">
+                <p className="mt-2 break-all rounded-2xl border border-[var(--accent-border)] bg-[var(--accent-subtle)] p-4 font-mono text-sm leading-6 text-[var(--fg-primary)]">
                   {createReceiveHandoffLink(resharedTicket)}
                 </p>
               </div>
               <div className="flex shrink-0 flex-wrap gap-2">
                 <button
+                  type="button"
                   onClick={() => void handleCopyShareLink()}
-                  className={`glass-button inline-flex items-center gap-2 self-start px-4 py-2 text-sm transition-all duration-200 ${
+                  className={`inline-flex min-h-11 items-center gap-2 self-start rounded-xl border px-4 py-2 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] ${
                     copied === "link"
-                      ? "border-emerald-400/20 bg-emerald-500/10 text-emerald-100"
-                      : "text-slate-100"
+                      ? "border-[var(--state-success)]/30 bg-[var(--state-success)]/10 text-[var(--state-success)]"
+                      : "border-[var(--border-strong)] bg-[var(--surface-1)] text-[var(--fg-primary)] hover:bg-[var(--surface-hover)]"
                   }`}
                 >
                   <Copy className="h-4 w-4" />
                   {copied === "link" ? "Link copied" : "Copy share link"}
                 </button>
                 <button
+                  type="button"
                   onClick={() => void handleCopyRawTicket()}
-                  className={`glass-button inline-flex items-center gap-2 self-start px-4 py-2 text-sm transition-all duration-200 ${
+                  className={`inline-flex min-h-11 items-center gap-2 self-start rounded-xl border px-4 py-2 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] ${
                     copied === "ticket"
-                      ? "border-emerald-400/20 bg-emerald-500/10 text-emerald-100"
-                      : "text-slate-100"
+                      ? "border-[var(--state-success)]/30 bg-[var(--state-success)]/10 text-[var(--state-success)]"
+                      : "border-[var(--border-strong)] bg-[var(--surface-1)] text-[var(--fg-primary)] hover:bg-[var(--surface-hover)]"
                   }`}
                 >
                   <Copy className="h-4 w-4" />
@@ -294,14 +306,15 @@ export function HistoryView() {
 
       <section className="space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2 text-sm font-medium text-slate-200">
-            <History className="h-4 w-4 text-violet-200" />
+          <div className="flex items-center gap-2 text-base font-semibold text-[var(--fg-primary)]">
+            <History className="h-4 w-4 text-[var(--accent-primary)]" />
             Recent activity
           </div>
           <button
+            type="button"
             onClick={() => void handleClearHistory()}
             disabled={history.length === 0 || clearingHistory}
-            className="glass-button inline-flex items-center gap-2 px-3 py-2 text-xs text-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[var(--border-strong)] bg-[var(--surface-0)] px-3 py-2 text-sm font-medium text-[var(--fg-primary)] transition hover:bg-[var(--surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Trash2 className="h-3.5 w-3.5" />
             Clear history
@@ -309,7 +322,7 @@ export function HistoryView() {
         </div>
 
         {filteredHistory.length > 0 ? (
-          <p className="text-xs text-slate-500" aria-live="polite">
+          <p className="text-sm text-[var(--fg-muted)]" aria-live="polite">
             Showing {visibleHistory.length} of {filteredHistory.length} records
           </p>
         ) : null}
@@ -336,13 +349,13 @@ export function HistoryView() {
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: Math.min(index, 8) * 0.012, duration: 0.18 }}
-                className="glass-panel group p-5 transition-colors duration-200 hover:bg-white/[0.05]"
+                className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-0)] p-5 shadow-sm transition-colors duration-200 hover:bg-[var(--surface-hover)]"
               >
                 <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <span
-                        className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-0.5 text-[10px] uppercase tracking-[0.22em] ${directionTone(
+                        className={`inline-flex min-h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs font-semibold ${directionTone(
                           record.direction,
                           record.status,
                         )}`}
@@ -351,23 +364,23 @@ export function HistoryView() {
                           ? "Share prepared"
                           : record.direction}
                       </span>
-                      <span className="text-xs text-slate-500">
+                      <span className="text-sm text-[var(--fg-muted)]">
                         {formatTimestamp(record.timestamp)}
                       </span>
                     </div>
 
-                    <p className="mt-2 text-base font-semibold text-white">
+                    <p className="mt-2 text-base font-semibold text-[var(--fg-primary)]">
                       {safeDisplayText(record.filename, "Shared file")}
                     </p>
-                    <div className="mt-2 flex flex-wrap items-center gap-3 text-[13px] text-slate-300/72">
+                    <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-[var(--fg-secondary)]">
                       <span className="tabular-nums">
                         {formatBytes(record.size)}
                       </span>
-                      <span className="font-mono text-[11px] text-slate-400">
+                      <span className="font-mono text-xs text-[var(--fg-muted)]">
                         {record.hash.slice(0, 16)}...
                       </span>
                       {record.peer ? (
-                        <span className="truncate font-mono text-[11px] text-slate-400">
+                        <span className="truncate font-mono text-xs text-[var(--fg-muted)]">
                           {record.peer.slice(0, 18)}...
                         </span>
                       ) : null}
@@ -375,8 +388,9 @@ export function HistoryView() {
                   </div>
 
                   <button
+                    type="button"
                     onClick={() => void handleReshare(record.hash)}
-                    className="glass-button inline-flex shrink-0 items-center gap-2 px-4 py-2 text-sm text-slate-100 opacity-70 transition-opacity duration-200 group-hover:opacity-100"
+                    className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-xl border border-[var(--border-strong)] bg-[var(--surface-1)] px-4 py-2 text-sm font-medium text-[var(--fg-primary)] transition hover:bg-[var(--surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
                   >
                     <RefreshCw className="h-3.5 w-3.5" />
                     Re-share
@@ -394,7 +408,7 @@ export function HistoryView() {
                 Math.min(count + HISTORY_PAGE_SIZE, filteredHistory.length),
               )
             }
-            className="glass-button mt-3 min-h-11 w-full justify-center px-4 text-sm text-slate-100"
+            className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-[var(--border-strong)] bg-[var(--surface-0)] px-4 text-sm font-medium text-[var(--fg-primary)] transition hover:bg-[var(--surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
           >
             Load {Math.min(HISTORY_PAGE_SIZE, filteredHistory.length - visibleHistory.length)} more
           </button>
