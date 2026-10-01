@@ -1,0 +1,67 @@
+{
+  "transfer_progress": {
+    "type": "progress",
+    "transfer_id": "recv-1",
+    "bytes": 128,
+    "total": 256,
+    "speed_bps": 64,
+    "route_kind": "relay",
+    "phase": "downloading",
+    "connect_ms": 12,
+    "download_ms": 24,
+    "export_ms": 0,
+    "provider_count": 1,
+    "direct_provider_count": 0,
+    "relay_provider_count": 1,
+    "strategy": "queued_single_provider",
+    "first_byte_ms": 16,
+    "effective_mbps": 0
+  },
+  "share_prepared": {
+    "type": "share_prepared",
+    "transfer_id": "share-1",
+    "hash": "abc123",
+    "name": "photo.jpg",
+    "size": 42,
+    "timestamp": 10
+  },
+  "app_settings": {
+    "download_dir": ".",
+    "auto_update_enabled": false,
+    "first_run_complete": true,
+    "relay_mode": "public",
+    "custom_relay_url": null,
+    "local_discovery_enabled": true,
+    "bluetooth_discovery_enabled": false,
+    "transfer_mode": "smart_auto",
+    "experimental_swarm_receive": false
+  },
+  "incoming_offer": {
+    "offer_id": "offer-1",
+    "sender_node_id": "0123456789abcdef",
+    "sender_device_name": "Sender",
+    "label": "photo.jpg",
+    "size": 42,
+    "blob_hash": "abc123",
+    "blob_format": "hash_seq",
+    "file_count": 1,
+    "received_at_unix": 10,
+    "ready_to_catch": false,
+    "flick_direction": "right"
+  },
+  "nearby_device": {
+    "node_id": "0123456789abcdef",
+    "device_name": "Sender",
+    "last_seen_unix": 10,
+    "transport": "wifi_mdns",
+    "route_hint": "direct",
+    "direct_address_count": 1,
+    "has_active_share": true
+  },
+  "node_supervisor_status": {
+    "phase": "starting",
+    "last_reason": "app_startup",
+    "last_error": null,
+    "last_changed_unix": 10
+  }
+}

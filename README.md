@@ -129,7 +129,7 @@ drop files → share the /receive link  →     open link → "Receive in this b
 
 ## ◆ Install
 
-Stable: **v0.4.6**. Experimental: **v0.9.13** (reliable startup from legacy installs, mouse/touch Flick & Catch with directional arrival cues, persistent transfer progress, authenticated offers, secure restart-safe receive resume, Lightning Chat, BBR congestion control, Warp mode, swarm receive, and ticket pre-warming). With files staged, use the device's **Flick** control and swipe toward the side where that person is; their screen shows the file arriving from the opposite approximate side. Tapping **Send** remains a normal directionless send. Android's latest signed beta artifact is **v0.9.13**.
+Stable: **v0.4.6**. Experimental: **v0.9.13** (reliable startup from legacy installs, mouse/touch Flick & Catch with directional arrival cues, persistent transfer progress, authenticated offers, secure restart-safe receive resume, Lightning Chat, BBR congestion control, Warp mode, swarm receive, and ticket pre-warming). With files staged, use the device's **Flick** control and swipe toward the side where that person is; their screen shows the file arriving from that same approximate side. No location data is shared. Tapping **Send** remains a normal directionless send. Android's latest signed beta artifact is **v0.9.13**.
 
 | Platform | Asset | Channel | Best for |
 | --- | --- | --- | --- |
