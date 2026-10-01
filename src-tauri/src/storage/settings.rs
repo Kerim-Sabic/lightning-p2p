@@ -682,25 +682,45 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn missing_transfer_mode_field_uses_platform_default() {
+    async fn legacy_settings_default_new_fields_without_resetting_preferences() {
         let dir = tempfile::tempdir().expect("tempdir");
         let settings_path = dir.path().join(SETTINGS_FILE_NAME);
-        // settings.json that predates the transfer_mode field
+        // settings.json predating local discovery, Bluetooth, transfer mode,
+        // and experimental swarm options.
         std::fs::write(
             &settings_path,
             r#"{
-                "download_dir": "C:/tmp",
-                "auto_update_enabled": false,
+                "download_dir": "C:/tmp/legacy-downloads",
+                "auto_update_enabled": true,
                 "first_run_complete": true,
-                "relay_mode": "public",
-                "custom_relay_url": null
+                "relay_mode": "custom",
+                "custom_relay_url": "https://relay.example.com"
             }"#,
         )
         .expect("write legacy settings");
 
         let state = SettingsState::load_or_create(dir.path()).expect("settings load");
         let snapshot = state.snapshot().await;
+        assert_eq!(
+            snapshot.download_dir,
+            PathBuf::from("C:/tmp/legacy-downloads")
+        );
+        assert!(snapshot.auto_update_enabled);
+        assert!(snapshot.first_run_complete);
+        assert_eq!(snapshot.relay_mode, RelayModeSetting::Custom);
+        assert_eq!(
+            snapshot.custom_relay_url.as_deref(),
+            Some("https://relay.example.com")
+        );
+        assert!(snapshot.local_discovery_enabled);
+        assert!(!snapshot.bluetooth_discovery_enabled);
         assert_eq!(snapshot.transfer_mode, TransferMode::platform_default());
+        assert!(!snapshot.experimental_swarm_receive);
+
+        let persisted: AppSettings =
+            serde_json::from_slice(&std::fs::read(&settings_path).expect("read migrated settings"))
+                .expect("migrated settings remain readable");
+        assert_eq!(persisted, snapshot);
     }
 
     #[test]
