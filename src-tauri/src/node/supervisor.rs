@@ -21,6 +21,7 @@ use tauri::{AppHandle, Emitter};
 use tokio::sync::{Mutex, RwLock};
 
 const NODE_SUPERVISOR_STATUS_EVENT: &str = "node-supervisor-status";
+const NODE_START_PREPARATION_TIMEOUT: Duration = Duration::from_secs(5);
 // Opening an existing on-disk blob store can take longer on Windows when the
 // database is large or the disk is cold. Keep startup bounded, but allow the
 // store to finish initializing instead of declaring a healthy install failed
@@ -192,6 +193,22 @@ impl NodeSupervisor {
         settings: AppSettings,
         nearby: NearbyServices,
     ) {
+        let prepare_nearby_trust = async {
+            let blocked_peers = nearby.blocked_peers.list().await;
+            nearby.offers.load_blocked_peers(blocked_peers).await;
+        };
+        if tokio::time::timeout(NODE_START_PREPARATION_TIMEOUT, prepare_nearby_trust)
+            .await
+            .is_err()
+        {
+            let error = LightningP2PError::Other(
+                "Node startup timed out while loading nearby-device trust settings. Open Settings and retry startup.".into(),
+            );
+            self.mark_failed(&app, "app_startup_preparation", &error)
+                .await;
+            return;
+        }
+
         if let Err(error) = self
             .replace_node(
                 app,

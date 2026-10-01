@@ -99,17 +99,10 @@ impl LightningP2PNode {
         std::fs::create_dir_all(&data_dir)?;
         std::fs::create_dir_all(&download_dir)?;
 
-        probe_mdns_socket();
-
-        let lookup = MemoryLookup::new();
-        let endpoint = bind_endpoint(relay_url, &data_dir, profile, &lookup).await?;
-        let mdns = setup_mdns(&endpoint);
-        tracing::info!(
-            endpoint_id = %endpoint.id(),
-            local_network_discovery = local_network_discovery_label(),
-            "iroh endpoint bound (n0-discovery + mDNS)"
-        );
-
+        // Finish local storage initialization before binding network resources.
+        // Besides making startup ordering clearer, this prevents a slow or
+        // incompatible transfer store from leaving a partially started QUIC
+        // endpoint behind while the supervisor is waiting on storage.
         tracing::info!("opening local blob store");
         preserve_incompatible_blob_store(&data_dir)?;
         let store = load_blob_store(&data_dir).await?;
@@ -122,6 +115,17 @@ impl LightningP2PNode {
             "loaded share access metadata"
         );
         let blob_access = BlobAccessController::with_public_hashes(public_hashes);
+
+        probe_mdns_socket();
+        let lookup = MemoryLookup::new();
+        let endpoint = bind_endpoint(relay_url, &data_dir, profile, &lookup).await?;
+        let mdns = setup_mdns(&endpoint);
+        tracing::info!(
+            endpoint_id = %endpoint.id(),
+            local_network_discovery = local_network_discovery_label(),
+            "iroh endpoint bound (n0-discovery + mDNS)"
+        );
+
         let blobs = AuthorizedBlobsProtocol::new(store.as_ref(), blob_access.clone());
         let mut router_builder = Router::builder(endpoint.clone()).accept(iroh_blobs::ALPN, blobs);
         if let Some(protocol) = nearby_protocol {

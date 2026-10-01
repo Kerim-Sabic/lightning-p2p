@@ -205,10 +205,6 @@ fn spawn_node_startup(handle: tauri::AppHandle) {
         let state = handle.state::<AppState>();
         let settings = state.settings.snapshot().await;
         state
-            .offer_inbox
-            .load_blocked_peers(state.blocked_peers.list().await)
-            .await;
-        state
             .node_supervisor
             .start(
                 handle.clone(),

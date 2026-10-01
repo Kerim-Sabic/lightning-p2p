@@ -128,22 +128,12 @@ function displayReceiveLink(link: string): string {
   return link.replace(/(#t=).+$/u, "$1[hidden ticket]");
 }
 
-interface FlickTargetSnapshot {
-  nodeId: string;
-  left: number;
-  right: number;
-  top: number;
-  bottom: number;
-  centerX: number;
-  centerY: number;
-}
-
 interface ActiveFlick {
+  nodeId: string;
   pointerId: number;
   startX: number;
   startY: number;
   startedAt: number;
-  targets: FlickTargetSnapshot[];
   element: HTMLElement;
 }
 
@@ -192,13 +182,13 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
     () => new Set(),
   );
   const [flickHint, setFlickHint] = useState<string | null>(null);
+  const suppressFlickClickRef = useRef<string | null>(null);
   const recipientDevices = flickDevices ?? devices;
   const recipientVerifiedNodeIds = flickVerifiedNodeIds ?? verifiedNodeIds;
   const recipientGroups = groupNearbyDevices(
     recipientDevices,
     recipientVerifiedNodeIds,
   );
-  const recipientSurfaceRef = useRef<HTMLElement | null>(null);
   const activeFlickRef = useRef<ActiveFlick | null>(null);
 
   useEffect(() => {
@@ -422,6 +412,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
 
   const handleFlickPointerDown = (
     event: ReactPointerEvent<HTMLButtonElement>,
+    device: NearbyDevice,
   ): void => {
     if (
       !event.isPrimary ||
@@ -434,41 +425,20 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
     ) {
       return;
     }
-    const targets = Array.from(
-      recipientSurfaceRef.current?.querySelectorAll<HTMLElement>(
-        "[data-flick-target]",
-      ) ?? [],
-    ).flatMap((element) => {
-      const nodeId = element.dataset.flickTarget;
-      if (!nodeId) return [];
-      const rect = element.getBoundingClientRect();
-      return [
-        {
-          nodeId,
-          left: rect.left,
-          right: rect.right,
-          top: rect.top,
-          bottom: rect.bottom,
-          centerX: rect.left + rect.width / 2,
-          centerY: rect.top + rect.height / 2,
-        },
-      ];
-    });
-    if (targets.length === 0) return;
 
-    event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
     activeFlickRef.current = {
+      nodeId: device.node_id,
       pointerId: event.pointerId,
       startX: event.clientX,
       startY: event.clientY,
       startedAt: performance.now(),
-      targets,
       element: event.currentTarget,
     };
-    setFlickDevices(devices.map((device) => ({ ...device })));
+    setFlickDevices(devices.map((nearbyDevice) => ({ ...nearbyDevice })));
     setFlickVerifiedNodeIds(new Set(verifiedNodeIds));
-    setFlickHint("Flick toward a device to show its approximate side");
+    setDropTargetNodeId(device.node_id);
+    setFlickHint("Flick toward their side to show the approximate arrival side");
   };
 
   const handleFlickPointerMove = (
@@ -476,14 +446,6 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
   ): void => {
     const active = activeFlickRef.current;
     if (!active || active.pointerId !== event.pointerId) return;
-    const target = active.targets.find(
-      (candidate) =>
-        event.clientX >= candidate.left &&
-        event.clientX <= candidate.right &&
-        event.clientY >= candidate.top &&
-        event.clientY <= candidate.bottom,
-    );
-    setDropTargetNodeId(target?.nodeId ?? null);
     const direction = classifyFlickDirection(
       event.clientX - active.startX,
       event.clientY - active.startY,
@@ -510,44 +472,36 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
       active.element.releasePointerCapture(active.pointerId);
     }
 
+    const elapsedMs = performance.now() - active.startedAt;
+    const dx = event.clientX - active.startX;
+    const dy = event.clientY - active.startY;
+    const deliberate = isDeliberateFlick({ dx, dy, elapsedMs });
+    if (deliberate) {
+      event.preventDefault();
+      suppressFlickClickRef.current = active.nodeId;
+      window.setTimeout(() => {
+        if (suppressFlickClickRef.current === active.nodeId) {
+          suppressFlickClickRef.current = null;
+        }
+      }, 0);
+    }
+
     const atSystemEdge =
       event.clientX < 24 ||
       event.clientX > window.innerWidth - 24 ||
       event.clientY < 24 ||
       event.clientY > window.innerHeight - 24;
     if (atSystemEdge) return;
-    const target = active.targets.find(
-      (candidate) =>
-        event.clientX >= candidate.left &&
-        event.clientX <= candidate.right &&
-        event.clientY >= candidate.top &&
-        event.clientY <= candidate.bottom,
-    );
-    if (!target) return;
     const device = devices.find(
-      (candidate) => candidate.node_id === target.nodeId,
+      (candidate) => candidate.node_id === active.nodeId,
     );
     if (!device) {
       setError("That device is no longer nearby. Choose a device again.");
       return;
     }
-    const elapsedMs = performance.now() - active.startedAt;
-    if (
-      isDeliberateFlick({
-        dx: event.clientX - active.startX,
-        dy: event.clientY - active.startY,
-        elapsedMs,
-        targetX: target.centerX - active.startX,
-        targetY: target.centerY - active.startY,
-      })
-    ) {
-      void handleSendToDevice(
-        device,
-        classifyFlickDirection(
-          event.clientX - active.startX,
-          event.clientY - active.startY,
-        ) ?? undefined,
-      );
+    const direction = classifyFlickDirection(dx, dy);
+    if (deliberate && direction) {
+      void handleSendToDevice(device, direction);
     }
   };
 
@@ -579,11 +533,8 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
   };
 
   const renderDeviceTarget = (device: NearbyDevice) => (
-    <button
+    <div
       key={device.node_id}
-      data-flick-target={device.node_id}
-      type="button"
-      onClick={() => void handleSendToDevice(device)}
       onDragOver={(event) => {
         if (
           event.dataTransfer.types.includes("application/x-lightning-selection")
@@ -601,52 +552,104 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
         }
         setDropTargetNodeId(null);
       }}
-      disabled={
-        busyNodeId !== null ||
-        isPreparingSelection ||
-        isSharing ||
-        !nativeRuntime
-      }
-      className={`flex min-h-16 items-center gap-3 rounded-2xl border px-4 py-3 text-left transition disabled:opacity-55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300 ${dropTargetNodeId === device.node_id ? "border-sky-300/60 bg-sky-400/10" : "border-white/[0.08] bg-white/[0.025] hover:border-sky-300/30 hover:bg-white/[0.05]"}`}
+      className={`flex min-h-16 items-center gap-3 rounded-2xl border px-4 py-3 transition ${dropTargetNodeId === device.node_id ? "border-sky-300/60 bg-sky-400/10" : "border-white/[0.08] bg-white/[0.025] hover:border-sky-300/30 hover:bg-white/[0.05]"}`}
     >
-      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-white/[0.08] bg-white/[0.04]">
-        <LaptopMinimal className="h-4 w-4 text-sky-200" />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-semibold text-white">
-          {safeDisplayText(device.device_name, "Nearby device")}
+      <button
+        type="button"
+        onClick={() => void handleSendToDevice(device)}
+        disabled={
+          busyNodeId !== null ||
+          isPreparingSelection ||
+          isSharing ||
+          !nativeRuntime
+        }
+        className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300 disabled:opacity-55"
+      >
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-white/[0.08] bg-white/[0.04]">
+          <LaptopMinimal className="h-4 w-4 text-sky-200" />
         </span>
-        <span className="mt-1 block text-xs text-slate-400">
-          {dropTargetNodeId === device.node_id
-            ? `Release to send to ${safeDisplayText(device.device_name, "Nearby device")}`
-            : busyNodeId === device.node_id
-              ? "Preparing and offering…"
-              : device.transport === "ble"
-                ? "Bluetooth nearby"
-                : device.transport === "both"
-                  ? "Wi-Fi and Bluetooth"
-                  : "On your local network"}
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-semibold text-white">
+            {safeDisplayText(device.device_name, "Nearby device")}
+          </span>
+          <span className="mt-1 block text-xs text-slate-400">
+            {dropTargetNodeId === device.node_id
+              ? `Release to send to ${safeDisplayText(device.device_name, "Nearby device")}`
+              : busyNodeId === device.node_id
+                ? "Preparing and offering…"
+                : device.transport === "ble"
+                  ? "Bluetooth nearby"
+                  : device.transport === "both"
+                    ? "Wi-Fi and Bluetooth"
+                    : "On your local network"}
+          </span>
+          <span
+            className={`mt-1 inline-flex items-center gap-1 text-xs font-medium ${recipientVerifiedNodeIds.has(device.node_id) ? "text-emerald-200" : "text-amber-200/85"}`}
+          >
+            {recipientVerifiedNodeIds.has(device.node_id) ? (
+              <>
+                <ShieldCheck className="h-3.5 w-3.5" /> Verified by you
+              </>
+            ) : (
+              "Not verified"
+            )}
+          </span>
         </span>
-        <span
-          className={`mt-1 inline-flex items-center gap-1 text-xs font-medium ${recipientVerifiedNodeIds.has(device.node_id) ? "text-emerald-200" : "text-amber-200/85"}`}
-        >
-          {recipientVerifiedNodeIds.has(device.node_id) ? (
-            <>
-              <ShieldCheck className="h-3.5 w-3.5" /> Verified by you
-            </>
-          ) : (
-            "Not verified"
-          )}
+        <span className="shrink-0 text-xs font-semibold text-sky-200">
+          {busyNodeId === device.node_id
+            ? "Working"
+            : shareSelection.length > 0
+              ? "Send"
+              : "Choose files"}
         </span>
-      </span>
-      <span className="shrink-0 text-xs font-semibold text-sky-200">
-        {busyNodeId === device.node_id
-          ? "Working"
-          : shareSelection.length > 0
-            ? "Send"
-            : "Choose files"}
-      </span>
-    </button>
+      </button>
+      {shareSelection.length > 0 && nativeRuntime ? (
+        <div className="flex shrink-0 flex-col items-center gap-1">
+          <button
+            type="button"
+            aria-label={`Flick toward the side where ${safeDisplayText(device.device_name, "this device")} is near you to send files with an approximate arrival cue`}
+            onClick={() => {
+              if (suppressFlickClickRef.current === device.node_id) {
+                suppressFlickClickRef.current = null;
+                return;
+              }
+              void handleSendToDevice(device);
+            }}
+            onPointerDown={(event) => handleFlickPointerDown(event, device)}
+            onPointerMove={handleFlickPointerMove}
+            onPointerUp={handleFlickPointerUp}
+            onPointerCancel={() => {
+              cancelFlick();
+              setFlickHint(null);
+            }}
+            onLostPointerCapture={() => {
+              if (activeFlickRef.current) {
+                cancelFlick();
+                setFlickHint(null);
+              }
+            }}
+            disabled={
+              busyNodeId !== null || isPreparingSelection || isSharing
+            }
+            style={{ touchAction: "none" }}
+            className="grid h-11 min-w-11 place-items-center rounded-xl border border-[var(--accent-primary)]/30 bg-[var(--accent-primary)]/10 px-2 text-xs font-semibold text-sky-100 transition hover:bg-[var(--accent-primary)]/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300 disabled:opacity-55"
+          >
+            {activeFlickRef.current?.nodeId === device.node_id && flickHint
+              ? "Flicking…"
+              : "Flick"}
+          </button>
+          <span
+            className="max-w-32 text-center text-[10px] leading-4 text-slate-500"
+            aria-live="polite"
+            aria-atomic="true"
+          >
+            {activeFlickRef.current?.nodeId === device.node_id && flickHint
+              ? flickHint
+              : "toward their side"}
+          </span>
+        </div>
+      ) : null}
+    </div>
   );
 
   return (
@@ -789,36 +792,6 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
                   Drag the file stack onto a nearby device, or choose Send.
                 </p>
               ) : null}
-              {nativeRuntime && devices.length > 0 ? (
-                <button
-                  type="button"
-                  aria-label="Flick toward a nearby device to send; its screen shows the file arriving from your approximate side"
-                  onPointerDown={handleFlickPointerDown}
-                  onPointerMove={handleFlickPointerMove}
-                  onPointerUp={handleFlickPointerUp}
-                  onPointerCancel={() => {
-                    cancelFlick();
-                    setFlickHint(null);
-                  }}
-                  onLostPointerCapture={() => {
-                    if (activeFlickRef.current) {
-                      cancelFlick();
-                      setFlickHint(null);
-                    }
-                  }}
-                  disabled={isPreparingSelection || isSharing || busyNodeId !== null}
-                  style={{ touchAction: "none" }}
-                  className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-full border border-[var(--accent-primary)]/35 bg-[var(--accent-primary)]/10 px-4 text-xs font-semibold text-blue-100 transition hover:bg-[var(--accent-primary)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300"
-                >
-                  <span aria-hidden="true" className="text-base">
-                    ↗
-                  </span>
-                  {flickHint ?? "Flick to a device"}
-                  <span className="sr-only" aria-live="polite" aria-atomic="true">
-                    {flickHint}
-                  </span>
-                </button>
-              ) : null}
             </div>
 
             <div className="flex flex-wrap gap-2">
@@ -908,7 +881,6 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
         </div>
         <aside className="min-w-0 xl:sticky xl:top-4 xl:self-start">
       <section
-        ref={recipientSurfaceRef}
         className="glass-panel p-5"
         aria-labelledby="nearby-recipient-title"
       >

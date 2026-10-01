@@ -8,11 +8,13 @@ import {
 describe("classifyFlickDirection", () => {
   it("maps gestures to the matching screen edge", () => {
     expect(classifyFlickDirection(100, 0)).toBe("right");
-    expect(classifyFlickDirection(-100, 0)).toBe("left");
-    expect(classifyFlickDirection(0, -100)).toBe("up");
-    expect(classifyFlickDirection(0, 100)).toBe("down");
     expect(classifyFlickDirection(100, 100)).toBe("down_right");
+    expect(classifyFlickDirection(0, 100)).toBe("down");
+    expect(classifyFlickDirection(-100, 100)).toBe("down_left");
+    expect(classifyFlickDirection(-100, 0)).toBe("left");
     expect(classifyFlickDirection(-100, -100)).toBe("up_left");
+    expect(classifyFlickDirection(0, -100)).toBe("up");
+    expect(classifyFlickDirection(100, -100)).toBe("up_right");
   });
 
   it("rejects vectors without a usable direction", () => {
@@ -35,26 +37,22 @@ describe("arrivalDirectionFromSenderFlick", () => {
 });
 
 describe("isDeliberateFlick", () => {
-  it("accepts a fast movement toward the locked target", () => {
+  it("accepts a fast deliberate movement in any chosen direction", () => {
     expect(
       isDeliberateFlick({
         dx: 0,
         dy: 120,
         elapsedMs: 100,
-        targetX: 20,
-        targetY: 260,
       }),
     ).toBe(true);
   });
 
-  it("rejects slow drags, short movement, and movement away from the target", () => {
+  it("rejects slow drags and short movements", () => {
     expect(
       isDeliberateFlick({
         dx: 0,
         dy: 120,
         elapsedMs: 400,
-        targetX: 0,
-        targetY: 260,
       }),
     ).toBe(false);
     expect(
@@ -62,18 +60,17 @@ describe("isDeliberateFlick", () => {
         dx: 30,
         dy: 0,
         elapsedMs: 10,
-        targetX: 100,
-        targetY: 0,
       }),
     ).toBe(false);
+  });
+
+  it("does not require the motion to point at the device card", () => {
     expect(
       isDeliberateFlick({
-        dx: 100,
-        dy: 0,
+        dx: 96,
+        dy: 2,
         elapsedMs: 100,
-        targetX: -200,
-        targetY: 0,
       }),
-    ).toBe(false);
+    ).toBe(true);
   });
 });

@@ -4,6 +4,16 @@ All notable changes to Lightning P2P are documented here. The project follows se
 
 ## [Unreleased]
 
+### Fixed
+
+- Flick gestures now start from the chosen device's dedicated control, so the
+  swipe direction reports the sender's intended side instead of depending on
+  where the device card appears. The receiver shows the opposite, approximate
+  arrival side; tapping Send still sends without a directional cue.
+- Bound nearby-trust preparation during startup and initialize transfer stores
+  before binding the network endpoint, so a stalled local store cannot leave a
+  partial endpoint running or keep startup marked in progress indefinitely.
+
 ## [0.9.13] - 2026-10-01 ("Reliable Startup and Flick")
 
 ### Fixed
