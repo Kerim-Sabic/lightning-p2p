@@ -55,4 +55,35 @@ describe("incoming offer queue", () => {
     expect(useIncomingOfferStore.getState().queue.map((item) => item.sender_node_id))
       .toEqual(["peer-b"]);
   });
+
+  it("does not revive a dismissed offer from a late startup snapshot", () => {
+    const store = useIncomingOfferStore.getState();
+    store.pushIncoming(offer("already-closed", "peer-a"));
+    store.dismissIncoming("already-closed", "peer-a");
+
+    useIncomingOfferStore
+      .getState()
+      .applyIncomingSnapshot([offer("already-closed", "peer-a")]);
+
+    expect(useIncomingOfferStore.getState().queue).toEqual([]);
+  });
+
+  it("merges a pending-offer snapshot without duplicating live events", () => {
+    const store = useIncomingOfferStore.getState();
+    store.pushIncoming(offer("live", "peer-a"));
+
+    useIncomingOfferStore.getState().applyIncomingSnapshot([
+      offer("missed", "peer-b"),
+      offer("live", "peer-a"),
+    ]);
+
+    expect(
+      useIncomingOfferStore
+        .getState()
+        .queue.map((item) => [item.sender_node_id, item.offer_id]),
+    ).toEqual([
+      ["peer-a", "live"],
+      ["peer-b", "missed"],
+    ]);
+  });
 });

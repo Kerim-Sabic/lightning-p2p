@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   attachAsyncUnlisten,
+  attachAsyncUnlistenersWithSnapshot,
   createSingleFlightRunner,
 } from "./asyncSubscription";
 
@@ -81,5 +82,69 @@ describe("attachAsyncUnlisten", () => {
     await Promise.resolve();
     expect(reportAfterUnmount).not.toHaveBeenCalled();
     mounted();
+  });
+});
+
+describe("attachAsyncUnlistenersWithSnapshot", () => {
+  it("waits for every listener before reconciling the backend snapshot", async () => {
+    let resolveFirst: ((stop: () => void) => void) | undefined;
+    let resolveSecond: ((stop: () => void) => void) | undefined;
+    const firstStop = vi.fn();
+    const secondStop = vi.fn();
+    const snapshot = vi.fn().mockResolvedValue(["pending"]);
+    const applySnapshot = vi.fn();
+    const first = new Promise<() => void>((resolve) => {
+      resolveFirst = resolve;
+    });
+    const second = new Promise<() => void>((resolve) => {
+      resolveSecond = resolve;
+    });
+    const cleanup = attachAsyncUnlistenersWithSnapshot(
+      [first, second],
+      snapshot,
+      applySnapshot,
+      vi.fn(),
+    );
+
+    resolveFirst?.(firstStop);
+    await Promise.resolve();
+    expect(snapshot).not.toHaveBeenCalled();
+
+    resolveSecond?.(secondStop);
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(snapshot).toHaveBeenCalledOnce();
+    expect(applySnapshot).toHaveBeenCalledWith(["pending"]);
+
+    cleanup();
+    expect(firstStop).toHaveBeenCalledOnce();
+    expect(secondStop).toHaveBeenCalledOnce();
+  });
+
+  it("does not apply a snapshot that resolves after cleanup", async () => {
+    let resolveSnapshot: ((items: readonly string[]) => void) | undefined;
+    const stop = vi.fn();
+    const applySnapshot = vi.fn();
+    const subscription = Promise.resolve(stop);
+    const cleanup = attachAsyncUnlistenersWithSnapshot(
+      [subscription],
+      () =>
+        new Promise<readonly string[]>((resolve) => {
+          resolveSnapshot = resolve;
+        }),
+      applySnapshot,
+      vi.fn(),
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+
+    cleanup();
+    resolveSnapshot?.(["stale"]);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(stop).toHaveBeenCalledOnce();
+    expect(applySnapshot).not.toHaveBeenCalled();
   });
 });

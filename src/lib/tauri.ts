@@ -933,6 +933,13 @@ export async function getNearbyDevices(): Promise<NearbyDevice[]> {
   return invoke<NearbyDevice[]>("get_nearby_devices");
 }
 
+export async function getPendingIncomingOffers(): Promise<IncomingOffer[]> {
+  if (!isDesktopRuntime()) {
+    return [];
+  }
+  return invoke<IncomingOffer[]>("get_pending_incoming_offers");
+}
+
 export async function sendChatMessage(
   nodeId: string,
   body: string,

@@ -2,6 +2,7 @@ import { isTauri } from "@tauri-apps/api/core";
 import { useEffect, useEffectEvent } from "react";
 import {
   desktopRuntimeMessage,
+  getPendingIncomingOffers,
   isMobileRuntime,
   onDiscoveredSharesUpdated,
   onIncomingOffer,
@@ -23,6 +24,7 @@ import { useNearbyShareStore } from "../stores/nearbyShareStore";
 import { useTransferStore } from "../stores/transferStore";
 import {
   attachAsyncUnlisten,
+  attachAsyncUnlistenersWithSnapshot,
   createSingleFlightRunner,
 } from "./asyncSubscription";
 
@@ -274,12 +276,20 @@ export function useTransfer(): void {
       return;
     }
 
-    return attachAsyncUnlisten(
-      onIncomingOfferClosed(({ offer_id, sender_node_id }) => {
-        useIncomingOfferStore
-          .getState()
-          .dismissIncoming(offer_id, sender_node_id);
-      }),
+    return attachAsyncUnlistenersWithSnapshot(
+      [
+        onIncomingOfferClosed(({ offer_id, sender_node_id }) => {
+          useIncomingOfferStore
+            .getState()
+            .dismissIncoming(offer_id, sender_node_id);
+        }),
+        onIncomingOffer((offer) => {
+          useIncomingOfferStore.getState().pushIncoming(offer);
+        }),
+      ],
+      getPendingIncomingOffers,
+      (offers) =>
+        useIncomingOfferStore.getState().applyIncomingSnapshot(offers),
       handleSubscriptionError,
     );
   }, [handleSubscriptionError, inTauriRuntime]);
@@ -292,19 +302,6 @@ export function useTransfer(): void {
     return attachAsyncUnlisten(
       onNearbyDiagnosticState((state) => {
         useNearbyDiagnosticStore.getState().applyState(state);
-      }),
-      handleSubscriptionError,
-    );
-  }, [handleSubscriptionError, inTauriRuntime]);
-
-  useEffect(() => {
-    if (!inTauriRuntime) {
-      return;
-    }
-
-    return attachAsyncUnlisten(
-      onIncomingOffer((offer) => {
-        useIncomingOfferStore.getState().pushIncoming(offer);
       }),
       handleSubscriptionError,
     );

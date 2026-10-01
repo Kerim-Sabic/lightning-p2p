@@ -5,7 +5,7 @@ use crate::node::nearby_offer::{
     emit_offer_resolved, FlickDirection, OfferDecision, OfferShareMessage,
 };
 use crate::node::nearby_protocol::{local_device_name, send_offer, WireBlobFormat};
-use crate::node::NearbyDevice;
+use crate::node::{IncomingOffer, NearbyDevice};
 use crate::storage::peers;
 use crate::AppState;
 use iroh::{EndpointAddr, EndpointId};
@@ -22,6 +22,21 @@ use tauri::{Emitter, State};
 #[tauri::command]
 pub async fn get_nearby_devices(state: State<'_, AppState>) -> Result<Vec<NearbyDevice>, String> {
     Ok(state.nearby_shares.devices_snapshot().await)
+}
+
+/// Returns offers that are still waiting for a user decision.
+///
+/// This snapshot reconciles offers received before the frontend's async event
+/// listeners were registered during app startup.
+///
+/// # Errors
+///
+/// Returns an error if application state cannot be accessed.
+#[tauri::command]
+pub async fn get_pending_incoming_offers(
+    state: State<'_, AppState>,
+) -> Result<Vec<IncomingOffer>, String> {
+    Ok(state.offer_inbox.snapshot().await)
 }
 
 /// Clears persisted and in-memory nearby peer caches.

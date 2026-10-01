@@ -42,3 +42,42 @@ export function attachAsyncUnlisten(
     unlisten = null;
   };
 }
+
+/** Registers async listeners before reconciling their current backend snapshot. */
+export function attachAsyncUnlistenersWithSnapshot<T>(
+  subscriptions: readonly Promise<() => void>[],
+  getSnapshot: () => Promise<readonly T[]>,
+  applySnapshot: (items: readonly T[]) => void,
+  reportError: (error: unknown) => void,
+): () => void {
+  let disposed = false;
+  let unlisten: (() => void)[] = [];
+
+  void Promise.allSettled(subscriptions)
+    .then(async (results) => {
+      const stopListening = results.flatMap((result) =>
+        result.status === "fulfilled" ? [result.value] : [],
+      );
+      const failed = results.find((result) => result.status === "rejected");
+      if (disposed || failed) {
+        stopListening.forEach((stop) => stop());
+        if (!disposed && failed?.status === "rejected") {
+          reportError(failed.reason);
+        }
+        return;
+      }
+      unlisten = stopListening;
+      try {
+        const snapshot = await getSnapshot();
+        if (!disposed) applySnapshot(snapshot);
+      } catch (error) {
+        if (!disposed) reportError(error);
+      }
+    });
+
+  return () => {
+    disposed = true;
+    unlisten.forEach((stop) => stop());
+    unlisten = [];
+  };
+}

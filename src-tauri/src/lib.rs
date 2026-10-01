@@ -298,6 +298,7 @@ pub fn run() {
             commands::transfer::get_transfer_history,
             commands::transfer::clear_transfer_history,
             commands::nearby::get_nearby_devices,
+            commands::nearby::get_pending_incoming_offers,
             commands::nearby::clear_peer_cache,
             commands::nearby::offer_share_to_peer,
             commands::nearby::respond_to_offer,
