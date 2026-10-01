@@ -35,6 +35,7 @@ import {
   flickDirectionForGesture,
   flickTargetAtPoint,
   isAdditionalFlickPointer,
+  movedBeyondFlickClickSlop,
   type FlickDirection,
   type FlickTargetBounds,
 } from "../lib/flickGesture";
@@ -142,6 +143,7 @@ interface ActiveFlick {
   targets?: FlickTargetBounds[];
   devices?: NearbyDevice[];
   selectionPaths?: string[];
+  movedBeyondClickSlop?: boolean;
 }
 
 interface ActiveSelectionDrag {
@@ -539,13 +541,6 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
       active.element.releasePointerCapture(active.pointerId);
     }
 
-    const atSystemEdge =
-      event.clientX < 24 ||
-      event.clientX > window.innerWidth - 24 ||
-      event.clientY < 24 ||
-      event.clientY > window.innerHeight - 24;
-    if (atSystemEdge) return;
-
     const targetNodeId = flickTargetAtPoint(
       active.targets ?? [],
       event.clientX,
@@ -694,6 +689,14 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
   ): void => {
     const active = activeFlickRef.current;
     if (!active || active.pointerId !== event.pointerId) return;
+    if (
+      movedBeyondFlickClickSlop(
+        event.clientX - active.startX,
+        event.clientY - active.startY,
+      )
+    ) {
+      active.movedBeyondClickSlop = true;
+    }
     const direction = flickDirectionForGesture({
       dx: event.clientX - active.startX,
       dy: event.clientY - active.startY,
@@ -725,7 +728,10 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
     const dx = event.clientX - active.startX;
     const dy = event.clientY - active.startY;
     const direction = flickDirectionForGesture({ dx, dy, elapsedMs });
-    if (active.nodeId) {
+    const movedBeyondClickSlop =
+      active.movedBeyondClickSlop ||
+      movedBeyondFlickClickSlop(dx, dy);
+    if (active.nodeId && movedBeyondClickSlop) {
       event.preventDefault();
       suppressFlickClickRef.current = active.nodeId;
       window.setTimeout(() => {
@@ -735,12 +741,6 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
       }, 0);
     }
 
-    const atSystemEdge =
-      event.clientX < 24 ||
-      event.clientX > window.innerWidth - 24 ||
-      event.clientY < 24 ||
-      event.clientY > window.innerHeight - 24;
-    if (atSystemEdge) return;
     const device = devices.find(
       (candidate) => candidate.node_id === active.nodeId,
     );
@@ -760,6 +760,8 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
     }
     if (direction) {
       void handleSendToDevice(device, direction);
+    } else if (movedBeyondClickSlop) {
+      setError("That swipe was too slow or short. Try a quicker flick or tap to send normally.");
     }
   };
 

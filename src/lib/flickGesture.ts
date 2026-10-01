@@ -55,6 +55,16 @@ export function arrivalDirectionFromSenderFlick(
 
 export const MIN_FLICK_DISTANCE_PX = 48;
 export const MIN_FLICK_VELOCITY_PX_PER_MS = 0.65;
+const FLICK_CLICK_SLOP_PX = 8;
+
+/** Distinguishes a tap from a pointer gesture that should not trigger its click action. */
+export function movedBeyondFlickClickSlop(dx: number, dy: number): boolean {
+  return (
+    Number.isFinite(dx) &&
+    Number.isFinite(dy) &&
+    Math.hypot(dx, dy) >= FLICK_CLICK_SLOP_PX
+  );
+}
 
 /** Resolves a pointer location against target geometry frozen for one gesture. */
 export function flickTargetAtPoint(

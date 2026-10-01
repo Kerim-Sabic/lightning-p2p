@@ -6,6 +6,7 @@ import {
   flickTargetAtPoint,
   isAdditionalFlickPointer,
   isDeliberateFlick,
+  movedBeyondFlickClickSlop,
 } from "./flickGesture";
 
 describe("classifyFlickDirection", () => {
@@ -89,6 +90,14 @@ describe("flickDirectionForGesture", () => {
     expect(flickDirectionForGesture({ dx: 20, dy: 0, elapsedMs: 5 })).toBe(
       null,
     );
+  });
+});
+
+describe("movedBeyondFlickClickSlop", () => {
+  it("keeps ordinary taps clickable while suppressing drag-generated clicks", () => {
+    expect(movedBeyondFlickClickSlop(3, 4)).toBe(false);
+    expect(movedBeyondFlickClickSlop(8, 0)).toBe(true);
+    expect(movedBeyondFlickClickSlop(Number.NaN, 10)).toBe(false);
   });
 });
 
