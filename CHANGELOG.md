@@ -18,12 +18,19 @@ All notable changes to Lightning P2P are documented here. The project follows se
 - Recover file and folder receives after restart when verified output was published but completion history had not yet been flushed.
 - Make prolonged storage startup guidance explain how to recover when initialization does not finish.
 
-## [Unreleased]
+## [0.9.19] - 2026-10-01 ("Android Share Cache Lifecycle")
+
+- Remove app-private copies of Android share-sheet files when a selection is
+  replaced, cleared, or trimmed, and when an undrained share intent is superseded.
+- Restrict cleanup to direct regular files in Lightning's private share-staging
+  directory; stale cache entries remain covered by the startup sweeper.
 
 ### Fixed
 
 - Key completed receive history by transfer ID and block stale resume requests
   after the saved transfer's completion event was lost.
+
+## [Unreleased]
 
 ## [0.9.16] - 2026-10-01 ("Reliable Startup and Receiving")
 
