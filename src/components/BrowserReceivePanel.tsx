@@ -17,6 +17,7 @@ import {
   inspectTicket,
   saveReceivedFile,
   saveReceivedFileStreaming,
+  verifiedCollectionSize,
   type TicketInfo,
 } from "../lib/webReceiver";
 import { browserReceiveFileKey } from "../lib/browserReceiveFiles";
@@ -133,7 +134,7 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
           }
           return !controller.signal.aborted;
         });
-        const verifiedSize = files.reduce((sum, file) => sum + file.size, 0);
+        const verifiedSize = verifiedCollectionSize(files);
         setInfo((current) =>
           current ? { ...current, size: verifiedSize } : current,
         );
@@ -161,10 +162,7 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
         setReceivedBytes(latestBytes);
         setStatus("Reading files…");
         const receivedFiles = await rx.listCollection(root);
-        const verifiedSize = receivedFiles.reduce(
-          (sum, file) => sum + file.size,
-          0,
-        );
+        const verifiedSize = verifiedCollectionSize(receivedFiles);
         setInfo((current) =>
           current ? { ...current, size: verifiedSize } : current,
         );

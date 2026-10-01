@@ -134,7 +134,25 @@ export function browserReceiveSupported(): boolean {
 export async function inspectTicket(ticket: string): Promise<TicketInfo> {
   const mod = await loadModule();
   const parsed = JSON.parse(mod.inspect_ticket(ticket)) as TicketInfo;
-  return { label: parsed.label ?? "", size: Number(parsed.size ?? 0) };
+  const size = Number(parsed.size ?? 0);
+  if (!Number.isSafeInteger(size) || size < 0) {
+    throw new Error("This ticket's size is outside the browser-safe range.");
+  }
+  return { label: parsed.label ?? "", size };
+}
+
+/** Adds authenticated collection sizes without accepting overflow or precision loss. */
+export function verifiedCollectionSize(files: readonly CollectionFile[]): number {
+  return files.reduce((total, file) => {
+    if (!Number.isSafeInteger(file.size) || file.size < 0) {
+      throw new Error("A file size is outside the browser-safe range.");
+    }
+    const combined = total + file.size;
+    if (!Number.isSafeInteger(combined)) {
+      throw new Error("The collection is too large for safe browser accounting.");
+    }
+    return combined;
+  }, 0);
 }
 
 /** True when the loaded cached WASM engine supports bounded streamed receive. */
@@ -211,6 +229,7 @@ export class BrowserReceiver {
   async listCollection(rootHex: string): Promise<CollectionFile[]> {
     const raw = await this.inner.list_collection(rootHex);
     const parsed = JSON.parse(raw) as CollectionFile[];
+    verifiedCollectionSize(parsed);
     return parsed.map((file) => ({
       name: file.name,
       hash: file.hash,
@@ -233,6 +252,15 @@ export class BrowserReceiver {
     offset: number,
     len: number,
   ): Promise<Uint8Array> {
+    if (
+      !Number.isSafeInteger(offset) ||
+      !Number.isSafeInteger(len) ||
+      offset < 0 ||
+      len < 0 ||
+      !Number.isSafeInteger(offset + len)
+    ) {
+      throw new Error("The requested file range is outside the browser-safe range.");
+    }
     if (!this.inner.read_blob_range)
       throw new Error("engine version without ranged reads");
     return this.inner.read_blob_range(hashHex, offset, len);
@@ -263,6 +291,7 @@ export class BrowserReceiver {
       onProgress,
     );
     const parsed = JSON.parse(raw) as CollectionFile[];
+    verifiedCollectionSize(parsed);
     return parsed.map((file) => ({
       name: file.name,
       hash: file.hash,
@@ -277,6 +306,9 @@ export class BrowserReceiver {
     onChunk: (chunk: Uint8Array) => Promise<void>,
     onProgress?: (receivedBytes: number) => void,
   ): Promise<number> {
+    if (!Number.isSafeInteger(expectedSize) || expectedSize < 0) {
+      throw new Error("This file size is outside the browser-safe range.");
+    }
     if (!this.inner.stream_blob_to)
       throw new Error("engine version without streamed receive");
     let receivedBytes = 0;

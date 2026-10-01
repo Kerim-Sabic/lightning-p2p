@@ -3,6 +3,7 @@ import {
   BrowserReceiver,
   saveReceivedFileStreaming,
   supportsStreamingReceiveApi,
+  verifiedCollectionSize,
 } from "./webReceiver";
 
 afterEach(() => {
@@ -78,5 +79,28 @@ describe("supportsStreamingReceiveApi", () => {
       }),
     ).toBe(false);
     expect(supportsStreamingReceiveApi(undefined)).toBe(false);
+  });
+});
+
+describe("verifiedCollectionSize", () => {
+  it("safely totals individually verified collection sizes", () => {
+    expect(
+      verifiedCollectionSize([
+        { name: "a.bin", hash: "a", size: 32 },
+        { name: "b.bin", hash: "b", size: 70 },
+      ]),
+    ).toBe(102);
+  });
+
+  it("rejects invalid sizes and aggregate precision loss", () => {
+    expect(() =>
+      verifiedCollectionSize([{ name: "bad", hash: "a", size: Number.NaN }]),
+    ).toThrow("outside the browser-safe range");
+    expect(() =>
+      verifiedCollectionSize([
+        { name: "large-a", hash: "a", size: Number.MAX_SAFE_INTEGER },
+        { name: "large-b", hash: "b", size: 1 },
+      ]),
+    ).toThrow("too large for safe browser accounting");
   });
 });
