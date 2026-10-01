@@ -221,6 +221,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
   const [verifiedNodeIds, setVerifiedNodeIds] = useState<Set<string>>(
     () => new Set(),
   );
+  const pairedDevicesRevision = useRef(0);
   const [flickHint, setFlickHint] = useState<string | null>(null);
   const suppressFlickClickRef = useRef<string | null>(null);
   const recipientDevices = flickDevices ?? devices;
@@ -235,14 +236,17 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
   useEffect(() => {
     if (!nativeRuntime) return;
     let active = true;
+    const revision = ++pairedDevicesRevision.current;
     void listPairedDevices()
       .then((paired) => {
-        if (active) {
+        if (active && revision === pairedDevicesRevision.current) {
           setVerifiedNodeIds(new Set(paired.map((device) => device.node_id)));
         }
       })
       .catch(() => {
-        if (active) setVerifiedNodeIds(new Set());
+        if (active && revision === pairedDevicesRevision.current) {
+          setVerifiedNodeIds(new Set());
+        }
       });
     return () => {
       active = false;
@@ -253,6 +257,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
     if (!nativeRuntime) return;
     return attachAsyncUnlisten(
       onPairedDevicesUpdated((paired) => {
+        pairedDevicesRevision.current += 1;
         setVerifiedNodeIds(new Set(paired.map((device) => device.node_id)));
       }),
       (error: unknown) =>

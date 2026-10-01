@@ -95,16 +95,16 @@ function ReadyToCatchNotice({
   }, [expiresAtMs, onExpire]);
 
   return (
-    <div className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl border border-sky-300/20 bg-sky-400/[0.07] px-4 py-3">
-      <Clock3 className="h-4 w-4 text-sky-200" />
-      <p className="min-w-0 flex-1 text-xs leading-5 text-sky-50/85">
+    <div className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl border border-[var(--accent-border)] bg-[var(--accent-subtle)] px-4 py-3">
+      <Clock3 className="h-4 w-4 text-[var(--accent-primary)]" />
+      <p className="min-w-0 flex-1 text-sm leading-5 text-[var(--fg-secondary)]">
         Ready to Catch from <strong>{deviceName}</strong> for {secondsRemaining}
         s. One supported file up to 100 MiB. Received files never open
         automatically.
       </p>
       <button
         type="button"
-        className="glass-button min-h-9 px-3 py-1.5 text-xs"
+        className="min-h-11 rounded-xl border border-[var(--border-strong)] bg-[var(--surface-0)] px-3 py-1.5 text-sm font-medium text-[var(--fg-primary)] hover:bg-[var(--surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
         onClick={onCancel}
       >
         Cancel
@@ -148,6 +148,7 @@ export function DevicesView() {
   const [localIdentity, setLocalIdentity] =
     useState<LocalDeviceIdentity | null>(null);
   const [pairedDevices, setPairedDevices] = useState<PairedDevice[]>([]);
+  const pairedDevicesRevision = useRef(0);
   const [pairingCandidate, setPairingCandidate] = useState<NearbyDevice | null>(
     null,
   );
@@ -229,9 +230,12 @@ export function DevicesView() {
   useEffect(() => {
     if (!nativeRuntime) return;
     let active = true;
+    const revision = ++pairedDevicesRevision.current;
     void listPairedDevices()
       .then((saved) => {
-        if (active) setPairedDevices(saved);
+        if (active && revision === pairedDevicesRevision.current) {
+          setPairedDevices(saved);
+        }
       })
       .catch((error: unknown) => {
         if (active)
@@ -249,7 +253,10 @@ export function DevicesView() {
   useEffect(() => {
     if (!nativeRuntime) return;
     return attachAsyncUnlisten(
-      onPairedDevicesUpdated((saved) => setPairedDevices(saved)),
+      onPairedDevicesUpdated((saved) => {
+        pairedDevicesRevision.current += 1;
+        setPairedDevices(saved);
+      }),
       (error: unknown) =>
         setError(
           error instanceof Error
@@ -282,6 +289,7 @@ export function DevicesView() {
         pairingCandidate.node_id,
         pairingName,
       );
+      pairedDevicesRevision.current += 1;
       setPairedDevices(saved);
       setPairingCandidate(null);
       setPairingCode(null);
@@ -296,7 +304,9 @@ export function DevicesView() {
 
   const revokeDevice = async (nodeId: string): Promise<void> => {
     try {
-      setPairedDevices(await removePairedDevice(nodeId));
+      const saved = await removePairedDevice(nodeId);
+      pairedDevicesRevision.current += 1;
+      setPairedDevices(saved);
       setReadySession(null);
     } catch (error) {
       setError(
@@ -327,7 +337,9 @@ export function DevicesView() {
 
   const saveRename = async (nodeId: string): Promise<void> => {
     try {
-      setPairedDevices(await renamePairedDevice(nodeId, renamingValue));
+      const saved = await renamePairedDevice(nodeId, renamingValue);
+      pairedDevicesRevision.current += 1;
+      setPairedDevices(saved);
       setRenamingNodeId(null);
     } catch (error) {
       setError(
@@ -549,9 +561,7 @@ export function DevicesView() {
                 <DeviceCard
                   device={device}
                   busy={busyNodeId === device.node_id}
-                  disabled={
-                    !nativeRuntime || isPreparingSelection || isSharing
-                  }
+                  disabled={!nativeRuntime || isPreparingSelection || isSharing}
                   onSend={(target) => void handleSend(target)}
                 />
                 {pairedDevices.some(
@@ -591,7 +601,7 @@ export function DevicesView() {
             <p className="page-eyebrow">Your devices</p>
             <h2
               id="my-devices-title"
-              className="mt-1 text-lg font-semibold text-white"
+              className="mt-1 text-lg font-semibold text-[var(--fg-primary)]"
             >
               My Devices
             </h2>
@@ -616,7 +626,7 @@ export function DevicesView() {
           />
         ) : null}
         {pairedDevices.length === 0 ? (
-          <p className="mt-4 rounded-2xl border border-white/[0.08] bg-white/[0.025] px-4 py-4 text-sm text-slate-400">
+          <p className="mt-4 rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-1)] px-4 py-4 text-sm leading-6 text-[var(--fg-secondary)]">
             Verify a nearby device to add it here. Compare the verification code
             on both devices in person.
           </p>
@@ -625,7 +635,7 @@ export function DevicesView() {
             {pairedDevices.map((device) => (
               <li
                 key={device.node_id}
-                className="flex flex-wrap items-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.025] px-4 py-3"
+                className="flex flex-wrap items-center gap-3 rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-1)] px-4 py-3"
               >
                 {renamingNodeId === device.node_id ? (
                   <form
@@ -641,16 +651,16 @@ export function DevicesView() {
                       onChange={(event) => setRenamingValue(event.target.value)}
                       maxLength={64}
                       aria-label="Device name"
-                      className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none focus:border-blue-300/60"
+                      className="min-h-11 min-w-0 flex-1 rounded-xl border border-[var(--border-strong)] bg-[var(--surface-0)] px-3 py-2 text-sm text-[var(--fg-primary)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
                     />
                     <button
-                      className="glass-button px-3 py-2 text-xs"
+                      className="min-h-11 rounded-xl border border-[var(--border-strong)] bg-[var(--surface-0)] px-3 py-2 text-sm font-medium text-[var(--fg-primary)] hover:bg-[var(--surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
                       type="submit"
                     >
                       Save
                     </button>
                     <button
-                      className="glass-button px-3 py-2 text-xs"
+                      className="min-h-11 rounded-xl border border-[var(--border-strong)] bg-[var(--surface-0)] px-3 py-2 text-sm font-medium text-[var(--fg-primary)] hover:bg-[var(--surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
                       type="button"
                       onClick={() => setRenamingNodeId(null)}
                     >
@@ -660,16 +670,16 @@ export function DevicesView() {
                 ) : (
                   <>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold text-white">
+                      <p className="truncate text-sm font-semibold text-[var(--fg-primary)]">
                         {safeDisplayText(device.name, "Saved device")}
                       </p>
-                      <p className="mt-1 truncate font-mono text-[11px] text-slate-500">
+                      <p className="mt-1 truncate font-mono text-xs text-[var(--fg-muted)]">
                         {device.node_id}
                       </p>
                     </div>
                     <button
                       type="button"
-                      className={`glass-button px-3 py-2 text-xs ${readySession?.nodeId === device.node_id ? "border-sky-300/40 text-sky-100" : ""}`}
+                      className={`min-h-11 rounded-xl border border-[var(--border-strong)] bg-[var(--surface-0)] px-3 py-2 text-sm font-medium text-[var(--fg-primary)] hover:bg-[var(--surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] ${readySession?.nodeId === device.node_id ? "border-[var(--accent-border)] bg-[var(--accent-subtle)] text-[var(--accent-primary)]" : ""}`}
                       onClick={() => void toggleReadyToCatch(device.node_id)}
                     >
                       {readySession?.nodeId === device.node_id
@@ -678,17 +688,19 @@ export function DevicesView() {
                     </button>
                     <button
                       type="button"
-                      className="glass-button px-3 py-2 text-xs"
+                      className="min-h-11 rounded-xl border border-[var(--border-strong)] bg-[var(--surface-0)] px-3 py-2 text-sm font-medium text-[var(--fg-primary)] hover:bg-[var(--surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
                       onClick={() => {
                         setRenamingNodeId(device.node_id);
-                        setRenamingValue(safeDisplayText(device.name, "Saved device"));
+                        setRenamingValue(
+                          safeDisplayText(device.name, "Saved device"),
+                        );
                       }}
                     >
                       Rename
                     </button>
                     <button
                       type="button"
-                      className="glass-button px-3 py-2 text-xs text-rose-200"
+                      className="min-h-11 rounded-xl border border-[var(--danger-border)] bg-[var(--danger-bg)] px-3 py-2 text-sm font-medium text-[var(--danger-copy)] hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--danger-copy)]"
                       onClick={() => void revokeDevice(device.node_id)}
                     >
                       Remove
@@ -703,7 +715,7 @@ export function DevicesView() {
 
       {pairingCandidate && pairingCode ? (
         <div
-          className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4"
+          className="fixed inset-0 z-50 grid place-items-center bg-black/55 p-3 backdrop-blur-sm sm:p-4"
           role="presentation"
           tabIndex={-1}
           onKeyDown={(event) => {
@@ -725,25 +737,32 @@ export function DevicesView() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="pair-device-title"
-            className="w-full max-w-md rounded-3xl border border-white/10 bg-[#181b21] p-6 shadow-2xl"
+            aria-describedby="pair-device-details"
+            className="max-h-[min(90dvh,720px)] w-full max-w-md overflow-y-auto rounded-3xl border border-[var(--border-strong)] bg-[var(--surface-0)] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.3)] sm:p-6"
           >
             <p className="page-eyebrow">Verify identity</p>
             <h2
               id="pair-device-title"
-              className="mt-2 text-xl font-semibold text-white"
+              className="mt-2 text-xl font-semibold text-[var(--fg-primary)]"
             >
               Is this your device?
             </h2>
-            <p className="mt-2 text-sm leading-6 text-slate-300">
-              On <strong>{safeDisplayText(pairingCandidate.device_name, "Nearby device")}</strong>, open Devices
-              and verify this device too. Compare the code in person before
-              saving.
+            <p
+              id="pair-device-details"
+              className="mt-2 text-sm leading-6 text-[var(--fg-secondary)]"
+            >
+              On{" "}
+              <strong>
+                {safeDisplayText(pairingCandidate.device_name, "Nearby device")}
+              </strong>
+              , open Devices and verify this device too. Compare the code in
+              person before saving.
             </p>
-            <p className="my-5 rounded-2xl border border-blue-300/20 bg-blue-400/[0.08] py-4 text-center font-mono text-2xl font-semibold tracking-[0.18em] text-blue-100">
+            <p className="my-5 rounded-2xl border border-[var(--accent-border)] bg-[var(--accent-subtle)] py-4 text-center font-mono text-2xl font-semibold tracking-[0.18em] text-[var(--accent-primary)]">
               {pairingCode}
             </p>
             <label
-              className="block text-xs font-medium text-slate-300"
+              className="block text-sm font-medium text-[var(--fg-secondary)]"
               htmlFor="paired-device-name"
             >
               Name on this device
@@ -755,18 +774,18 @@ export function DevicesView() {
               value={pairingName}
               onChange={(event) => setPairingName(event.target.value)}
               maxLength={64}
-              className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm text-white outline-none focus:border-blue-300/60"
+              className="mt-2 min-h-11 w-full rounded-xl border border-[var(--border-strong)] bg-[var(--surface-1)] px-3 py-2.5 text-sm text-[var(--fg-primary)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
             />
-            <p className="mt-3 text-xs leading-5 text-slate-500">
+            <p className="mt-3 text-sm leading-5 text-[var(--fg-muted)]">
               The code is derived from both authenticated public device
               identities. A saved identity does not enable automatic receiving.
             </p>
-            <label className="mt-4 flex cursor-pointer items-start gap-3 text-sm leading-5 text-slate-200">
+            <label className="mt-4 flex min-h-11 cursor-pointer items-start gap-3 text-sm leading-5 text-[var(--fg-primary)]">
               <input
                 type="checkbox"
                 checked={codesConfirmed}
                 onChange={(event) => setCodesConfirmed(event.target.checked)}
-                className="mt-1 accent-blue-500"
+                className="mt-1 accent-[var(--accent-primary)]"
               />
               <span>I compared both codes in person and they match.</span>
             </label>
@@ -778,7 +797,7 @@ export function DevicesView() {
                   setPairingCandidate(null);
                   setPairingCode(null);
                 }}
-                className="glass-button px-4 py-2.5 text-sm"
+                className="min-h-11 rounded-xl border border-[var(--border-strong)] bg-[var(--surface-1)] px-4 py-2.5 text-sm font-medium text-[var(--fg-primary)] transition hover:bg-[var(--surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] disabled:opacity-55"
               >
                 Cancel
               </button>
@@ -790,7 +809,7 @@ export function DevicesView() {
                   pairingName.trim().length === 0
                 }
                 onClick={() => void confirmPairing()}
-                className="btn-primary inline-flex items-center gap-2"
+                className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--accent-primary)] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[var(--accent-primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface-0)] disabled:opacity-55"
               >
                 <Check className="h-4 w-4" />
                 {savingPair ? "Saving…" : "Save verified device"}
