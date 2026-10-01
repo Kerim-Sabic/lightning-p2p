@@ -3,6 +3,7 @@ import {
   arrivalDirectionFromSenderFlick,
   classifyFlickDirection,
   flickTargetAtPoint,
+  isAdditionalFlickPointer,
   isDeliberateFlick,
 } from "./flickGesture";
 
@@ -73,6 +74,18 @@ describe("isDeliberateFlick", () => {
         elapsedMs: 100,
       }),
     ).toBe(true);
+  });
+});
+
+describe("isAdditionalFlickPointer", () => {
+  it("cancels an active gesture when another non-primary pointer starts", () => {
+    expect(isAdditionalFlickPointer(1, 2, false)).toBe(true);
+  });
+
+  it("keeps primary pointer starts and idle state from canceling a gesture", () => {
+    expect(isAdditionalFlickPointer(1, 2, true)).toBe(false);
+    expect(isAdditionalFlickPointer(1, 1, false)).toBe(false);
+    expect(isAdditionalFlickPointer(null, 2, false)).toBe(false);
   });
 });
 

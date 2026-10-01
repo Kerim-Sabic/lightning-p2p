@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import {
   useEffect,
+  useEffectEvent,
   useMemo,
   useRef,
   useState,
@@ -33,6 +34,7 @@ import {
   arrivalDirectionFromSenderFlick,
   classifyFlickDirection,
   flickTargetAtPoint,
+  isAdditionalFlickPointer,
   isDeliberateFlick,
   type FlickDirection,
   type FlickTargetBounds,
@@ -782,6 +784,32 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
       window.removeEventListener("resize", cancel);
       window.removeEventListener("orientationchange", cancel);
       window.removeEventListener("scroll", cancel, true);
+    };
+  }, []);
+
+  const cancelOnAdditionalPointer = useEffectEvent((event: PointerEvent) => {
+    const active = activeFlickRef.current;
+    if (
+      !isAdditionalFlickPointer(
+        active?.pointerId ?? null,
+        event.pointerId,
+        event.isPrimary,
+      )
+    ) {
+      return;
+    }
+
+    cancelFlick();
+    setFlickHint(null);
+    setError(
+      "Flick cancelled because another pointer started. Try again with one finger.",
+    );
+  });
+
+  useEffect(() => {
+    window.addEventListener("pointerdown", cancelOnAdditionalPointer, true);
+    return () => {
+      window.removeEventListener("pointerdown", cancelOnAdditionalPointer, true);
     };
   }, []);
 

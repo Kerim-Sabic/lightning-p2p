@@ -12,6 +12,19 @@ export interface FlickTargetBounds {
   bottom: number;
 }
 
+/** Returns true when a second non-primary pointer should cancel an active flick. */
+export function isAdditionalFlickPointer(
+  activePointerId: number | null,
+  incomingPointerId: number,
+  isPrimary: boolean,
+): boolean {
+  return (
+    activePointerId !== null &&
+    incomingPointerId !== activePointerId &&
+    !isPrimary
+  );
+}
+
 export type FlickDirection =
   | "right"
   | "down_right"
