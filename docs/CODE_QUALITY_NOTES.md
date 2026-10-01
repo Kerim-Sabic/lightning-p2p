@@ -10,7 +10,7 @@ These notes summarize the launch-readiness audit and the changes made in this pa
 - Hid raw receive handoff tickets by default and documented that revealing/copying the raw ticket is sensitive.
 - Added diagnostic redaction for ticket-like strings in frontend, Rust, and Android log tails before bundles are copied.
 - Baseline checks after this pass: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm check:release-state`, `cargo fmt --check`, `cargo test --lib`, and `cargo clippy --all-targets -- -D warnings` pass. The same non-integration baseline is available as `pnpm check:baseline`.
-- The full Rust integration harness in `tests/transfer_test.rs` is compiled out on Windows. The manifest-less Cargo test executable imported `TaskDialogIndirect` from `comctl32.dll` before the Rust test harness started and exited with `STATUS_ENTRYPOINT_NOT_FOUND` (`0xc0000139`). Non-Windows `cargo test` still runs the end-to-end iroh transfer harness; Windows transfer coverage should use packaged-app smoke tests until a Cargo test host can embed the same Common Controls v6 activation context as the Tauri app.
+- The Rust integration harness in `tests/transfer_test.rs` now embeds the Common Controls v6 manifest in its Windows test executable, matching the activation context Tauri needs for `TaskDialogIndirect`. The default end-to-end file, safe-overwrite, and 1,024-file directory transfers run on Windows as well as non-Windows hosts; larger transfer cases remain ignored manual smoke tests.
 
 ## Fixed In This Pass
 

@@ -1,11 +1,4 @@
-#![cfg(not(windows))]
 #![allow(clippy::cast_possible_truncation, clippy::ignored_unit_patterns)]
-
-// This end-to-end harness links the full Tauri library graph. On Windows, the
-// manifest-less Cargo test executable can import comctl32 v5 before the Rust
-// harness starts and fail with STATUS_ENTRYPOINT_NOT_FOUND for TaskDialogIndirect.
-// Keep Windows transfer validation in packaged-app smoke tests until the test
-// host can embed the same Common Controls v6 activation context as the app.
 
 use lightning_p2p_lib::node::LightningP2PNode;
 use lightning_p2p_lib::transfer::ticket::ShareTicket;

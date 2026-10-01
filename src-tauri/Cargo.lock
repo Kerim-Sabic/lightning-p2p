@@ -3763,6 +3763,7 @@ dependencies = [
  "criterion",
  "dirs",
  "ed25519-dalek 2.2.0",
+ "embed-resource",
  "flate2",
  "fs2",
  "futures-util",
