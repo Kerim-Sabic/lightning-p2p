@@ -9,6 +9,7 @@ import {
 } from "react";
 import { useTransfer } from "./hooks/useTransfer";
 import { attachAsyncUnlisten } from "./hooks/asyncSubscription";
+import { engineStatusPresentation } from "./lib/firstRunStatus";
 import {
   drainPendingSharedFiles,
   drainPendingSharedTicket,
@@ -204,6 +205,9 @@ function NativeAppShell({ runtimeKind }: NativeAppShellProps) {
   const [view, setView] = useState<View>("send");
   const error = useTransferStore((state) => state.error);
   const appError = useTransferStore((state) => state.appError);
+  const nodeSupervisorStatus = useTransferStore(
+    (state) => state.nodeSupervisorStatus,
+  );
   const clearError = useTransferStore((state) => state.clearError);
   const setPendingReceiveTicket = useTransferStore(
     (state) => state.setPendingReceiveTicket,
@@ -214,6 +218,7 @@ function NativeAppShell({ runtimeKind }: NativeAppShellProps) {
   const createShare = useTransferStore((state) => state.createShare);
   useTransfer();
   const mobileRuntime = runtimeKind === "android" || runtimeKind === "ios";
+  const engineStatus = engineStatusPresentation(nodeSupervisorStatus);
 
   useEffect(() => {
     const subscription = onDeepLinkOpened((ticket) => {
@@ -350,6 +355,33 @@ function NativeAppShell({ runtimeKind }: NativeAppShellProps) {
                 message={error}
                 onDismiss={clearError}
               />
+              {nodeSupervisorStatus.phase !== "idle" ? (
+                <section
+                  role={engineStatus.tone === "attention" ? "alert" : "status"}
+                  aria-live={engineStatus.tone === "attention" ? "assertive" : "polite"}
+                  className={`flex flex-wrap items-center gap-3 rounded-2xl border px-4 py-3 ${
+                    engineStatus.tone === "attention"
+                      ? "border-[var(--amber-border)] bg-[var(--amber-bg)]"
+                      : "border-[var(--accent-border)] bg-[var(--surface-0)]"
+                  }`}
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-[var(--fg-primary)]">
+                      Transfer engine · {engineStatus.label}
+                    </p>
+                    <p className="mt-0.5 text-sm leading-5 text-[var(--fg-secondary)]">
+                      {engineStatus.copy}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleNavigate("settings")}
+                    className="inline-flex min-h-11 shrink-0 items-center rounded-xl border border-[var(--border-strong)] bg-[var(--surface-0)] px-3 text-sm font-semibold text-[var(--fg-primary)] transition hover:bg-[var(--surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
+                  >
+                    Engine status
+                  </button>
+                </section>
+              ) : null}
               {content}
               <TransferTray
                 mobileRuntime={mobileRuntime}
