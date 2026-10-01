@@ -646,7 +646,11 @@ export function SettingsView() {
                   {nodeSupervisorStatus.last_error}
                 </p>
               ) : null}
-              {nodeSupervisorStatus.phase === "failed" && nativeRuntime ? (
+              {nodeSupervisorStatus.phase === "failed" &&
+              nativeRuntime &&
+              !nodeSupervisorStatus.last_error?.includes(
+                "Close and reopen Lightning",
+              ) ? (
                 <div className="mt-3">
                   <button
                     type="button"

@@ -28,6 +28,7 @@ const NODE_START_PREPARATION_TIMEOUT: Duration = Duration::from_secs(5);
 // iroh-blobs starts its own actor/runtime while opening the store, so cancelling
 // this future can leave an orphaned database actor holding the file lock.
 const NODE_START_WARNING_AFTER: Duration = Duration::from_secs(60);
+const NODE_START_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 
 /// Nearby services that must remain attached to the node across restarts.
 #[derive(Debug, Clone)]
@@ -426,6 +427,7 @@ impl NodeSupervisor {
         Box::pin(await_start_with_warning(
             start,
             NODE_START_WARNING_AFTER,
+            NODE_START_TIMEOUT,
             async {
             let message = "The local transfer store is taking longer than usual to open. Startup is continuing; keep Lightning open. If this persists, close any other Lightning window and retry from Settings.";
             tracing::warn!(
@@ -476,8 +478,9 @@ impl NodeSupervisor {
 async fn await_start_with_warning<F, W>(
     start: F,
     warning_after: Duration,
+    startup_timeout: Duration,
     warning: W,
-) -> std::result::Result<F::Output, tokio::task::JoinError>
+) -> std::result::Result<F::Output, String>
 where
     F: Future + Send + 'static,
     F::Output: Send + 'static,
@@ -485,10 +488,18 @@ where
 {
     let mut start = tokio::spawn(start);
     match tokio::time::timeout(warning_after, &mut start).await {
-        Ok(result) => result,
+        Ok(result) => result.map_err(|error| error.to_string()),
         Err(_elapsed) => {
             warning.await;
-            start.await
+            match tokio::time::timeout(startup_timeout.saturating_sub(warning_after), &mut start)
+                .await
+            {
+                Ok(result) => result.map_err(|error| error.to_string()),
+                Err(_elapsed) => {
+                    start.abort();
+                    Err("Node startup exceeded five minutes. Close and reopen Lightning to release any pending storage initialization, then try again.".into())
+                }
+            }
         }
     }
 }
@@ -531,9 +542,14 @@ mod tests {
             Poll::Ready(42)
         });
 
-        let result = await_start_with_warning(start, Duration::from_secs(1), async {})
-            .await
-            .expect("startup task should complete");
+        let result = await_start_with_warning(
+            start,
+            Duration::from_secs(1),
+            Duration::from_secs(5),
+            async {},
+        )
+        .await
+        .expect("startup task should complete");
 
         assert_eq!(result, 42);
         assert_eq!(polls.load(Ordering::SeqCst), 1);
@@ -548,9 +564,14 @@ mod tests {
             42
         };
 
-        let result = await_start_with_warning(start, Duration::from_millis(1), async move {
-            warning_state.fetch_add(1, Ordering::SeqCst);
-        })
+        let result = await_start_with_warning(
+            start,
+            Duration::from_millis(1),
+            Duration::from_secs(5),
+            async move {
+                warning_state.fetch_add(1, Ordering::SeqCst);
+            },
+        )
         .await
         .expect("startup task should complete after warning");
 
@@ -559,10 +580,26 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn startup_that_never_finishes_is_bounded_and_reports_recovery_steps() {
+        let result = await_start_with_warning(
+            std::future::pending::<()>(),
+            Duration::from_millis(1),
+            Duration::from_millis(3),
+            async {},
+        )
+        .await;
+
+        assert!(result
+            .expect_err("hung startup must become a visible failure")
+            .contains("Close and reopen Lightning"));
+    }
+
+    #[tokio::test]
     async fn startup_panic_is_returned_as_a_join_error() {
         let result = await_start_with_warning(
             async { panic!("simulated startup panic") },
             Duration::from_secs(1),
+            Duration::from_secs(5),
             async {},
         )
         .await;

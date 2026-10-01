@@ -751,7 +751,9 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
       }, 0);
     }
 
-    const device = devices.find(
+    // Keep the receiver chosen on pointer-down. Nearby discovery can refresh
+    // its list while the pointer is held, but that must not retarget a Flick.
+    const device = active.devices?.find(
       (candidate) => candidate.node_id === active.nodeId,
     );
     if (!device) {
