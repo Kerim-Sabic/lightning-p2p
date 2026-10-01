@@ -173,14 +173,13 @@ export function OfferPrompt() {
   const pairedSender =
     pairedDevices?.find((device) => device.node_id === offer.sender_node_id) ??
     null;
-  const trustLabel =
-    !currentPairedLookup
-      ? "Checking device trust"
-      : currentPairedLookup.failed
-        ? "Trust status unavailable"
-        : pairedSender
-          ? "Verified device"
-          : "Unverified sender";
+  const trustLabel = !currentPairedLookup
+    ? "Checking device trust"
+    : currentPairedLookup.failed
+      ? "Trust status unavailable"
+      : pairedSender
+        ? "Verified device"
+        : "Unverified sender";
   const senderName = safeDisplayText(
     pairedSender?.name || offer.sender_device_name,
     "Nearby device",
@@ -270,20 +269,21 @@ export function OfferPrompt() {
 
   return (
     <div
-      className="fixed inset-0 z-[1000] flex items-end justify-center bg-black/60 p-4 backdrop-blur-sm sm:items-center"
+      className="fixed inset-0 z-[1000] flex items-end justify-center bg-black/55 p-3 backdrop-blur-sm sm:items-center sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="offer-prompt-title"
+      aria-describedby="offer-prompt-details"
     >
       <article
         ref={dialogRef}
         tabIndex={-1}
         onKeyDown={handleDialogKeyDown}
-        className="glass-panel w-full max-w-md p-5 shadow-2xl"
+        className="max-h-[min(90dvh,720px)] w-full max-w-md overflow-y-auto rounded-3xl border border-[var(--border-strong)] bg-[var(--surface-0)] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.3)] sm:max-h-[85vh] sm:p-6"
       >
         <header className="flex items-start gap-3">
-          <div className="glass-icon h-12 w-12 rounded-[18px]">
-            <Inbox className="h-5 w-5 text-emerald-200" />
+          <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-2)]">
+            <Inbox className="h-5 w-5 text-[var(--accent-primary)]" />
           </div>
           <div className="min-w-0 flex-1">
             <p className="page-eyebrow">
@@ -293,15 +293,15 @@ export function OfferPrompt() {
             </p>
             <h2
               id="offer-prompt-title"
-              className="mt-1 truncate text-lg font-semibold text-white"
+              className="mt-1 truncate text-lg font-semibold text-[var(--fg-primary)]"
             >
               {senderName} wants to share
             </h2>
             <p
               className={`mt-1.5 inline-flex min-h-7 items-center rounded-full border px-2.5 text-[11px] font-semibold ${
                 pairedSender
-                  ? "border-[color:var(--signal-green)]/30 bg-[color:var(--signal-green)]/10 text-[var(--signal-green)]"
-                  : "border-[color:var(--proof-amber)]/30 bg-[color:var(--proof-amber)]/10 text-[var(--proof-amber)]"
+                  ? "border-[var(--state-success)]/30 bg-[var(--state-success)]/10 text-[var(--state-success)]"
+                  : "border-[var(--proof-amber)]/30 bg-[var(--proof-amber)]/10 text-[var(--proof-amber)]"
               }`}
               role="status"
             >
@@ -310,21 +310,24 @@ export function OfferPrompt() {
           </div>
         </header>
 
-        <div className="glass-subtle mt-4 flex items-start gap-3 p-4">
-          <div className="glass-icon h-10 w-10 shrink-0">
-            <LaptopMinimal className="h-4 w-4 text-sky-200" />
+        <div className="mt-4 flex items-start gap-3 rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-1)] p-4">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-2)]">
+            <LaptopMinimal className="h-4 w-4 text-[var(--accent-primary)]" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold text-white">
+            <p className="truncate text-[15px] font-semibold text-[var(--fg-primary)]">
               {offerLabel}
             </p>
-            <p className="mt-1 text-xs text-slate-400">
+            <p
+              id="offer-prompt-details"
+              className="mt-1.5 text-sm leading-6 text-[var(--fg-secondary)]"
+            >
               Sender estimates {fileCountLabel} · {formatBytes(offer.size)}
               <br />
               Save to {folderName || "your configured receive folder"}
               <br />
               Offer details are supplied by sender · Peer{" "}
-              <span className="font-mono">
+              <span className="font-mono text-[var(--fg-muted)]">
                 {offer.sender_node_id.slice(0, 12)}…
               </span>
             </p>
@@ -332,28 +335,27 @@ export function OfferPrompt() {
         </div>
 
         {flickArrivalDirection ? (
-          <div className="mt-3 flex items-center justify-center gap-2 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-xs text-slate-300">
+          <div className="mt-3 flex items-center justify-center gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-1)] px-3 py-2.5 text-sm text-[var(--fg-secondary)]">
             <span
-              className="flick-arrival-file grid h-7 w-7 place-items-center rounded-lg border border-sky-300/20 bg-sky-300/10 text-sky-100"
+              className="flick-arrival-file grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-[var(--accent-border)] bg-[var(--accent-subtle)] text-[var(--accent-primary)]"
               style={flickArrivalStyle}
               aria-hidden="true"
             >
               <File className="h-3.5 w-3.5" />
             </span>
             <span className="text-center">
-              <span className="block font-medium text-slate-200">
+              <span className="block font-medium text-[var(--fg-primary)]">
                 Arriving {arrivalLabel(flickArrivalDirection)} · approximate
               </span>
-              <span className="mt-0.5 block text-[10px] text-slate-500">
-                The flick hints at the sender’s side; no location data is
-                used.
+              <span className="mt-0.5 block text-xs text-[var(--fg-muted)]">
+                The flick hints at the sender’s side; no location data is used.
               </span>
             </span>
           </div>
         ) : null}
 
         {queue.length > 1 ? (
-          <p className="mt-3 text-[12px] text-slate-400">
+          <p className="mt-3 text-sm text-[var(--fg-secondary)]">
             {queue.length - 1} more offer{queue.length - 1 === 1 ? "" : "s"}{" "}
             waiting after this one.
           </p>
@@ -364,7 +366,7 @@ export function OfferPrompt() {
             type="button"
             onClick={() => void handleBlock()}
             disabled={pending || offer.ready_to_catch}
-            className="min-h-11 rounded-xl px-3 text-sm font-medium text-slate-300 underline-offset-4 hover:text-white hover:underline disabled:opacity-55"
+            className="min-h-11 rounded-xl px-3 text-sm font-medium text-[var(--fg-secondary)] underline-offset-4 hover:text-[var(--fg-primary)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] disabled:opacity-55"
           >
             Block this sender
           </button>
@@ -374,7 +376,7 @@ export function OfferPrompt() {
               type="button"
               onClick={() => void handleRespond(false)}
               disabled={pending || offer.ready_to_catch}
-              className="glass-button inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm text-slate-100"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[var(--border-strong)] bg-[var(--surface-1)] px-4 py-2.5 text-sm font-medium text-[var(--fg-primary)] transition hover:bg-[var(--surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] disabled:opacity-55"
             >
               <X className="h-4 w-4" />
               Decline
@@ -383,7 +385,7 @@ export function OfferPrompt() {
               type="button"
               onClick={() => void handleRespond(true)}
               disabled={pending || offer.ready_to_catch}
-              className="btn-success inline-flex items-center justify-center gap-2 px-4 py-2.5"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[var(--accent-primary)] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[var(--accent-primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface-0)] disabled:opacity-55"
             >
               <Check className="h-4 w-4" />
               {pending ? "Accepting..." : "Accept"}
@@ -391,7 +393,7 @@ export function OfferPrompt() {
           </div>
         </div>
 
-        <p className="mt-3 text-[11px] text-slate-500">
+        <p className="mt-3 text-sm leading-5 text-[var(--fg-muted)]">
           Accepting starts the download into your usual receive folder.
         </p>
       </article>
