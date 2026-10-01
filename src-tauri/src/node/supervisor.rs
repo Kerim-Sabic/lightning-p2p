@@ -21,7 +21,11 @@ use tauri::{AppHandle, Emitter};
 use tokio::sync::{Mutex, RwLock};
 
 const NODE_SUPERVISOR_STATUS_EVENT: &str = "node-supervisor-status";
-const NODE_START_TIMEOUT: Duration = Duration::from_secs(25);
+// Opening an existing on-disk blob store can take longer on Windows when the
+// database is large or the disk is cold. Keep startup bounded, but allow the
+// store to finish initializing instead of declaring a healthy install failed
+// after the old 25-second limit.
+const NODE_START_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// Nearby services that must remain attached to the node across restarts.
 #[derive(Debug, Clone)]
@@ -188,7 +192,7 @@ impl NodeSupervisor {
         settings: AppSettings,
         nearby: NearbyServices,
     ) {
-        if let Err(_error) = self
+        if let Err(error) = self
             .replace_node(
                 app,
                 settings,
@@ -198,7 +202,7 @@ impl NodeSupervisor {
             )
             .await
         {
-            tracing::error!("failed to start supervised iroh node");
+            tracing::error!(%error, "failed to start supervised iroh node");
         }
     }
 
@@ -418,7 +422,7 @@ impl NodeSupervisor {
             ),
         )
         .await;
-        tracing::error!(reason, "supervised node lifecycle failed");
+        tracing::error!(reason, error = %error, "supervised node lifecycle failed");
     }
 
     async fn set_status(&self, app: &AppHandle, status: NodeSupervisorStatus) {

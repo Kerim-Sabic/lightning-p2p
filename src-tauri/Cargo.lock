@@ -3779,6 +3779,7 @@ dependencies = [
  "noq-proto",
  "qrcode",
  "rand 0.8.6",
+ "redb",
  "serde",
  "serde_json",
  "sha2 0.10.9",

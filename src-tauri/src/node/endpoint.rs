@@ -34,7 +34,7 @@ use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 const ONLINE_WAIT_TIMEOUT: Duration = Duration::from_secs(6);
 const DB_FILE_NAME: &str = "lightning-p2p.db";
@@ -110,10 +110,18 @@ impl LightningP2PNode {
             "iroh endpoint bound (n0-discovery + mDNS)"
         );
 
+        tracing::info!("opening local blob store");
+        preserve_incompatible_blob_store(&data_dir)?;
         let store = load_blob_store(&data_dir).await?;
+        tracing::info!("local blob store ready");
         let db = open_storage_db(&data_dir)?;
-        let blob_access =
-            BlobAccessController::with_public_hashes(share_access::load_public_hashes(&db)?);
+        tracing::info!("local metadata database ready");
+        let public_hashes = share_access::load_public_hashes(&db)?;
+        tracing::info!(
+            public_hash_count = public_hashes.len(),
+            "loaded share access metadata"
+        );
+        let blob_access = BlobAccessController::with_public_hashes(public_hashes);
         let blobs = AuthorizedBlobsProtocol::new(store.as_ref(), blob_access.clone());
         let mut router_builder = Router::builder(endpoint.clone()).accept(iroh_blobs::ALPN, blobs);
         if let Some(protocol) = nearby_protocol {
@@ -124,6 +132,7 @@ impl LightningP2PNode {
             router_builder =
                 router_builder.accept(super::chat_protocol::CHAT_PROTOCOL_ALPN, protocol);
         }
+        tracing::info!("starting transfer protocol router");
         let router = router_builder.spawn();
         Ok(Self {
             endpoint,
@@ -453,6 +462,44 @@ async fn load_blob_store(data_dir: &Path) -> Result<FsStore> {
     FsStore::load(data_dir.join("blobs"))
         .await
         .map_err(|err| LightningP2PError::Blob(err.to_string()))
+}
+
+/// Keeps an older iroh-blobs database intact when the current redb version
+/// cannot open it, then lets the node create a fresh store for new transfers.
+fn preserve_incompatible_blob_store(data_dir: &Path) -> Result<()> {
+    let store_dir = data_dir.join("blobs");
+    let database_path = store_dir.join("blobs.db");
+    if !database_path.exists() {
+        return Ok(());
+    }
+
+    match redb::Database::open(&database_path) {
+        Ok(database) => drop(database),
+        Err(redb::DatabaseError::UpgradeRequired(version)) => {
+            let timestamp = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map_or(0, |duration| duration.as_secs());
+            let backup_stem = format!("blobs-legacy-redb-v{version}-{timestamp}");
+            let mut backup_dir = data_dir.join(&backup_stem);
+            let mut suffix = 1_u32;
+            while backup_dir.exists() {
+                backup_dir = data_dir.join(format!("{backup_stem}-{suffix}"));
+                suffix += 1;
+            }
+            std::fs::rename(&store_dir, &backup_dir)?;
+            tracing::warn!(
+                legacy_version = version,
+                backup_path = %backup_dir.display(),
+                "preserved incompatible transfer store; a fresh store will be created"
+            );
+        }
+        Err(error) => {
+            return Err(LightningP2PError::Blob(format!(
+                "Could not inspect the local transfer store: {error}"
+            )));
+        }
+    }
+    Ok(())
 }
 
 fn open_storage_db(data_dir: &Path) -> Result<StorageDb> {

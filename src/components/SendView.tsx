@@ -426,7 +426,6 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
     if (
       !event.isPrimary ||
       event.button !== 0 ||
-      event.pointerType === "mouse" ||
       shareSelection.length === 0 ||
       isPreparingSelection ||
       isSharing ||
