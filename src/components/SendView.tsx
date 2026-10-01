@@ -888,7 +888,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
         <div className="flex shrink-0 flex-col items-center gap-1">
           <button
             type="button"
-            aria-label={`Flick toward the side where ${safeDisplayText(device.device_name, "this device")} is near you to send files with an approximate arrival cue`}
+            aria-label={`Send files to ${safeDisplayText(device.device_name, "this device")} normally. Swipe toward their side to add an approximate arrival direction.`}
             onClick={() => {
               if (suppressFlickClickRef.current === device.node_id) {
                 suppressFlickClickRef.current = null;
@@ -920,13 +920,13 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
               : "Flick"}
           </button>
           <span
-            className="max-w-32 text-center text-[10px] leading-4 text-slate-500"
+            className="max-w-36 text-center text-xs leading-4 text-[var(--fg-muted)]"
             aria-live="polite"
             aria-atomic="true"
           >
             {activeFlickRef.current?.nodeId === device.node_id && flickHint
               ? flickHint
-              : "toward their side"}
+              : "Tap to send · flick toward their side"}
           </span>
         </div>
       ) : null}

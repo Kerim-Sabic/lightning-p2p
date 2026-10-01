@@ -80,6 +80,7 @@ export function Sidebar({ currentView, onNavigate }: SidebarProps) {
               key={item.id}
               onClick={() => onNavigate(item.id)}
               className={`nav-button ${active ? "nav-button-active" : ""}`}
+              aria-current={active ? "page" : undefined}
             >
               <div className={`nav-icon ${active ? "nav-icon-active" : ""}`}>
                 <Icon className="h-[17px] w-[17px]" />
