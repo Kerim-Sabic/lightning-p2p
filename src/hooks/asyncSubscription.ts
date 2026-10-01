@@ -53,33 +53,57 @@ export function attachAsyncUnlistenersWithSnapshot<T>(
   reportError: (error: unknown) => void,
 ): () => void {
   let disposed = false;
-  let unlisten: (() => void)[] = [];
+  let failed = false;
+  let snapshotStarted = false;
+  let resolvedSubscriptions = 0;
+  const unlisten = new Set<() => void>();
 
-  void Promise.allSettled(subscriptions)
-    .then(async (results) => {
-      const stopListening = results.flatMap((result) =>
-        result.status === "fulfilled" ? [result.value] : [],
-      );
-      const failed = results.find((result) => result.status === "rejected");
-      if (disposed || failed) {
-        stopListening.forEach((stop) => stop());
-        if (!disposed && failed?.status === "rejected") {
-          reportError(failed.reason);
+  const stopListening = (): void => {
+    for (const stop of unlisten) stop();
+    unlisten.clear();
+  };
+
+  const fail = (error: unknown): void => {
+    if (disposed || failed) return;
+    failed = true;
+    stopListening();
+    reportError(error);
+  };
+
+  const reconcileWhenReady = (): void => {
+    if (
+      disposed ||
+      failed ||
+      snapshotStarted ||
+      resolvedSubscriptions !== subscriptions.length
+    ) {
+      return;
+    }
+    snapshotStarted = true;
+    void getSnapshot()
+      .then((items) => {
+        if (!disposed) applySnapshot(items);
+      })
+      .catch(fail);
+  };
+
+  for (const subscription of subscriptions) {
+    void subscription
+      .then((stop) => {
+        if (disposed || failed) {
+          stop();
+          return;
         }
-        return;
-      }
-      unlisten = stopListening;
-      try {
-        const snapshot = await getSnapshot();
-        if (!disposed) applySnapshot(snapshot);
-      } catch (error) {
-        if (!disposed) reportError(error);
-      }
-    });
+        unlisten.add(stop);
+        resolvedSubscriptions += 1;
+        reconcileWhenReady();
+      })
+      .catch(fail);
+  }
+  reconcileWhenReady();
 
   return () => {
     disposed = true;
-    unlisten.forEach((stop) => stop());
-    unlisten = [];
+    stopListening();
   };
 }

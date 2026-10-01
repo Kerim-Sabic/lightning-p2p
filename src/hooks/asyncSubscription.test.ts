@@ -178,4 +178,55 @@ describe("attachAsyncUnlistenersWithSnapshot", () => {
     expect(stop).toHaveBeenCalledOnce();
     expect(applySnapshot).not.toHaveBeenCalled();
   });
+
+  it("unlistens each resolved subscription immediately after cleanup", async () => {
+    let resolvePending: ((stop: () => void) => void) | undefined;
+    const firstStop = vi.fn();
+    const pending = new Promise<() => void>((resolve) => {
+      resolvePending = resolve;
+    });
+    const snapshot = vi.fn().mockResolvedValue([]);
+    const cleanup = attachAsyncUnlistenersWithSnapshot(
+      [Promise.resolve(firstStop), pending],
+      snapshot,
+      vi.fn(),
+      vi.fn(),
+    );
+
+    await Promise.resolve();
+    cleanup();
+    expect(firstStop).toHaveBeenCalledOnce();
+    expect(snapshot).not.toHaveBeenCalled();
+
+    const pendingStop = vi.fn();
+    resolvePending?.(pendingStop);
+    await Promise.resolve();
+    expect(pendingStop).toHaveBeenCalledOnce();
+  });
+
+  it("reports a failed subscription without waiting for slower listeners", async () => {
+    let resolvePending: ((stop: () => void) => void) | undefined;
+    const pending = new Promise<() => void>((resolve) => {
+      resolvePending = resolve;
+    });
+    const reportError = vi.fn();
+    const snapshot = vi.fn();
+    const cleanup = attachAsyncUnlistenersWithSnapshot(
+      [Promise.reject(new Error("listener failed")), pending],
+      async () => [],
+      snapshot,
+      reportError,
+    );
+
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(reportError).toHaveBeenCalledWith(new Error("listener failed"));
+    expect(snapshot).not.toHaveBeenCalled();
+
+    const pendingStop = vi.fn();
+    resolvePending?.(pendingStop);
+    await Promise.resolve();
+    expect(pendingStop).toHaveBeenCalledOnce();
+    cleanup();
+  });
 });
