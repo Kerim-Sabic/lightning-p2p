@@ -32,10 +32,9 @@ import { groupNearbyDevices } from "../lib/nearbyDeviceGroups";
 import { getNearbyDiscoveryStatus } from "../lib/nearbyDiscoveryStatus";
 import {
   arrivalDirectionFromSenderFlick,
-  classifyFlickDirection,
+  flickDirectionForGesture,
   flickTargetAtPoint,
   isAdditionalFlickPointer,
-  isDeliberateFlick,
   type FlickDirection,
   type FlickTargetBounds,
 } from "../lib/flickGesture";
@@ -500,13 +499,11 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
     if (targetNodeId) {
       const dx = event.clientX - active.startX;
       const dy = event.clientY - active.startY;
-      const direction = isDeliberateFlick({
+      const direction = flickDirectionForGesture({
         dx,
         dy,
         elapsedMs: performance.now() - active.startedAt,
-      })
-        ? classifyFlickDirection(dx, dy)
-        : null;
+      });
       const arrivalDirection = direction
         ? arrivalDirectionFromSenderFlick(direction)
         : null;
@@ -576,9 +573,8 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
     const dx = event.clientX - active.startX;
     const dy = event.clientY - active.startY;
     const elapsedMs = performance.now() - active.startedAt;
-    const direction = isDeliberateFlick({ dx, dy, elapsedMs })
-      ? classifyFlickDirection(dx, dy) ?? undefined
-      : undefined;
+    const direction =
+      flickDirectionForGesture({ dx, dy, elapsedMs }) ?? undefined;
     void handleSendToDevice(device, direction);
   };
 
@@ -653,13 +649,11 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
 
     const dx = event.clientX - active.startX;
     const dy = event.clientY - active.startY;
-    const direction = isDeliberateFlick({
+    const direction = flickDirectionForGesture({
       dx,
       dy,
       elapsedMs: performance.now() - active.startedAt,
-    })
-      ? classifyFlickDirection(dx, dy) ?? undefined
-      : undefined;
+    }) ?? undefined;
     void handleSendToDevice(liveDevice, direction);
   };
 
@@ -700,10 +694,11 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
   ): void => {
     const active = activeFlickRef.current;
     if (!active || active.pointerId !== event.pointerId) return;
-    const direction = classifyFlickDirection(
-      event.clientX - active.startX,
-      event.clientY - active.startY,
-    );
+    const direction = flickDirectionForGesture({
+      dx: event.clientX - active.startX,
+      dy: event.clientY - active.startY,
+      elapsedMs: performance.now() - active.startedAt,
+    });
     if (direction) {
       const arrivalDirection = arrivalDirectionFromSenderFlick(direction);
       setFlickHint(
@@ -729,8 +724,8 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
     const elapsedMs = performance.now() - active.startedAt;
     const dx = event.clientX - active.startX;
     const dy = event.clientY - active.startY;
-    const deliberate = isDeliberateFlick({ dx, dy, elapsedMs });
-    if (deliberate && active.nodeId) {
+    const direction = flickDirectionForGesture({ dx, dy, elapsedMs });
+    if (active.nodeId) {
       event.preventDefault();
       suppressFlickClickRef.current = active.nodeId;
       window.setTimeout(() => {
@@ -763,8 +758,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
       setError("Your selection changed during the flick. Review it and send again.");
       return;
     }
-    const direction = classifyFlickDirection(dx, dy);
-    if (deliberate && direction) {
+    if (direction) {
       void handleSendToDevice(device, direction);
     }
   };

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   arrivalDirectionFromSenderFlick,
   classifyFlickDirection,
+  flickDirectionForGesture,
   flickTargetAtPoint,
   isAdditionalFlickPointer,
   isDeliberateFlick,
@@ -74,6 +75,20 @@ describe("isDeliberateFlick", () => {
         elapsedMs: 100,
       }),
     ).toBe(true);
+  });
+});
+
+describe("flickDirectionForGesture", () => {
+  it("uses the same deliberate threshold for the preview and sent direction", () => {
+    expect(flickDirectionForGesture({ dx: 100, dy: 0, elapsedMs: 100 })).toBe(
+      "right",
+    );
+    expect(flickDirectionForGesture({ dx: 100, dy: 0, elapsedMs: 200 })).toBe(
+      null,
+    );
+    expect(flickDirectionForGesture({ dx: 20, dy: 0, elapsedMs: 5 })).toBe(
+      null,
+    );
   });
 });
 

@@ -86,6 +86,17 @@ export function classifyFlickDirection(
   );
 }
 
+/** Returns a direction only when the gesture meets the send threshold. */
+export function flickDirectionForGesture({
+  dx,
+  dy,
+  elapsedMs,
+}: FlickMeasurement): FlickDirection | null {
+  return isDeliberateFlick({ dx, dy, elapsedMs })
+    ? classifyFlickDirection(dx, dy)
+    : null;
+}
+
 export function isDeliberateFlick({
   dx,
   dy,
