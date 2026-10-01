@@ -158,6 +158,7 @@ interface ActiveSelectionDrag {
   startX: number;
   startY: number;
   startedAt: number;
+  samples: FlickPointerSample[];
   targets: FlickTargetBounds[];
   devices: NearbyDevice[];
   selectionPaths: string[];
@@ -471,6 +472,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
     setDropTargetNodeId(null);
     setFlickDevices(null);
     setFlickVerifiedNodeIds(null);
+    setFlickHint(null);
   };
 
   const cancelFlickWithFeedback = (): void => {
@@ -628,10 +630,12 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
       event.preventDefault();
       return;
     }
+    const startedAt = performance.now();
     activeSelectionDragRef.current = {
       startX: event.clientX,
       startY: event.clientY,
-      startedAt: performance.now(),
+      startedAt,
+      samples: [{ x: event.clientX, y: event.clientY, at: startedAt }],
       targets,
       devices: devices.map((device) => ({ ...device })),
       selectionPaths: shareSelection.map((item) => item.path),
@@ -642,15 +646,47 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
     event.dataTransfer.setData("application/x-lightning-selection", "files");
   };
 
+  const handleSelectionDragMove = (event: DragEvent<HTMLDivElement>): void => {
+    const active = activeSelectionDragRef.current;
+    if (!active) return;
+    const snapshot = snapshotFlickGesture(
+      active.startX,
+      active.startY,
+      active.startedAt,
+      active.samples,
+      event.clientX,
+      event.clientY,
+      performance.now(),
+    );
+    active.samples = snapshot.samples;
+    const direction = flickDirectionForGesture(snapshot.measurement);
+    const arrivalDirection = direction
+      ? arrivalDirectionFromSenderFlick(direction)
+      : null;
+    setFlickHint(
+      arrivalDirection
+        ? `Quick flick · arrives from ${FLICK_ARRIVAL_SIDE_LABELS[arrivalDirection]}`
+        : null,
+    );
+  };
+
   const handleSelectionDrop = (
     event: DragEvent<HTMLDivElement>,
   ): void => {
     event.preventDefault();
     const active = activeSelectionDragRef.current;
+    if (event.dataTransfer.getData("application/x-lightning-selection")) {
+      const pointerFlick = activeFlickRef.current;
+      if (pointerFlick?.element.hasPointerCapture(pointerFlick.pointerId)) {
+        pointerFlick.element.releasePointerCapture(pointerFlick.pointerId);
+      }
+      activeFlickRef.current = null;
+    }
     activeSelectionDragRef.current = null;
     setDropTargetNodeId(null);
     setFlickDevices(null);
     setFlickVerifiedNodeIds(null);
+    setFlickHint(null);
     if (!event.dataTransfer.getData("application/x-lightning-selection")) {
       return;
     }
@@ -687,13 +723,16 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
     }
     if (!intendedDevice) return;
 
-    const dx = event.clientX - active.startX;
-    const dy = event.clientY - active.startY;
-    const direction = flickDirectionForGesture({
-      dx,
-      dy,
-      elapsedMs: performance.now() - active.startedAt,
-    }) ?? undefined;
+    const { measurement } = snapshotFlickGesture(
+      active.startX,
+      active.startY,
+      active.startedAt,
+      active.samples,
+      event.clientX,
+      event.clientY,
+      performance.now(),
+    );
+    const direction = flickDirectionForGesture(measurement) ?? undefined;
     void handleSendToDevice(liveDevice, direction);
   };
 
@@ -883,6 +922,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
         if (
           event.dataTransfer.types.includes("application/x-lightning-selection")
         ) {
+          handleSelectionDragMove(event);
           const intendedTargetId = flickTargetAtPoint(
             activeSelectionDragRef.current?.targets ?? [],
             event.clientX,
@@ -921,7 +961,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
           </span>
           <span className="mt-1 block text-xs text-[var(--fg-secondary)]">
             {dropTargetNodeId === device.node_id
-              ? `Release to send to ${safeDisplayText(device.device_name, "Nearby device")}`
+              ? `Release to send to ${safeDisplayText(device.device_name, "Nearby device")}${flickHint ? ` · ${flickHint}` : ""}`
               : busyNodeId === device.node_id
                 ? "Preparing and offering…"
                 : device.transport === "ble"
@@ -1256,11 +1296,13 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
             className="mt-4 grid gap-2"
             draggable={shareSelection.length > 0 && !mobileRuntime}
             onDragStart={handleSelectionDragStart}
+            onDrag={handleSelectionDragMove}
             onDragEnd={() => {
               activeSelectionDragRef.current = null;
               setDropTargetNodeId(null);
               setFlickDevices(null);
               setFlickVerifiedNodeIds(null);
+              setFlickHint(null);
             }}
             aria-label="Selected files. Drag onto a nearby device to send."
           >
