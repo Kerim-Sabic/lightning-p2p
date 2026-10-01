@@ -11,11 +11,14 @@ All notable changes to Lightning P2P are documented here. The project follows se
 - Recover completed receive history by transfer ID when its completion event
   was lost.
 
-## [Unreleased]
+## [0.9.18] - 2026-10-01 ("Transfer State Reliability")
 
 - Keep paused receives paused when delayed start/progress events arrive after
   the backend has stopped the transfer.
 - Recover file and folder receives after restart when verified output was published but completion history had not yet been flushed.
+- Make prolonged storage startup guidance explain how to recover when initialization does not finish.
+
+## [Unreleased]
 
 ### Fixed
 

@@ -427,7 +427,7 @@ impl NodeSupervisor {
             start,
             NODE_START_WARNING_AFTER,
             async {
-                let message = "The transfer engine is taking longer than expected. Startup is still running; keep Lightning open. Transfers will be available when the node is ready.";
+                let message = "Lightning is still opening local transfer storage. Keep the app open while it finishes. If startup stays here for several minutes, close and reopen Lightning to release the pending storage initialization.";
                 tracing::warn!(
                     reason,
                     "node startup is still running after 60 seconds"
