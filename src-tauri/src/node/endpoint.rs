@@ -96,20 +96,37 @@ impl LightningP2PNode {
         chat_protocol: Option<Arc<ChatProtocol>>,
         profile: TransferProfile,
     ) -> Result<Self> {
-        std::fs::create_dir_all(&data_dir)?;
-        std::fs::create_dir_all(&download_dir)?;
-
         // Finish local storage initialization before binding network resources.
         // Besides making startup ordering clearer, this prevents a slow or
         // incompatible transfer store from leaving a partially started QUIC
         // endpoint behind while the supervisor is waiting on storage.
+        let startup_data_dir = data_dir.clone();
+        let startup_download_dir = download_dir.clone();
+        tokio::task::spawn_blocking(move || {
+            std::fs::create_dir_all(&startup_data_dir)?;
+            std::fs::create_dir_all(&startup_download_dir)?;
+            preserve_incompatible_blob_store(&startup_data_dir)
+        })
+        .await
+        .map_err(|error| {
+            LightningP2PError::Other(format!("Node storage preparation task failed: {error}"))
+        })??;
+
         tracing::info!("opening local blob store");
-        preserve_incompatible_blob_store(&data_dir)?;
         let store = load_blob_store(&data_dir).await?;
         tracing::info!("local blob store ready");
-        let db = open_storage_db(&data_dir)?;
+
+        let metadata_dir = data_dir.clone();
+        let (db, public_hashes) = tokio::task::spawn_blocking(move || {
+            let db = open_storage_db(&metadata_dir)?;
+            let public_hashes = share_access::load_public_hashes(&db)?;
+            Ok::<_, LightningP2PError>((db, public_hashes))
+        })
+        .await
+        .map_err(|error| {
+            LightningP2PError::Other(format!("Node metadata initialization task failed: {error}"))
+        })??;
         tracing::info!("local metadata database ready");
-        let public_hashes = share_access::load_public_hashes(&db)?;
         tracing::info!(
             public_hash_count = public_hashes.len(),
             "loaded share access metadata"
