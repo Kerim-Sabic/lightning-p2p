@@ -440,6 +440,9 @@ impl NodeSupervisor {
             },
         ))
         .await
+        .map_err(|error| {
+            LightningP2PError::Other(format!("Node startup task failed: {error}"))
+        })?
     }
 
     async fn mark_failed(&self, app: &AppHandle, reason: &str, error: &LightningP2PError) {
@@ -470,12 +473,17 @@ impl NodeSupervisor {
     }
 }
 
-async fn await_start_with_warning<F, W>(start: F, warning_after: Duration, warning: W) -> F::Output
+async fn await_start_with_warning<F, W>(
+    start: F,
+    warning_after: Duration,
+    warning: W,
+) -> std::result::Result<F::Output, tokio::task::JoinError>
 where
-    F: Future,
+    F: Future + Send + 'static,
+    F::Output: Send + 'static,
     W: Future<Output = ()>,
 {
-    tokio::pin!(start);
+    let mut start = tokio::spawn(start);
     match tokio::time::timeout(warning_after, &mut start).await {
         Ok(result) => result,
         Err(_elapsed) => {
@@ -523,7 +531,9 @@ mod tests {
             Poll::Ready(42)
         });
 
-        let result = await_start_with_warning(start, Duration::from_secs(1), async {}).await;
+        let result = await_start_with_warning(start, Duration::from_secs(1), async {})
+            .await
+            .expect("startup task should complete");
 
         assert_eq!(result, 42);
         assert_eq!(polls.load(Ordering::SeqCst), 1);
@@ -541,9 +551,22 @@ mod tests {
         let result = await_start_with_warning(start, Duration::from_millis(1), async move {
             warning_state.fetch_add(1, Ordering::SeqCst);
         })
-        .await;
+        .await
+        .expect("startup task should complete after warning");
 
         assert_eq!(result, 42);
         assert_eq!(warned.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn startup_panic_is_returned_as_a_join_error() {
+        let result = await_start_with_warning(
+            async { panic!("simulated startup panic") },
+            Duration::from_secs(1),
+            async {},
+        )
+        .await;
+
+        assert!(result.is_err());
     }
 }
