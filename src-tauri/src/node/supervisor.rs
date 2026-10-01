@@ -11,6 +11,7 @@ use crate::storage::paired_devices::PairedDevices;
 use crate::storage::settings::AppSettings;
 use crate::transfer::lifecycle::TransferLifecycleGate;
 use serde::Serialize;
+use std::future::Future;
 use std::path::PathBuf;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
@@ -421,11 +422,10 @@ impl NodeSupervisor {
             Some(chat_protocol),
             profile,
         );
-        tokio::pin!(start);
-        if tokio::time::timeout(NODE_START_WARNING_AFTER, &mut start)
-            .await
-            .is_err()
-        {
+        Box::pin(await_start_with_warning(
+            start,
+            NODE_START_WARNING_AFTER,
+            async {
             let message = "The local transfer store is taking longer than usual to open. Startup is continuing; keep Lightning open. If this persists, close any other Lightning window and retry from Settings.";
             tracing::warn!(
                 reason,
@@ -436,8 +436,9 @@ impl NodeSupervisor {
                 NodeSupervisorStatus::new(phase, Some(reason.into()), Some(message.into())),
             )
             .await;
-        }
-        start.await
+            },
+        ))
+        .await
     }
 
     async fn mark_failed(&self, app: &AppHandle, reason: &str, error: &LightningP2PError) {
@@ -468,6 +469,21 @@ impl NodeSupervisor {
     }
 }
 
+async fn await_start_with_warning<F, W>(start: F, warning_after: Duration, warning: W) -> F::Output
+where
+    F: Future,
+    W: Future<Output = ()>,
+{
+    tokio::pin!(start);
+    match tokio::time::timeout(warning_after, &mut start).await {
+        Ok(result) => result,
+        Err(_elapsed) => {
+            warning.await;
+            start.await
+        }
+    }
+}
+
 fn startup_retry_allowed(phase: NodeSupervisorPhase, node_initialized: bool) -> bool {
     phase == NodeSupervisorPhase::Failed && !node_initialized
 }
@@ -480,7 +496,14 @@ fn unix_timestamp() -> u64 {
 
 #[cfg(test)]
 mod tests {
-    use super::{startup_retry_allowed, NodeSupervisorPhase};
+    use super::{await_start_with_warning, startup_retry_allowed, NodeSupervisorPhase};
+    use std::future::poll_fn;
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+    use std::task::Poll;
+    use std::time::Duration;
 
     #[test]
     fn startup_retry_requires_a_failed_supervisor_without_a_live_node() {
@@ -488,5 +511,38 @@ mod tests {
         assert!(!startup_retry_allowed(NodeSupervisorPhase::Failed, true));
         assert!(!startup_retry_allowed(NodeSupervisorPhase::Starting, false));
         assert!(!startup_retry_allowed(NodeSupervisorPhase::Idle, false));
+    }
+
+    #[tokio::test]
+    async fn completed_startup_result_is_returned_without_polling_future_again() {
+        let polls = Arc::new(AtomicUsize::new(0));
+        let observed_polls = polls.clone();
+        let start = poll_fn(move |_| {
+            observed_polls.fetch_add(1, Ordering::SeqCst);
+            Poll::Ready(42)
+        });
+
+        let result = await_start_with_warning(start, Duration::from_secs(1), async {}).await;
+
+        assert_eq!(result, 42);
+        assert_eq!(polls.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn slow_start_emits_warning_then_returns_its_result() {
+        let warned = Arc::new(AtomicUsize::new(0));
+        let warning_state = warned.clone();
+        let start = async {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+            42
+        };
+
+        let result = await_start_with_warning(start, Duration::from_millis(1), async move {
+            warning_state.fetch_add(1, Ordering::SeqCst);
+        })
+        .await;
+
+        assert_eq!(result, 42);
+        assert_eq!(warned.load(Ordering::SeqCst), 1);
     }
 }
