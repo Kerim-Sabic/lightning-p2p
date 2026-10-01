@@ -4,6 +4,8 @@ All notable changes to Lightning P2P are documented here. The project follows se
 
 ## [Unreleased]
 
+## [0.9.14] - 2026-10-01 ("Reliable Handoff")
+
 ### Fixed
 
 - Flick gestures now start from the chosen device's dedicated control, so the
