@@ -142,6 +142,45 @@ impl NodeSupervisor {
         self.status.read().await.clone()
     }
 
+    /// Retries startup after a failed initial node build when no node is live.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error unless the supervisor is failed and the node is absent,
+    /// or if the replacement node cannot be built.
+    pub(crate) async fn retry_failed_startup(
+        &self,
+        app: AppHandle,
+        settings: AppSettings,
+        nearby: NearbyServices,
+    ) -> Result<()> {
+        let _guard = self.lifecycle_lock.lock().await;
+        let phase = self.status.read().await.phase;
+        if !startup_retry_allowed(phase, self.node.read().await.is_some()) {
+            return Err(LightningP2PError::Other(
+                "Node startup can only be retried after a failed start when no node is running."
+                    .into(),
+            ));
+        }
+        if self.pending_restart.lock().await.is_some()
+            || self.pending_worker_running.load(Ordering::Acquire)
+        {
+            return Err(LightningP2PError::Other(
+                "A node update is already queued. Wait for it to finish before retrying startup."
+                    .into(),
+            ));
+        }
+
+        self.replace_node_locked(
+            app,
+            settings,
+            nearby,
+            NodeSupervisorPhase::Starting,
+            "user_retry",
+        )
+        .await
+    }
+
     /// Starts the node during app startup.
     pub(crate) async fn start(
         &self,
@@ -249,6 +288,18 @@ impl NodeSupervisor {
         reason: &'static str,
     ) -> Result<()> {
         let _guard = self.lifecycle_lock.lock().await;
+        self.replace_node_locked(app, settings, nearby, phase, reason)
+            .await
+    }
+
+    async fn replace_node_locked(
+        &self,
+        app: AppHandle,
+        settings: AppSettings,
+        nearby: NearbyServices,
+        phase: NodeSupervisorPhase,
+        reason: &'static str,
+    ) -> Result<()> {
         self.set_status(
             &app,
             NodeSupervisorStatus::new(phase, Some(reason.into()), None),
@@ -381,8 +432,25 @@ impl NodeSupervisor {
     }
 }
 
+fn startup_retry_allowed(phase: NodeSupervisorPhase, node_initialized: bool) -> bool {
+    phase == NodeSupervisorPhase::Failed && !node_initialized
+}
+
 fn unix_timestamp() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |duration| duration.as_secs())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{startup_retry_allowed, NodeSupervisorPhase};
+
+    #[test]
+    fn startup_retry_requires_a_failed_supervisor_without_a_live_node() {
+        assert!(startup_retry_allowed(NodeSupervisorPhase::Failed, false));
+        assert!(!startup_retry_allowed(NodeSupervisorPhase::Failed, true));
+        assert!(!startup_retry_allowed(NodeSupervisorPhase::Starting, false));
+        assert!(!startup_retry_allowed(NodeSupervisorPhase::Idle, false));
+    }
 }

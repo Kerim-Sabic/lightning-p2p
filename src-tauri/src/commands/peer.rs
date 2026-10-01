@@ -1,7 +1,7 @@
 //! Commands for querying node/peer information.
 
 use crate::node::nearby_protocol::local_device_name;
-use crate::node::{NodeRuntimeStatus, NodeSupervisorStatus};
+use crate::node::{NearbyServices, NodeRuntimeStatus, NodeSupervisorStatus};
 use crate::storage::paired_devices::{comparison_code, PairedDevice};
 use crate::AppState;
 use serde::Serialize;
@@ -58,6 +58,39 @@ pub async fn get_node_status(state: State<'_, AppState>) -> Result<NodeRuntimeSt
 pub async fn get_node_supervisor_status(
     state: State<'_, AppState>,
 ) -> Result<NodeSupervisorStatus, String> {
+    Ok(state.node_supervisor.status().await)
+}
+
+/// Retries node startup after a failed initial start.
+///
+/// # Errors
+///
+/// Returns an error unless the supervisor is failed and no node is running, or
+/// if rebuilding the node fails again.
+#[tauri::command]
+pub async fn retry_node_startup(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<NodeSupervisorStatus, String> {
+    let settings = state.settings.snapshot().await;
+    state
+        .offer_inbox
+        .load_blocked_peers(state.blocked_peers.list().await)
+        .await;
+    state
+        .node_supervisor
+        .retry_failed_startup(
+            app,
+            settings,
+            NearbyServices::new(
+                state.nearby_shares.clone(),
+                state.offer_inbox.clone(),
+                state.blocked_peers.clone(),
+                state.paired_devices.clone(),
+            ),
+        )
+        .await
+        .map_err(String::from)?;
     Ok(state.node_supervisor.status().await)
 }
 

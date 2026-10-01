@@ -855,6 +855,11 @@ export async function getNodeSupervisorStatus(): Promise<NodeSupervisorStatus> {
   return invoke<NodeSupervisorStatus>("get_node_supervisor_status");
 }
 
+export async function retryNodeStartup(): Promise<NodeSupervisorStatus> {
+  requireNativeRuntime("Node startup retry");
+  return invoke<NodeSupervisorStatus>("retry_node_startup");
+}
+
 export async function getAppVersion(): Promise<string> {
   if (!isDesktopRuntime()) {
     return "web-preview";

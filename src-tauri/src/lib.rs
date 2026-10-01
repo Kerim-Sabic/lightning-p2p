@@ -297,6 +297,7 @@ pub fn run() {
             commands::peer::get_node_id,
             commands::peer::get_node_status,
             commands::peer::get_node_supervisor_status,
+            commands::peer::retry_node_startup,
             commands::peer::get_local_device_identity,
             commands::peer::get_device_pairing_code,
             commands::peer::list_paired_devices,

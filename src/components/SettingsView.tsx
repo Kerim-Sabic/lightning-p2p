@@ -35,6 +35,7 @@ import {
   type PlatformProfile,
   type RelayMode,
   setNearbyPeerBlocked,
+  retryNodeStartup,
   writeClipboardText,
 } from "../lib/tauri";
 import { useAppearanceStore } from "../stores/appearanceStore";
@@ -254,6 +255,8 @@ export function SettingsView() {
   const [blockedPeersError, setBlockedPeersError] = useState<string | null>(
     null,
   );
+  const [retryingNode, setRetryingNode] = useState(false);
+  const [nodeRetryError, setNodeRetryError] = useState<string | null>(null);
 
   useEffect(() => {
     setCustomRelayUrlInput(settings?.custom_relay_url ?? "");
@@ -292,6 +295,27 @@ export function SettingsView() {
 
   const saveCustomRelay = async (): Promise<void> => {
     await setCustomRelayUrl(customRelayUrl.trim() || null);
+  };
+
+  const retryNode = async (): Promise<void> => {
+    setRetryingNode(true);
+    setNodeRetryError(null);
+    try {
+      await retryNodeStartup();
+      await Promise.all([
+        useTransferStore.getState().refreshNodeStatus(),
+        useTransferStore.getState().refreshNodeSupervisorStatus(),
+      ]);
+    } catch (error) {
+      setNodeRetryError(
+        error instanceof Error
+          ? error.message
+          : "Could not restart the transfer engine. Check the connection and try again.",
+      );
+      await useTransferStore.getState().refreshNodeSupervisorStatus();
+    } finally {
+      setRetryingNode(false);
+    }
   };
 
   const enableCustomRelay = async (): Promise<void> => {
@@ -621,6 +645,32 @@ export function SettingsView() {
                 <p className="mt-1 text-xs leading-5 text-amber-100/80">
                   {nodeSupervisorStatus.last_error}
                 </p>
+              ) : null}
+              {nodeSupervisorStatus.phase === "failed" && nativeRuntime ? (
+                <div className="mt-3">
+                  <button
+                    type="button"
+                    onClick={() => void retryNode()}
+                    disabled={retryingNode}
+                    className="inline-flex min-h-11 items-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-4 text-sm font-semibold text-white transition hover:bg-white/[0.1] disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+                  >
+                    <RefreshCw
+                      className={`h-4 w-4 ${retryingNode ? "animate-spin" : ""}`}
+                      aria-hidden="true"
+                    />
+                    {retryingNode
+                      ? "Starting transfer engine…"
+                      : "Retry startup"}
+                  </button>
+                  {nodeRetryError ? (
+                    <p
+                      role="alert"
+                      className="mt-2 text-xs leading-5 text-rose-100/90"
+                    >
+                      {nodeRetryError}
+                    </p>
+                  ) : null}
+                </div>
               ) : null}
             </div>
             <div className="stat-card">
