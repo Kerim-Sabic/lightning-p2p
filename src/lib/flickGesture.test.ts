@@ -9,6 +9,7 @@ import {
   isDeliberateFlick,
   liveFlickRecipient,
   movedBeyondFlickClickSlop,
+  resolveFlickRelease,
 } from "./flickGesture";
 
 describe("classifyFlickDirection", () => {
@@ -96,6 +97,26 @@ describe("flickDirectionForGesture", () => {
     );
     expect(flickDirectionForGesture({ dx: 20, dy: 0, elapsedMs: 5 })).toBe(
       null,
+    );
+  });
+});
+
+describe("resolveFlickRelease", () => {
+  it("sends with the direction for a deliberate flick", () => {
+    expect(
+      resolveFlickRelease({ dx: 100, dy: 0, elapsedMs: 100 }, true),
+    ).toEqual({ kind: "send", direction: "right" });
+  });
+
+  it("keeps a slower intentional swipe as a normal send", () => {
+    expect(
+      resolveFlickRelease({ dx: 30, dy: 0, elapsedMs: 100 }, true),
+    ).toEqual({ kind: "send" });
+  });
+
+  it("leaves an ordinary tap to the button click handler", () => {
+    expect(resolveFlickRelease({ dx: 3, dy: 4, elapsedMs: 100 }, false)).toEqual(
+      { kind: "tap" },
     );
   });
 });

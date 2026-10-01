@@ -34,10 +34,10 @@ import {
   arrivalDirectionFromSenderFlick,
   flickDirectionForGesture,
   flickTargetAtPoint,
-  hasIntentionalFlickTravel,
   isAdditionalFlickPointer,
   liveFlickRecipient,
   movedBeyondFlickClickSlop,
+  resolveFlickRelease,
   type FlickDirection,
   type FlickTargetBounds,
 } from "../lib/flickGesture";
@@ -743,7 +743,6 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
     const elapsedMs = performance.now() - active.startedAt;
     const dx = event.clientX - active.startX;
     const dy = event.clientY - active.startY;
-    const direction = flickDirectionForGesture({ dx, dy, elapsedMs });
     const movedBeyondClickSlop =
       active.movedBeyondClickSlop ||
       movedBeyondFlickClickSlop(dx, dy);
@@ -774,14 +773,15 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
       setError("Your selection changed during the flick. Review it and send again.");
       return;
     }
-    if (direction) {
-      void handleSendToDevice(device, direction);
-    } else if (hasIntentionalFlickTravel(dx, dy)) {
-      void handleSendToDevice(device);
-    } else if (movedBeyondClickSlop) {
-      setError(
-        "That movement was too short to send. Tap Send or drag farther to the target.",
-      );
+    const releaseAction = resolveFlickRelease(
+      { dx, dy, elapsedMs },
+      movedBeyondClickSlop,
+    );
+    if (releaseAction.kind === "send") {
+      // The device was chosen on pointer-down. If movement misses the
+      // directional flick threshold, keep the user's send intent and send
+      // without an arrival-side hint instead of dropping the transfer.
+      void handleSendToDevice(device, releaseAction.direction);
     }
   };
 

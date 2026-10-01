@@ -4,6 +4,10 @@ export interface FlickMeasurement {
   elapsedMs: number;
 }
 
+export type FlickReleaseAction =
+  | { kind: "send"; direction?: FlickDirection }
+  | { kind: "tap" };
+
 export interface FlickTargetBounds {
   nodeId: string;
   left: number;
@@ -123,6 +127,16 @@ export function flickDirectionForGesture({
   return isDeliberateFlick({ dx, dy, elapsedMs })
     ? classifyFlickDirection(dx, dy)
     : null;
+}
+
+/** Preserves a selected-device send when motion is too soft for direction. */
+export function resolveFlickRelease(
+  measurement: FlickMeasurement,
+  movedBeyondClickSlop: boolean,
+): FlickReleaseAction {
+  const direction = flickDirectionForGesture(measurement);
+  if (direction) return { kind: "send", direction };
+  return movedBeyondClickSlop ? { kind: "send" } : { kind: "tap" };
 }
 
 export function isDeliberateFlick({
