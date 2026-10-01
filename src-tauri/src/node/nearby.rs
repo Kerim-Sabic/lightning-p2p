@@ -1058,7 +1058,7 @@ mod tests {
 
         let changed = registry.clear_discovered_shares().await;
         assert_eq!(changed, Some(Vec::new()));
-        assert!(registry.snapshot().await.is_empty());
+        assert_eq!(registry.snapshot().await, Vec::new());
     }
 
     #[tokio::test]
@@ -1105,7 +1105,7 @@ mod tests {
             .await;
 
         assert!(changed.is_none());
-        assert!(registry.devices_snapshot().await.is_empty());
+        assert_eq!(registry.devices_snapshot().await, Vec::new());
     }
 
     #[tokio::test]
@@ -1146,8 +1146,8 @@ mod tests {
             .await
             .expect("ble device should be cleared");
 
-        assert!(changed.is_empty());
-        assert!(registry.devices_snapshot().await.is_empty());
+        assert_eq!(changed, Vec::new());
+        assert_eq!(registry.devices_snapshot().await, Vec::new());
     }
 
     #[tokio::test]
@@ -1244,8 +1244,8 @@ mod tests {
             .await
             .expect("wifi device should be removed");
 
-        assert!(changed.is_empty());
-        assert!(registry.devices_snapshot().await.is_empty());
+        assert_eq!(changed, Vec::new());
+        assert_eq!(registry.devices_snapshot().await, Vec::new());
     }
 
     #[test]

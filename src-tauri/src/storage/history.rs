@@ -225,7 +225,7 @@ mod tests {
         clear_all(&db).expect("history should clear");
 
         let records = load_all(&db).expect("records should load");
-        assert!(records.is_empty());
+        assert_eq!(records, Vec::new());
     }
 
     #[test]

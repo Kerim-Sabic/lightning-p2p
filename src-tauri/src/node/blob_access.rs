@@ -282,7 +282,7 @@ mod tests {
         );
 
         assert!(!controller.allows(peer, hash));
-        assert!(controller.read().private_grants.is_empty());
+        assert!(controller.read().private_grants.keys().next().is_none());
     }
 
     #[test]

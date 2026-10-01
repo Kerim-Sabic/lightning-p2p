@@ -768,7 +768,7 @@ mod tests {
             inbox.record(sample_offer("single-use")).await,
             Err(OfferRejection::CapacityOrDuplicate)
         ));
-        assert!(inbox.snapshot().await.is_empty());
+        assert_eq!(inbox.snapshot().await.len(), 0);
     }
 
     #[tokio::test]
@@ -821,7 +821,7 @@ mod tests {
             inbox.record(offer).await,
             Err(OfferRejection::InvalidMetadata)
         ));
-        assert!(inbox.snapshot().await.is_empty());
+        assert_eq!(inbox.snapshot().await.len(), 0);
     }
 
     #[tokio::test]
@@ -837,7 +837,7 @@ mod tests {
             decision.try_recv().expect("pending offer is rejected"),
             OfferDecision::Rejected
         );
-        assert!(inbox.snapshot().await.is_empty());
+        assert_eq!(inbox.snapshot().await.len(), 0);
 
         let mut future = sample_offer("blocked-future");
         future.sender_node_id = peer.to_string();

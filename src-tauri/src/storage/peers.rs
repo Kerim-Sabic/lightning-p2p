@@ -107,6 +107,6 @@ mod tests {
         clear_all(&db).expect("peers should clear");
 
         let peers = load_all(&db).expect("peers should load");
-        assert!(peers.is_empty());
+        assert_eq!(peers, Vec::new());
     }
 }

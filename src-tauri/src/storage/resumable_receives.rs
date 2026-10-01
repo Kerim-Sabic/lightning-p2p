@@ -293,9 +293,11 @@ mod tests {
         let id = record.transfer.transfer_id.clone();
         store.save(record).expect("save record");
         store.remove(&id).expect("remove record");
-        assert!(ResumableReceiveStore::load(directory.path())
-            .expect("reload store")
-            .list()
-            .is_empty());
+        assert_eq!(
+            ResumableReceiveStore::load(directory.path())
+                .expect("reload store")
+                .list(),
+            Vec::new()
+        );
     }
 }

@@ -177,7 +177,7 @@ mod tests {
         queue.add(sample_info(), None).await;
         let removed = queue.remove("recv-1").await;
         assert!(removed.is_some());
-        assert!(queue.list().await.is_empty());
+        assert_eq!(queue.list().await, Vec::new());
     }
 
     #[tokio::test]

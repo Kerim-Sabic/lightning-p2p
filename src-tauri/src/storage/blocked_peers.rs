@@ -157,16 +157,20 @@ mod tests {
 
         let reloaded = BlockedPeers::load(dir.path()).expect("reload");
         assert_eq!(reloaded.list().await, vec![peer.clone()]);
-        assert!(reloaded
-            .set_blocked(&peer, false)
-            .await
-            .expect("unblock peer")
-            .is_empty());
-        assert!(BlockedPeers::load(dir.path())
-            .expect("load after revoke")
-            .list()
-            .await
-            .is_empty());
+        assert_eq!(
+            reloaded
+                .set_blocked(&peer, false)
+                .await
+                .expect("unblock peer"),
+            Vec::<String>::new()
+        );
+        assert_eq!(
+            BlockedPeers::load(dir.path())
+                .expect("load after revoke")
+                .list()
+                .await,
+            Vec::<String>::new()
+        );
     }
 
     #[tokio::test]
@@ -177,6 +181,6 @@ mod tests {
             .set_blocked("not-an-endpoint-id", true)
             .await
             .is_err());
-        assert!(blocks.list().await.is_empty());
+        assert_eq!(blocks.list().await.len(), 0);
     }
 }

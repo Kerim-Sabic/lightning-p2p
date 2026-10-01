@@ -410,7 +410,7 @@ mod tests {
         let delivered = store.take_for_recipient(&[8; 16], &[7; 16], 2_000);
 
         assert_eq!(delivered.len(), 1);
-        assert!(store.is_empty());
+        assert_eq!(store.len(), 0);
     }
 
     #[test]
@@ -426,7 +426,7 @@ mod tests {
         let second = store.spray_to(&[9; 32], 10, 2_001);
 
         assert_eq!(first[0].copies, 4);
-        assert!(second.is_empty());
+        assert_eq!(second, Vec::new());
     }
 
     #[test]

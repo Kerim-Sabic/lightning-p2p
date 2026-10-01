@@ -514,7 +514,7 @@ mod tests {
 
     #[test]
     fn local_device_name_has_fallback() {
-        assert!(!local_device_name().trim().is_empty());
+        assert_ne!(local_device_name().trim(), "");
     }
 
     #[test]

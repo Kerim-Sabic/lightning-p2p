@@ -264,7 +264,7 @@ mod tests {
         assert_eq!(reloaded.list().await, devices);
         reloaded.rename(&node_id, "Workstation").await.unwrap();
         assert_eq!(reloaded.list().await[0].name, "Workstation");
-        assert!(reloaded.remove(&node_id).await.unwrap().is_empty());
+        assert_eq!(reloaded.remove(&node_id).await.unwrap(), Vec::new());
         assert!(!reloaded.contains(&node_id).await);
     }
 
@@ -275,7 +275,7 @@ mod tests {
         std::fs::write(&occupied_path, b"occupied").unwrap();
         let store = PairedDevices::in_memory(&occupied_path);
         assert!(store.pair(&identity(7), "Laptop").await.is_err());
-        assert!(store.list().await.is_empty());
+        assert_eq!(store.list().await, Vec::new());
     }
 
     #[test]
