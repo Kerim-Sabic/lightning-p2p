@@ -976,7 +976,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
                     ? "Pick files to share"
                     : "Drop files to share"}
               </h1>
-              <p className="meta-copy mt-3 max-w-[58ch]">
+              <p className="mt-3 max-w-[58ch] text-sm leading-6 text-[var(--fg-secondary)]">
                 {mobileRuntime
                   ? "Pick files from this phone, then send nearby or create a receive link. Keep Lightning open while files move."
                   : "Choose files or a folder, then send nearby or create a receive link."}
@@ -1008,6 +1008,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
               className={`flex flex-col gap-3 ${mobileRuntime ? "w-full" : "w-full max-w-[320px]"}`}
             >
               <button
+                type="button"
                 onClick={() => void pickShareFiles()}
                 disabled={!nativeRuntime || isPreparingSelection || isSharing}
                 className={
@@ -1023,6 +1024,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
               </button>
               {!mobileRuntime ? (
                 <button
+                  type="button"
                   onClick={() => void pickShareFolder()}
                   disabled={!nativeRuntime || isPreparingSelection || isSharing}
                   className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-[var(--border-strong)] bg-[var(--surface-1)] px-5 py-3 text-sm text-[var(--fg-primary)] transition hover:bg-[var(--surface-hover)]"
@@ -1032,12 +1034,12 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
                 </button>
               ) : null}
               {!nativeRuntime ? (
-                <p className="text-xs leading-6 text-slate-500">
+                <p className="text-sm leading-6 text-[var(--fg-secondary)]">
                   File and folder pickers require the native Lightning P2P app
                   runtime.
                 </p>
               ) : mobileRuntime ? (
-                <p className="text-xs leading-6 text-slate-500">
+                <p className="text-sm leading-6 text-[var(--fg-secondary)]">
                   Pick files here, or use any app's Share button and choose
                   Lightning P2P. Pictures go to Pictures, audio to Music, video
                   to Movies, other files to Downloads.
@@ -1053,19 +1055,19 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
           className="flex flex-wrap items-center gap-3 rounded-3xl border border-[var(--border-strong)] bg-[var(--surface-0)] p-5"
           aria-live="polite"
         >
-          <Loader2 className="h-4 w-4 animate-spin text-sky-300" />
+          <Loader2 className="h-4 w-4 animate-spin text-[var(--accent-primary)]" />
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-white">
+            <p className="text-sm font-semibold text-[var(--fg-primary)]">
               Reading your selection
             </p>
-            <p className="meta-copy mt-1">
+            <p className="mt-1 text-sm leading-6 text-[var(--fg-secondary)]">
               Scanning files and folders before staging them for share.
             </p>
           </div>
           <button
             type="button"
             onClick={clearShareSelection}
-            className="glass-button ml-auto min-h-11 px-4 text-sm text-slate-100"
+            className="ml-auto inline-flex min-h-11 items-center justify-center rounded-xl border border-[var(--border-strong)] bg-[var(--surface-1)] px-4 text-sm font-medium text-[var(--fg-primary)] transition hover:bg-[var(--surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
           >
             Cancel
           </button>
@@ -1076,15 +1078,15 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
         <section className="rounded-3xl border border-[var(--border-strong)] bg-[var(--surface-0)] p-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <p className="text-sm font-semibold text-white">
+              <p className="text-base font-semibold text-[var(--fg-primary)]">
                 Staged selection
               </p>
-              <p className="meta-copy mt-1">
+              <p className="mt-1 text-sm leading-6 text-[var(--fg-secondary)]">
                 {shareSelection.length} item
                 {shareSelection.length === 1 ? "" : "s"} ready |{" "}
                 {formatBytes(selectionSize)}
               </p>
-              <p className="mt-2 text-xs text-slate-400">
+              <p className="mt-2 text-sm leading-6 text-[var(--fg-secondary)]">
                 Drag or flick the selection onto a device to send. A quick flick adds an approximate arrival side.
               </p>
               {nativeRuntime && recipientDevices.length > 0 ? (
@@ -1101,7 +1103,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
                       }
                     }}
                     style={{ touchAction: "none" }}
-                    className={`mt-3 inline-flex min-h-11 select-none items-center gap-2 rounded-full border border-[var(--accent-primary)]/30 bg-[var(--accent-primary)]/10 px-4 text-sm font-semibold text-sky-100 transition ${isPreparingSelection || isSharing || busyNodeId !== null ? "cursor-not-allowed opacity-55" : "cursor-grab hover:bg-[var(--accent-primary)]/20 active:cursor-grabbing"}`}
+                    className={`mt-3 inline-flex min-h-11 select-none items-center gap-2 rounded-xl border border-[var(--accent-border)] bg-[var(--accent-subtle)] px-4 text-sm font-semibold text-[var(--accent-primary)] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] ${isPreparingSelection || isSharing || busyNodeId !== null ? "cursor-not-allowed opacity-55" : "cursor-grab hover:bg-[var(--surface-hover)] active:cursor-grabbing"}`}
                   >
                     <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
                     {activeFlickRef.current && !activeFlickRef.current.nodeId
@@ -1110,7 +1112,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
                   </div>
                   {activeFlickRef.current && !activeFlickRef.current.nodeId ? (
                     <p
-                      className="mt-2 text-xs text-sky-100"
+                      className="mt-2 text-sm text-[var(--accent-primary)]"
                       aria-live="polite"
                       aria-atomic="true"
                     >
@@ -1126,20 +1128,22 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
                 type="button"
                 onClick={() => void pickShareFiles(true)}
                 disabled={isPreparingSelection || isSharing || !nativeRuntime}
-                className="glass-button inline-flex items-center gap-2 px-4 py-2.5 text-sm text-slate-100"
+                className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[var(--border-strong)] bg-[var(--surface-1)] px-4 py-2.5 text-sm font-medium text-[var(--fg-primary)] transition hover:bg-[var(--surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] disabled:opacity-55"
               >
                 <File className="h-4 w-4" />
                 {isPreparingSelection ? "Adding files…" : "Add files"}
               </button>
               <button
+                type="button"
                 onClick={clearShareSelection}
                 disabled={isSharing}
-                className="glass-button inline-flex items-center gap-2 px-4 py-2.5 text-sm text-slate-100"
+                className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[var(--border-strong)] bg-[var(--surface-1)] px-4 py-2.5 text-sm font-medium text-[var(--fg-primary)] transition hover:bg-[var(--surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] disabled:opacity-55"
               >
                 <Trash2 className="h-4 w-4" />
                 Clear
               </button>
               <button
+                type="button"
                 onClick={() => void createShare()}
                 disabled={isSharing || !nativeRuntime}
                 className="btn-primary"
@@ -1221,18 +1225,18 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
             <p className="page-eyebrow">Choose a destination</p>
             <h2
               id="nearby-recipient-title"
-              className="mt-1 text-lg font-semibold text-white"
+              className="mt-1 text-lg font-semibold text-[var(--fg-primary)]"
             >
               Nearby devices
             </h2>
           </div>
-          <p className="text-xs leading-5 text-slate-400">
+          <p className="max-w-[34ch] text-sm leading-6 text-[var(--fg-secondary)]">
             Device names are supplied by nearby peers. Confirm the device before
             sending.
           </p>
         </div>
         {!nativeRuntime ? (
-          <p className="meta-copy mt-4">
+          <p className="mt-4 text-sm leading-6 text-[var(--fg-secondary)]">
             Open the native app to send files to nearby devices.
           </p>
         ) : recipientDevices.length > 0 ? (
@@ -1242,11 +1246,11 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
                 <div className="mb-2 flex items-baseline justify-between gap-3">
                   <h3
                     id="my-device-targets-title"
-                    className="text-sm font-semibold text-white"
+                    className="text-sm font-semibold text-[var(--fg-primary)]"
                   >
                     My Devices
                   </h3>
-                  <span className="text-xs text-slate-400">
+                  <span className="text-sm text-[var(--fg-secondary)]">
                     Saved and verified
                   </span>
                 </div>
@@ -1260,11 +1264,11 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
                 <div className="mb-2 flex items-baseline justify-between gap-3">
                   <h3
                     id="other-device-targets-title"
-                    className="text-sm font-semibold text-white"
+                    className="text-sm font-semibold text-[var(--fg-primary)]"
                   >
                     Nearby devices
                   </h3>
-                  <span className="text-xs text-slate-400">
+                  <span className="text-sm text-[var(--fg-secondary)]">
                     Confirm the device name before sending
                   </span>
                 </div>
@@ -1275,14 +1279,14 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
             ) : null}
           </div>
         ) : !discoveryEnabled ? (
-          <p className="meta-copy mt-4">
+          <p className="mt-4 text-sm leading-6 text-[var(--fg-secondary)]">
             Nearby discovery is off. Turn on local network discovery
             {bluetoothDiscoverySupported
               ? " or Bluetooth discovery"
               : ""} in Settings, or choose files to create a receive link.
           </p>
         ) : (
-          <p className="meta-copy mt-4">
+          <p className="mt-4 text-sm leading-6 text-[var(--fg-secondary)]">
             {nearbyDiscoveryStatus === "bluetooth_only"
               ? "No Bluetooth peers found yet. Check that Bluetooth is on, permissions are granted, and Lightning is open on a supported device."
               : nearbyDiscoveryStatus === "lan_unavailable"
@@ -1301,21 +1305,22 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
             <div className="space-y-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p className="text-sm font-semibold text-white">
+                  <p className="text-base font-semibold text-[var(--fg-primary)]">
                     Share link ready
                   </p>
-                  <p className="meta-copy mt-1">
+                  <p className="mt-1 text-sm leading-6 text-[var(--fg-secondary)]">
                     Copy the receive link or scan the QR code on the receiving
                     device. Keep this sender window open until the receiver is
                     done.
                   </p>
                 </div>
                 <button
+                  type="button"
                   onClick={() => void handleCopyReceiveLink()}
-                  className={`glass-button inline-flex items-center gap-2 px-4 py-2 text-sm ${
+                  className={`inline-flex min-h-11 items-center gap-2 rounded-xl border px-4 py-2 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] ${
                     copied === "link"
-                      ? "border-emerald-400/20 bg-emerald-500/10 text-emerald-100"
-                      : "text-slate-100"
+                      ? "border-[var(--state-success)]/35 bg-[var(--state-success)]/10 text-[var(--state-success)]"
+                      : "border-[var(--border-strong)] bg-[var(--surface-1)] text-[var(--fg-primary)] hover:bg-[var(--surface-hover)]"
                   }`}
                 >
                   <Copy className="h-4 w-4" />
@@ -1324,20 +1329,20 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
               </div>
 
               <div
-                className={`rounded-[20px] border px-4 py-3 text-sm ${
+                className={`rounded-2xl border px-4 py-3 text-sm ${
                   visibleToNearbyPeers
-                    ? "border-emerald-400/18 bg-emerald-500/10 text-emerald-50"
-                    : "border-white/8 bg-white/[0.03] text-slate-300"
+                    ? "border-[var(--state-success)]/35 bg-[var(--state-success)]/10 text-[var(--fg-primary)]"
+                    : "border-[var(--border-subtle)] bg-[var(--surface-1)] text-[var(--fg-secondary)]"
                 }`}
               >
-                <p className="metric-label">
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--fg-muted)]">
                   {visibleToNearbyPeers
                     ? "Nearby discovery is active"
                     : discoveryEnabled
                       ? "Share link is ready; discovery is starting"
                       : "Nearby discovery is disabled"}
                 </p>
-                <p className="mt-2 leading-6">
+                <p className="mt-2 text-sm leading-6">
                   {visibleToNearbyPeers
                     ? "Saved devices found through active discovery may see this share while you stay online. If the receiver does not appear, send them this receive link."
                     : discoveryEnabled
@@ -1347,24 +1352,24 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
               </div>
 
               {receiveHandoffLink ? (
-                <div className="overflow-hidden rounded-[20px] border border-emerald-400/16 bg-emerald-500/[0.08] p-4">
-                  <p className="metric-label text-emerald-100/80">
+                <div className="overflow-hidden rounded-2xl border border-[var(--accent-border)] bg-[var(--accent-subtle)] p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--accent-primary)]">
                     Recommended receive link
                   </p>
-                  <code className="mt-2 block break-all font-mono text-[13px] leading-7 text-emerald-50/90">
+                  <code className="mt-2 block break-all font-mono text-sm leading-6 text-[var(--fg-primary)]">
                     {displayReceiveLink(receiveHandoffLink)}
                   </code>
                 </div>
               ) : null}
 
-              <div className="overflow-hidden rounded-[20px] border border-white/[0.08] bg-black/25 p-4">
+              <div className="overflow-hidden rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-1)] p-4">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                  <p className="metric-label">Raw ticket fallback</p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--fg-muted)]">Raw ticket fallback</p>
                   <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
                       onClick={() => setShowRawTicket((value) => !value)}
-                      className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-semibold text-slate-200 transition-colors hover:bg-white/[0.08]"
+                      className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[var(--border-strong)] bg-[var(--surface-0)] px-3 py-1.5 text-sm font-medium text-[var(--fg-primary)] transition hover:bg-[var(--surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
                     >
                       <Eye className="h-3.5 w-3.5" />
                       {showRawTicket ? "Hide" : "Reveal"}
@@ -1372,10 +1377,10 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
                     <button
                       type="button"
                       onClick={() => void handleCopyRawTicket()}
-                      className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                      className={`min-h-11 rounded-xl border px-3 py-1.5 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] ${
                         copied === "ticket"
-                          ? "border-emerald-400/20 bg-emerald-500/10 text-emerald-100"
-                          : "border-white/10 bg-white/[0.04] text-slate-200 hover:bg-white/[0.08]"
+                          ? "border-[var(--state-success)]/35 bg-[var(--state-success)]/10 text-[var(--state-success)]"
+                          : "border-[var(--border-strong)] bg-[var(--surface-0)] text-[var(--fg-primary)] hover:bg-[var(--surface-hover)]"
                       }`}
                     >
                       {copied === "ticket" ? "Ticket copied" : "Copy"}
@@ -1383,11 +1388,11 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
                   </div>
                 </div>
                 {showRawTicket ? (
-                  <code className="block break-all font-mono text-[13px] leading-7 text-sky-50/88">
+                  <code className="block break-all font-mono text-sm leading-6 text-[var(--fg-primary)]">
                     {shareTicket}
                   </code>
                 ) : (
-                  <p className="text-sm leading-6 text-slate-300">
+                  <p className="text-sm leading-6 text-[var(--fg-secondary)]">
                     Hidden because anyone with the ticket can receive while this
                     share is active. Reveal it only for manual paste fallback.
                   </p>
@@ -1398,19 +1403,19 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
             <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-1)] p-5 text-center">
               {qrSvg ? (
                 <div
-                  className="qr-code-frame rounded-[20px] border border-white/[0.08] bg-white p-3"
+                  className="qr-code-frame rounded-2xl border border-[var(--border-strong)] bg-white p-3"
                   dangerouslySetInnerHTML={{ __html: qrSvg }}
                 />
               ) : (
-                <div className="glass-icon h-20 w-20 rounded-[24px]">
-                  <Link2 className="h-6 w-6 text-slate-400" />
+                <div className="grid h-20 w-20 place-items-center rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-2)]">
+                  <Link2 className="h-6 w-6 text-[var(--fg-muted)]" />
                 </div>
               )}
               <div>
-                <p className="text-sm font-semibold text-white">
+                <p className="text-sm font-semibold text-[var(--fg-primary)]">
                   Scan to receive
                 </p>
-                <p className="meta-copy mt-1">
+                <p className="mt-1 text-sm leading-6 text-[var(--fg-secondary)]">
                   Opens the receive handoff page first; nearby discovery and
                   manual ticket entry still work.
                 </p>
@@ -1422,8 +1427,8 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
 
       {sendTransfer ? (
         <section className="space-y-2">
-          <div className="flex items-center gap-2 text-sm font-medium text-slate-200">
-            <CheckCircle2 className="h-4 w-4 text-sky-200" />
+          <div className="flex items-center gap-2 text-sm font-semibold text-[var(--fg-primary)]">
+            <CheckCircle2 className="h-4 w-4 text-[var(--accent-primary)]" />
             Current share
           </div>
           <TransferCard

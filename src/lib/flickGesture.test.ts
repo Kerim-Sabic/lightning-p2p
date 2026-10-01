@@ -30,15 +30,15 @@ describe("classifyFlickDirection", () => {
 });
 
 describe("arrivalDirectionFromSenderFlick", () => {
-  it("preserves the sender's approximate side on the receiving screen", () => {
-    expect(arrivalDirectionFromSenderFlick("right")).toBe("right");
-    expect(arrivalDirectionFromSenderFlick("down_right")).toBe("down_right");
-    expect(arrivalDirectionFromSenderFlick("down")).toBe("down");
-    expect(arrivalDirectionFromSenderFlick("down_left")).toBe("down_left");
-    expect(arrivalDirectionFromSenderFlick("left")).toBe("left");
-    expect(arrivalDirectionFromSenderFlick("up_left")).toBe("up_left");
-    expect(arrivalDirectionFromSenderFlick("up")).toBe("up");
-    expect(arrivalDirectionFromSenderFlick("up_right")).toBe("up_right");
+  it("shows the sender entering from the opposite side of the receiver", () => {
+    expect(arrivalDirectionFromSenderFlick("right")).toBe("left");
+    expect(arrivalDirectionFromSenderFlick("down_right")).toBe("up_left");
+    expect(arrivalDirectionFromSenderFlick("down")).toBe("up");
+    expect(arrivalDirectionFromSenderFlick("down_left")).toBe("up_right");
+    expect(arrivalDirectionFromSenderFlick("left")).toBe("right");
+    expect(arrivalDirectionFromSenderFlick("up_left")).toBe("down_right");
+    expect(arrivalDirectionFromSenderFlick("up")).toBe("down");
+    expect(arrivalDirectionFromSenderFlick("up_right")).toBe("down_left");
   });
 });
 

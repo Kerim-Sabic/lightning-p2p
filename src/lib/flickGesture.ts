@@ -55,11 +55,21 @@ const FLICK_DIRECTIONS: readonly FlickDirection[] = [
   "up_right",
 ];
 
-/** Carries the sender's chosen approximate side onto the receiver's screen. */
+/** Converts the sender's recipient-side gesture to the sender's side at arrival. */
 export function arrivalDirectionFromSenderFlick(
   direction: FlickDirection,
 ): FlickDirection {
-  return direction;
+  const opposite: Record<FlickDirection, FlickDirection> = {
+    right: "left",
+    down_right: "up_left",
+    down: "up",
+    down_left: "up_right",
+    left: "right",
+    up_left: "down_right",
+    up: "down",
+    up_right: "down_left",
+  };
+  return opposite[direction];
 }
 
 export const MIN_FLICK_DISTANCE_PX = 48;
