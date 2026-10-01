@@ -126,12 +126,14 @@ pub async fn send_files(
     let (plan, sampler) =
         prepare_share_plan(paths, &cancel_rx, &reporter, sampler, &queue, &transfer_id).await?;
     progress.set(0, plan.total_size);
+    let concurrent_transfers = queue.list().await.len().max(1);
 
     let mut result = create_share_with_plan(
         node,
         plan,
         Some(progress.clone()),
         profile,
+        concurrent_transfers,
         Some(cancel_rx.clone()),
     )
     .await;
@@ -325,7 +327,7 @@ pub async fn create_share(node: &LightningP2PNode, paths: Vec<PathBuf>) -> Resul
         .await
         .map_err(|error| LightningP2PError::Other(error.to_string()))??;
     let profile = crate::transfer::TransferMode::platform_default().profile();
-    let outcome = create_share_with_plan(node, plan, None, profile, None).await?;
+    let outcome = create_share_with_plan(node, plan, None, profile, 1, None).await?;
     node.authorize_public_share(outcome.hash).await?;
     Ok(outcome)
 }
@@ -335,12 +337,21 @@ async fn create_share_with_plan(
     plan: SharePlan,
     progress: Option<ProgressHandle>,
     profile: TransferProfile,
+    concurrent_transfers: usize,
     cancel_rx: Option<watch::Receiver<bool>>,
 ) -> Result<ShareOutcome> {
     let file_count = u32::try_from(plan.sources.len()).map_err(|_| {
         LightningP2PError::Other("The share contains too many files to describe.".into())
     })?;
-    let imported = import_sources(node.blobs_client(), &plan, progress, profile, cancel_rx).await?;
+    let imported = import_sources(
+        node.blobs_client(),
+        &plan,
+        progress,
+        profile,
+        concurrent_transfers,
+        cancel_rx,
+    )
+    .await?;
     let hash = persist_collection(node.blobs_client(), imported).await?;
     let ticket = build_ticket(node, hash).await?;
     tracing::info!("Lightning P2P share content prepared");
@@ -657,8 +668,27 @@ async fn import_sources(
     plan: &SharePlan,
     progress: Option<ProgressHandle>,
     profile: TransferProfile,
+    concurrent_transfers: usize,
     cancel_rx: Option<watch::Receiver<bool>>,
 ) -> Result<Vec<ImportedSource>> {
+    let parallelism = import_parallelism(
+        plan.sources.len(),
+        plan.total_size,
+        profile,
+        concurrent_transfers,
+    );
+    let started_at = std::time::Instant::now();
+    if profile.mode == crate::transfer::TransferMode::SmartAuto {
+        tracing::debug!(
+            source_count = plan.sources.len(),
+            total_bytes = plan.total_size,
+            available_cores =
+                std::thread::available_parallelism().map_or(2, std::num::NonZeroUsize::get),
+            concurrent_transfers,
+            import_parallelism = parallelism,
+            "SmartAuto selected a bounded source-import budget"
+        );
+    }
     let tasks = plan
         .sources
         .iter()
@@ -675,22 +705,32 @@ async fn import_sources(
                 cancel_rx.clone(),
             )
         });
-    let mut pending = stream::iter(tasks).buffer_unordered(import_parallelism(
-        plan.sources.len(),
-        plan.total_size,
-        profile,
-    ));
+    let mut pending = stream::iter(tasks).buffer_unordered(parallelism);
     let mut imported = Vec::with_capacity(plan.sources.len());
 
     while let Some(item) = pending.next().await {
         imported.push(item?);
     }
 
+    if profile.mode == crate::transfer::TransferMode::SmartAuto {
+        tracing::debug!(
+            elapsed_ms = u64::try_from(started_at.elapsed().as_millis()).unwrap_or(u64::MAX),
+            imported_bytes = plan.total_size,
+            import_parallelism = parallelism,
+            "SmartAuto source-import sample completed"
+        );
+    }
+
     imported.sort_by_key(|item| item.index);
     Ok(imported.into_iter().map(|item| item.source).collect())
 }
 
-fn import_parallelism(source_count: usize, total_size: u64, profile: TransferProfile) -> usize {
+fn import_parallelism(
+    source_count: usize,
+    total_size: u64,
+    profile: TransferProfile,
+    concurrent_transfers: usize,
+) -> usize {
     // Import is I/O-bound (disk read + hashing handled by iroh-blobs in async tasks),
     // so CPU count is a poor proxy — NVMe can comfortably absorb many in-flight imports.
     // Resolution order:
@@ -700,7 +740,7 @@ fn import_parallelism(source_count: usize, total_size: u64, profile: TransferPro
     let cap = env_import_parallelism_cap().unwrap_or_else(|| {
         if profile.mode == crate::transfer::TransferMode::SmartAuto {
             let cores = std::thread::available_parallelism().map_or(2, std::num::NonZeroUsize::get);
-            smart_auto_import_parallelism(source_count, total_size, cores)
+            smart_auto_import_parallelism(source_count, total_size, cores, concurrent_transfers)
         } else {
             profile.import_parallelism
         }
@@ -708,22 +748,29 @@ fn import_parallelism(source_count: usize, total_size: u64, profile: TransferPro
     compute_import_parallelism(source_count, cap.min(MAX_IMPORT_PARALLELISM))
 }
 
-/// Adapts only the bounded import fanout from observable CPU and payload shape.
-/// Large files use fewer simultaneous hashing pipelines; small-file batches can
-/// use up to twice the available parallelism, with an eight-job ceiling.
-fn smart_auto_import_parallelism(source_count: usize, total_size: u64, cores: usize) -> usize {
+/// Adapts bounded import fanout from CPU, payload shape, and active-transfer contention.
+/// Large files use fewer hashing pipelines; small-file batches may use up to
+/// twice CPU parallelism, with an eight-job ceiling divided across active work.
+fn smart_auto_import_parallelism(
+    source_count: usize,
+    total_size: u64,
+    cores: usize,
+    concurrent_transfers: usize,
+) -> usize {
     if source_count <= 1 {
         return 1;
     }
     let cores = cores.max(1);
     let average_file_size = total_size / source_count as u64;
-    let cap = if average_file_size >= 64 * 1024 * 1024 || total_size >= 1024 * 1024 * 1024 {
+    let workload_cap = if average_file_size >= 64 * 1024 * 1024 || total_size >= 1024 * 1024 * 1024
+    {
         cores.min(4)
     } else if average_file_size <= 4 * 1024 * 1024 {
         cores.saturating_mul(2).min(8)
     } else {
         cores.min(8)
     };
+    let cap = workload_cap.div_ceil(concurrent_transfers.max(1));
     source_count.min(cap.max(1))
 }
 
@@ -1021,11 +1068,21 @@ mod tests {
     #[test]
     fn smart_auto_scales_imports_to_workload_and_available_cores() {
         const MB: u64 = 1024 * 1024;
-        assert_eq!(smart_auto_import_parallelism(100, 100 * MB, 2), 4);
-        assert_eq!(smart_auto_import_parallelism(100, 8 * 1024 * MB, 16), 4);
-        assert_eq!(smart_auto_import_parallelism(100, 100 * MB, 1), 2);
-        assert_eq!(smart_auto_import_parallelism(1, 8 * 1024 * MB, 16), 1);
-        assert_eq!(smart_auto_import_parallelism(3, 6 * MB, 12), 3);
+        assert_eq!(smart_auto_import_parallelism(100, 100 * MB, 2, 1), 4);
+        assert_eq!(smart_auto_import_parallelism(100, 8 * 1024 * MB, 16, 1), 4);
+        assert_eq!(smart_auto_import_parallelism(100, 100 * MB, 1, 1), 2);
+        assert_eq!(smart_auto_import_parallelism(1, 8 * 1024 * MB, 16, 1), 1);
+        assert_eq!(smart_auto_import_parallelism(3, 6 * MB, 12, 1), 3);
+    }
+
+    #[test]
+    fn smart_auto_shares_import_budget_across_concurrent_transfers() {
+        const MB: u64 = 1024 * 1024;
+        assert_eq!(smart_auto_import_parallelism(100, 100 * MB, 4, 0), 8);
+        assert_eq!(smart_auto_import_parallelism(100, 100 * MB, 4, 1), 8);
+        assert_eq!(smart_auto_import_parallelism(100, 100 * MB, 4, 2), 4);
+        assert_eq!(smart_auto_import_parallelism(100, 100 * MB, 4, 4), 2);
+        assert_eq!(smart_auto_import_parallelism(100, 8 * 1024 * MB, 16, 20), 1);
     }
 
     #[test]
