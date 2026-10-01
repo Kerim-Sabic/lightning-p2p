@@ -450,6 +450,15 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
     setFlickVerifiedNodeIds(null);
   };
 
+  const cancelFlickWithFeedback = (): void => {
+    const wasActive = activeFlickRef.current !== null;
+    cancelFlick();
+    setFlickHint(null);
+    if (wasActive) {
+      setError("Flick cancelled. Tap Send to continue, or try the gesture again.");
+    }
+  };
+
   const handleSelectionPointerDown = (
     event: ReactPointerEvent<HTMLDivElement>,
   ): void => {
@@ -899,14 +908,10 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
             onPointerDown={(event) => handleFlickPointerDown(event, device)}
             onPointerMove={handleFlickPointerMove}
             onPointerUp={handleFlickPointerUp}
-            onPointerCancel={() => {
-              cancelFlick();
-              setFlickHint(null);
-            }}
+            onPointerCancel={cancelFlickWithFeedback}
             onLostPointerCapture={() => {
               if (activeFlickRef.current) {
-                cancelFlick();
-                setFlickHint(null);
+                cancelFlickWithFeedback();
               }
             }}
             disabled={
@@ -1078,14 +1083,10 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
                     onPointerDown={handleSelectionPointerDown}
                     onPointerMove={handleSelectionPointerMove}
                     onPointerUp={handleSelectionPointerUp}
-                    onPointerCancel={() => {
-                      cancelFlick();
-                      setFlickHint(null);
-                    }}
+                    onPointerCancel={cancelFlickWithFeedback}
                     onLostPointerCapture={() => {
                       if (activeFlickRef.current) {
-                        cancelFlick();
-                        setFlickHint(null);
+                        cancelFlickWithFeedback();
                       }
                     }}
                     style={{ touchAction: "none" }}
