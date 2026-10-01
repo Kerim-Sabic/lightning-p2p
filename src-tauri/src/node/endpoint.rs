@@ -102,6 +102,7 @@ impl LightningP2PNode {
         // endpoint behind while the supervisor is waiting on storage.
         let startup_data_dir = data_dir.clone();
         let startup_download_dir = download_dir.clone();
+        tracing::info!("preparing node storage directories");
         tokio::task::spawn_blocking(move || {
             std::fs::create_dir_all(&startup_data_dir)?;
             std::fs::create_dir_all(&startup_download_dir)?;
@@ -135,6 +136,7 @@ impl LightningP2PNode {
 
         probe_mdns_socket();
         let lookup = MemoryLookup::new();
+        tracing::info!("binding iroh endpoint");
         let endpoint = bind_endpoint(relay_url, &data_dir, profile, &lookup).await?;
         let mdns = setup_mdns(&endpoint);
         tracing::info!(
@@ -153,7 +155,7 @@ impl LightningP2PNode {
             router_builder =
                 router_builder.accept(super::chat_protocol::CHAT_PROTOCOL_ALPN, protocol);
         }
-        tracing::info!("starting transfer protocol router");
+        tracing::info!("starting transfer and nearby protocol router");
         let router = router_builder.spawn();
         Ok(Self {
             endpoint,

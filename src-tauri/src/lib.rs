@@ -23,6 +23,7 @@ use node::{
     NodeRuntimeStatus, NodeSupervisor, OfferInbox,
 };
 use std::sync::{atomic::AtomicBool, Arc};
+use std::time::Duration;
 use storage::{
     blocked_peers::BlockedPeers,
     paired_devices::PairedDevices,
@@ -64,6 +65,9 @@ pub struct AppState {
     /// Guards the Windows GATT chat drain loop.
     pub chat_mesh_polling_active: Arc<AtomicBool>,
 }
+
+const NODE_READINESS_WAIT: Duration = Duration::from_secs(65);
+const NODE_READINESS_POLL: Duration = Duration::from_millis(100);
 
 impl AppState {
     /// Creates a new `AppState` with no node initialized yet.
@@ -139,13 +143,37 @@ impl AppState {
     ///
     /// # Errors
     ///
-    /// Returns `LightningP2PError::Other` if the node is not ready yet.
+    /// Returns `LightningP2PError::Other` if startup fails or does not finish
+    /// within the bounded startup window.
     pub async fn get_node(&self) -> Result<Arc<LightningP2PNode>> {
-        self.node
-            .read()
-            .await
-            .clone()
-            .ok_or_else(|| LightningP2PError::Other("Node not initialized yet".into()))
+        let readiness = tokio::time::timeout(NODE_READINESS_WAIT, async {
+            loop {
+                if let Some(node) = self.node.read().await.clone() {
+                    return Ok(node);
+                }
+
+                let status = self.node_supervisor.status().await;
+                if status.phase == node::NodeSupervisorPhase::Failed {
+                    return Err(LightningP2PError::Other(status.last_error.unwrap_or_else(
+                        || "Node startup failed. Open Settings to retry startup.".into(),
+                    )));
+                }
+                if status.phase == node::NodeSupervisorPhase::Idle {
+                    return Err(LightningP2PError::Other(
+                        "Node is not available. Open Settings to retry startup.".into(),
+                    ));
+                }
+
+                tokio::time::sleep(NODE_READINESS_POLL).await;
+            }
+        })
+        .await;
+
+        readiness.unwrap_or_else(|_| {
+            Err(LightningP2PError::Other(
+                "Node startup is taking too long. Open Settings to review diagnostics and retry startup.".into(),
+            ))
+        })
     }
 }
 
