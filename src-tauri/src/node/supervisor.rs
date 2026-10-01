@@ -23,10 +23,10 @@ use tokio::sync::{Mutex, RwLock};
 const NODE_SUPERVISOR_STATUS_EVENT: &str = "node-supervisor-status";
 const NODE_START_PREPARATION_TIMEOUT: Duration = Duration::from_secs(5);
 // Opening an existing on-disk blob store can take longer on Windows when the
-// database is large or the disk is cold. Keep startup bounded, but allow the
-// store to finish initializing instead of declaring a healthy install failed
-// after the old 25-second limit.
-const NODE_START_TIMEOUT: Duration = Duration::from_secs(60);
+// database is large or the disk is cold. Use this as a warning threshold only:
+// iroh-blobs starts its own actor/runtime while opening the store, so cancelling
+// this future can leave an orphaned database actor holding the file lock.
+const NODE_START_WARNING_AFTER: Duration = Duration::from_secs(60);
 
 /// Nearby services that must remain attached to the node across restarts.
 #[derive(Debug, Clone)]
@@ -352,7 +352,10 @@ impl NodeSupervisor {
             }
         }
 
-        match self.build_node(&app, settings, nearby.clone()).await {
+        match self
+            .build_node(&app, settings, nearby.clone(), phase, reason)
+            .await
+        {
             Ok(node) => {
                 if let Some(expected) = old_node_id {
                     if node.node_id() != expected {
@@ -397,6 +400,8 @@ impl NodeSupervisor {
         app: &AppHandle,
         settings: AppSettings,
         nearby: NearbyServices,
+        phase: NodeSupervisorPhase,
+        reason: &'static str,
     ) -> Result<LightningP2PNode> {
         let relay_url = settings.resolved_custom_relay_url()?;
         let profile = settings.transfer_mode.profile();
@@ -416,13 +421,23 @@ impl NodeSupervisor {
             Some(chat_protocol),
             profile,
         );
-        tokio::time::timeout(NODE_START_TIMEOUT, start)
+        tokio::pin!(start);
+        if tokio::time::timeout(NODE_START_WARNING_AFTER, &mut start)
             .await
-            .map_err(|_| {
-                LightningP2PError::Other(
-                    "Node startup timed out; open Settings and copy diagnostics.".into(),
-                )
-            })?
+            .is_err()
+        {
+            let message = "The local transfer store is taking longer than usual to open. Startup is continuing; keep Lightning open. If this persists, close any other Lightning window and retry from Settings.";
+            tracing::warn!(
+                reason,
+                "node storage initialization is still running after 60 seconds"
+            );
+            self.set_status(
+                app,
+                NodeSupervisorStatus::new(phase, Some(reason.into()), Some(message.into())),
+            )
+            .await;
+        }
+        start.await
     }
 
     async fn mark_failed(&self, app: &AppHandle, reason: &str, error: &LightningP2PError) {
