@@ -337,6 +337,7 @@ export function OfferPrompt() {
         {flickArrivalDirection ? (
           <div className="mt-3 flex items-center justify-center gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-1)] px-3 py-2.5 text-sm text-[var(--fg-secondary)]">
             <span
+              key={offer.offer_id}
               className="flick-arrival-file grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-[var(--accent-border)] bg-[var(--accent-subtle)] text-[var(--accent-primary)]"
               style={flickArrivalStyle}
               aria-hidden="true"
