@@ -40,7 +40,9 @@ import {
   movedBeyondFlickClickSlop,
   resolveFlickRelease,
   type FlickDirection,
+  type FlickPointerSample,
   type FlickTargetBounds,
+  snapshotFlickGesture,
 } from "../lib/flickGesture";
 import { createReceiveHandoffLink } from "../lib/shareLinks";
 import { attachAsyncUnlisten } from "../hooks/asyncSubscription";
@@ -144,6 +146,7 @@ interface ActiveFlick {
   startX: number;
   startY: number;
   startedAt: number;
+  samples: FlickPointerSample[];
   element: HTMLElement;
   targets?: FlickTargetBounds[];
   devices?: NearbyDevice[];
@@ -497,11 +500,13 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
     if (targets.length === 0) return;
 
     event.currentTarget.setPointerCapture(event.pointerId);
+    const startedAt = performance.now();
     activeFlickRef.current = {
       pointerId: event.pointerId,
       startX: event.clientX,
       startY: event.clientY,
-      startedAt: performance.now(),
+      startedAt,
+      samples: [{ x: event.clientX, y: event.clientY, at: startedAt }],
       element: event.currentTarget,
       targets,
       devices: devices.map((device) => ({ ...device })),
@@ -518,6 +523,17 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
     const active = activeFlickRef.current;
     if (!active || active.pointerId !== event.pointerId) return;
 
+    const now = performance.now();
+    const snapshot = snapshotFlickGesture(
+      active.startX,
+      active.startY,
+      active.startedAt,
+      active.samples,
+      event.clientX,
+      event.clientY,
+      now,
+    );
+    active.samples = snapshot.samples;
     const targetNodeId = flickTargetAtPoint(
       active.targets ?? [],
       event.clientX,
@@ -528,13 +544,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
     );
 
     if (targetNodeId) {
-      const dx = event.clientX - active.startX;
-      const dy = event.clientY - active.startY;
-      const direction = flickDirectionForGesture({
-        dx,
-        dy,
-        elapsedMs: performance.now() - active.startedAt,
-      });
+      const direction = flickDirectionForGesture(snapshot.measurement);
       const arrivalDirection = direction
         ? arrivalDirectionFromSenderFlick(direction)
         : null;
@@ -594,11 +604,17 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
       return;
     }
 
-    const dx = event.clientX - active.startX;
-    const dy = event.clientY - active.startY;
-    const elapsedMs = performance.now() - active.startedAt;
-    const direction =
-      flickDirectionForGesture({ dx, dy, elapsedMs }) ?? undefined;
+    const now = performance.now();
+    const { measurement } = snapshotFlickGesture(
+      active.startX,
+      active.startY,
+      active.startedAt,
+      active.samples,
+      event.clientX,
+      event.clientY,
+      now,
+    );
+    const direction = flickDirectionForGesture(measurement) ?? undefined;
     void handleSendToDevice(device, direction);
   };
 
@@ -698,12 +714,14 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
     }
 
     event.currentTarget.setPointerCapture(event.pointerId);
+    const startedAt = performance.now();
     activeFlickRef.current = {
       nodeId: device.node_id,
       pointerId: event.pointerId,
       startX: event.clientX,
       startY: event.clientY,
-      startedAt: performance.now(),
+      startedAt,
+      samples: [{ x: event.clientX, y: event.clientY, at: startedAt }],
       element: event.currentTarget,
       selectionPaths: shareSelection.map((item) => item.path),
     };
@@ -726,11 +744,18 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
     ) {
       active.movedBeyondClickSlop = true;
     }
-    const direction = flickDirectionForGesture({
-      dx: event.clientX - active.startX,
-      dy: event.clientY - active.startY,
-      elapsedMs: performance.now() - active.startedAt,
-    });
+    const now = performance.now();
+    const snapshot = snapshotFlickGesture(
+      active.startX,
+      active.startY,
+      active.startedAt,
+      active.samples,
+      event.clientX,
+      event.clientY,
+      now,
+    );
+    active.samples = snapshot.samples;
+    const direction = flickDirectionForGesture(snapshot.measurement);
     if (direction) {
       const arrivalDirection = arrivalDirectionFromSenderFlick(direction);
       setFlickHint(
@@ -753,9 +778,17 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
       active.element.releasePointerCapture(active.pointerId);
     }
 
-    const elapsedMs = performance.now() - active.startedAt;
-    const dx = event.clientX - active.startX;
-    const dy = event.clientY - active.startY;
+    const now = performance.now();
+    const { measurement } = snapshotFlickGesture(
+      active.startX,
+      active.startY,
+      active.startedAt,
+      active.samples,
+      event.clientX,
+      event.clientY,
+      now,
+    );
+    const { dx, dy } = measurement;
     const movedBeyondClickSlop =
       active.movedBeyondClickSlop ||
       movedBeyondFlickClickSlop(dx, dy);
@@ -787,7 +820,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
       return;
     }
     const releaseAction = resolveFlickRelease(
-      { dx, dy, elapsedMs },
+      measurement,
       movedBeyondClickSlop,
     );
     if (releaseAction.kind === "send") {

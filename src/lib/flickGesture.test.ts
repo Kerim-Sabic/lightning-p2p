@@ -10,6 +10,7 @@ import {
   liveFlickRecipient,
   movedBeyondFlickClickSlop,
   resolveFlickRelease,
+  snapshotFlickGesture,
 } from "./flickGesture";
 
 describe("classifyFlickDirection", () => {
@@ -118,6 +119,59 @@ describe("resolveFlickRelease", () => {
     expect(resolveFlickRelease({ dx: 3, dy: 4, elapsedMs: 100 }, false)).toEqual(
       { kind: "tap" },
     );
+  });
+
+  it("keeps a directional cue after holding before a quick swipe", () => {
+    const { measurement } = snapshotFlickGesture(
+      0,
+      0,
+      0,
+      [
+        { x: 0, y: 0, at: 0 },
+        { x: 0, y: 0, at: 1000 },
+        { x: 80, y: 0, at: 1080 },
+      ],
+      80,
+      0,
+      1100,
+    );
+    expect(measurement.elapsedMs).toBe(1100);
+    expect(flickDirectionForGesture(measurement)).toBe("right");
+  });
+
+  it("drops stale directional motion but preserves the send on release", () => {
+    const snapshot = snapshotFlickGesture(
+      0,
+      0,
+      0,
+      [
+        { x: 0, y: 0, at: 0 },
+        { x: 80, y: 0, at: 80 },
+      ],
+      80,
+      0,
+      500,
+    );
+    expect(flickDirectionForGesture(snapshot.measurement)).toBeNull();
+    expect(resolveFlickRelease(snapshot.measurement, true)).toEqual({
+      kind: "send",
+    });
+  });
+
+  it("does not turn a slow drag into a direction cue", () => {
+    const snapshot = snapshotFlickGesture(
+      0,
+      0,
+      0,
+      [
+        { x: 0, y: 0, at: 0 },
+        { x: 40, y: 0, at: 200 },
+      ],
+      100,
+      0,
+      400,
+    );
+    expect(flickDirectionForGesture(snapshot.measurement)).toBeNull();
   });
 });
 

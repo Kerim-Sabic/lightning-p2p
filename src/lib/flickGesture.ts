@@ -2,6 +2,20 @@ export interface FlickMeasurement {
   dx: number;
   dy: number;
   elapsedMs: number;
+  recentDx?: number;
+  recentDy?: number;
+  recentElapsedMs?: number;
+}
+
+export interface FlickPointerSample {
+  x: number;
+  y: number;
+  at: number;
+}
+
+export interface FlickGestureSnapshot {
+  samples: FlickPointerSample[];
+  measurement: FlickMeasurement;
 }
 
 export type FlickReleaseAction =
@@ -69,6 +83,59 @@ export function arrivalDirectionFromSenderFlick(
 export const MIN_FLICK_DISTANCE_PX = 48;
 export const MIN_FLICK_VELOCITY_PX_PER_MS = 0.65;
 const FLICK_CLICK_SLOP_PX = 8;
+const FLICK_VELOCITY_WINDOW_MS = 120;
+const FLICK_MOTION_EXPIRY_MS = 250;
+
+/** Measures total travel and recent velocity with a bounded pointer history. */
+export function snapshotFlickGesture(
+  startX: number,
+  startY: number,
+  startedAt: number,
+  previousSamples: readonly FlickPointerSample[],
+  x: number,
+  y: number,
+  at: number,
+): FlickGestureSnapshot {
+  const retainedCutoff = at - FLICK_MOTION_EXPIRY_MS;
+  const olderSample = previousSamples
+    .filter((sample) => sample.at < retainedCutoff)
+    .at(-1);
+  const recentSamples = previousSamples.filter(
+    (sample) => sample.at >= retainedCutoff,
+  );
+  const lastSample = recentSamples.at(-1) ?? olderSample;
+  const moved = !lastSample || lastSample.x !== x || lastSample.y !== y;
+  const samples = [
+    ...(olderSample ? [olderSample] : []),
+    ...recentSamples,
+    ...(moved ? [{ x, y, at }] : []),
+  ];
+  const motionEnd = samples.at(-1);
+  const motionIsFresh =
+    motionEnd !== undefined && at - motionEnd.at <= FLICK_MOTION_EXPIRY_MS;
+  const velocityStart = motionIsFresh
+    ? samples.find(
+        (sample) =>
+          motionEnd.at - sample.at <= FLICK_VELOCITY_WINDOW_MS &&
+          sample.at < motionEnd.at,
+      )
+    : undefined;
+
+  return {
+    samples,
+    measurement: {
+      dx: x - startX,
+      dy: y - startY,
+      elapsedMs: at - startedAt,
+      recentDx:
+        velocityStart && motionEnd ? motionEnd.x - velocityStart.x : 0,
+      recentDy:
+        velocityStart && motionEnd ? motionEnd.y - velocityStart.y : 0,
+      recentElapsedMs:
+        velocityStart && motionEnd ? motionEnd.at - velocityStart.at : 0,
+    },
+  };
+}
 
 /** Distinguishes a tap from a pointer gesture that should not trigger its click action. */
 export function movedBeyondFlickClickSlop(dx: number, dy: number): boolean {
@@ -123,9 +190,16 @@ export function flickDirectionForGesture({
   dx,
   dy,
   elapsedMs,
+  recentDx,
+  recentDy,
+  recentElapsedMs,
 }: FlickMeasurement): FlickDirection | null {
-  return isDeliberateFlick({ dx, dy, elapsedMs })
-    ? classifyFlickDirection(dx, dy)
+  const measurement = { dx, dy, elapsedMs, recentDx, recentDy, recentElapsedMs };
+  if (!isDeliberateFlick(measurement)) return null;
+  const directionX = recentDx ?? dx;
+  const directionY = recentDy ?? dy;
+  return directionX !== 0 || directionY !== 0
+    ? classifyFlickDirection(directionX, directionY)
     : null;
 }
 
@@ -143,11 +217,18 @@ export function isDeliberateFlick({
   dx,
   dy,
   elapsedMs,
+  recentDx,
+  recentDy,
+  recentElapsedMs,
 }: FlickMeasurement): boolean {
-  if (elapsedMs <= 0) return false;
+  const velocityX = recentDx ?? dx;
+  const velocityY = recentDy ?? dy;
+  const velocityElapsed = recentElapsedMs ?? elapsedMs;
+  if (velocityElapsed <= 0) return false;
   const distance = Math.hypot(dx, dy);
   return (
     distance >= MIN_FLICK_DISTANCE_PX &&
-    distance / elapsedMs >= MIN_FLICK_VELOCITY_PX_PER_MS
+    Math.hypot(velocityX, velocityY) / velocityElapsed >=
+      MIN_FLICK_VELOCITY_PX_PER_MS
   );
 }
