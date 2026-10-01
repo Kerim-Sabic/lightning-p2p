@@ -5,12 +5,16 @@ use std::path::{Path, PathBuf};
 use tracing_subscriber::{fmt::MakeWriter, EnvFilter};
 
 const APP_IDENTIFIER: &str = "com.lightningp2p.app";
+const DATA_DIR_ENV: &str = "LIGHTNING_P2P_DATA_DIR";
+const DEPRECATED_DATA_DIR_ENV: &str = "FASTDROP_DATA_DIR";
+const PROFILE_ENV: &str = "LIGHTNING_P2P_PROFILE";
+const DEPRECATED_PROFILE_ENV: &str = "FASTDROP_PROFILE";
 const DIAGNOSTICS_DIR_NAME: &str = "diagnostics";
 const RUST_LOG_FILE_NAME: &str = "rust.log";
 
 /// Initializes the `tracing` subscriber with env-filter support and a local log file.
 ///
-/// Set `RUST_LOG=lightning_p2p=debug` for verbose output. Android defaults to
+/// Set `RUST_LOG=lightning_p2p_lib=debug` for verbose output. Android defaults to
 /// info-level app logs so launch failures have useful local context.
 pub fn init_tracing() {
     let log_path = diagnostic_log_path();
@@ -57,9 +61,35 @@ fn diagnostic_log_path() -> Option<PathBuf> {
 }
 
 fn default_data_dir() -> Option<PathBuf> {
-    dirs::data_local_dir()
-        .or_else(|| std::env::current_dir().ok())
-        .map(|dir| dir.join(APP_IDENTIFIER))
+    resolve_data_dir(
+        non_empty_env(DATA_DIR_ENV),
+        non_empty_env(DEPRECATED_DATA_DIR_ENV),
+        non_empty_env(PROFILE_ENV),
+        non_empty_env(DEPRECATED_PROFILE_ENV),
+        dirs::data_local_dir().or_else(|| std::env::current_dir().ok()),
+    )
+}
+
+fn non_empty_env(name: &str) -> Option<std::ffi::OsString> {
+    std::env::var_os(name).filter(|value| !value.is_empty())
+}
+
+fn resolve_data_dir(
+    data_dir: Option<std::ffi::OsString>,
+    deprecated_data_dir: Option<std::ffi::OsString>,
+    profile: Option<std::ffi::OsString>,
+    deprecated_profile: Option<std::ffi::OsString>,
+    platform_data_dir: Option<PathBuf>,
+) -> Option<PathBuf> {
+    if let Some(path) = data_dir.or(deprecated_data_dir) {
+        return Some(PathBuf::from(path));
+    }
+
+    let mut dir = platform_data_dir?.join(APP_IDENTIFIER);
+    if let Some(profile) = profile.or(deprecated_profile) {
+        dir.push(profile);
+    }
+    Some(dir)
 }
 
 #[derive(Clone)]
@@ -140,8 +170,82 @@ fn panic_summary(panic_info: &std::panic::PanicHookInfo<'_>) -> String {
 
 fn default_filter() -> &'static str {
     if cfg!(any(target_os = "android", target_os = "ios")) {
-        "lightning_p2p=info,iroh=warn,iroh_blobs=warn"
+        "lightning_p2p_lib=info,lightning_p2p=info,iroh=warn,iroh_blobs=warn"
     } else {
-        "lightning_p2p=info,iroh=warn"
+        "lightning_p2p_lib=info,lightning_p2p=info,iroh=warn"
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_data_dir;
+    use std::ffi::OsString;
+    use std::path::PathBuf;
+
+    #[test]
+    fn explicit_data_directory_matches_storage_precedence() {
+        let resolved = resolve_data_dir(
+            Some(OsString::from("custom-data")),
+            Some(OsString::from("legacy-data")),
+            Some(OsString::from("ignored-profile")),
+            None,
+            Some(PathBuf::from("platform-data")),
+        );
+
+        assert_eq!(resolved, Some(PathBuf::from("custom-data")));
+    }
+
+    #[test]
+    fn profile_logs_are_isolated_under_the_application_data_directory() {
+        let resolved = resolve_data_dir(
+            None,
+            None,
+            Some(OsString::from("work")),
+            None,
+            Some(PathBuf::from("platform-data")),
+        );
+
+        assert_eq!(
+            resolved,
+            Some(
+                PathBuf::from("platform-data")
+                    .join("com.lightningp2p.app")
+                    .join("work")
+            )
+        );
+    }
+
+    #[test]
+    fn deprecated_profile_and_data_directory_remain_supported() {
+        let explicit_dir = resolve_data_dir(
+            None,
+            Some(OsString::from("legacy-data")),
+            None,
+            Some(OsString::from("legacy-profile")),
+            Some(PathBuf::from("platform-data")),
+        );
+        assert_eq!(explicit_dir, Some(PathBuf::from("legacy-data")));
+
+        let profile_dir = resolve_data_dir(
+            None,
+            None,
+            None,
+            Some(OsString::from("legacy-profile")),
+            Some(PathBuf::from("platform-data")),
+        );
+        assert_eq!(
+            profile_dir,
+            Some(
+                PathBuf::from("platform-data")
+                    .join("com.lightningp2p.app")
+                    .join("legacy-profile")
+            )
+        );
+    }
+
+    #[test]
+    fn default_log_filter_includes_the_library_tracing_target() {
+        let filter = super::default_filter();
+        assert!(filter.contains("lightning_p2p_lib=info"));
     }
 }
