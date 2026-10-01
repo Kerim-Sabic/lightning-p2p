@@ -4,6 +4,11 @@ All notable changes to Lightning P2P are documented here. The project follows se
 
 ## [Unreleased]
 
+### Fixed
+
+- Key completed receive history by transfer ID and block stale resume requests
+  after the saved transfer's completion event was lost.
+
 ## [0.9.16] - 2026-10-01 ("Reliable Startup and Receiving")
 
 ### Fixed

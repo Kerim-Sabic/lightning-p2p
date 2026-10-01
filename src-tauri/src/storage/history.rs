@@ -21,6 +21,9 @@ pub enum TransferRecordStatus {
 /// A record of a completed receive or a prepared outgoing share.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TransferRecord {
+    /// Stable local transfer identifier when the record belongs to one transfer.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transfer_id: Option<String>,
     /// BLAKE3 hash of the transferred blob.
     pub hash: String,
     /// Original file or bundle name.
@@ -111,12 +114,37 @@ pub fn latest_send_by_hash(db: &StorageDb, hash: &str) -> Result<Option<Transfer
         .find(|record| record.direction == TransferDirection::Send && record.hash == hash))
 }
 
+/// Finds a completed receive by its stable local transfer identifier.
+///
+/// # Errors
+///
+/// Returns an error if history cannot be read or decoded.
+pub fn receive_by_transfer_id(db: &StorageDb, transfer_id: &str) -> Result<Option<TransferRecord>> {
+    let tree = db.tree(TREE_NAME)?;
+    let Some(value) = tree.get(transfer_history_key(
+        TransferDirection::Receive,
+        transfer_id,
+    ))?
+    else {
+        return Ok(None);
+    };
+    let record: TransferRecord = serde_json::from_slice(&value)?;
+    Ok((record.status == Some(TransferRecordStatus::Completed)).then_some(record))
+}
+
 fn history_key(record: &TransferRecord) -> Vec<u8> {
+    if let Some(transfer_id) = &record.transfer_id {
+        return transfer_history_key(record.direction, transfer_id);
+    }
     format!(
         "{:020}-{:?}-{}",
         record.timestamp, record.direction, record.hash
     )
     .into_bytes()
+}
+
+fn transfer_history_key(direction: TransferDirection, transfer_id: &str) -> Vec<u8> {
+    format!("transfer-{direction:?}-{transfer_id}").into_bytes()
 }
 
 #[cfg(test)]
@@ -133,6 +161,7 @@ mod tests {
     fn save_and_load_record() {
         let (db, _dir) = temp_db();
         let record = TransferRecord {
+            transfer_id: None,
             hash: "abc123".into(),
             filename: "test.txt".into(),
             size: 1024,
@@ -151,6 +180,7 @@ mod tests {
     fn latest_send_by_hash_prefers_newest_send() {
         let (db, _dir) = temp_db();
         let oldest = TransferRecord {
+            transfer_id: None,
             hash: "abc123".into(),
             filename: "old.txt".into(),
             size: 128,
@@ -160,6 +190,7 @@ mod tests {
             status: Some(TransferRecordStatus::SharePrepared),
         };
         let newest = TransferRecord {
+            transfer_id: None,
             hash: "abc123".into(),
             filename: "new.txt".into(),
             size: 256,
@@ -181,6 +212,7 @@ mod tests {
     fn clear_all_removes_records() {
         let (db, _dir) = temp_db();
         let record = TransferRecord {
+            transfer_id: None,
             hash: "abc123".into(),
             filename: "test.txt".into(),
             size: 1024,
@@ -213,5 +245,33 @@ mod tests {
 
         let records = load_all(&db).expect("load history");
         assert_eq!(records[0].status, Some(TransferRecordStatus::SharePrepared));
+    }
+
+    #[test]
+    fn completed_receives_are_idempotent_by_transfer_id() {
+        let (db, _dir) = temp_db();
+        let receive = |transfer_id: &str, filename: &str| TransferRecord {
+            transfer_id: Some(transfer_id.into()),
+            hash: "abc123".into(),
+            filename: filename.into(),
+            size: 1024,
+            peer: Some("peer-1".into()),
+            timestamp: 1_700_000_000,
+            direction: TransferDirection::Receive,
+            status: Some(TransferRecordStatus::Completed),
+        };
+
+        save_record(&db, &receive("transfer-a", "first.txt")).expect("first should save");
+        save_record(&db, &receive("transfer-b", "second.txt")).expect("second should save");
+        save_record(&db, &receive("transfer-a", "first.txt")).expect("retry should be safe");
+
+        let records = load_all(&db).expect("history should load");
+        assert_eq!(records.len(), 2);
+        assert_eq!(
+            receive_by_transfer_id(&db, "transfer-a")
+                .expect("lookup should succeed")
+                .map(|record| record.filename),
+            Some("first.txt".into())
+        );
     }
 }

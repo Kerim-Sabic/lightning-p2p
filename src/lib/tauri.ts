@@ -199,6 +199,7 @@ export interface ActiveTransfer {
 }
 
 export interface TransferRecord {
+  transfer_id?: string;
   hash: string;
   filename: string;
   size: number;

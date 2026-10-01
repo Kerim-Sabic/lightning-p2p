@@ -953,6 +953,7 @@ fn save_send_record(node: &LightningP2PNode, outcome: &ShareOutcome) -> Result<(
     history::save_record(
         node.db(),
         &TransferRecord {
+            transfer_id: None,
             hash: outcome.hash.to_string(),
             filename: outcome.label.clone(),
             size: outcome.total_size,

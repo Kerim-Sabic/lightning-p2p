@@ -61,6 +61,7 @@ impl ReceiveLimits {
 
 #[derive(Debug, Clone)]
 struct ReceiveOptions {
+    transfer_id: Option<String>,
     profile: TransferProfile,
     swarm_enabled: bool,
     limits: ReceiveLimits,
@@ -69,6 +70,7 @@ struct ReceiveOptions {
 
 #[derive(Debug, Clone)]
 struct ReceiveSummary {
+    transfer_id: Option<String>,
     hash: String,
     label: String,
     size: u64,
@@ -198,6 +200,7 @@ pub async fn receive_blob(
         &mut cancel_rx,
         Some(&progress),
         ReceiveOptions {
+            transfer_id: Some(transfer_id.clone()),
             profile,
             swarm_enabled,
             limits,
@@ -208,6 +211,15 @@ pub async fn receive_blob(
 
     match result {
         Ok(summary) => {
+            if let Err(_error) = save_peer_no_flush(node, &summary.peer) {
+                tracing::warn!("could not update received peer history");
+            }
+            if let Err(_error) = save_receive_record_no_flush(node, &summary) {
+                tracing::warn!("could not save receive history record");
+            }
+            if let Err(_error) = node.db().flush() {
+                tracing::warn!("could not flush receive history");
+            }
             queue.remove(&transfer_id).await;
             progress.set(summary.size, summary.size);
             progress.set_metrics(summary.metrics);
@@ -222,15 +234,6 @@ pub async fn receive_blob(
                 Some(summary.output_path.to_string_lossy().to_string()),
             ) {
                 tracing::warn!("could not emit completed receive event");
-            }
-            if let Err(_error) = save_peer_no_flush(node, &summary.peer) {
-                tracing::warn!("could not update received peer history");
-            }
-            if let Err(_error) = save_receive_record_no_flush(node, &summary) {
-                tracing::warn!("could not save receive history record");
-            }
-            if let Err(_error) = node.db().flush() {
-                tracing::warn!("could not flush receive history");
             }
             Ok(())
         }
@@ -279,6 +282,7 @@ pub async fn receive_ticket(
         &mut cancel_rx,
         None,
         ReceiveOptions {
+            transfer_id: None,
             profile,
             swarm_enabled: false,
             limits: ReceiveLimits::default(),
@@ -309,6 +313,7 @@ async fn receive_core(
     options: ReceiveOptions,
 ) -> Result<ReceiveSummary> {
     let ReceiveOptions {
+        transfer_id,
         profile,
         swarm_enabled,
         limits,
@@ -391,6 +396,7 @@ async fn receive_core(
         progress.set_metrics(metrics);
     }
     Ok(ReceiveSummary {
+        transfer_id,
         hash: primary.hash().to_string(),
         label: export_summary.label,
         size: export_summary.size,
@@ -792,6 +798,7 @@ fn save_receive_record_no_flush(node: &LightningP2PNode, summary: &ReceiveSummar
     history::save_record_no_flush(
         node.db(),
         &TransferRecord {
+            transfer_id: summary.transfer_id.clone(),
             hash: summary.hash.clone(),
             filename: summary.label.clone(),
             size: summary.size,

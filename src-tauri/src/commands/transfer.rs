@@ -251,6 +251,7 @@ pub async fn resume_transfer(
     if state.transfers.get(&transfer_id).await.is_some() {
         return Err(command_error("Transfer is already active"));
     }
+    ensure_receive_not_completed(&state, &transfer_id).await?;
     let record = state
         .resumable_receives
         .list()
@@ -286,6 +287,28 @@ pub async fn resume_transfer(
         Some(record),
     )
     .await
+}
+
+async fn ensure_receive_not_completed(state: &AppState, transfer_id: &str) -> CommandResult<()> {
+    let node = state.get_node().await.map_err(command_error)?;
+    let history_transfer_id = transfer_id.to_string();
+    let completed = tokio::task::spawn_blocking(move || {
+        history::receive_by_transfer_id(node.db(), &history_transfer_id)
+    })
+    .await
+    .map_err(|error| command_error(error.to_string()))?
+    .map_err(command_error)?;
+    if completed.is_some() {
+        let _ = crate::crypto::delete_receive_resume_ticket(&state.data_dir, transfer_id);
+        state
+            .resumable_receives
+            .remove(transfer_id)
+            .map_err(command_error)?;
+        return Err(command_error(
+            "This receive is already saved. Find it in Activity instead of receiving it again.",
+        ));
+    }
+    Ok(())
 }
 
 /// Returns a snapshot of all active transfers.
