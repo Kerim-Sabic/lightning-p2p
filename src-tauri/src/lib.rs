@@ -334,6 +334,7 @@ pub fn run() {
             commands::settings::open_download_dir,
             commands::mobile::resolve_content_uris,
             commands::mobile::take_pending_shared_files,
+            commands::mobile::delete_staged_shared_files,
             commands::mobile::take_pending_shared_ticket,
             commands::mobile::open_android_bucket,
             commands::mobile::start_ble_discovery,

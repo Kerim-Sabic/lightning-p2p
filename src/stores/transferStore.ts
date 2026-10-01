@@ -58,6 +58,17 @@ function cancelActiveSharePathScan(): void {
   }
 }
 
+function cleanupDiscardedSharePaths(
+  previous: SharePathInfo[],
+  retained: SharePathInfo[],
+): void {
+  const retainedPaths = new Set(retained.map((item) => item.path));
+  const discardedPaths = previous
+    .map((item) => item.path)
+    .filter((path) => !retainedPaths.has(path));
+  void tauri.deleteStagedSharedFiles(discardedPaths);
+}
+
 export interface TransferEntry {
   transferId: string;
   direction: TransferDirection;
@@ -454,6 +465,7 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
   },
   clearShareSelection: () => {
     if (get().isSharing) return;
+    const previousSelection = get().shareSelection;
     shareSelectionRequestSequence += 1;
     cancelActiveSharePathScan();
     set({
@@ -462,6 +474,7 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
       isSharing: false,
       isPreparingSelection: false,
     });
+    cleanupDiscardedSharePaths(previousSelection, []);
     if (tauri.isDesktopRuntime()) {
       void tauri.clearActiveShare().catch((error: unknown) => {
         set(errorState(error));
@@ -471,6 +484,7 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
 
   removeShareSelectionItem: (path) => {
     if (get().isSharing) return;
+    const previousSelection = get().shareSelection;
     shareSelectionRequestSequence += 1;
     cancelActiveSharePathScan();
     set((state) => ({
@@ -479,6 +493,10 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
       isSharing: false,
       isPreparingSelection: false,
     }));
+    cleanupDiscardedSharePaths(
+      previousSelection,
+      previousSelection.filter((item) => item.path !== path),
+    );
     if (tauri.isDesktopRuntime()) {
       void tauri.clearActiveShare().catch((error: unknown) => {
         set(errorState(error));
@@ -515,13 +533,16 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
       );
       if (requestSequence !== shareSelectionRequestSequence) return;
       set({ shareSelection, isPreparingSelection: false });
+      cleanupDiscardedSharePaths(previousSelection, shareSelection);
     } catch (error) {
       if (requestSequence !== shareSelectionRequestSequence) return;
+      const retainedSelection = behavior === "append" ? previousSelection : [];
       set({
         ...errorState(error),
-        shareSelection: behavior === "append" ? previousSelection : [],
+        shareSelection: retainedSelection,
         isPreparingSelection: false,
       });
+      cleanupDiscardedSharePaths(previousSelection, retainedSelection);
     } finally {
       if (activeSharePathScanId === requestId) {
         activeSharePathScanId = null;
@@ -690,10 +711,7 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
     const requestSequence = ++historyRequestSequence;
     try {
       const history = await tauri.getTransferHistory();
-      if (
-        requestSequence === historyRequestSequence &&
-        !historyClearInFlight
-      ) {
+      if (requestSequence === historyRequestSequence && !historyClearInFlight) {
         set({ history });
       }
     } catch (error) {

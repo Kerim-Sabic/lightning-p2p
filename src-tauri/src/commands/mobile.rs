@@ -275,6 +275,29 @@ pub(crate) mod android {
         .map_err(|e| e.to_string())
     }
 
+    pub fn delete_staged_shared_files(paths: Vec<String>) -> Result<(), String> {
+        if paths.is_empty() {
+            return Ok(());
+        }
+        let vm = jvm()?;
+        vm.attach_current_thread(|env| -> BridgeResult<()> {
+            let context = context_obj(env)?;
+            let paths = vec_to_jstring_array(env, &paths)?;
+            let class = load_app_class(env, RESOLVER_CLASS_DOTTED)?;
+            let raw = env.call_static_method(
+                class,
+                jni_str!("deleteStagedSharedFiles"),
+                jni_sig!("(Landroid/content/Context;[Ljava/lang/String;)I"),
+                &[JValue::Object(&context), JValue::Object(&paths)],
+            );
+            if let Err(error) = raw {
+                return Err(drain_exception(env, &error));
+            }
+            Ok(())
+        })
+        .map_err(|error| error.to_string())
+    }
+
     pub fn open_system_folder(bucket: &str) -> Result<(), String> {
         let vm = jvm()?;
         vm.attach_current_thread(|env| -> BridgeResult<()> {
@@ -714,6 +737,21 @@ pub async fn take_pending_shared_files() -> Result<Vec<String>, String> {
     #[cfg(not(target_os = "android"))]
     {
         Ok(Vec::new())
+    }
+}
+
+/// Removes Android share-sheet imports once they are no longer in the user's selection.
+/// Paths outside Lightning's private staging directory are ignored by the native bridge.
+#[tauri::command]
+pub async fn delete_staged_shared_files(paths: Vec<String>) -> Result<(), String> {
+    #[cfg(target_os = "android")]
+    {
+        android::delete_staged_shared_files(paths)
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = paths;
+        Ok(())
     }
 }
 

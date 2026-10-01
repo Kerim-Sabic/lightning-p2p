@@ -5,8 +5,27 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertThrows
 import org.junit.Test
+import java.nio.file.Files
 
 class ContentUriResolverTest {
+    @Test
+    fun stagedShareCleanupRemovesOnlyDirectFilesInsideTheStagingDirectory() {
+        val root = Files.createTempDirectory("lightning-share-cleanup").toFile()
+        val staging = root.resolve("shared-staging").apply { mkdirs() }
+        val staged = staging.resolve("share.bin").apply { writeText("shared") }
+        val outside = root.resolve("keep.txt").apply { writeText("keep") }
+
+        val removed = ContentUriResolver.deleteStagedSharedFiles(
+            staging,
+            arrayOf(staged.absolutePath, outside.absolutePath),
+        )
+
+        assertEquals(1, removed)
+        assertFalse(staged.exists())
+        assertTrue(outside.exists())
+        root.deleteRecursively()
+    }
+
     @Test
     fun sharedFileImportPreservesFreeSpaceReserve() {
         val reserve = 128L * 1024 * 1024

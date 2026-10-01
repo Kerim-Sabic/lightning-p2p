@@ -126,7 +126,7 @@ class MainActivity : TauriActivity() {
         applicationContext,
         uriStrings.toTypedArray(),
       )
-      ContentUriResolver.setPendingSharedFiles(resolved)
+      ContentUriResolver.setPendingSharedFiles(applicationContext, resolved)
       AndroidDiagnostics.info(this, "Stashed ${resolved.size} shared file(s) for drain")
     } catch (error: Throwable) {
       AndroidDiagnostics.error(this, "Failed to resolve shared files", error)

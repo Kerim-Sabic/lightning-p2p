@@ -18,6 +18,7 @@ vi.mock("../lib/tauri", async (importOriginal) => {
     getTransferHistory: vi.fn(),
     clearTransferHistory: vi.fn(),
     describeSharePaths: vi.fn(),
+    deleteStagedSharedFiles: vi.fn().mockResolvedValue(undefined),
     cancelSharePathScan: vi.fn().mockResolvedValue(true),
   };
 });
@@ -400,8 +401,7 @@ describe("node status snapshot reconciliation", () => {
       }),
     );
 
-    const refresh =
-      useTransferStore.getState().refreshNodeSupervisorStatus();
+    const refresh = useTransferStore.getState().refreshNodeSupervisorStatus();
     useTransferStore.getState().applyNodeSupervisorStatus({
       phase: "idle",
       last_reason: "app_startup",
@@ -448,6 +448,7 @@ describe("share selection editing", () => {
       isPreparingSelection: false,
     });
     vi.mocked(tauri.describeSharePaths).mockReset();
+    vi.mocked(tauri.deleteStagedSharedFiles).mockClear();
   });
 
   it("appends unique paths and removes only the requested item", async () => {
@@ -467,6 +468,17 @@ describe("share selection editing", () => {
     expect(
       useTransferStore.getState().shareSelection.map((item) => item.path),
     ).toEqual(["second.txt"]);
+    expect(tauri.deleteStagedSharedFiles).toHaveBeenCalledWith(["first.txt"]);
+  });
+
+  it("cleans up staged files discarded by replacing the selection", async () => {
+    vi.mocked(tauri.describeSharePaths).mockImplementation(async (paths) =>
+      paths.map(sharePath),
+    );
+    await useTransferStore.getState().prepareShareSelection(["old.txt"]);
+    await useTransferStore.getState().prepareShareSelection(["new.txt"]);
+
+    expect(tauri.deleteStagedSharedFiles).toHaveBeenCalledWith(["old.txt"]);
   });
 
   it("ignores an older file description after selection is cleared", async () => {

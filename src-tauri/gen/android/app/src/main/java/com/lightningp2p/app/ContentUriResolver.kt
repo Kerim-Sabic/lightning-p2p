@@ -338,8 +338,32 @@ object ContentUriResolver {
     }
 
     @JvmStatic
-    fun setPendingSharedFiles(paths: Array<String>) {
-        pendingSharedFiles.set(paths.toList())
+    fun setPendingSharedFiles(context: Context, paths: Array<String>) {
+        val replaced = pendingSharedFiles.getAndSet(paths.toList())
+        deleteStagedSharedFiles(context, replaced.toTypedArray())
+    }
+
+    /** Deletes only direct child files from this app's private share staging directory. */
+    @JvmStatic
+    fun deleteStagedSharedFiles(context: Context, paths: Array<String>): Int =
+        deleteStagedSharedFiles(File(context.cacheDir, STAGING_DIR), paths)
+
+    internal fun deleteStagedSharedFiles(stagingDir: File, paths: Array<String>): Int {
+        val stagingRoot = stagingDir.canonicalFile
+        var removed = 0
+        paths.forEach { path ->
+            try {
+                val candidate = File(path)
+                if (Files.isSymbolicLink(candidate.toPath())) return@forEach
+                val canonical = candidate.canonicalFile
+                if (canonical.parentFile == stagingRoot && canonical.isFile && canonical.delete()) {
+                    removed += 1
+                }
+            } catch (_: IOException) {
+                // Cleanup is best-effort; stale entries are removed by the boot sweeper.
+            }
+        }
+        return removed
     }
 
     @JvmStatic

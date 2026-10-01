@@ -1412,6 +1412,18 @@ export async function drainPendingSharedFiles(): Promise<string[]> {
   }
 }
 
+/** Best-effort cleanup for Android content copied into Lightning's private cache. */
+export async function deleteStagedSharedFiles(paths: string[]): Promise<void> {
+  if (!isMobileRuntime() || paths.length === 0) {
+    return;
+  }
+  try {
+    await invoke<unknown>("delete_staged_shared_files", { paths });
+  } catch (error) {
+    console.error("delete_staged_shared_files failed", error);
+  }
+}
+
 /**
  * Drain any Lightning P2P receive ticket dropped here via NFC tap or any
  * other side channel since the last call. Returns null if nothing queued.
