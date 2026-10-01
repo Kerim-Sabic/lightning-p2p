@@ -1,56 +1,115 @@
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import {
   ArrowRight,
+  Check,
   FolderCog,
   HardDriveDownload,
   LoaderCircle,
   Radar,
+  RefreshCw,
   Waypoints,
 } from "lucide-react";
-import { useState } from "react";
-import { isMobileRuntime } from "../lib/tauri";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { getRuntimeKind, retryNodeStartup } from "../lib/tauri";
+import {
+  canRetryNodeStartup,
+  engineStatusPresentation,
+  routeStatusPresentation,
+} from "../lib/firstRunStatus";
 import { useTransferStore } from "../stores/transferStore";
 
-function statusLabel(onlineState: string): string {
-  switch (onlineState) {
-    case "direct_ready":
-      return "Direct route ready";
-    case "relay_ready":
-      return "Relay route ready";
-    case "degraded":
-      return "Route still warming";
-    case "offline":
-      return "Node offline";
-    case "starting":
-    default:
-      return "Booting node";
+function toneClass(tone: "ready" | "working" | "attention"): string {
+  switch (tone) {
+    case "ready":
+      return "border-[color-mix(in_srgb,var(--state-success)_26%,transparent)] bg-[color-mix(in_srgb,var(--state-success)_8%,var(--surface-0))] text-[var(--state-success)]";
+    case "working":
+      return "border-[var(--accent-border)] bg-[var(--accent-subtle)] text-[var(--accent-primary)]";
+    case "attention":
+      return "border-[var(--amber-border)] bg-[var(--amber-bg)] text-[var(--proof-amber)]";
   }
 }
 
-function statusCopy(onlineState: string): string {
-  switch (onlineState) {
-    case "direct_ready":
-      return "The local node can already advertise direct addresses for peer transfers.";
-    case "relay_ready":
-      return "Relay fallback is online while direct route information keeps warming up.";
-    case "degraded":
-      return "The node is online, but route discovery has not stabilized yet.";
-    case "offline":
-      return "Startup failed. You can continue, but open Settings before starting real transfers.";
-    case "starting":
-    default:
-      return "The iroh endpoint is starting in the background.";
-  }
+function StatusCard({
+  label,
+  copy,
+  icon,
+  tone,
+  busy = false,
+}: {
+  label: string;
+  copy: string;
+  icon: "engine" | "route";
+  tone: "ready" | "working" | "attention";
+  busy?: boolean;
+}) {
+  const Icon = busy ? LoaderCircle : icon === "engine" ? Waypoints : Radar;
+
+  return (
+    <section className="min-w-0 rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-1)] p-4">
+      <div className="flex items-start gap-3">
+        <span
+          className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl border ${toneClass(tone)}`}
+          aria-hidden="true"
+        >
+          <Icon className={`h-5 w-5 ${busy ? "animate-spin" : ""}`} />
+        </span>
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--fg-muted)]">
+            {icon === "engine" ? "Transfer engine" : "Connection routes"}
+          </p>
+          <p
+            className="mt-1 text-base font-semibold text-[var(--fg-primary)]"
+            aria-live="polite"
+          >
+            {label}
+          </p>
+          <p className="mt-1.5 text-sm leading-5 text-[var(--fg-secondary)]">
+            {copy}
+          </p>
+        </div>
+      </div>
+    </section>
+  );
 }
 
 export function FirstRunOverlay() {
   const settings = useTransferStore((state) => state.settings);
   const nodeStatus = useTransferStore((state) => state.nodeStatus);
+  const nodeSupervisorStatus = useTransferStore(
+    (state) => state.nodeSupervisorStatus,
+  );
+  const platformProfile = useTransferStore((state) => state.platformProfile);
+  const applyNodeSupervisorStatus = useTransferStore(
+    (state) => state.applyNodeSupervisorStatus,
+  );
   const pickDownloadDir = useTransferStore((state) => state.pickDownloadDir);
   const completeFirstRun = useTransferStore((state) => state.completeFirstRun);
   const openDownloadDir = useTransferStore((state) => state.openDownloadDir);
   const [isSaving, setIsSaving] = useState(false);
-  const mobileRuntime = isMobileRuntime();
+  const [isRetrying, setIsRetrying] = useState(false);
+  const [retryError, setRetryError] = useState<string | null>(null);
+  const runtimeKind = getRuntimeKind();
+  const mobileRuntime = runtimeKind === "android" || runtimeKind === "ios";
+  const androidProfileReady =
+    runtimeKind !== "android" || platformProfile.platform_kind === "android";
+  const androidSmartRouting =
+    runtimeKind === "android" &&
+    androidProfileReady &&
+    platformProfile.capabilities.smart_routing;
+  const reducedMotion = useReducedMotion();
+  const dialogRef = useRef<HTMLElement>(null);
+  const engine = engineStatusPresentation(nodeSupervisorStatus);
+  const route = routeStatusPresentation(nodeStatus);
+  const canRetryStartup = canRetryNodeStartup(nodeSupervisorStatus);
+
+  useEffect(() => {
+    const previousFocus =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+    dialogRef.current?.focus();
+    return () => previousFocus?.focus();
+  }, []);
 
   if (!settings || settings.first_run_complete) {
     return null;
@@ -65,169 +124,233 @@ export function FirstRunOverlay() {
     }
   };
 
-  return (
-    <div className="pointer-events-auto absolute inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/72 px-4 py-[calc(16px+env(safe-area-inset-top))] backdrop-blur-2xl sm:items-center">
-      <motion.section
-        initial={{ opacity: 0, y: 20, scale: 0.96 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
-        className="glass-panel relative my-auto w-full max-w-4xl overflow-hidden p-5 sm:p-7"
-      >
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.12),transparent_34%),radial-gradient(circle_at_90%_15%,rgba(56,189,248,0.08),transparent_30%)]" />
-        <div className="relative space-y-5">
-          <header className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr] xl:items-start">
-            <div className="space-y-3">
-              <div className="badge">
-                <Waypoints className="h-3.5 w-3.5 text-sky-200" />
-                First Run
-              </div>
-              <div className="space-y-3">
-                <h2 className="page-title max-w-[13ch] text-[clamp(2.2rem,2rem+0.9vw,2.8rem)]">
-                  Finish setup and keep the fast path available
-                </h2>
-                <p className="page-copy max-w-2xl text-[15px]">
-                  Confirm where verified receives should land, wait for the node
-                  to publish route information, and Lightning P2P is ready to
-                  move files directly between devices.
-                </p>
-              </div>
-            </div>
+  const handleRetry = async (): Promise<void> => {
+    setRetryError(null);
+    setIsRetrying(true);
+    try {
+      const status = await retryNodeStartup();
+      applyNodeSupervisorStatus(status);
+    } catch (error) {
+      setRetryError(
+        error instanceof Error ? error.message : "Could not retry startup.",
+      );
+    } finally {
+      setIsRetrying(false);
+    }
+  };
 
-            <div className="glass-subtle p-4">
-              <p className="metric-label">Route readiness</p>
-              <div className="mt-3 flex items-start gap-3">
-                <div className="glass-icon h-12 w-12 rounded-2xl">
-                  {nodeStatus.online ? (
-                    <Radar className="h-5 w-5 text-emerald-200" />
-                  ) : (
-                    <LoaderCircle className="h-5 w-5 animate-spin text-sky-200" />
-                  )}
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-white">
-                    {statusLabel(nodeStatus.online_state)}
-                  </p>
-                  <p className="meta-copy mt-1">
-                    {statusCopy(nodeStatus.online_state)}
-                  </p>
-                </div>
-              </div>
-            </div>
+  const containTabFocus = (event: KeyboardEvent<HTMLElement>): void => {
+    if (event.key !== "Tab") return;
+    const focusable = Array.from(
+      event.currentTarget.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), a[href], input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ),
+    );
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (!first || !last) {
+      event.preventDefault();
+      event.currentTarget.focus();
+    } else if (
+      event.shiftKey &&
+      (document.activeElement === first ||
+        document.activeElement === dialogRef.current)
+    ) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+
+  const engineBusy =
+    nodeSupervisorStatus.phase === "starting" ||
+    nodeSupervisorStatus.phase === "restarting";
+
+  return (
+    <div className="pointer-events-auto absolute inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/45 px-4 py-[calc(16px+env(safe-area-inset-top))] sm:items-center">
+      <motion.section
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="first-run-title"
+        aria-describedby="first-run-copy"
+        tabIndex={-1}
+        onKeyDown={containTabFocus}
+        initial={reducedMotion ? false : { opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: reducedMotion ? 0 : 0.22, ease: "easeOut" }}
+        className="my-auto w-full max-w-3xl rounded-[28px] border border-[var(--border-strong)] bg-[var(--canvas-0)] p-5 text-[var(--fg-primary)] shadow-2xl sm:p-7"
+      >
+        <div className="space-y-6">
+          <header className="max-w-2xl">
+            <p className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--accent-primary)]">
+              <span className="grid h-8 w-8 place-items-center rounded-xl border border-[var(--accent-border)] bg-[var(--accent-subtle)]">
+                <Check className="h-4 w-4" aria-hidden="true" />
+              </span>
+              Set up Lightning
+            </p>
+            <h2
+              id="first-run-title"
+              className="mt-4 text-[clamp(1.8rem,1.5rem+1vw,2.4rem)] font-semibold tracking-[-0.04em]"
+            >
+              Choose where received files go.
+            </h2>
+            <p
+              id="first-run-copy"
+              className="mt-2 max-w-[60ch] text-[15px] leading-6 text-[var(--fg-secondary)]"
+            >
+              Incoming files are verified as they arrive, then saved here. You
+              can change this any time in Settings.
+            </p>
           </header>
 
-          <div className="grid gap-3 xl:grid-cols-2">
-            <article className="glass-subtle p-4">
-              <div className="flex items-center gap-3">
-                <div className="glass-icon">
-                  <Waypoints className="h-5 w-5 text-sky-200" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-white">
-                    Node identity
-                  </p>
-                  <p className="text-[13px] text-slate-300/72">
-                    This is the sender identity embedded into your transfer
-                    ticket.
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-3 rounded-2xl border border-white/8 bg-black/25 p-4">
-                <p className="mb-2 text-[10px] uppercase tracking-[0.3em] text-slate-500">
-                  NodeId
-                </p>
-                <p className="break-all font-mono text-[13px] leading-6 text-slate-100/88">
-                  {nodeStatus.node_id ?? "Initializing node..."}
-                </p>
-              </div>
-            </article>
-
-            <article className="glass-subtle p-4">
-              <div className="flex items-center gap-3">
-                <div className="glass-icon">
-                  <HardDriveDownload className="h-5 w-5 text-emerald-200" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-white">
-                    {mobileRuntime
-                      ? "Smart save routing"
-                      : "Default receive folder"}
-                  </p>
-                  <p className="text-[13px] text-slate-300/72">
-                    {mobileRuntime
-                      ? "Received files auto-route into your phone's system folders by type."
-                      : "Verified downloads are exported here."}
-                  </p>
-                </div>
-              </div>
-
-              {mobileRuntime ? (
-                <ul className="mt-3 grid gap-1.5 text-[13px] text-slate-100/88 sm:grid-cols-2">
-                  <li className="rounded-xl border border-white/8 bg-black/25 px-3 py-2">
-                    Images <span className="text-slate-400">→ Pictures</span>
-                  </li>
-                  <li className="rounded-xl border border-white/8 bg-black/25 px-3 py-2">
-                    Video <span className="text-slate-400">→ Movies</span>
-                  </li>
-                  <li className="rounded-xl border border-white/8 bg-black/25 px-3 py-2">
-                    Audio <span className="text-slate-400">→ Music</span>
-                  </li>
-                  <li className="rounded-xl border border-white/8 bg-black/25 px-3 py-2">
-                    Other <span className="text-slate-400">→ Downloads</span>
-                  </li>
-                </ul>
-              ) : (
-                <>
-                  <div className="mt-3 rounded-2xl border border-white/8 bg-black/25 p-4">
-                    <p className="mb-2 text-[10px] uppercase tracking-[0.3em] text-slate-500">
-                      Save location
-                    </p>
-                    <p className="break-all font-mono text-[13px] leading-6 text-slate-100/88">
-                      {settings.download_dir}
-                    </p>
-                  </div>
-
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <button
-                      onClick={() => void pickDownloadDir()}
-                      className="glass-button inline-flex items-center gap-2 px-3.5 py-2 text-sm text-slate-100"
+          <section
+            aria-label="Transfer readiness"
+            className="grid gap-3 sm:grid-cols-2"
+          >
+            <div>
+              <StatusCard
+                label={engine.label}
+                copy={engine.copy}
+                icon="engine"
+                tone={engine.tone}
+                busy={engineBusy || isRetrying}
+              />
+              {canRetryStartup ? (
+                <div className="mt-2">
+                  <button
+                    type="button"
+                    onClick={() => void handleRetry()}
+                    disabled={isRetrying}
+                    className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[var(--accent-border)] bg-[var(--accent-subtle)] px-4 text-sm font-semibold text-[var(--accent-primary)] transition hover:bg-[var(--accent-border)] disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
+                  >
+                    <RefreshCw
+                      className={`h-4 w-4 ${isRetrying ? "animate-spin" : ""}`}
+                      aria-hidden="true"
+                    />
+                    {isRetrying ? "Retrying…" : "Retry startup"}
+                  </button>
+                  {retryError ? (
+                    <p
+                      role="alert"
+                      className="mt-2 text-sm text-[var(--danger-copy)]"
                     >
-                      <FolderCog className="h-4 w-4" />
-                      Change folder
-                    </button>
-                    <button
-                      onClick={() => void openDownloadDir()}
-                      className="glass-button inline-flex items-center gap-2 px-3.5 py-2 text-sm text-slate-100"
-                    >
-                      <HardDriveDownload className="h-4 w-4" />
-                      Open folder
-                    </button>
-                  </div>
-                </>
-              )}
-            </article>
-          </div>
+                      {retryError}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+              {nodeSupervisorStatus.phase === "failed" && !canRetryStartup ? (
+                <p className="mt-2 text-sm leading-5 text-[var(--fg-secondary)]">
+                  Close and reopen Lightning to release the pending storage
+                  initialization, then check this status again.
+                </p>
+              ) : null}
+            </div>
+            <StatusCard
+              label={route.label}
+              copy={route.copy}
+              icon="route"
+              tone={route.tone}
+              busy={nodeStatus.online_state === "starting"}
+            />
+          </section>
 
-          <div className="flex flex-col gap-3 border-t border-white/8 pt-4 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm leading-6 text-slate-300/72">
-              You can change storage and relay settings later from the Settings
-              view.
+          <section className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-0)] p-4 sm:p-5">
+            <div className="flex items-start gap-3">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-2)] text-[var(--accent-primary)]">
+                <HardDriveDownload className="h-5 w-5" aria-hidden="true" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-base font-semibold">
+                  {androidSmartRouting
+                    ? "Smart save routing"
+                    : runtimeKind === "ios"
+                      ? "App-private storage"
+                      : runtimeKind === "android"
+                        ? "Checking save options"
+                        : "Receive folder"}
+                </h3>
+                <p className="mt-1 text-sm leading-5 text-[var(--fg-secondary)]">
+                  {androidSmartRouting
+                    ? "Verified files are saved into your phone’s system folders by type."
+                    : runtimeKind === "ios"
+                      ? "Receives stay in app-private storage on this build; public file export is not enabled."
+                      : runtimeKind === "android"
+                        ? "Lightning is checking the save locations available on this device."
+                        : "Choose the folder Lightning uses for verified downloads."}
+                </p>
+              </div>
+            </div>
+
+            {androidSmartRouting ? (
+              <ul className="mt-4 grid gap-2 text-sm text-[var(--fg-secondary)] sm:grid-cols-2">
+                {[
+                  ["Images", "Pictures"],
+                  ["Video", "Movies"],
+                  ["Audio", "Music"],
+                  ["Other", "Downloads"],
+                ].map(([kind, folder]) => (
+                  <li
+                    key={kind}
+                    className="flex min-h-11 items-center justify-between rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-1)] px-3"
+                  >
+                    <span>{kind}</span>
+                    <span className="text-[var(--fg-muted)]">{folder}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : mobileRuntime ? null : (
+              <>
+                <p className="mt-4 break-all rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-1)] px-3 py-3 text-sm text-[var(--fg-primary)]">
+                  {settings.download_dir}
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void pickDownloadDir()}
+                    className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[var(--border-strong)] bg-[var(--surface-0)] px-4 text-sm font-medium text-[var(--fg-primary)] transition hover:bg-[var(--surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
+                  >
+                    <FolderCog className="h-4 w-4" aria-hidden="true" />
+                    Change folder
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void openDownloadDir()}
+                    className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[var(--border-strong)] bg-[var(--surface-0)] px-4 text-sm font-medium text-[var(--fg-primary)] transition hover:bg-[var(--surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
+                  >
+                    <HardDriveDownload className="h-4 w-4" aria-hidden="true" />
+                    Open folder
+                  </button>
+                </div>
+              </>
+            )}
+          </section>
+
+          <footer className="flex flex-col gap-3 border-t border-[var(--border-subtle)] pt-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm leading-5 text-[var(--fg-secondary)]">
+              Engine startup and network reachability are separate. You can
+              continue while routes finish warming.
             </p>
             <button
+              type="button"
               onClick={() => void handleContinue()}
               disabled={isSaving}
-              className="btn-primary"
+              className="inline-flex min-h-12 shrink-0 items-center justify-center gap-2 rounded-xl bg-[var(--accent-primary)] px-5 text-sm font-semibold text-white transition hover:bg-[var(--accent-primary-hover)] disabled:cursor-wait disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--canvas-0)]"
             >
-              <span className="relative inline-flex items-center gap-2">
-                {isSaving ? (
-                  <LoaderCircle className="h-4 w-4 animate-spin" />
-                ) : (
-                  <ArrowRight className="h-4 w-4" />
-                )}
-                Continue
-              </span>
+              {isSaving ? (
+                <LoaderCircle
+                  className="h-4 w-4 animate-spin"
+                  aria-hidden="true"
+                />
+              ) : (
+                <ArrowRight className="h-4 w-4" aria-hidden="true" />
+              )}
+              Continue
             </button>
-          </div>
+          </footer>
         </div>
       </motion.section>
     </div>

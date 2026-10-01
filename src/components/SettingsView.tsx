@@ -24,6 +24,7 @@ import {
   Waypoints,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { canRetryNodeStartup } from "../lib/firstRunStatus";
 import {
   collectDiagnosticBundle,
   getBlockedNearbyPeers,
@@ -659,11 +660,7 @@ export function SettingsView() {
               <p className="mt-2 text-sm leading-6 text-[var(--fg-secondary)]">
                 {supervisorPhaseCopy(nodeSupervisorStatus)}
               </p>
-              {nodeSupervisorStatus.phase === "failed" &&
-              nativeRuntime &&
-              !nodeSupervisorStatus.last_error?.includes(
-                "Close and reopen Lightning",
-              ) ? (
+              {canRetryNodeStartup(nodeSupervisorStatus) && nativeRuntime ? (
                 <div className="mt-3">
                   <button
                     type="button"
@@ -1057,7 +1054,12 @@ export function SettingsView() {
                     aria-hidden
                     layoutId="active-transfer-mode"
                     className="absolute inset-0 -z-10 rounded-2xl bg-sky-500/14"
-                    transition={{ type: "spring", stiffness: 340, damping: 30, mass: 0.6 }}
+                    transition={{
+                      type: "spring",
+                      stiffness: 340,
+                      damping: 30,
+                      mass: 0.6,
+                    }}
                   />
                 )}
                 <span className="relative z-10 inline-flex items-baseline gap-1.5">
@@ -1076,9 +1078,10 @@ export function SettingsView() {
         </div>
 
         <p className="mt-3 text-[12px] leading-6 text-slate-400">
-          {TRANSFER_MODE_DESCRIPTORS[
-            settings?.transfer_mode ?? "smart_auto"
-          ].description}
+          {
+            TRANSFER_MODE_DESCRIPTORS[settings?.transfer_mode ?? "smart_auto"]
+              .description
+          }
         </p>
         <p className="mt-2 text-[11px] leading-6 text-slate-500">
           Honest scope: the congestion controller switch is evidence-based
@@ -1132,9 +1135,10 @@ export function SettingsView() {
                   : "bg-slate-300"
               }`}
               style={{
-                marginLeft: (settings?.experimental_swarm_receive ?? false)
-                  ? "22px"
-                  : "3px",
+                marginLeft:
+                  (settings?.experimental_swarm_receive ?? false)
+                    ? "22px"
+                    : "3px",
               }}
             />
           </button>
@@ -1219,9 +1223,8 @@ export function SettingsView() {
                   Wi-Fi/LAN nearby discovery
                 </p>
                 <p className="text-[13px] leading-6 text-slate-300/72">
-                  Find Lightning devices on this local network. Turning this
-                  off stops LAN mDNS discovery; shared-link transfers still
-                  work.
+                  Find Lightning devices on this local network. Turning this off
+                  stops LAN mDNS discovery; shared-link transfers still work.
                 </p>
               </div>
             </div>
