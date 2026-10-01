@@ -352,17 +352,34 @@ export class BrowserSender {
     return new BrowserSender(await mod.WebSender.spawn());
   }
 
+  /** Whether this cached WASM sender can import files with bounded memory. */
+  supportsStreamingImport(): boolean {
+    return Boolean(
+      this.inner.begin_file && this.inner.push_chunk && this.inner.finish_file,
+    );
+  }
+
   /**
    * Streams one file into the share chunk by chunk. The engine hashes chunks
    * as they arrive (with backpressure), so the file is never duplicated
    * whole in memory — this is what lets big files fit in a tab.
    *
-   * A stale-cached engine without the streaming API falls back to the
-   * buffered import: more peak memory, identical result.
+   * A stale-cached engine without the streaming API uses a bounded buffered
+   * compatibility path to avoid unbounded WebAssembly memory growth.
    */
   async addFile(name: string, file: Blob): Promise<void> {
     const inner = this.inner;
     if (!inner.begin_file || !inner.push_chunk || !inner.finish_file) {
+      const stagedBytes = inner.staged_bytes();
+      if (
+        !Number.isSafeInteger(stagedBytes) ||
+        stagedBytes < 0 ||
+        file.size > MAX_COMPAT_BUFFERED_IMPORT_BYTES - stagedBytes
+      ) {
+        throw new Error(
+          "This browser is using an older transfer engine that cannot safely import more than 64 MiB without streaming. Reload the page to update the engine, or share a smaller selection.",
+        );
+      }
       await inner.add_file(name, new Uint8Array(await file.arrayBuffer()));
       return;
     }
@@ -427,6 +444,8 @@ export function hasSaveFilePicker(): boolean {
 // Slice size for streamed saves: big enough to keep disk writes efficient,
 // small enough that peak extra memory stays negligible.
 const SAVE_CHUNK_BYTES = 8 * 1024 * 1024;
+/** Aggregate staging ceiling for stale browser engines without streaming import. */
+export const MAX_COMPAT_BUFFERED_IMPORT_BYTES = 64 * 1024 * 1024;
 
 /**
  * Saves one received file the best way available: streamed out of the store

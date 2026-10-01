@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  BrowserSender,
   BrowserReceiver,
+  MAX_COMPAT_BUFFERED_IMPORT_BYTES,
   saveReceivedFile,
   saveReceivedFileStreaming,
   supportsStreamingReceiveApi,
@@ -33,6 +35,40 @@ describe("BrowserReceiver.streamBlobTo", () => {
         async () => undefined,
       ),
     ).rejects.toThrow("streamed file length did not match");
+  });
+});
+
+describe("BrowserSender.addFile compatibility import", () => {
+  it("refuses to buffer beyond the aggregate safety limit", async () => {
+    const addFile = vi.fn();
+    const file = {
+      size: MAX_COMPAT_BUFFERED_IMPORT_BYTES - 32 + 1,
+      arrayBuffer: vi.fn(),
+    } as unknown as Blob;
+    const sender = {
+      inner: { staged_bytes: () => 32, add_file: addFile },
+    } as unknown as BrowserSender;
+
+    await expect(
+      BrowserSender.prototype.addFile.call(sender, "large.bin", file),
+    ).rejects.toThrow("cannot safely import more than 64 MiB");
+    expect(file.arrayBuffer).not.toHaveBeenCalled();
+    expect(addFile).not.toHaveBeenCalled();
+  });
+
+  it("keeps the legacy buffered path available below the safety limit", async () => {
+    const addFile = vi.fn(async () => undefined);
+    const file = {
+      size: 2,
+      arrayBuffer: vi.fn(async () => new Uint8Array([3, 4]).buffer),
+    } as unknown as Blob;
+    const sender = {
+      inner: { staged_bytes: () => 0, add_file: addFile },
+    } as unknown as BrowserSender;
+
+    await BrowserSender.prototype.addFile.call(sender, "small.bin", file);
+
+    expect(addFile).toHaveBeenCalledWith("small.bin", new Uint8Array([3, 4]));
   });
 });
 

@@ -21,6 +21,7 @@ import siteLogoUrl from "../assets/lightning-p2p-site-logo.png";
 import { REPO_URL } from "../lib/shareLinks";
 import {
   BrowserSender,
+  MAX_COMPAT_BUFFERED_IMPORT_BYTES,
   browserReceiveSupported,
   receiveLinkForTicket,
   renderQrSvg,
@@ -164,6 +165,14 @@ export function SendPage() {
       setStatus("Starting the engine in this tab…");
       const sender = await ensureSender();
       senderRef.current = sender;
+      if (
+        !sender.supportsStreamingImport() &&
+        totalBytes > MAX_COMPAT_BUFFERED_IMPORT_BYTES
+      ) {
+        throw new Error(
+          "This tab's cached transfer engine cannot safely stage more than 64 MiB. Reload the page to update the engine, or choose a smaller selection.",
+        );
+      }
       for (const [index, f] of staged.entries()) {
         setStatus(`Importing ${f.name} (${index + 1}/${staged.length})…`);
         await sender.addFile(f.name, f.file);
