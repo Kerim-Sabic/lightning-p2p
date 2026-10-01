@@ -1,4 +1,5 @@
 import {
+  ArrowUpRight,
   Binary,
   CheckCircle2,
   Copy,
@@ -31,8 +32,10 @@ import { getNearbyDiscoveryStatus } from "../lib/nearbyDiscoveryStatus";
 import {
   arrivalDirectionFromSenderFlick,
   classifyFlickDirection,
+  flickTargetAtPoint,
   isDeliberateFlick,
   type FlickDirection,
+  type FlickTargetBounds,
 } from "../lib/flickGesture";
 import { createReceiveHandoffLink } from "../lib/shareLinks";
 import { attachAsyncUnlisten } from "../hooks/asyncSubscription";
@@ -129,12 +132,44 @@ function displayReceiveLink(link: string): string {
 }
 
 interface ActiveFlick {
-  nodeId: string;
+  nodeId?: string;
   pointerId: number;
   startX: number;
   startY: number;
   startedAt: number;
   element: HTMLElement;
+  targets?: FlickTargetBounds[];
+  devices?: NearbyDevice[];
+  selectionPaths?: string[];
+}
+
+interface ActiveSelectionDrag {
+  startX: number;
+  startY: number;
+  startedAt: number;
+  targets: FlickTargetBounds[];
+  devices: NearbyDevice[];
+  selectionPaths: string[];
+}
+
+function snapshotFlickTargets(): FlickTargetBounds[] {
+  return Array.from(
+    document.querySelectorAll<HTMLElement>("[data-flick-target-node-id]"),
+  ).flatMap((element) => {
+    const nodeId = element.dataset.flickTargetNodeId;
+    const rect = element.getBoundingClientRect();
+    return nodeId && rect.width > 0 && rect.height > 0
+      ? [
+          {
+            nodeId,
+            left: rect.left,
+            top: rect.top,
+            right: rect.right,
+            bottom: rect.bottom,
+          },
+        ]
+      : [];
+  });
 }
 
 export function SendView({ onNavigateReceive }: SendViewProps) {
@@ -190,6 +225,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
     recipientVerifiedNodeIds,
   );
   const activeFlickRef = useRef<ActiveFlick | null>(null);
+  const activeSelectionDragRef = useRef<ActiveSelectionDrag | null>(null);
 
   useEffect(() => {
     if (!nativeRuntime) return;
@@ -405,9 +441,224 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
       active.element.releasePointerCapture(active.pointerId);
     }
     activeFlickRef.current = null;
+    activeSelectionDragRef.current = null;
     setDropTargetNodeId(null);
     setFlickDevices(null);
     setFlickVerifiedNodeIds(null);
+  };
+
+  const handleSelectionPointerDown = (
+    event: ReactPointerEvent<HTMLDivElement>,
+  ): void => {
+    if (
+      !event.isPrimary ||
+      event.button !== 0 ||
+      shareSelection.length === 0 ||
+      isPreparingSelection ||
+      isSharing ||
+      busyNodeId !== null
+    ) {
+      return;
+    }
+
+    const targets = snapshotFlickTargets();
+    if (targets.length === 0) return;
+
+    event.currentTarget.setPointerCapture(event.pointerId);
+    activeFlickRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startedAt: performance.now(),
+      element: event.currentTarget,
+      targets,
+      devices: devices.map((device) => ({ ...device })),
+      selectionPaths: shareSelection.map((item) => item.path),
+    };
+    setFlickDevices(devices.map((device) => ({ ...device })));
+    setFlickVerifiedNodeIds(new Set(verifiedNodeIds));
+    setFlickHint("Drag the file stack onto a device to send");
+  };
+
+  const handleSelectionPointerMove = (
+    event: ReactPointerEvent<HTMLDivElement>,
+  ): void => {
+    const active = activeFlickRef.current;
+    if (!active || active.pointerId !== event.pointerId) return;
+
+    const targetNodeId = flickTargetAtPoint(
+      active.targets ?? [],
+      event.clientX,
+      event.clientY,
+    );
+    setDropTargetNodeId((current) =>
+      current === targetNodeId ? current : targetNodeId,
+    );
+
+    if (targetNodeId) {
+      const dx = event.clientX - active.startX;
+      const dy = event.clientY - active.startY;
+      const direction = isDeliberateFlick({
+        dx,
+        dy,
+        elapsedMs: performance.now() - active.startedAt,
+      })
+        ? classifyFlickDirection(dx, dy)
+        : null;
+      const arrivalDirection = direction
+        ? arrivalDirectionFromSenderFlick(direction)
+        : null;
+      const arrivalSide = arrivalDirection
+        ? FLICK_ARRIVAL_SIDE_LABELS[arrivalDirection]
+        : null;
+      const device = active.devices?.find(
+        (candidate) => candidate.node_id === targetNodeId,
+      );
+      setFlickHint(
+        device
+          ? arrivalSide
+            ? `Release to send to ${safeDisplayText(device.device_name, "nearby device")} · arrives from ${arrivalSide}`
+            : `Release to send to ${safeDisplayText(device.device_name, "nearby device")}`
+          : "Release over a nearby device to send",
+      );
+    } else {
+      setFlickHint("Drag the file stack onto a device to send");
+    }
+  };
+
+  const handleSelectionPointerUp = (
+    event: ReactPointerEvent<HTMLDivElement>,
+  ): void => {
+    const active = activeFlickRef.current;
+    if (!active || active.pointerId !== event.pointerId) return;
+    activeFlickRef.current = null;
+    setDropTargetNodeId(null);
+    setFlickDevices(null);
+    setFlickVerifiedNodeIds(null);
+    setFlickHint(null);
+    if (active.element.hasPointerCapture(active.pointerId)) {
+      active.element.releasePointerCapture(active.pointerId);
+    }
+
+    const atSystemEdge =
+      event.clientX < 24 ||
+      event.clientX > window.innerWidth - 24 ||
+      event.clientY < 24 ||
+      event.clientY > window.innerHeight - 24;
+    if (atSystemEdge) return;
+
+    const targetNodeId = flickTargetAtPoint(
+      active.targets ?? [],
+      event.clientX,
+      event.clientY,
+    );
+    if (!targetNodeId) return;
+
+    const currentPaths = useTransferStore
+      .getState()
+      .shareSelection.map((item) => item.path);
+    if (
+      currentPaths.length !== (active.selectionPaths?.length ?? 0) ||
+      currentPaths.some((path, index) => path !== active.selectionPaths?.[index])
+    ) {
+      setError("Your selection changed during the flick. Review it and send again.");
+      return;
+    }
+
+    const device = devices.find((candidate) => candidate.node_id === targetNodeId);
+    if (!device) {
+      setError("That device left before you released. Choose a device again.");
+      return;
+    }
+
+    const dx = event.clientX - active.startX;
+    const dy = event.clientY - active.startY;
+    const elapsedMs = performance.now() - active.startedAt;
+    const direction = isDeliberateFlick({ dx, dy, elapsedMs })
+      ? classifyFlickDirection(dx, dy) ?? undefined
+      : undefined;
+    void handleSendToDevice(device, direction);
+  };
+
+  const handleSelectionDragStart = (event: DragEvent<HTMLDivElement>): void => {
+    if (shareSelection.length === 0 || mobileRuntime) {
+      event.preventDefault();
+      return;
+    }
+    const targets = snapshotFlickTargets();
+    if (targets.length === 0) {
+      event.preventDefault();
+      return;
+    }
+    activeSelectionDragRef.current = {
+      startX: event.clientX,
+      startY: event.clientY,
+      startedAt: performance.now(),
+      targets,
+      devices: devices.map((device) => ({ ...device })),
+      selectionPaths: shareSelection.map((item) => item.path),
+    };
+    setFlickDevices(devices.map((device) => ({ ...device })));
+    setFlickVerifiedNodeIds(new Set(verifiedNodeIds));
+    event.dataTransfer.effectAllowed = "copy";
+    event.dataTransfer.setData("application/x-lightning-selection", "files");
+  };
+
+  const handleSelectionDrop = (
+    event: DragEvent<HTMLDivElement>,
+  ): void => {
+    event.preventDefault();
+    const active = activeSelectionDragRef.current;
+    activeSelectionDragRef.current = null;
+    setDropTargetNodeId(null);
+    setFlickDevices(null);
+    setFlickVerifiedNodeIds(null);
+    if (!event.dataTransfer.getData("application/x-lightning-selection")) {
+      return;
+    }
+    if (!active) {
+      setError("The drag session ended before the device received the files. Try again.");
+      return;
+    }
+
+    const currentPaths = useTransferStore
+      .getState()
+      .shareSelection.map((item) => item.path);
+    if (
+      currentPaths.length !== active.selectionPaths.length ||
+      currentPaths.some((path, index) => path !== active.selectionPaths[index])
+    ) {
+      setError("Your selection changed during the drag. Review it and send again.");
+      return;
+    }
+
+    const targetNodeId = flickTargetAtPoint(
+      active.targets,
+      event.clientX,
+      event.clientY,
+    );
+    if (!targetNodeId) return;
+
+    const intendedDevice = active.devices.find(
+      (candidate) => candidate.node_id === targetNodeId,
+    );
+    const liveDevice = devices.find((candidate) => candidate.node_id === targetNodeId);
+    if (!liveDevice) {
+      setError("That device left during the drag. Choose a device again.");
+      return;
+    }
+    if (!intendedDevice) return;
+
+    const dx = event.clientX - active.startX;
+    const dy = event.clientY - active.startY;
+    const direction = isDeliberateFlick({
+      dx,
+      dy,
+      elapsedMs: performance.now() - active.startedAt,
+    })
+      ? classifyFlickDirection(dx, dy) ?? undefined
+      : undefined;
+    void handleSendToDevice(liveDevice, direction);
   };
 
   const handleFlickPointerDown = (
@@ -434,6 +685,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
       startY: event.clientY,
       startedAt: performance.now(),
       element: event.currentTarget,
+      selectionPaths: shareSelection.map((item) => item.path),
     };
     setFlickDevices(devices.map((nearbyDevice) => ({ ...nearbyDevice })));
     setFlickVerifiedNodeIds(new Set(verifiedNodeIds));
@@ -476,7 +728,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
     const dx = event.clientX - active.startX;
     const dy = event.clientY - active.startY;
     const deliberate = isDeliberateFlick({ dx, dy, elapsedMs });
-    if (deliberate) {
+    if (deliberate && active.nodeId) {
       event.preventDefault();
       suppressFlickClickRef.current = active.nodeId;
       window.setTimeout(() => {
@@ -499,6 +751,16 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
       setError("That device is no longer nearby. Choose a device again.");
       return;
     }
+    const currentPaths = useTransferStore
+      .getState()
+      .shareSelection.map((item) => item.path);
+    if (
+      currentPaths.length !== (active.selectionPaths?.length ?? 0) ||
+      currentPaths.some((path, index) => path !== active.selectionPaths?.[index])
+    ) {
+      setError("Your selection changed during the flick. Review it and send again.");
+      return;
+    }
     const direction = classifyFlickDirection(dx, dy);
     if (deliberate && direction) {
       void handleSendToDevice(device, direction);
@@ -507,7 +769,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
 
   useEffect(() => {
     const cancel = (): void => {
-      if (!activeFlickRef.current) return;
+      if (!activeFlickRef.current && !activeSelectionDragRef.current) return;
       cancelFlick();
       setFlickHint(null);
     };
@@ -523,35 +785,30 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
     };
   }, []);
 
-  const handleSelectionDragStart = (event: DragEvent<HTMLDivElement>): void => {
-    if (shareSelection.length === 0 || mobileRuntime) {
-      event.preventDefault();
-      return;
-    }
-    event.dataTransfer.effectAllowed = "copy";
-    event.dataTransfer.setData("application/x-lightning-selection", "files");
-  };
-
   const renderDeviceTarget = (device: NearbyDevice) => (
     <div
       key={device.node_id}
+      data-flick-target-node-id={device.node_id}
       onDragOver={(event) => {
         if (
           event.dataTransfer.types.includes("application/x-lightning-selection")
         ) {
-          event.preventDefault();
-          event.dataTransfer.dropEffect = "copy";
-          setDropTargetNodeId(device.node_id);
+          const intendedTargetId = flickTargetAtPoint(
+            activeSelectionDragRef.current?.targets ?? [],
+            event.clientX,
+            event.clientY,
+          );
+          if (intendedTargetId) {
+            event.preventDefault();
+            event.dataTransfer.dropEffect = "copy";
+            setDropTargetNodeId(intendedTargetId);
+          } else {
+            setDropTargetNodeId(null);
+          }
         }
       }}
       onDragLeave={() => setDropTargetNodeId(null)}
-      onDrop={(event) => {
-        event.preventDefault();
-        if (event.dataTransfer.getData("application/x-lightning-selection")) {
-          void handleSendToDevice(device);
-        }
-        setDropTargetNodeId(null);
-      }}
+      onDrop={handleSelectionDrop}
       className={`flex min-h-16 items-center gap-3 rounded-2xl border px-4 py-3 transition ${dropTargetNodeId === device.node_id ? "border-sky-300/60 bg-sky-400/10" : "border-white/[0.08] bg-white/[0.025] hover:border-sky-300/30 hover:bg-white/[0.05]"}`}
     >
       <button
@@ -787,10 +1044,44 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
                 {shareSelection.length === 1 ? "" : "s"} ready |{" "}
                 {formatBytes(selectionSize)}
               </p>
-              {!mobileRuntime ? (
-                <p className="mt-2 text-xs text-slate-400">
-                  Drag the file stack onto a nearby device, or choose Send.
-                </p>
+              <p className="mt-2 text-xs text-slate-400">
+                Drag or flick the selection onto a device to send. A quick flick adds an approximate arrival side.
+              </p>
+              {nativeRuntime && recipientDevices.length > 0 ? (
+                <>
+                  <div
+                    aria-hidden="true"
+                    onPointerDown={handleSelectionPointerDown}
+                    onPointerMove={handleSelectionPointerMove}
+                    onPointerUp={handleSelectionPointerUp}
+                    onPointerCancel={() => {
+                      cancelFlick();
+                      setFlickHint(null);
+                    }}
+                    onLostPointerCapture={() => {
+                      if (activeFlickRef.current) {
+                        cancelFlick();
+                        setFlickHint(null);
+                      }
+                    }}
+                    style={{ touchAction: "none" }}
+                    className={`mt-3 inline-flex min-h-11 select-none items-center gap-2 rounded-full border border-[var(--accent-primary)]/30 bg-[var(--accent-primary)]/10 px-4 text-sm font-semibold text-sky-100 transition ${isPreparingSelection || isSharing || busyNodeId !== null ? "cursor-not-allowed opacity-55" : "cursor-grab hover:bg-[var(--accent-primary)]/20 active:cursor-grabbing"}`}
+                  >
+                    <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
+                    {activeFlickRef.current && !activeFlickRef.current.nodeId
+                      ? "Flicking…"
+                      : "Flick to device"}
+                  </div>
+                  {activeFlickRef.current && !activeFlickRef.current.nodeId ? (
+                    <p
+                      className="mt-2 text-xs text-sky-100"
+                      aria-live="polite"
+                      aria-atomic="true"
+                    >
+                      {flickHint}
+                    </p>
+                  ) : null}
+                </>
               ) : null}
             </div>
 
@@ -833,7 +1124,12 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
             className="mt-4 grid gap-2"
             draggable={shareSelection.length > 0 && !mobileRuntime}
             onDragStart={handleSelectionDragStart}
-            onDragEnd={() => setDropTargetNodeId(null)}
+            onDragEnd={() => {
+              activeSelectionDragRef.current = null;
+              setDropTargetNodeId(null);
+              setFlickDevices(null);
+              setFlickVerifiedNodeIds(null);
+            }}
             aria-label="Selected files. Drag onto a nearby device to send."
           >
             {shareSelection.map((item) => {

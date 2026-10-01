@@ -4,6 +4,14 @@ export interface FlickMeasurement {
   elapsedMs: number;
 }
 
+export interface FlickTargetBounds {
+  nodeId: string;
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
 export type FlickDirection =
   | "right"
   | "down_right"
@@ -45,6 +53,21 @@ export function arrivalDirectionFromSenderFlick(
 
 export const MIN_FLICK_DISTANCE_PX = 48;
 export const MIN_FLICK_VELOCITY_PX_PER_MS = 0.65;
+
+/** Resolves a pointer location against target geometry frozen for one gesture. */
+export function flickTargetAtPoint(
+  targets: readonly FlickTargetBounds[],
+  x: number,
+  y: number,
+): string | null {
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  return (
+    targets.find(
+      ({ left, top, right, bottom }) =>
+        x >= left && x <= right && y >= top && y <= bottom,
+    )?.nodeId ?? null
+  );
+}
 
 export function classifyFlickDirection(
   dx: number,

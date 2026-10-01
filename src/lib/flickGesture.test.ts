@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   arrivalDirectionFromSenderFlick,
   classifyFlickDirection,
+  flickTargetAtPoint,
   isDeliberateFlick,
 } from "./flickGesture";
 
@@ -72,5 +73,22 @@ describe("isDeliberateFlick", () => {
         elapsedMs: 100,
       }),
     ).toBe(true);
+  });
+});
+
+describe("flickTargetAtPoint", () => {
+  const frozenTargets = [
+    { nodeId: "device-left", left: 10, top: 20, right: 90, bottom: 80 },
+    { nodeId: "device-right", left: 110, top: 20, right: 190, bottom: 80 },
+  ];
+
+  it("locks hit testing to the target geometry captured at gesture start", () => {
+    expect(flickTargetAtPoint(frozenTargets, 130, 50)).toBe("device-right");
+    expect(flickTargetAtPoint(frozenTargets, 90, 80)).toBe("device-left");
+    expect(flickTargetAtPoint(frozenTargets, 100, 50)).toBeNull();
+  });
+
+  it("does not select a target for non-finite pointer coordinates", () => {
+    expect(flickTargetAtPoint(frozenTargets, Number.NaN, 50)).toBeNull();
   });
 });
