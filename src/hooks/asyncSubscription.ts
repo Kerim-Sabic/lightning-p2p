@@ -20,6 +20,7 @@ export function createSingleFlightRunner<T>(): (
 export function attachAsyncUnlisten(
   subscription: Promise<() => void>,
   reportError: (error: unknown) => void,
+  onReady?: () => void,
 ): () => void {
   let disposed = false;
   let unlisten: (() => void) | null = null;
@@ -30,6 +31,7 @@ export function attachAsyncUnlisten(
         stopListening();
       } else {
         unlisten = stopListening;
+        onReady?.();
       }
     })
     .catch((error: unknown) => {

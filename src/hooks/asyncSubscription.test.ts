@@ -47,6 +47,37 @@ describe("createSingleFlightRunner", () => {
 });
 
 describe("attachAsyncUnlisten", () => {
+  it("runs reconciliation only after the listener is attached", async () => {
+    let resolveSubscription: ((stop: () => void) => void) | undefined;
+    const subscription = new Promise<() => void>((resolve) => {
+      resolveSubscription = resolve;
+    });
+    const onReady = vi.fn();
+    const cleanup = attachAsyncUnlisten(subscription, vi.fn(), onReady);
+
+    expect(onReady).not.toHaveBeenCalled();
+    resolveSubscription?.(vi.fn());
+    await Promise.resolve();
+
+    expect(onReady).toHaveBeenCalledOnce();
+    cleanup();
+  });
+
+  it("does not reconcile when a listener resolves after disposal", async () => {
+    let resolveSubscription: ((stop: () => void) => void) | undefined;
+    const subscription = new Promise<() => void>((resolve) => {
+      resolveSubscription = resolve;
+    });
+    const onReady = vi.fn();
+    const cleanup = attachAsyncUnlisten(subscription, vi.fn(), onReady);
+
+    cleanup();
+    resolveSubscription?.(vi.fn());
+    await Promise.resolve();
+
+    expect(onReady).not.toHaveBeenCalled();
+  });
+
   it("unlistens when subscription resolves after disposal", async () => {
     let resolveSubscription: ((stop: () => void) => void) | undefined;
     const subscription = new Promise<() => void>((resolve) => {

@@ -229,6 +229,9 @@ export function useTransfer(): void {
     return attachAsyncUnlisten(
       onTransferProgress(handleTransferEvent),
       handleSubscriptionError,
+      () => {
+        void useTransferStore.getState().refreshActiveTransfers();
+      },
     );
   }, [handleSubscriptionError, handleTransferEvent, inTauriRuntime]);
 
@@ -255,6 +258,12 @@ export function useTransfer(): void {
         useNearbyShareStore.getState().applySharesUpdated(shares);
       }),
       handleSubscriptionError,
+      () => {
+        void useNearbyShareStore
+          .getState()
+          .refreshShares()
+          .catch(handleSubscriptionError);
+      },
     );
   }, [handleSubscriptionError, inTauriRuntime]);
 
@@ -268,6 +277,12 @@ export function useTransfer(): void {
         useNearbyDeviceStore.getState().applyDevicesUpdated(devices);
       }),
       handleSubscriptionError,
+      () => {
+        void useNearbyDeviceStore
+          .getState()
+          .refreshDevices()
+          .catch(handleSubscriptionError);
+      },
     );
   }, [handleSubscriptionError, inTauriRuntime]);
 
