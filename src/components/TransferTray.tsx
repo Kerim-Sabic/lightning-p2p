@@ -5,8 +5,10 @@ import {
   ChevronUp,
 } from "lucide-react";
 import { useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { formatBytes, formatSpeed } from "../lib/format";
 import { safeDisplayText } from "../lib/safeDisplayText";
+import { selectOngoingTransferIds } from "../stores/transferSelectors";
 import { useTransferStore, type TransferEntry } from "../stores/transferStore";
 
 interface TransferTrayProps {
@@ -50,7 +52,10 @@ function phaseLabel(transfer: TransferEntry): string {
   }
 }
 
-function TransferRow({ transfer }: { transfer: TransferEntry }) {
+function TransferRow({ transferId }: { transferId: string }) {
+  const transfer = useTransferStore((state) => state.transfers[transferId]);
+  if (!transfer || !isOngoing(transfer)) return null;
+
   const name = safeDisplayText(transfer.name, "File transfer");
   const progress =
     transfer.total > 0
@@ -70,7 +75,9 @@ function TransferRow({ transfer }: { transfer: TransferEntry }) {
         <p className="min-w-0 flex-1 truncate text-sm font-medium text-[var(--fg-primary)]">
           {name}
         </p>
-        <span className="shrink-0 text-xs text-[var(--fg-muted)]">{status}</span>
+        <span className="shrink-0 text-xs text-[var(--fg-muted)]">
+          {status}
+        </span>
       </div>
       {progress === null ? (
         <p className="ml-[26px] mt-1 text-xs text-[var(--fg-muted)]">
@@ -110,11 +117,12 @@ export function TransferTray({
   onNavigateActivity,
 }: TransferTrayProps) {
   const [expanded, setExpanded] = useState(false);
-  const transfersById = useTransferStore((state) => state.transfers);
-  const transfers = Object.values(transfersById).filter(isOngoing);
-  if (transfers.length === 0) return null;
+  const transferIds = useTransferStore(
+    useShallow((state) => selectOngoingTransferIds(state.transfers)),
+  );
+  if (transferIds.length === 0) return null;
 
-  const visibleTransfers = expanded ? transfers : transfers.slice(0, 1);
+  const visibleTransferIds = expanded ? transferIds : transferIds.slice(0, 1);
 
   return (
     <>
@@ -141,16 +149,16 @@ export function TransferTray({
         <div className="mx-auto max-w-[1040px] rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-0)] p-2.5 shadow-[0_12px_36px_rgba(0,0,0,0.22)]">
           <div className="flex items-center gap-2 px-1 pb-2">
             <p className="min-w-0 flex-1 text-sm font-semibold text-[var(--fg-primary)]">
-              {transfers.length} transfer{transfers.length === 1 ? "" : "s"}
+              {transferIds.length} transfer{transferIds.length === 1 ? "" : "s"}
             </p>
-            {transfers.length > 1 ? (
+            {transferIds.length > 1 ? (
               <button
                 type="button"
                 onClick={() => setExpanded((value) => !value)}
                 aria-expanded={expanded}
                 className="inline-flex min-h-11 items-center gap-1 rounded-lg px-2 text-sm font-medium text-[var(--fg-muted)] hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] dark:hover:bg-white/5"
               >
-                {expanded ? "Show less" : `Show all ${transfers.length}`}
+                {expanded ? "Show less" : `Show all ${transferIds.length}`}
                 {expanded ? (
                   <ChevronDown className="h-4 w-4" aria-hidden="true" />
                 ) : (
@@ -167,8 +175,8 @@ export function TransferTray({
             </button>
           </div>
           <ul className="grid max-h-[35vh] gap-2 overflow-y-auto">
-            {visibleTransfers.map((transfer) => (
-              <TransferRow key={transfer.transferId} transfer={transfer} />
+            {visibleTransferIds.map((transferId) => (
+              <TransferRow key={transferId} transferId={transferId} />
             ))}
           </ul>
         </div>

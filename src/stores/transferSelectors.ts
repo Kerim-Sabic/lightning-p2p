@@ -9,6 +9,20 @@ function isActiveTransfer(transfer: TransferEntry): boolean {
   return transfer.status === "starting" || transfer.status === "running";
 }
 
+/** Selects active transfer IDs without exposing high-frequency progress fields. */
+export function selectOngoingTransferIds(
+  transfers: Record<string, Pick<TransferEntry, "transferId" | "status">>,
+): string[] {
+  return Object.values(transfers)
+    .filter(
+      (transfer) =>
+        transfer.status === "starting" ||
+        transfer.status === "running" ||
+        transfer.status === "paused",
+    )
+    .map((transfer) => transfer.transferId);
+}
+
 function compareTransferIdDescending(
   left: TransferEntry,
   right: TransferEntry,
