@@ -4,13 +4,22 @@ All notable changes to Lightning P2P are documented here. The project follows se
 
 ## [Unreleased]
 
+## [0.9.15] - 2026-10-01 ("Same-Side Flick Arrival")
+
+### Fixed
+
+- Preserve the sender's screen-relative Flick direction on the receiver, so a
+  rightward Flick arrives from the receiver's right side. Startup recovery now
+  distinguishes in-process retries from storage failures that require a full
+  app restart.
+
 ## [0.9.14] - 2026-10-01 ("Reliable Handoff")
 
 ### Fixed
 
 - Flick gestures now start from the chosen device's dedicated control, so the
   swipe direction reports the sender's intended side instead of depending on
-  where the device card appears. The receiver shows the opposite, approximate
+  where the device card appears. The receiver shows the same, approximate
   arrival side; tapping Send still sends without a directional cue.
 - Bound nearby-trust preparation during startup and initialize transfer stores
   before binding the network endpoint, so a stalled local store cannot leave a
@@ -64,7 +73,7 @@ All notable changes to Lightning P2P are documented here. The project follows se
 ### Added
 
 - Flick transfers now carry the sender's screen-relative gesture direction to
-  the receiver. The receiver previews the file arriving from the opposite
+  the receiver. The receiver previews the file arriving from the same
   edge, giving both people a useful left/right handoff cue without sharing
   precise location.
 

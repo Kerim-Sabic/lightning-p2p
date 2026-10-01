@@ -30,15 +30,20 @@ describe("classifyFlickDirection", () => {
 });
 
 describe("arrivalDirectionFromSenderFlick", () => {
-  it("shows the sender entering from the opposite side of the receiver", () => {
-    expect(arrivalDirectionFromSenderFlick("right")).toBe("left");
-    expect(arrivalDirectionFromSenderFlick("down_right")).toBe("up_left");
-    expect(arrivalDirectionFromSenderFlick("down")).toBe("up");
-    expect(arrivalDirectionFromSenderFlick("down_left")).toBe("up_right");
-    expect(arrivalDirectionFromSenderFlick("left")).toBe("right");
-    expect(arrivalDirectionFromSenderFlick("up_left")).toBe("down_right");
-    expect(arrivalDirectionFromSenderFlick("up")).toBe("down");
-    expect(arrivalDirectionFromSenderFlick("up_right")).toBe("down_left");
+  it("shows the file arriving from the same screen side the sender flicked toward", () => {
+    const directions = [
+      "right",
+      "down_right",
+      "down",
+      "down_left",
+      "left",
+      "up_left",
+      "up",
+      "up_right",
+    ] as const;
+    for (const direction of directions) {
+      expect(arrivalDirectionFromSenderFlick(direction)).toBe(direction);
+    }
   });
 });
 
