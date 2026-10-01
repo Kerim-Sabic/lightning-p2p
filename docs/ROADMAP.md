@@ -13,7 +13,7 @@ linked release evidence.
 - Android v0.5.1 as a signed sideload APK with share-target sends and public
   MediaStore destinations.
 
-### v0.9.19 beta channel
+### v0.9.20 beta channel
 
 - Windows, universal macOS DMG, Linux AppImage/deb/rpm, and CLI artifacts.
 - Lightning Chat in the Windows and Android apps plus the `/chat` Web lounge.
@@ -27,7 +27,9 @@ linked release evidence.
 - Legacy transfer stores are preserved and the node starts with a compatible
   store rather than stalling during initialization. Slow storage initialization
   is allowed to finish safely instead of being aborted while the database is
-  opening. Flick gestures work with mouse, touch, and stylus input, and show the
+  opening. If startup remains stalled for five minutes, the app now surfaces
+  recovery guidance while still allowing a late successful initialization to
+  finish. Flick gestures work with mouse, touch, and stylus input, and show the
   sender's approximate screen-relative direction on arrival.
 - Browser receive startup keeps active receives alive while the receiver view
   initializes, and legacy memory imports are bounded to prevent oversized

@@ -28,6 +28,7 @@ const NODE_START_PREPARATION_TIMEOUT: Duration = Duration::from_secs(5);
 // iroh-blobs starts its own actor/runtime while opening the store, so cancelling
 // this future can leave an orphaned database actor holding the file lock.
 const NODE_START_WARNING_AFTER: Duration = Duration::from_secs(60);
+const NODE_START_RECOVERY_AFTER: Duration = Duration::from_secs(5 * 60);
 
 /// Nearby services that must remain attached to the node across restarts.
 #[derive(Debug, Clone)]
@@ -426,6 +427,7 @@ impl NodeSupervisor {
         Box::pin(await_start_with_warning(
             start,
             NODE_START_WARNING_AFTER,
+            NODE_START_RECOVERY_AFTER,
             async {
                 let message = "Lightning is still opening local transfer storage. Keep the app open while it finishes. If startup stays here for several minutes, close and reopen Lightning to release the pending storage initialization.";
                 tracing::warn!(
@@ -435,6 +437,19 @@ impl NodeSupervisor {
                 self.set_status(
                     app,
                     NodeSupervisorStatus::new(phase, Some(reason.into()), Some(message.into())),
+                )
+                .await;
+            },
+            async {
+                let message = "Node startup has not finished after five minutes. Close and reopen Lightning to reset storage initialization; if it happens again, collect a diagnostic bundle from Settings.";
+                tracing::error!(reason, "node startup remains blocked after five minutes");
+                self.set_status(
+                    app,
+                    NodeSupervisorStatus::new(
+                        NodeSupervisorPhase::Failed,
+                        Some(reason.into()),
+                        Some(message.into()),
+                    ),
                 )
                 .await;
             },
@@ -473,15 +488,18 @@ impl NodeSupervisor {
     }
 }
 
-async fn await_start_with_warning<F, W>(
+async fn await_start_with_warning<F, W, S>(
     start: F,
     warning_after: Duration,
+    recovery_after: Duration,
     warning: W,
+    stalled: S,
 ) -> std::result::Result<F::Output, String>
 where
     F: Future + Send + 'static,
     F::Output: Send + 'static,
     W: Future<Output = ()>,
+    S: Future<Output = ()>,
 {
     let mut start = tokio::spawn(start);
     if let Ok(result) = tokio::time::timeout(warning_after, &mut start).await {
@@ -489,10 +507,17 @@ where
     }
 
     warning.await;
+    let remaining = recovery_after.saturating_sub(warning_after);
+    match tokio::time::timeout(remaining, &mut start).await {
+        Ok(result) => return result.map_err(|error| error.to_string()),
+        Err(_elapsed) => {}
+    }
+
+    stalled.await;
     // Store initialization is not cancellation-safe. Keep owning and awaiting
-    // the task after the warning so a slow store can still install its node
-    // when it finishes. Dropping this JoinHandle would discard the completed
-    // node and leave the app permanently unable to transfer until restarted.
+    // the task after surfacing recovery steps so a slow store can still install
+    // its node if it finishes. Dropping this JoinHandle could orphan the
+    // database actor and leave the app unable to transfer until restarted.
     start.await.map_err(|error| error.to_string())
 }
 
@@ -534,9 +559,15 @@ mod tests {
             Poll::Ready(42)
         });
 
-        let result = await_start_with_warning(start, Duration::from_secs(1), async {})
-            .await
-            .expect("startup task should complete");
+        let result = await_start_with_warning(
+            start,
+            Duration::from_secs(1),
+            Duration::from_secs(2),
+            async {},
+            async {},
+        )
+        .await
+        .expect("startup task should complete");
 
         assert_eq!(result, 42);
         assert_eq!(polls.load(Ordering::SeqCst), 1);
@@ -551,9 +582,15 @@ mod tests {
             42
         };
 
-        let result = await_start_with_warning(start, Duration::from_millis(1), async move {
-            warning_state.fetch_add(1, Ordering::SeqCst);
-        })
+        let result = await_start_with_warning(
+            start,
+            Duration::from_millis(1),
+            Duration::from_secs(1),
+            async move {
+                warning_state.fetch_add(1, Ordering::SeqCst);
+            },
+            async {},
+        )
         .await
         .expect("startup task should complete after warning");
 
@@ -571,9 +608,15 @@ mod tests {
             tokio::time::sleep(Duration::from_millis(20)).await;
             observed_finish.store(1, Ordering::SeqCst);
         };
-        let result = await_start_with_warning(start, Duration::from_millis(1), async move {
-            warning_state.fetch_add(1, Ordering::SeqCst);
-        })
+        let result = await_start_with_warning(
+            start,
+            Duration::from_millis(1),
+            Duration::from_secs(1),
+            async move {
+                warning_state.fetch_add(1, Ordering::SeqCst);
+            },
+            async {},
+        )
         .await;
 
         assert!(result.is_ok());
@@ -582,10 +625,37 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn indefinitely_slow_startup_surfaces_recovery_without_aborting_late_start() {
+        let stalled = Arc::new(AtomicUsize::new(0));
+        let observed_stalled = stalled.clone();
+        let start = async {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+            42
+        };
+
+        let result = await_start_with_warning(
+            start,
+            Duration::from_millis(1),
+            Duration::from_millis(5),
+            async {},
+            async move {
+                observed_stalled.fetch_add(1, Ordering::SeqCst);
+            },
+        )
+        .await
+        .expect("a late store result should still be returned");
+
+        assert_eq!(result, 42);
+        assert_eq!(stalled.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
     async fn startup_panic_is_returned_as_a_join_error() {
         let result = await_start_with_warning(
             async { panic!("simulated startup panic") },
             Duration::from_secs(1),
+            Duration::from_secs(2),
+            async {},
             async {},
         )
         .await;

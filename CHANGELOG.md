@@ -25,6 +25,14 @@ All notable changes to Lightning P2P are documented here. The project follows se
 - Restrict cleanup to direct regular files in Lightning's private share-staging
   directory; stale cache entries remain covered by the startup sweeper.
 
+## [0.9.20] - 2026-10-02 ("Startup Recovery Guidance")
+
+- Keep slow transfer-store initialization alive so late starts can still succeed.
+- After five minutes, show a recoverable startup failure with clear restart and
+  diagnostics guidance instead of leaving the app indefinitely marked Starting.
+- Preserve the sender's approximate screen-relative Flick direction on the
+  receiver; no location data is used.
+
 ### Fixed
 
 - Key completed receive history by transfer ID and block stale resume requests
