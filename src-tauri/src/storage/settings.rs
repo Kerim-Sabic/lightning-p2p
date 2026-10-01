@@ -426,7 +426,14 @@ fn normalize_download_dir(path: &Path) -> Result<PathBuf> {
         std::env::current_dir()?.join(path)
     };
 
-    std::fs::create_dir_all(&normalized)?;
+    if let Err(error) = std::fs::create_dir_all(&normalized) {
+        if normalized.exists() && !normalized.is_dir() {
+            return Err(LightningP2PError::Other(
+                "Download directory must point to a folder".into(),
+            ));
+        }
+        return Err(error.into());
+    }
     if !normalized.is_dir() {
         return Err(LightningP2PError::Other(
             "Download directory must point to a folder".into(),
@@ -492,6 +499,26 @@ mod tests {
         let reloaded = SettingsState::load_or_create(dir.path()).expect("settings reload");
         let snapshot = reloaded.snapshot().await;
         assert_eq!(snapshot.download_dir, download_dir);
+    }
+
+    #[tokio::test]
+    async fn download_directory_rejects_an_existing_file_without_changing_settings() {
+        let (state, dir) = temp_settings_state();
+        let existing_file = dir.path().join("not-a-folder");
+        std::fs::write(&existing_file, b"preserve this file").expect("write existing file");
+        let before = state.snapshot().await;
+
+        let error = state
+            .set_download_dir(existing_file.clone())
+            .await
+            .expect_err("an existing file cannot be used as a folder");
+
+        assert!(error.to_string().contains("must point to a folder"));
+        assert_eq!(state.snapshot().await, before);
+        assert_eq!(
+            std::fs::read(existing_file).expect("existing file"),
+            b"preserve this file"
+        );
     }
 
     #[tokio::test]
