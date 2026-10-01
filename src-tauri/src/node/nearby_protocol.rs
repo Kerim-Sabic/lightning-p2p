@@ -334,6 +334,7 @@ pub async fn send_offer(
     node_addr: EndpointAddr,
     offer: OfferShareMessage,
 ) -> Result<OfferDecision> {
+    let expected_offer_id = offer.offer_id.clone();
     let response = exchange(
         endpoint,
         node_addr,
@@ -343,8 +344,28 @@ pub async fn send_offer(
         },
     )
     .await?;
+    validate_offer_response(response, &expected_offer_id)
+}
+
+fn validate_offer_response(
+    response: NearbyResponse,
+    expected_offer_id: &str,
+) -> Result<OfferDecision> {
     match response {
-        NearbyResponse::OfferDecision { response, .. } => Ok(response.decision),
+        NearbyResponse::OfferDecision {
+            protocol_version,
+            response,
+        } if protocol_version <= PROTOCOL_VERSION => {
+            if response.offer_id != expected_offer_id {
+                return Err(LightningP2PError::Other(
+                    "Nearby offer response did not match the pending offer.".into(),
+                ));
+            }
+            Ok(response.decision)
+        }
+        NearbyResponse::OfferDecision { .. } => Err(LightningP2PError::Other(
+            "Nearby peer uses an unsupported offer protocol version.".into(),
+        )),
         other => Err(LightningP2PError::Other(format!(
             "unexpected nearby response: {other:?}"
         ))),
@@ -516,6 +537,44 @@ mod tests {
         let bytes = serde_json::to_vec(&envelope).expect("encode response");
         let parsed: NearbyResponse = serde_json::from_slice(&bytes).expect("decode response");
         assert!(matches!(parsed, NearbyResponse::Shares { .. }));
+    }
+
+    #[test]
+    fn offer_response_must_match_the_pending_offer_id() {
+        let response = NearbyResponse::OfferDecision {
+            protocol_version: PROTOCOL_VERSION,
+            response: OfferResponseMessage {
+                offer_id: "offer-1".into(),
+                decision: OfferDecision::Accepted,
+            },
+        };
+
+        assert_eq!(
+            validate_offer_response(response, "offer-1").expect("matching offer response"),
+            OfferDecision::Accepted
+        );
+
+        let mismatched = NearbyResponse::OfferDecision {
+            protocol_version: PROTOCOL_VERSION,
+            response: OfferResponseMessage {
+                offer_id: "offer-2".into(),
+                decision: OfferDecision::Accepted,
+            },
+        };
+        assert!(validate_offer_response(mismatched, "offer-1").is_err());
+    }
+
+    #[test]
+    fn offer_response_rejects_unknown_protocol_versions() {
+        let response = NearbyResponse::OfferDecision {
+            protocol_version: PROTOCOL_VERSION + 1,
+            response: OfferResponseMessage {
+                offer_id: "offer-1".into(),
+                decision: OfferDecision::Accepted,
+            },
+        };
+
+        assert!(validate_offer_response(response, "offer-1").is_err());
     }
 
     #[test]
