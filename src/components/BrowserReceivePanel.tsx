@@ -65,16 +65,22 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
   const abortControllerRef = useRef<AbortController | null>(null);
   const saveAbortControllerRef = useRef<AbortController | null>(null);
 
+  // This must be mount-only: setting the receiver during beginReceive is not
+  // a cancellation signal and must not abort the operation being started.
   useEffect(() => {
     return () => {
       abortControllerRef.current?.abort();
       saveAbortControllerRef.current?.abort();
-      if (receiver) {
-        void receiver
-          .cancel()
-          .catch(() => undefined)
-          .finally(() => window.setTimeout(() => receiver.stop(), 0));
-      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!receiver) return;
+    return () => {
+      void receiver
+        .cancel()
+        .catch(() => undefined)
+        .finally(() => window.setTimeout(() => receiver.stop(), 0));
     };
   }, [receiver]);
 
