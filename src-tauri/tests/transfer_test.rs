@@ -133,6 +133,37 @@ async fn receiving_file_with_existing_output_uses_safe_suffix() -> TestResult<()
 }
 
 #[tokio::test]
+async fn duplicate_node_startup_fails_fast_without_disturbing_the_live_node() -> TestResult<()> {
+    let root = tempfile::tempdir()?;
+    let data_dir = root.path().join("shared-data");
+    let first =
+        LightningP2PNode::start_with_dirs(data_dir.clone(), root.path().join("first-downloads"))
+            .await?;
+    let first_node_id = first.node_id();
+
+    let second_attempt = tokio::time::timeout(
+        Duration::from_secs(2),
+        LightningP2PNode::start_with_dirs(data_dir, root.path().join("second-downloads")),
+    )
+    .await?;
+    let error = match second_attempt {
+        Ok(second) => {
+            second.shutdown().await?;
+            return Err(std::io::Error::other(
+                "a second node unexpectedly opened the live node's data directory",
+            )
+            .into());
+        }
+        Err(error) => error,
+    };
+
+    assert!(error.to_string().contains("Another Lightning P2P process"));
+    assert_eq!(first.node_id(), first_node_id);
+    first.shutdown().await?;
+    Ok(())
+}
+
+#[tokio::test]
 #[ignore = "manual large transfer smoke test"]
 async fn transfers_ten_megabytes_end_to_end() -> TestResult<()> {
     run_file_transfer_smoke_test(10 * 1024 * 1024, false).await
