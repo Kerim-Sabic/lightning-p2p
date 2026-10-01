@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   ActiveTransfer,
+  NodeSupervisorStatus,
   NodeStatus,
   SharePathInfo,
   TransferEvent,
@@ -13,6 +14,7 @@ vi.mock("../lib/tauri", async (importOriginal) => {
     ...actual,
     getActiveTransfers: vi.fn(),
     getNodeStatus: vi.fn(),
+    getNodeSupervisorStatus: vi.fn(),
     getTransferHistory: vi.fn(),
     clearTransferHistory: vi.fn(),
     describeSharePaths: vi.fn(),
@@ -328,6 +330,33 @@ describe("node status snapshot reconciliation", () => {
     await olderRefresh;
 
     expect(useTransferStore.getState().nodeStatus).toEqual(directStatus);
+  });
+
+  it("keeps a ready event when an older startup snapshot resolves afterward", async () => {
+    let resolveSnapshot: ((status: NodeSupervisorStatus) => void) | undefined;
+    vi.mocked(tauri.getNodeSupervisorStatus).mockReturnValue(
+      new Promise((resolve) => {
+        resolveSnapshot = resolve;
+      }),
+    );
+
+    const refresh =
+      useTransferStore.getState().refreshNodeSupervisorStatus();
+    useTransferStore.getState().applyNodeSupervisorStatus({
+      phase: "idle",
+      last_reason: "app_startup",
+      last_error: null,
+      last_changed_unix: 10,
+    });
+    resolveSnapshot?.({
+      phase: "starting",
+      last_reason: "app_startup",
+      last_error: null,
+      last_changed_unix: 9,
+    });
+    await refresh;
+
+    expect(useTransferStore.getState().nodeSupervisorStatus.phase).toBe("idle");
   });
 });
 

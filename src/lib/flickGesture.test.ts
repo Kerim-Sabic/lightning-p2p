@@ -7,6 +7,7 @@ import {
   hasIntentionalFlickTravel,
   isAdditionalFlickPointer,
   isDeliberateFlick,
+  liveFlickRecipient,
   movedBeyondFlickClickSlop,
 } from "./flickGesture";
 
@@ -142,5 +143,18 @@ describe("flickTargetAtPoint", () => {
 
   it("does not select a target for non-finite pointer coordinates", () => {
     expect(flickTargetAtPoint(frozenTargets, Number.NaN, 50)).toBeNull();
+  });
+});
+
+describe("liveFlickRecipient", () => {
+  it("keeps the frozen recipient and returns its latest discovered record", () => {
+    const devices = [
+      { node_id: "device-left", device_name: "Left" },
+      { node_id: "device-right", device_name: "Updated name" },
+    ];
+
+    expect(liveFlickRecipient("device-right", devices)).toEqual(devices[1]);
+    expect(liveFlickRecipient("device-moved", devices)).toBeNull();
+    expect(liveFlickRecipient(null, devices)).toBeNull();
   });
 });

@@ -44,6 +44,7 @@ type ProgressTransferEvent = Extract<TransferEvent, { type: "progress" }>;
 
 let activeTransfersRequestSequence = 0;
 let nodeStatusRequestSequence = 0;
+let nodeSupervisorStatusUpdateSequence = 0;
 let historyRequestSequence = 0;
 let historyClearInFlight = false;
 let shareSelectionRequestSequence = 0;
@@ -574,11 +575,16 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
   },
 
   refreshNodeSupervisorStatus: async () => {
+    const requestSequence = ++nodeSupervisorStatusUpdateSequence;
     try {
       const nodeSupervisorStatus = await tauri.getNodeSupervisorStatus();
-      set({ nodeSupervisorStatus });
+      if (requestSequence === nodeSupervisorStatusUpdateSequence) {
+        set({ nodeSupervisorStatus });
+      }
     } catch (error) {
-      set(errorState(error));
+      if (requestSequence === nodeSupervisorStatusUpdateSequence) {
+        set(errorState(error));
+      }
     }
   },
 
@@ -1259,6 +1265,7 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
   },
 
   applyNodeSupervisorStatus: (status) => {
+    nodeSupervisorStatusUpdateSequence += 1;
     set({ nodeSupervisorStatus: status });
   },
 }));

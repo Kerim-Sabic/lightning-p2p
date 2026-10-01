@@ -36,6 +36,7 @@ import {
   flickTargetAtPoint,
   hasIntentionalFlickTravel,
   isAdditionalFlickPointer,
+  liveFlickRecipient,
   movedBeyondFlickClickSlop,
   type FlickDirection,
   type FlickTargetBounds,
@@ -569,7 +570,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
       return;
     }
 
-    const device = devices.find((candidate) => candidate.node_id === targetNodeId);
+    const device = liveFlickRecipient(targetNodeId, devices);
     if (!device) {
       setError("That device left before you released. Choose a device again.");
       return;
@@ -645,7 +646,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
     const intendedDevice = active.devices.find(
       (candidate) => candidate.node_id === targetNodeId,
     );
-    const liveDevice = devices.find((candidate) => candidate.node_id === targetNodeId);
+    const liveDevice = liveFlickRecipient(targetNodeId, devices);
     if (!liveDevice) {
       setError("That device left during the drag. Choose a device again.");
       return;
@@ -753,9 +754,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
 
     // Keep the receiver chosen on pointer-down. Nearby discovery can refresh
     // its list while the pointer is held, but that must not retarget a Flick.
-    const device = active.devices?.find(
-      (candidate) => candidate.node_id === active.nodeId,
-    );
+    const device = liveFlickRecipient(active.nodeId ?? null, devices);
     if (!device) {
       setError("That device is no longer nearby. Choose a device again.");
       return;

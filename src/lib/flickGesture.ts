@@ -12,6 +12,15 @@ export interface FlickTargetBounds {
   bottom: number;
 }
 
+/** Returns the current live device only when the frozen recipient is still present. */
+export function liveFlickRecipient<T extends { node_id: string }>(
+  nodeId: string | null,
+  devices: readonly T[],
+): T | null {
+  if (!nodeId) return null;
+  return devices.find((device) => device.node_id === nodeId) ?? null;
+}
+
 /** Returns true when a second non-primary pointer should cancel an active flick. */
 export function isAdditionalFlickPointer(
   activePointerId: number | null,
