@@ -213,6 +213,11 @@ pub async fn set_local_discovery_enabled(
             app.emit("discovered-shares-updated", shares)
                 .map_err(|error| command_error(error.to_string()))?;
         }
+        let devices = state.nearby_shares.clear_wifi_discovered_devices().await;
+        if let Some(devices) = devices {
+            app.emit("nearby-devices-updated", devices)
+                .map_err(|error| command_error(error.to_string()))?;
+        }
     }
     Box::pin(restart_node_after_endpoint_setting(
         app,

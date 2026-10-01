@@ -977,7 +977,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
                 </span>
                 <span className="chrome-pill">
                   {visibleToNearbyPeers
-                    ? "Visible to nearby peers"
+                    ? "Visible to saved devices"
                     : discoveryEnabled
                       ? "Nearby discovery enabled"
                       : "Manual link only"}
@@ -1328,7 +1328,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
                 </p>
                 <p className="mt-2 leading-6">
                   {visibleToNearbyPeers
-                    ? "Peers found through the active discovery methods may see this share while you stay online. If the receiver does not appear, send them this receive link."
+                    ? "Saved devices found through active discovery may see this share while you stay online. If the receiver does not appear, send them this receive link."
                     : discoveryEnabled
                       ? "Discovery is enabled but not active yet. Send the receive link if the receiver does not appear automatically."
                       : "Receivers will need the share link, raw ticket, or QR code explicitly."}

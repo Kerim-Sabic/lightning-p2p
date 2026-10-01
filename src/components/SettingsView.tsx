@@ -1190,8 +1190,9 @@ export function SettingsView() {
                   Wi-Fi/LAN nearby discovery
                 </p>
                 <p className="text-[13px] leading-6 text-slate-300/72">
-                  Automatically find peers on the same trusted local network
-                  without exchanging a code first.
+                  Find Lightning devices on this local network. Turning this
+                  off stops LAN mDNS discovery; shared-link transfers still
+                  work.
                 </p>
               </div>
             </div>

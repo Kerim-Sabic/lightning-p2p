@@ -414,13 +414,14 @@ impl NodeSupervisor {
             app.clone(),
         ));
         let chat_protocol = Arc::new(ChatProtocol::new(app.clone()));
-        let start = LightningP2PNode::start_with_dirs_and_relay(
+        let start = LightningP2PNode::start_with_dirs_and_relay_with_local_discovery(
             self.data_dir.clone(),
             settings.download_dir,
             relay_url,
             Some(nearby_protocol),
             Some(chat_protocol),
             profile,
+            settings.local_discovery_enabled,
         );
         Box::pin(await_start_with_warning(
             start,

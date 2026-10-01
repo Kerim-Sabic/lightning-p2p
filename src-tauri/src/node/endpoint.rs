@@ -100,6 +100,38 @@ impl LightningP2PNode {
         chat_protocol: Option<Arc<ChatProtocol>>,
         profile: TransferProfile,
     ) -> Result<Self> {
+        Self::start_with_dirs_and_relay_with_local_discovery(
+            data_dir,
+            download_dir,
+            relay_url,
+            nearby_protocol,
+            chat_protocol,
+            profile,
+            true,
+        )
+        .await
+    }
+
+    /// Starts the iroh node while optionally enabling LAN mDNS discovery.
+    ///
+    /// The established `start_with_dirs_and_relay` entry point keeps its
+    /// historical discovery default. Application settings use this variant
+    /// so disabling local discovery also disables mDNS advertisement and
+    /// listening without affecting shared-link or relay transfers.
+    ///
+    /// # Errors
+    ///
+    /// Returns `LightningP2PError` if endpoint binding, storage creation, or
+    /// protocol startup fails.
+    pub async fn start_with_dirs_and_relay_with_local_discovery(
+        data_dir: PathBuf,
+        download_dir: PathBuf,
+        relay_url: Option<RelayUrl>,
+        nearby_protocol: Option<Arc<NearbyShareProtocol>>,
+        chat_protocol: Option<Arc<ChatProtocol>>,
+        profile: TransferProfile,
+        local_discovery_enabled: bool,
+    ) -> Result<Self> {
         // Finish local storage initialization before binding network resources.
         // Besides making startup ordering clearer, this prevents a slow or
         // incompatible transfer store from leaving a partially started QUIC
@@ -139,14 +171,20 @@ impl LightningP2PNode {
         );
         let blob_access = BlobAccessController::with_public_hashes(public_hashes);
 
-        probe_mdns_socket();
+        if local_discovery_enabled {
+            probe_mdns_socket();
+        } else {
+            tracing::info!("LAN mDNS discovery disabled by settings");
+        }
         let lookup = MemoryLookup::new();
         tracing::info!("binding iroh endpoint");
         let endpoint = bind_endpoint(relay_url, &data_dir, profile, &lookup).await?;
-        let mdns = setup_mdns(&endpoint);
+        let mdns = local_discovery_enabled
+            .then(|| setup_mdns(&endpoint))
+            .flatten();
         tracing::info!(
             endpoint_id = %endpoint.id(),
-            local_network_discovery = local_network_discovery_label(),
+            local_network_discovery = local_network_discovery_label(local_discovery_enabled),
             "iroh endpoint bound (n0-discovery + mDNS)"
         );
 
@@ -410,8 +448,10 @@ fn setup_mdns(_endpoint: &Endpoint) -> Option<iroh_mdns_address_lookup::MdnsAddr
     None
 }
 
-fn local_network_discovery_label() -> &'static str {
-    if cfg!(target_os = "ios") {
+fn local_network_discovery_label(enabled: bool) -> &'static str {
+    if !enabled {
+        "disabled_by_user"
+    } else if cfg!(target_os = "ios") {
         "off-ios-entitlement-required"
     } else {
         "on"

@@ -48,14 +48,14 @@ The frontend does not choose receive destinations anymore. It asks Rust to recei
 
 ## Nearby Discovery Flow
 
-1. The iroh endpoint enables local-network discovery where the platform supports it.
+1. When local discovery is enabled, the iroh endpoint registers an mDNS lookup where the platform supports it.
 2. A background loop subscribes to iroh discovery events and keeps a candidate map.
 3. Candidates are queried over the authenticated `lightning-p2p/nearby/2` protocol.
 4. `Hello` identifies the peer. `ListShares` returns active-share metadata only when local discovery is enabled and the authenticated peer identity is saved as verified.
 5. The registry normalizes, dedupes, and sorts records before emitting UI updates. Revoking a saved identity also removes that peer's cached share metadata.
 6. If all peer queries fail during a refresh, the previous snapshot is retained to avoid flicker.
 
-Important caveat: the settings toggle controls active-share listings and the corresponding response. It does not rebuild the iroh endpoint to disable all local-network connectivity metadata. Device presence, endpoint identity, and a human-readable device label can still be discovered on the LAN. Push offers remain available to unpaired peers and require receiver consent.
+The local-discovery setting controls the LAN mDNS address-lookup service as well as nearby-share metadata. Turning it off restarts the endpoint without mDNS advertisement or listening. It does not disable iroh's public relay discovery, stop transfers through an already shared link, or reject inbound offers from peers that already know this device's identity. Push offers from unpaired peers still require receiver consent.
 
 ## Identity and Profiles
 

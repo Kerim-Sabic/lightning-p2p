@@ -164,6 +164,26 @@ async fn duplicate_node_startup_fails_fast_without_disturbing_the_live_node() ->
 }
 
 #[tokio::test]
+async fn disabled_local_discovery_does_not_register_mdns_lookup() -> TestResult<()> {
+    let root = tempfile::tempdir()?;
+    let node = LightningP2PNode::start_with_dirs_and_relay_with_local_discovery(
+        root.path().join("data"),
+        root.path().join("downloads"),
+        None,
+        None,
+        None,
+        lightning_p2p_lib::transfer::TransferMode::Standard.profile(),
+        false,
+    )
+    .await?;
+
+    assert!(node.mdns_lookup().is_none());
+    assert!(!node.runtime_status().lan_discovery_active);
+    node.shutdown().await?;
+    Ok(())
+}
+
+#[tokio::test]
 #[ignore = "manual large transfer smoke test"]
 async fn transfers_ten_megabytes_end_to_end() -> TestResult<()> {
     run_file_transfer_smoke_test(10 * 1024 * 1024, false).await

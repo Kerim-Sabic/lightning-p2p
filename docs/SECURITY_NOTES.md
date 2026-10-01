@@ -23,7 +23,7 @@ Treat these as sensitive when sharing diagnostics or support bundles:
 
 ## Nearby Discovery Metadata
 
-Nearby discovery exposes device presence and a human-readable device name on the local network. Detailed active-share metadata is returned only when the authenticated transport peer's NodeId is saved in My Devices:
+When LAN discovery is enabled, mDNS exposes device presence and a human-readable device name on the local network. Disabling local discovery removes the mDNS lookup on the next endpoint start; it does not revoke existing peer identities, public relay discovery, or links already shared. Detailed active-share metadata is returned only when the authenticated transport peer's NodeId is saved in My Devices:
 
 - device label
 - share label

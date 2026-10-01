@@ -353,6 +353,23 @@ impl NearbyShareRegistry {
         Some(Vec::new())
     }
 
+    /// Removes Wi-Fi mDNS-only devices and downgrades dual-transport entries to Bluetooth.
+    pub async fn clear_wifi_discovered_devices(&self) -> Option<Vec<NearbyDevice>> {
+        let mut guard = self.devices.write().await;
+        let before = snapshot_locked(&guard);
+        guard.retain(|_, device| device.transport != NearbyTransport::WifiMdns);
+        for device in guard.values_mut() {
+            if device.transport == NearbyTransport::Both {
+                device.transport = NearbyTransport::Ble;
+            }
+        }
+        let after = snapshot_locked(&guard);
+        if before == after {
+            return None;
+        }
+        Some(after)
+    }
+
     /// Upserts a device record discovered via Wi-Fi mDNS.
     ///
     /// Returns the resulting snapshot if it changed, otherwise `None`. The
@@ -536,6 +553,8 @@ pub fn spawn_nearby_discovery_loop(
     tauri::async_runtime::spawn(async move {
         let mut candidates = seed_candidates(&endpoint);
         let local_node_id = endpoint.id();
+        let endpoint_closed = endpoint.closed();
+        tokio::pin!(endpoint_closed);
         let mut stream_seen: HashSet<EndpointId> = HashSet::new();
         let mut interval = tokio::time::interval(REFRESH_INTERVAL);
         interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
@@ -570,6 +589,11 @@ pub fn spawn_nearby_discovery_loop(
         loop {
             if let Some(events) = discovery_events.as_mut() {
                 tokio::select! {
+                    () = &mut endpoint_closed => {
+                        lan_discovery_active.store(false, Ordering::Relaxed);
+                        tracing::debug!("LAN discovery loop stopped with its endpoint");
+                        break;
+                    }
                     _ = interval.tick() => {
                         if let Err(_error) = refresh_candidates(&app_handle, &endpoint, &registry, &mut candidates, &stream_seen).await {
                             tracing::debug!("nearby share refresh failed");
@@ -600,7 +624,14 @@ pub fn spawn_nearby_discovery_loop(
                 continue;
             }
 
-            interval.tick().await;
+            tokio::select! {
+                () = &mut endpoint_closed => {
+                    lan_discovery_active.store(false, Ordering::Relaxed);
+                    tracing::debug!("LAN discovery loop stopped with its endpoint");
+                    break;
+                }
+                _ = interval.tick() => {}
+            }
             if let Some(mdns) = &mdns {
                 tracing::info!("LAN discovery subscription re-established (mDNS)");
                 lan_discovery_active.store(true, Ordering::Relaxed);
@@ -1154,6 +1185,67 @@ mod tests {
 
         assert_eq!(changed[0].transport, NearbyTransport::WifiMdns);
         assert_eq!(registry.devices_snapshot().await.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn disabling_wifi_keeps_ble_side_of_dual_transport_device() {
+        let registry = NearbyShareRegistry::new(true);
+        registry.set_bluetooth_discovery_enabled(true).await;
+        let node_id = SecretKey::from_bytes(&[6_u8; 32]).public();
+
+        registry
+            .register_ble_candidate(node_id, "phone".into(), false)
+            .await
+            .expect("ble device should be added");
+        let candidate = RemoteCandidate {
+            node_id,
+            node_addr: EndpointAddr::new(node_id),
+            route_hint: NearbyRouteHint::Direct,
+            direct_address_count: 1,
+            last_seen_at: Instant::now(),
+        };
+        registry
+            .upsert_wifi_device(node_id, &candidate)
+            .await
+            .expect("wifi side should be added");
+
+        assert_eq!(
+            registry.devices_snapshot().await[0].transport,
+            NearbyTransport::Both
+        );
+
+        let changed = registry
+            .clear_wifi_discovered_devices()
+            .await
+            .expect("dual transport should downgrade");
+
+        assert_eq!(changed[0].transport, NearbyTransport::Ble);
+        assert_eq!(registry.devices_snapshot().await.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn disabling_wifi_clears_wifi_only_devices() {
+        let registry = NearbyShareRegistry::new(true);
+        let node_id = SecretKey::from_bytes(&[7_u8; 32]).public();
+        let candidate = RemoteCandidate {
+            node_id,
+            node_addr: EndpointAddr::new(node_id),
+            route_hint: NearbyRouteHint::Direct,
+            direct_address_count: 1,
+            last_seen_at: Instant::now(),
+        };
+        registry
+            .upsert_wifi_device(node_id, &candidate)
+            .await
+            .expect("wifi device should be added");
+
+        let changed = registry
+            .clear_wifi_discovered_devices()
+            .await
+            .expect("wifi device should be removed");
+
+        assert!(changed.is_empty());
+        assert!(registry.devices_snapshot().await.is_empty());
     }
 
     #[test]
