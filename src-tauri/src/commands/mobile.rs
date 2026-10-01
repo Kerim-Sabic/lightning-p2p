@@ -742,6 +742,10 @@ pub async fn take_pending_shared_files() -> Result<Vec<String>, String> {
 
 /// Removes Android share-sheet imports once they are no longer in the user's selection.
 /// Paths outside Lightning's private staging directory are ignored by the native bridge.
+///
+/// # Errors
+///
+/// Returns an error if the Android JNI bridge cannot run the cleanup operation.
 #[tauri::command]
 pub async fn delete_staged_shared_files(paths: Vec<String>) -> Result<(), String> {
     #[cfg(target_os = "android")]
