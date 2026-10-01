@@ -19,6 +19,7 @@ that are not supported by evidence.
 | Secondary text | `#B9BFCA` | Supporting copy                           |
 | Muted text     | `#858D9A` | Metadata only                             |
 | Action blue    | `#315EFF` | Primary actions, focus, and selection     |
+| Verified       | `#6EE7B7` dark / `#15803D` light | Verified device and success states |
 | Porcelain      | `#FAF9F6` | Light content sections and paper surfaces |
 | Amber          | `#E8BF70` | Cautions and uncertain network state      |
 | Error          | `#E05763` | Failure state, paired with clear text     |

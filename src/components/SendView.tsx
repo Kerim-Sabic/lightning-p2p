@@ -837,7 +837,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
       }}
       onDragLeave={() => setDropTargetNodeId(null)}
       onDrop={handleSelectionDrop}
-      className={`flex min-h-16 items-center gap-3 rounded-2xl border px-4 py-3 transition ${dropTargetNodeId === device.node_id ? "border-sky-300/60 bg-sky-400/10" : "border-white/[0.08] bg-white/[0.025] hover:border-sky-300/30 hover:bg-white/[0.05]"}`}
+      className={`flex min-h-16 items-center gap-3 rounded-2xl border px-4 py-3 transition ${dropTargetNodeId === device.node_id ? "border-[var(--accent-border)] bg-[var(--accent-subtle)]" : "border-[var(--border-subtle)] bg-[var(--surface-1)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-hover)]"}`}
     >
       <button
         type="button"
@@ -848,16 +848,16 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
           isSharing ||
           !nativeRuntime
         }
-        className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300 disabled:opacity-55"
+        className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] disabled:opacity-55"
       >
-        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-white/[0.08] bg-white/[0.04]">
-          <LaptopMinimal className="h-4 w-4 text-sky-200" />
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-2)]">
+          <LaptopMinimal className="h-4 w-4 text-[var(--accent-primary)]" />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-semibold text-white">
+          <span className="block truncate text-sm font-semibold text-[var(--fg-primary)]">
             {safeDisplayText(device.device_name, "Nearby device")}
           </span>
-          <span className="mt-1 block text-xs text-slate-400">
+          <span className="mt-1 block text-xs text-[var(--fg-secondary)]">
             {dropTargetNodeId === device.node_id
               ? `Release to send to ${safeDisplayText(device.device_name, "Nearby device")}`
               : busyNodeId === device.node_id
@@ -869,7 +869,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
                     : "On your local network"}
           </span>
           <span
-            className={`mt-1 inline-flex items-center gap-1 text-xs font-medium ${recipientVerifiedNodeIds.has(device.node_id) ? "text-emerald-200" : "text-amber-200/85"}`}
+            className={`mt-1 inline-flex items-center gap-1 text-xs font-medium ${recipientVerifiedNodeIds.has(device.node_id) ? "text-[var(--state-success)]" : "text-[var(--proof-amber)]"}`}
           >
             {recipientVerifiedNodeIds.has(device.node_id) ? (
               <>
@@ -880,7 +880,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
             )}
           </span>
         </span>
-        <span className="shrink-0 text-xs font-semibold text-sky-200">
+        <span className="shrink-0 text-xs font-semibold text-[var(--accent-primary)]">
           {busyNodeId === device.node_id
             ? "Working"
             : shareSelection.length > 0
@@ -917,7 +917,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
               busyNodeId !== null || isPreparingSelection || isSharing
             }
             style={{ touchAction: "none" }}
-            className="grid h-11 min-w-11 place-items-center rounded-xl border border-[var(--accent-primary)]/30 bg-[var(--accent-primary)]/10 px-2 text-xs font-semibold text-sky-100 transition hover:bg-[var(--accent-primary)]/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300 disabled:opacity-55"
+            className="grid h-11 min-w-11 place-items-center rounded-xl border border-[var(--accent-border)] bg-[var(--accent-subtle)] px-2 text-xs font-semibold text-[var(--accent-primary)] transition hover:bg-[var(--accent-border)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] disabled:opacity-55"
           >
             {activeFlickRef.current?.nodeId === device.node_id && flickHint
               ? "Flicking…"
@@ -938,26 +938,26 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
   );
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.08fr)_minmax(320px,0.92fr)]">
         <div className="min-w-0 space-y-4">
       <section
-        className={`glass-panel drop-zone ${isDragActive ? "drop-zone-active" : ""}`}
+        className={`rounded-3xl border border-[var(--border-strong)] bg-[var(--surface-0)] drop-zone ${isDragActive ? "drop-zone-active" : ""}`}
       >
         <div
           className={`simple-drop-zone ${
             isDragActive
-              ? "border-sky-400/45 bg-sky-500/[0.06]"
-              : "border-white/[0.08] bg-white/[0.02]"
+              ? "border-[var(--accent-border)] bg-[var(--accent-subtle)]"
+              : "border-[var(--border-subtle)] bg-[var(--surface-1)]"
           }`}
         >
           <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
             <div className="min-w-0">
-              <div className="glass-icon h-14 w-14 rounded-[20px]">
-                <Upload className="h-6 w-6 text-sky-200" />
+              <div className="grid h-14 w-14 place-items-center rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-2)]">
+                <Upload className="h-6 w-6 text-[var(--accent-primary)]" />
               </div>
               <p className="page-eyebrow mt-5">Send</p>
-              <h1 className="mt-2 text-[clamp(1.8rem,1.6rem+0.8vw,2.4rem)] font-semibold tracking-[-0.04em] text-white">
+              <h1 className="mt-2 text-[clamp(1.8rem,1.6rem+0.8vw,2.4rem)] font-semibold tracking-[-0.04em] text-[var(--fg-primary)]">
                 {isDragActive
                   ? "Release to stage files"
                   : mobileRuntime
@@ -966,11 +966,11 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
               </h1>
               <p className="meta-copy mt-3 max-w-[58ch]">
                 {mobileRuntime
-                  ? "Pick files from this phone, keep the app open, then generate one receive link when you are ready."
-                  : "Choose files or a folder, then generate one receive link when you are ready."}
+                  ? "Pick files from this phone, then send nearby or create a receive link. Keep Lightning open while files move."
+                  : "Choose files or a folder, then send nearby or create a receive link."}
               </p>
 
-              <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-400">
+              <div className="mt-4 flex flex-wrap gap-2 text-xs text-[var(--fg-secondary)]">
                 <span className="chrome-pill">
                   Network {networkLabel(nodeStatus.online_state)}
                 </span>
@@ -985,7 +985,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
               <button
                 type="button"
                 onClick={onNavigateReceive}
-                className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-full border border-white/[0.1] px-4 text-sm font-medium text-slate-200 transition hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+                className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-full border border-[var(--border-strong)] px-4 text-sm font-medium text-[var(--fg-secondary)] transition hover:bg-[var(--surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
               >
                 <ArrowDownToLine className="h-4 w-4" />
                 Receive a file
@@ -1013,7 +1013,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
                 <button
                   onClick={() => void pickShareFolder()}
                   disabled={!nativeRuntime || isPreparingSelection || isSharing}
-                  className="glass-button inline-flex items-center justify-center gap-2 px-5 py-3 text-sm text-slate-100"
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-[var(--border-strong)] bg-[var(--surface-1)] px-5 py-3 text-sm text-[var(--fg-primary)] transition hover:bg-[var(--surface-hover)]"
                 >
                   <Folder className="h-4 w-4" />
                   Choose folder
@@ -1038,7 +1038,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
 
       {isPreparingSelection && shareSelection.length === 0 ? (
         <section
-          className="glass-panel flex flex-wrap items-center gap-3 p-5"
+          className="flex flex-wrap items-center gap-3 rounded-3xl border border-[var(--border-strong)] bg-[var(--surface-0)] p-5"
           aria-live="polite"
         >
           <Loader2 className="h-4 w-4 animate-spin text-sky-300" />
@@ -1061,7 +1061,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
       ) : null}
 
       {shareSelection.length > 0 ? (
-        <section className="glass-panel p-5">
+        <section className="rounded-3xl border border-[var(--border-strong)] bg-[var(--surface-0)] p-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <p className="text-sm font-semibold text-white">
@@ -1167,21 +1167,21 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
               return (
                 <div
                   key={item.path}
-                  className="glass-subtle flex items-center gap-3 px-4 py-3"
+                  className="flex items-center gap-3 rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-1)] px-4 py-3"
                 >
-                  <div className="glass-icon h-9 w-9 shrink-0">
-                    <Icon className="h-4 w-4 text-sky-200" />
+                  <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[var(--accent-subtle)]">
+                    <Icon className="h-4 w-4 text-[var(--accent-primary)]" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-white">
+                    <p className="truncate text-sm font-medium text-[var(--fg-primary)]">
                       {itemName}
                     </p>
-                    <p className="text-xs text-slate-500">
+                    <p className="text-xs text-[var(--fg-muted)]">
                       {item.is_dir ? "Folder" : "File"}
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
-                    <span className="text-sm font-medium tabular-nums text-slate-300/78">
+                    <span className="text-sm font-medium tabular-nums text-[var(--fg-secondary)]">
                       {formatBytes(item.size)}
                     </span>
                     <button
@@ -1190,7 +1190,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
                       title={`Remove ${itemName}`}
                       onClick={() => removeShareSelectionItem(item.path)}
                       disabled={isSharing}
-                      className="grid h-10 w-10 place-items-center rounded-full text-slate-400 transition hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+                      className="grid h-10 w-10 place-items-center rounded-full text-[var(--fg-muted)] transition hover:bg-[var(--surface-hover)] hover:text-[var(--fg-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
                     >
                       <X className="h-4 w-4" aria-hidden="true" />
                     </button>
@@ -1205,7 +1205,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
         </div>
         <aside className="min-w-0 xl:sticky xl:top-4 xl:self-start">
       <section
-        className="glass-panel p-5"
+        className="rounded-3xl border border-[var(--border-strong)] bg-[var(--surface-0)] p-5"
         aria-labelledby="nearby-recipient-title"
       >
         <div className="flex flex-wrap items-end justify-between gap-3">
@@ -1288,7 +1288,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
       </div>
 
       {shareTicket ? (
-        <section className="glass-panel p-5">
+        <section className="rounded-3xl border border-[var(--border-strong)] bg-[var(--surface-0)] p-5">
           <div className="grid gap-5 lg:grid-cols-[1.2fr_0.8fr]">
             <div className="space-y-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1387,7 +1387,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
               </div>
             </div>
 
-            <div className="glass-subtle flex flex-col items-center justify-center gap-4 p-5 text-center">
+            <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-1)] p-5 text-center">
               {qrSvg ? (
                 <div
                   className="qr-code-frame rounded-[20px] border border-white/[0.08] bg-white p-3"
