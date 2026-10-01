@@ -4,6 +4,17 @@ All notable changes to Lightning P2P are documented here. The project follows se
 
 ## [Unreleased]
 
+## [0.9.16] - 2026-10-01 ("Reliable Startup and Receiving")
+
+### Fixed
+
+- Let slow local transfer-store initialization complete safely so a startup
+  timeout cannot strand the database actor or leave transfers unavailable.
+- Preserve active browser receives while the receive view initializes and cap
+  legacy in-memory imports to avoid oversized allocations.
+- Keep mouse, touch, and stylus Flick gestures tied to the chosen device and
+  show the file arriving from the sender's approximate screen-relative side.
+
 ## [0.9.15] - 2026-10-01 ("Same-Side Flick Arrival")
 
 ### Fixed

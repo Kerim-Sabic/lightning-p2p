@@ -13,7 +13,7 @@ linked release evidence.
 - Android v0.5.1 as a signed sideload APK with share-target sends and public
   MediaStore destinations.
 
-### v0.9.15 beta channel
+### v0.9.16 beta channel
 
 - Windows, universal macOS DMG, Linux AppImage/deb/rpm, and CLI artifacts.
 - Lightning Chat in the Windows and Android apps plus the `/chat` Web lounge.
@@ -25,8 +25,13 @@ linked release evidence.
 - Incoming Flick offers are namespaced by authenticated sender identity to
   prevent offer identifier collisions across peers.
 - Legacy transfer stores are preserved and the node starts with a compatible
-  store rather than stalling during initialization. Flick gestures work with
-  mouse, touch, and stylus input.
+  store rather than stalling during initialization. Slow storage initialization
+  is allowed to finish safely instead of being aborted while the database is
+  opening. Flick gestures work with mouse, touch, and stylus input, and show the
+  sender's approximate screen-relative direction on arrival.
+- Browser receive startup keeps active receives alive while the receiver view
+  initializes, and legacy memory imports are bounded to prevent oversized
+  fallback allocations.
 - Browser send and receive beta using the Rust/WASM transfer engine. Browser
   peers are relay-only and must remain open during transfer. Sending is
   memory-bound with a 2 GiB cap; receive streams to disk where the File System
