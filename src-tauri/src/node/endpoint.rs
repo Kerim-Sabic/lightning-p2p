@@ -15,6 +15,7 @@ use crate::storage::share_access;
 use crate::transfer::metrics::RouteKind;
 use crate::transfer::mode::{CongestionAlgorithm, TransferProfile};
 use crate::transfer::TransferMode;
+use fs2::FileExt;
 use iroh::address_lookup::memory::MemoryLookup;
 use iroh::endpoint::{ControllerFactory, MtuDiscoveryConfig, QuicTransportConfig, VarInt};
 use iroh::protocol::Router;
@@ -29,6 +30,7 @@ use iroh_mdns_address_lookup::MdnsAddressLookup;
 use noq_proto::congestion::{Bbr3Config, CubicConfig};
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 use socket2::{Domain, Protocol, Socket, Type};
+use std::fs::File;
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::path::{Path, PathBuf};
@@ -39,6 +41,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 const ONLINE_WAIT_TIMEOUT: Duration = Duration::from_secs(6);
 const DB_FILE_NAME: &str = "lightning-p2p.db";
 const DEPRECATED_DB_FILE_NAME: &str = "fastdrop.db";
+const NODE_LOCK_FILE_NAME: &str = ".lightning-p2p-node.lock";
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 const MDNS_MULTICAST_ADDR: Ipv4Addr = Ipv4Addr::new(224, 0, 0, 251);
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
@@ -49,6 +52,7 @@ pub struct LightningP2PNode {
     endpoint: Endpoint,
     /// Persistent iroh-blobs store. Derefs to [`iroh_blobs::api::Store`].
     store: FsStore,
+    _storage_lock: File,
     router: Router,
     /// Out-of-band address lookup used to teach the endpoint how to reach the
     /// peers named in a received ticket (relay + direct addresses).
@@ -103,10 +107,11 @@ impl LightningP2PNode {
         let startup_data_dir = data_dir.clone();
         let startup_download_dir = download_dir.clone();
         tracing::info!("preparing node storage directories");
-        tokio::task::spawn_blocking(move || {
+        let storage_lock = tokio::task::spawn_blocking(move || {
             std::fs::create_dir_all(&startup_data_dir)?;
             std::fs::create_dir_all(&startup_download_dir)?;
-            preserve_incompatible_blob_store(&startup_data_dir)
+            let storage_lock = acquire_node_storage_lock(&startup_data_dir)?;
+            preserve_incompatible_blob_store(&startup_data_dir).map(|()| storage_lock)
         })
         .await
         .map_err(|error| {
@@ -160,6 +165,7 @@ impl LightningP2PNode {
         Ok(Self {
             endpoint,
             store,
+            _storage_lock: storage_lock,
             router,
             lookup,
             mdns,
@@ -319,6 +325,22 @@ impl LightningP2PNode {
             .await
             .map_err(|error| LightningP2PError::Network(error.into()))
     }
+}
+
+fn acquire_node_storage_lock(data_dir: &Path) -> Result<File> {
+    let lock_path = data_dir.join(NODE_LOCK_FILE_NAME);
+    let lock_file = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .read(true)
+        .write(true)
+        .open(lock_path)?;
+    lock_file.try_lock_exclusive().map_err(|error| {
+        LightningP2PError::Other(format!(
+            "Another Lightning P2P process is already using this data folder ({error}). Close the other app window, then retry startup."
+        ))
+    })?;
+    Ok(lock_file)
 }
 
 fn hashes_for_collection(root: Hash, links: impl IntoIterator<Item = Hash>) -> Vec<Hash> {
@@ -559,6 +581,21 @@ mod tests {
 
         assert!(new_db.exists());
         assert!(!old_db.exists());
+    }
+
+    #[test]
+    fn node_storage_lock_rejects_a_second_owner_and_recovers_after_release() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let first = acquire_node_storage_lock(root.path()).expect("first owner acquires lock");
+
+        let contention = acquire_node_storage_lock(root.path())
+            .expect_err("second owner must fail without opening the blob database");
+        assert!(contention
+            .to_string()
+            .contains("Another Lightning P2P process"));
+
+        drop(first);
+        acquire_node_storage_lock(root.path()).expect("lock becomes available after shutdown");
     }
 
     #[test]

@@ -57,6 +57,7 @@ thiserror = "2"
 
 # Local storage
 sled = "0.34"
+fs2 = "0.4"
 
 # CLI (optional)
 clap = { version = "4", features = ["derive"], optional = true }
