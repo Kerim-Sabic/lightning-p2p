@@ -66,6 +66,15 @@ export function movedBeyondFlickClickSlop(dx: number, dy: number): boolean {
   );
 }
 
+/** Accepts a deliberate slow drop while keeping short pointer movement inert. */
+export function hasIntentionalFlickTravel(dx: number, dy: number): boolean {
+  return (
+    Number.isFinite(dx) &&
+    Number.isFinite(dy) &&
+    Math.hypot(dx, dy) >= MIN_FLICK_DISTANCE_PX
+  );
+}
+
 /** Resolves a pointer location against target geometry frozen for one gesture. */
 export function flickTargetAtPoint(
   targets: readonly FlickTargetBounds[],

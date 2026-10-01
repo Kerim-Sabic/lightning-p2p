@@ -4,6 +4,7 @@ import {
   classifyFlickDirection,
   flickDirectionForGesture,
   flickTargetAtPoint,
+  hasIntentionalFlickTravel,
   isAdditionalFlickPointer,
   isDeliberateFlick,
   movedBeyondFlickClickSlop,
@@ -90,6 +91,20 @@ describe("flickDirectionForGesture", () => {
     expect(flickDirectionForGesture({ dx: 20, dy: 0, elapsedMs: 5 })).toBe(
       null,
     );
+  });
+});
+
+describe("hasIntentionalFlickTravel", () => {
+  it("accepts a long slow drop without treating it as a directional flick", () => {
+    expect(hasIntentionalFlickTravel(100, 0)).toBe(true);
+    expect(flickDirectionForGesture({ dx: 100, dy: 0, elapsedMs: 500 })).toBe(
+      null,
+    );
+  });
+
+  it("rejects short or non-finite movement", () => {
+    expect(hasIntentionalFlickTravel(47, 0)).toBe(false);
+    expect(hasIntentionalFlickTravel(Number.NaN, 100)).toBe(false);
   });
 });
 

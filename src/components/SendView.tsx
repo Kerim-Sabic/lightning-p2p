@@ -34,6 +34,7 @@ import {
   arrivalDirectionFromSenderFlick,
   flickDirectionForGesture,
   flickTargetAtPoint,
+  hasIntentionalFlickTravel,
   isAdditionalFlickPointer,
   movedBeyondFlickClickSlop,
   type FlickDirection,
@@ -769,8 +770,12 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
     }
     if (direction) {
       void handleSendToDevice(device, direction);
+    } else if (hasIntentionalFlickTravel(dx, dy)) {
+      void handleSendToDevice(device);
     } else if (movedBeyondClickSlop) {
-      setError("That swipe was too slow or short. Try a quicker flick or tap to send normally.");
+      setError(
+        "That movement was too short to send. Tap Send or drag farther to the target.",
+      );
     }
   };
 
