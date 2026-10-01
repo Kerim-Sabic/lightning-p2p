@@ -11,6 +11,7 @@ pub mod progress;
 pub mod queue;
 pub mod receiver;
 pub mod sender;
+mod smart_auto;
 pub(crate) mod swarm;
 pub mod ticket;
 

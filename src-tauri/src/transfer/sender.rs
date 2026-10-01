@@ -10,6 +10,7 @@ use crate::transfer::progress::{
     TransferDirection, TransferInfo, TransferPhase,
 };
 use crate::transfer::queue::TransferQueue;
+use crate::transfer::smart_auto;
 use futures_util::stream;
 use futures_util::StreamExt;
 use iroh_blobs::api::proto::AddProgressItem;
@@ -671,12 +672,28 @@ async fn import_sources(
     concurrent_transfers: usize,
     cancel_rx: Option<watch::Receiver<bool>>,
 ) -> Result<Vec<ImportedSource>> {
-    let parallelism = import_parallelism(
+    let mut parallelism = import_parallelism(
         plan.sources.len(),
         plan.total_size,
         profile,
         concurrent_transfers,
     );
+    let auto_selection = (profile.mode == crate::transfer::TransferMode::SmartAuto
+        && concurrent_transfers == 1
+        && plan.sources.len() >= 8
+        && plan.total_size >= 32 * 1024 * 1024
+        && env_import_parallelism_cap().is_none())
+    .then(|| smart_auto::select(plan.sources.len(), plan.total_size, parallelism));
+    if let Some(selection) = auto_selection {
+        parallelism = selection.parallelism;
+        tracing::debug!(
+            source_count = plan.sources.len(),
+            total_bytes = plan.total_size,
+            import_parallelism = parallelism,
+            decision = ?selection.reason,
+            "SmartAuto selected import fanout from local workload measurements"
+        );
+    }
     let started_at = std::time::Instant::now();
     if profile.mode == crate::transfer::TransferMode::SmartAuto {
         tracing::debug!(
@@ -713,8 +730,12 @@ async fn import_sources(
     }
 
     if profile.mode == crate::transfer::TransferMode::SmartAuto {
+        let elapsed = started_at.elapsed();
+        if let Some(selection) = auto_selection {
+            smart_auto::record(selection, plan.total_size, elapsed);
+        }
         tracing::debug!(
-            elapsed_ms = u64::try_from(started_at.elapsed().as_millis()).unwrap_or(u64::MAX),
+            elapsed_ms = u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX),
             imported_bytes = plan.total_size,
             import_parallelism = parallelism,
             "SmartAuto source-import sample completed"
