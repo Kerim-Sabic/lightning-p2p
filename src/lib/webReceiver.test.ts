@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   BrowserReceiver,
+  saveReceivedFile,
   saveReceivedFileStreaming,
   supportsStreamingReceiveApi,
   verifiedCollectionSize,
@@ -8,6 +9,31 @@ import {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+});
+
+describe("BrowserReceiver.streamBlobTo", () => {
+  it("rejects a WASM byte count that differs from bytes delivered to the sink", async () => {
+    const inner = {
+      stream_blob_to: async (
+        _hash: string,
+        _size: number,
+        onChunk: (chunk: Uint8Array) => Promise<void>,
+      ) => {
+        await onChunk(new Uint8Array([1, 2]));
+        return 1;
+      },
+    };
+    const receiver = { inner } as unknown as BrowserReceiver;
+
+    await expect(
+      BrowserReceiver.prototype.streamBlobTo.call(
+        receiver,
+        "hash",
+        2,
+        async () => undefined,
+      ),
+    ).rejects.toThrow("streamed file length did not match");
+  });
 });
 
 describe("saveReceivedFileStreaming", () => {
@@ -62,6 +88,38 @@ describe("saveReceivedFileStreaming", () => {
     await expect(saving).rejects.toMatchObject({ name: "AbortError" });
     expect(abort).toHaveBeenCalledOnce();
     expect(write).toHaveBeenCalledOnce();
+  });
+});
+
+describe("saveReceivedFile ranged reads", () => {
+  it("does not publish a truncated range as a completed file", async () => {
+    const close = vi.fn(async () => undefined);
+    const abort = vi.fn(async () => undefined);
+    const createWritable = vi.fn(async () => ({
+      write: vi.fn(async () => undefined),
+      close,
+      abort,
+    }));
+    vi.stubGlobal("window", {
+      isSecureContext: true,
+      showSaveFilePicker: vi.fn(async () => ({ createWritable })),
+    });
+    const receiver = {
+      supportsRangedReads: () => true,
+      readBlobRange: async () => new Uint8Array([1]),
+      readBlob: vi.fn(async () => new Uint8Array([1, 2])),
+    } as unknown as BrowserReceiver;
+
+    await expect(
+      saveReceivedFile(receiver, {
+        name: "payload.bin",
+        hash: "hash",
+        size: 2,
+      }),
+    ).rejects.toThrow("saved file length did not match");
+    expect(close).not.toHaveBeenCalled();
+    expect(abort).toHaveBeenCalledOnce();
+    expect(receiver.readBlob).not.toHaveBeenCalled();
   });
 });
 

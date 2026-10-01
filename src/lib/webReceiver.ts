@@ -312,11 +312,29 @@ export class BrowserReceiver {
     if (!this.inner.stream_blob_to)
       throw new Error("engine version without streamed receive");
     let receivedBytes = 0;
-    return this.inner.stream_blob_to(hashHex, expectedSize, async (chunk) => {
-      await onChunk(chunk);
-      receivedBytes += chunk.byteLength;
-      onProgress?.(receivedBytes);
-    });
+    const reportedBytes = await this.inner.stream_blob_to(
+      hashHex,
+      expectedSize,
+      async (chunk) => {
+        const nextBytes = receivedBytes + chunk.byteLength;
+        if (!Number.isSafeInteger(nextBytes) || nextBytes > expectedSize) {
+          throw new Error("Received bytes exceed the verified file size.");
+        }
+        await onChunk(chunk);
+        receivedBytes = nextBytes;
+        onProgress?.(receivedBytes);
+      },
+    );
+    if (
+      !Number.isSafeInteger(reportedBytes) ||
+      reportedBytes !== receivedBytes ||
+      reportedBytes !== expectedSize
+    ) {
+      throw new Error(
+        "The streamed file length did not match its verified manifest.",
+      );
+    }
+    return reportedBytes;
   }
 }
 
@@ -514,10 +532,13 @@ async function saveBlobStreamed(
   const writable = await handle.createWritable();
   try {
     for (let offset = 0; offset < size; offset += SAVE_CHUNK_BYTES) {
-      const chunk = await read(
-        offset,
-        Math.min(SAVE_CHUNK_BYTES, size - offset),
-      );
+      const requestedLength = Math.min(SAVE_CHUNK_BYTES, size - offset);
+      const chunk = await read(offset, requestedLength);
+      if (chunk.byteLength !== requestedLength) {
+        throw new Error(
+          "The saved file length did not match its verified manifest.",
+        );
+      }
       await writable.write(chunk);
     }
     await writable.close();
