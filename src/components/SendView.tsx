@@ -28,6 +28,7 @@ import {
 } from "react";
 import { formatBytes } from "../lib/format";
 import { safeDisplayText } from "../lib/safeDisplayText";
+import { pageWindow } from "../lib/pageWindow";
 import { groupNearbyDevices } from "../lib/nearbyDeviceGroups";
 import { getNearbyDiscoveryStatus } from "../lib/nearbyDiscoveryStatus";
 import {
@@ -90,6 +91,8 @@ interface SendViewProps {
 function uniquePaths(paths: string[]): string[] {
   return Array.from(new Set(paths));
 }
+
+const SELECTION_PAGE_SIZE = 24;
 
 function iconForSelection(name: string, isDir: boolean) {
   if (isDir) {
@@ -214,6 +217,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
   const [qrSvg, setQrSvg] = useState<string | null>(null);
   const [showRawTicket, setShowRawTicket] = useState(false);
   const [busyNodeId, setBusyNodeId] = useState<string | null>(null);
+  const [selectionPage, setSelectionPage] = useState(0);
   const [dropTargetNodeId, setDropTargetNodeId] = useState<string | null>(null);
   const [flickDevices, setFlickDevices] = useState<NearbyDevice[] | null>(null);
   const [flickVerifiedNodeIds, setFlickVerifiedNodeIds] =
@@ -272,6 +276,15 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
   const selectionSize = useMemo(
     () => shareSelection.reduce((total, item) => total + item.size, 0),
     [shareSelection],
+  );
+  const selectionWindow = pageWindow(
+    shareSelection.length,
+    selectionPage,
+    SELECTION_PAGE_SIZE,
+  );
+  const visibleSelection = shareSelection.slice(
+    selectionWindow.start,
+    selectionWindow.end,
   );
   const localDiscoveryEnabled = settings?.local_discovery_enabled ?? true;
   const bluetoothDiscoverySupported =
@@ -1160,6 +1173,52 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
             </div>
           </div>
 
+          {shareSelection.length > SELECTION_PAGE_SIZE ? (
+            <nav
+              className="mt-4 flex flex-wrap items-center gap-2"
+              aria-label="Selected files pages"
+            >
+              <p
+                className="min-w-0 flex-1 text-sm tabular-nums text-[var(--fg-secondary)]"
+                aria-live="polite"
+                aria-atomic="true"
+              >
+                Showing {selectionWindow.start + 1}–{selectionWindow.end} of{" "}
+                {shareSelection.length} selected items
+              </p>
+              <button
+                type="button"
+                onClick={() =>
+                  setSelectionPage(Math.max(0, selectionWindow.pageIndex - 1))
+                }
+                disabled={selectionWindow.pageIndex === 0}
+                className="inline-flex min-h-11 items-center rounded-xl border border-[var(--border-strong)] bg-[var(--surface-1)] px-3 text-sm font-medium text-[var(--fg-primary)] transition hover:bg-[var(--surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] disabled:opacity-50"
+              >
+                Previous
+              </button>
+              <span className="min-w-16 text-center text-sm tabular-nums text-[var(--fg-secondary)]">
+                {selectionWindow.pageIndex + 1} / {selectionWindow.pageCount}
+              </span>
+              <button
+                type="button"
+                onClick={() =>
+                  setSelectionPage(
+                    Math.min(
+                      selectionWindow.pageCount - 1,
+                      selectionWindow.pageIndex + 1,
+                    ),
+                  )
+                }
+                disabled={
+                  selectionWindow.pageIndex >= selectionWindow.pageCount - 1
+                }
+                className="inline-flex min-h-11 items-center rounded-xl border border-[var(--border-strong)] bg-[var(--surface-1)] px-3 text-sm font-medium text-[var(--fg-primary)] transition hover:bg-[var(--surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] disabled:opacity-50"
+              >
+                Next
+              </button>
+            </nav>
+          ) : null}
+
           <div
             className="mt-4 grid gap-2"
             draggable={shareSelection.length > 0 && !mobileRuntime}
@@ -1172,7 +1231,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
             }}
             aria-label="Selected files. Drag onto a nearby device to send."
           >
-            {shareSelection.map((item) => {
+            {visibleSelection.map((item) => {
               const Icon = iconForSelection(item.name, item.is_dir);
               const itemName = safeDisplayText(item.name, "Selected item");
 
