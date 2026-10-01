@@ -1,9 +1,13 @@
 # web-receiver
 
-The "receive in any browser" feature: the Lightning P2P transfer engine
-(iroh + iroh-blobs, BLAKE3-verified) compiled to WebAssembly and run in the
-page. No server backend — the browser dials the sender directly over iroh's
-relay-over-WebSocket transport.
+The browser receive engine used by Lightning's `/receive` handoff page. The
+same iroh + iroh-blobs transfer code runs as WebAssembly in the page and
+BLAKE3-verifies received content.
+
+This is not a file-hosting backend. Browser peers are relay-only: iroh's relay
+forwards encrypted QUIC traffic when the receiver cannot connect directly.
+The sender must stay online while the receiver downloads; the relay does not
+store files for later delivery.
 
 Standalone crate on purpose: it pins the iroh 1.0 / iroh-blobs 0.103 line (the
 only line with browser support) with its own lockfile, independent of the
@@ -11,18 +15,24 @@ desktop/mobile app in `src-tauri/`.
 
 ## Status
 
-- ✅ Compiles to `wasm32-unknown-unknown` (release artifact ~6 MB raw; ~1.5-2 MB
-  after `wasm-bindgen` + `wasm-opt` + gzip).
-- ⏳ Wired into the receive page and shipped once the app itself is on iroh 1.0
-  (a browser peer can only receive from a 1.0 sender — iroh 0.91 broke the relay
-  wire protocol). See `docs/browser-receiver-spike.md`.
+- ✅ Built for `wasm32-unknown-unknown` and loaded lazily when a receiver
+  chooses browser receive.
+- ✅ Current browsers with the File System Access API and the streamed WASM
+  methods can receive verified chunks directly into the selected file sink,
+  with backpressure.
+- ✅ Other browsers use a memory-backed compatibility path with a conservative
+  128 MiB aggregate receive limit. The app checks actual incoming data against
+  that limit; sender-declared sizes are not trusted as the enforcement boundary.
 
 ## Constraints (surfaced in the UI)
 
-- **Relay-only**: browsers have no hole punching, so transfers go through the
-  relay. Expect lower throughput than the native direct path.
-- **Memory-bound**: the blob lives in wasm memory (`MemStore`), so the receive
-  page gates on ticket size before fetching.
+- **Relay-only**: browser peers cannot hole-punch, so the relay forwards
+  encrypted traffic. It provides connectivity, not cloud file storage.
+- **Compatibility receive is memory-backed**: browsers without a supported
+  writable sink or a cached engine with streaming methods use the 128 MiB
+  aggregate cap. Reloading may be required after an engine update.
+- **The sender stays online**: browser receive is an active peer transfer, not
+  asynchronous delivery.
 
 ## Build
 
@@ -43,10 +53,18 @@ browser receive, so the multi-MB wasm never touches the marketing page budget.
 
 ## JS surface
 
-- `inspect_ticket(ticket): string` — `{"label","size"}` JSON, fetches nothing
-  (feeds the pre-fetch size gate).
-- `WebReceiver.spawn(): Promise<WebReceiver>` — bind the endpoint + store.
-- `receiver.fetch(ticket): Promise<string>` — download (BLAKE3-verified),
-  returns the root hash hex.
-- `receiver.read_blob(hashHex): Promise<Uint8Array>` — bytes for saving via the
-  File System Access API (Chromium) or a Blob download (Firefox/Safari).
+- `inspect_ticket(ticket): string` — label and declared size, without fetching
+  payload bytes.
+- `WebReceiver.spawn(): Promise<WebReceiver>` — binds the browser endpoint.
+- `receiver.prepare_streamed_collection(ticket, progressCallback)` — fetches
+  and verifies bounded collection metadata, then returns file names, hashes,
+  and authenticated sizes.
+- `receiver.stream_blob_to(hash, size, chunkCallback)` — streams Bao-verified
+  chunks to an async sink and waits for each write before reading the next.
+- `receiver.fetch(ticket, maxBytes, progressCallback)` — bounded,
+  memory-backed compatibility path; returns the root hash.
+- `receiver.read_blob_range(hashHex, offset, length)` — reads bounded ranges
+  for streaming saves from the fetched in-memory store when the current engine
+  does not support direct sink streaming.
+- `receiver.cancel()` — closes the endpoint and interrupts an in-flight
+  receive.
