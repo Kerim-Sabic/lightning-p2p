@@ -79,6 +79,28 @@ function progressEvent(bytes: number): TransferEvent {
   };
 }
 
+function startedEvent(): TransferEvent {
+  return {
+    type: "started",
+    transfer_id: "recv-1",
+    direction: "receive",
+    name: "payload.bin",
+    peer: "peer-1",
+    total: 100,
+    route_kind: "direct",
+    phase: "connecting",
+    connect_ms: 0,
+    download_ms: 0,
+    export_ms: 0,
+    provider_count: 1,
+    direct_provider_count: 1,
+    relay_provider_count: 0,
+    strategy: "queued_single_provider",
+    first_byte_ms: 0,
+    effective_mbps: 0,
+  };
+}
+
 function completedEvent(): TransferEvent {
   return {
     type: "completed",
@@ -166,6 +188,44 @@ describe("active transfer snapshot reconciliation", () => {
       error_payload: null,
     });
     expect(receivedTransfer().status).toBe("paused");
+  });
+
+  it("keeps a paused receive paused when delayed activity events arrive", async () => {
+    vi.mocked(tauri.getActiveTransfers).mockResolvedValue([
+      {
+        ...activeTransfer,
+        phase: "paused",
+        can_resume: true,
+        speed_bps: 0,
+      },
+    ]);
+
+    await useTransferStore.getState().refreshActiveTransfers();
+    useTransferStore.getState().applyTransferEvent(startedEvent());
+    useTransferStore.getState().applyTransferEvent(progressEvent(80));
+
+    expect(receivedTransfer().status).toBe("paused");
+    expect(receivedTransfer().phase).toBe("paused");
+    expect(receivedTransfer().bytes).toBe(20);
+    expect(receivedTransfer().speedBps).toBe(0);
+  });
+
+  it("allows verified completion to supersede a paused snapshot", async () => {
+    vi.mocked(tauri.getActiveTransfers).mockResolvedValue([
+      {
+        ...activeTransfer,
+        phase: "paused",
+        can_resume: true,
+        speed_bps: 0,
+      },
+    ]);
+
+    await useTransferStore.getState().refreshActiveTransfers();
+    useTransferStore.getState().applyTransferEvent(completedEvent());
+
+    expect(receivedTransfer().status).toBe("completed");
+    expect(receivedTransfer().phase).toBe("completed");
+    expect(receivedTransfer().bytes).toBe(100);
   });
 
   beforeEach(() => {

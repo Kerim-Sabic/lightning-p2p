@@ -1099,6 +1099,17 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
       ) {
         return state;
       }
+      if (
+        current?.status === "paused" &&
+        (event.type === "started" || event.type === "progress")
+      ) {
+        // Pause waits for the backend task to stop. IPC delivery can still
+        // reorder an event that was already queued ahead of that command's
+        // snapshot, so stale activity must not make a safely paused receive
+        // look active again. A later completion or real failure remains
+        // authoritative.
+        return state;
+      }
       if (current?.status === "completed" || current?.status === "failed") {
         return state;
       }

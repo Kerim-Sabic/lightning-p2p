@@ -13,6 +13,8 @@ All notable changes to Lightning P2P are documented here. The project follows se
 
 ## [Unreleased]
 
+- Keep paused receives paused when delayed start/progress events arrive after
+  the backend has stopped the transfer.
 - Recover file and folder receives after restart when verified output was published but completion history had not yet been flushed.
 
 ### Fixed
