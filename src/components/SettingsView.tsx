@@ -32,6 +32,7 @@ import {
   TRANSFER_MODE_DESCRIPTORS,
   TRANSFER_MODES,
   type NodeStatus,
+  type NodeSupervisorStatus,
   type PlatformProfile,
   type RelayMode,
   setNearbyPeerBlocked,
@@ -181,6 +182,25 @@ function supervisorPhaseLabel(phase: string): string {
       return "Failed";
     default:
       return "Unknown";
+  }
+}
+
+function supervisorPhaseCopy(status: NodeSupervisorStatus): string {
+  if (status.last_error) return status.last_error;
+
+  switch (status.phase) {
+    case "idle":
+      return "The transfer engine is ready. Network route quality is shown separately.";
+    case "starting":
+      return "Preparing local storage and opening the secure network endpoint.";
+    case "restarting":
+      return "Applying connection settings and rebuilding the transfer endpoint.";
+    case "blocked_active_transfers":
+      return "Waiting for current transfers to finish before applying this change.";
+    case "failed":
+      return "The transfer engine could not start. Review the error and try again.";
+    default:
+      return "Transfer engine status is unavailable.";
   }
 }
 
@@ -606,46 +626,39 @@ export function SettingsView() {
       </section>
 
       <section className="grid gap-4 xl:grid-cols-2">
-        <article className="glass-panel p-6">
+        <article className="rounded-3xl border border-[var(--border-subtle)] bg-[var(--surface-0)] p-6 shadow-sm">
           <div className="flex items-center gap-3">
-            <div className="glass-icon">
-              <Activity className="h-5 w-5 text-sky-200" />
+            <div className="grid h-11 w-11 place-items-center rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-2)]">
+              <Activity className="h-5 w-5 text-[var(--accent-primary)]" />
             </div>
             <div>
-              <p className="text-sm font-medium text-white">
-                Runtime readiness
+              <p className="text-base font-semibold text-[var(--fg-primary)]">
+                Transfer engine and connection
               </p>
-              <p className="text-[13px] text-slate-300/72">
-                Android launch, route, benchmark, and restart state at a glance.
+              <p className="text-sm leading-6 text-[var(--fg-secondary)]">
+                Engine startup and network reachability are separate states.
               </p>
             </div>
           </div>
 
-          <div className="mt-4 grid gap-2 md:grid-cols-2">
-            <div className="stat-card">
-              <p className="metric-label">Android gate</p>
-              <p className="mt-1.5 text-sm font-semibold text-white">
-                {platformProfile.platform_kind === "android"
-                  ? "Physical proof required"
-                  : "Desktop runtime"}
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <section
+              className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-1)] p-4"
+              aria-labelledby="transfer-engine-status-title"
+            >
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--fg-muted)]">
+                Transfer engine
               </p>
-            </div>
-            <div className="stat-card">
-              <p className="metric-label">Route state</p>
-              <p className="mt-1.5 text-sm font-semibold text-white">
-                {onlineStateLabel(nodeStatus.online_state)}
-              </p>
-            </div>
-            <div className="stat-card">
-              <p className="metric-label">Supervisor</p>
-              <p className="mt-1.5 text-sm font-semibold text-white">
+              <h3
+                id="transfer-engine-status-title"
+                className="mt-1.5 text-base font-semibold text-[var(--fg-primary)]"
+                aria-live="polite"
+              >
                 {supervisorPhaseLabel(nodeSupervisorStatus.phase)}
+              </h3>
+              <p className="mt-2 text-sm leading-6 text-[var(--fg-secondary)]">
+                {supervisorPhaseCopy(nodeSupervisorStatus)}
               </p>
-              {nodeSupervisorStatus.last_error ? (
-                <p className="mt-1 text-xs leading-5 text-amber-100/80">
-                  {nodeSupervisorStatus.last_error}
-                </p>
-              ) : null}
               {nodeSupervisorStatus.phase === "failed" &&
               nativeRuntime &&
               !nodeSupervisorStatus.last_error?.includes(
@@ -656,7 +669,7 @@ export function SettingsView() {
                     type="button"
                     onClick={() => void retryNode()}
                     disabled={retryingNode}
-                    className="inline-flex min-h-11 items-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-4 text-sm font-semibold text-white transition hover:bg-white/[0.1] disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+                    className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[var(--accent-border)] bg-[var(--accent-subtle)] px-4 text-sm font-semibold text-[var(--accent-primary)] transition hover:bg-[var(--accent-border)] disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
                   >
                     <RefreshCw
                       className={`h-4 w-4 ${retryingNode ? "animate-spin" : ""}`}
@@ -669,20 +682,32 @@ export function SettingsView() {
                   {nodeRetryError ? (
                     <p
                       role="alert"
-                      className="mt-2 text-xs leading-5 text-rose-100/90"
+                      className="mt-2 text-sm leading-6 text-[var(--danger-copy)]"
                     >
                       {nodeRetryError}
                     </p>
                   ) : null}
                 </div>
               ) : null}
-            </div>
-            <div className="stat-card">
-              <p className="metric-label">Benchmark proof</p>
-              <p className="mt-1.5 text-sm font-semibold text-white">
-                Evidence required
+            </section>
+            <section className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-1)] p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--fg-muted)]">
+                Network route
               </p>
-            </div>
+              <h3 className="mt-1.5 text-base font-semibold text-[var(--fg-primary)]">
+                {onlineStateLabel(nodeStatus.online_state)}
+              </h3>
+              <p className="mt-2 text-sm leading-6 text-[var(--fg-secondary)]">
+                {onlineStateCopy(nodeStatus)}
+              </p>
+              <p className="mt-3 text-sm text-[var(--fg-muted)]">
+                {nodeStatus.direct_address_count} direct address
+                {nodeStatus.direct_address_count === 1 ? "" : "es"} ·{" "}
+                {nodeStatus.relay_connected
+                  ? "Relay connected"
+                  : "Relay not connected"}
+              </p>
+            </section>
           </div>
         </article>
 
