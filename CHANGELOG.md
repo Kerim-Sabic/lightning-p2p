@@ -2,6 +2,15 @@
 
 All notable changes to Lightning P2P are documented here. The project follows semantic versioning where practical.
 
+## [0.9.17] - 2026-10-01 ("Flick & Startup Reliability")
+
+- Keep slow node startup alive until the transfer store resolves, so a late
+  successful initialization can still bring sending and receiving online.
+- Preserve mouse, touch, and stylus Flick direction through nearby offers and
+  show the approximate arrival side on the receiver without sharing location.
+- Recover completed receive history by transfer ID when its completion event
+  was lost.
+
 ## [Unreleased]
 
 - Recover file and folder receives after restart when verified output was published but completion history had not yet been flushed.
