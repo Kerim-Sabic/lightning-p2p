@@ -28,6 +28,7 @@ const NODE_START_PREPARATION_TIMEOUT: Duration = Duration::from_secs(5);
 // iroh-blobs starts its own actor/runtime while opening the store, so cancelling
 // this future can leave an orphaned database actor holding the file lock.
 const NODE_START_WARNING_AFTER: Duration = Duration::from_secs(60);
+const NODE_START_RECOVERY_AFTER: Duration = Duration::from_secs(5 * 60);
 
 /// Nearby services that must remain attached to the node across restarts.
 #[derive(Debug, Clone)]
@@ -426,6 +427,7 @@ impl NodeSupervisor {
         Box::pin(await_start_with_warning(
             start,
             NODE_START_WARNING_AFTER,
+            NODE_START_RECOVERY_AFTER,
             async {
             let message = "The transfer engine is still opening its local store. Startup is continuing; keep Lightning open. Closing the app while this is running can interrupt store initialization.";
             tracing::warn!(
@@ -476,6 +478,7 @@ impl NodeSupervisor {
 async fn await_start_with_warning<F, W>(
     start: F,
     warning_after: Duration,
+    recovery_after: Duration,
     warning: W,
 ) -> std::result::Result<F::Output, String>
 where
@@ -484,15 +487,20 @@ where
     W: Future<Output = ()>,
 {
     let mut start = tokio::spawn(start);
-    match tokio::time::timeout(warning_after, &mut start).await {
+    if let Ok(result) = tokio::time::timeout(warning_after, &mut start).await {
+        return result.map_err(|error| error.to_string());
+    }
+
+    warning.await;
+    // FsStore initialization is not cancellation-safe: aborting it can strand
+    // its database actor and lock. Keep the task alive while waiting, then
+    // detach it on timeout so the supervisor can surface a recoverable state.
+    let remaining = recovery_after.saturating_sub(warning_after);
+    match tokio::time::timeout(remaining, &mut start).await {
         Ok(result) => result.map_err(|error| error.to_string()),
-        Err(_elapsed) => {
-            warning.await;
-            // FsStore initialization is not cancellation-safe: aborting it can
-            // strand its database actor and lock. Keep awaiting the same task
-            // so a slow disk can still finish and transfers can come online.
-            start.await.map_err(|error| error.to_string())
-        }
+        Err(_elapsed) => Err(
+            "The transfer engine did not finish initializing within five minutes. Its local database task was left running safely. Close and reopen Lightning to reset startup; if this repeats, collect a diagnostic bundle from Settings.".into(),
+        ),
     }
 }
 
@@ -534,9 +542,14 @@ mod tests {
             Poll::Ready(42)
         });
 
-        let result = await_start_with_warning(start, Duration::from_secs(1), async {})
-            .await
-            .expect("startup task should complete");
+        let result = await_start_with_warning(
+            start,
+            Duration::from_secs(1),
+            Duration::from_secs(2),
+            async {},
+        )
+        .await
+        .expect("startup task should complete");
 
         assert_eq!(result, 42);
         assert_eq!(polls.load(Ordering::SeqCst), 1);
@@ -551,9 +564,14 @@ mod tests {
             42
         };
 
-        let result = await_start_with_warning(start, Duration::from_millis(1), async move {
-            warning_state.fetch_add(1, Ordering::SeqCst);
-        })
+        let result = await_start_with_warning(
+            start,
+            Duration::from_millis(1),
+            Duration::from_secs(1),
+            async move {
+                warning_state.fetch_add(1, Ordering::SeqCst);
+            },
+        )
         .await
         .expect("startup task should complete after warning");
 
@@ -562,26 +580,29 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn startup_that_never_finishes_is_not_aborted_after_warning() {
+    async fn startup_that_never_finishes_surfaces_recovery_without_aborting_store_task() {
         let warned = Arc::new(AtomicUsize::new(0));
         let warning_state = warned.clone();
-        let result = tokio::time::timeout(
-            Duration::from_millis(10),
-            await_start_with_warning(
-                std::future::pending::<()>(),
-                Duration::from_millis(1),
-                async move {
-                    warning_state.fetch_add(1, Ordering::SeqCst);
-                },
-            ),
+        let task_finished = Arc::new(AtomicUsize::new(0));
+        let observed_finish = task_finished.clone();
+        let start = async move {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+            observed_finish.store(1, Ordering::SeqCst);
+        };
+        let result = await_start_with_warning(
+            start,
+            Duration::from_millis(1),
+            Duration::from_millis(5),
+            async move {
+                warning_state.fetch_add(1, Ordering::SeqCst);
+            },
         )
         .await;
 
-        assert!(
-            result.is_err(),
-            "a hung startup remains pending for recovery"
-        );
+        assert!(result.is_err());
         assert_eq!(warned.load(Ordering::SeqCst), 1);
+        tokio::time::sleep(Duration::from_millis(25)).await;
+        assert_eq!(task_finished.load(Ordering::SeqCst), 1);
     }
 
     #[tokio::test]
@@ -589,6 +610,7 @@ mod tests {
         let result = await_start_with_warning(
             async { panic!("simulated startup panic") },
             Duration::from_secs(1),
+            Duration::from_secs(2),
             async {},
         )
         .await;
