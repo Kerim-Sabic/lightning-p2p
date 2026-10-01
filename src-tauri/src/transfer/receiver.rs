@@ -198,16 +198,20 @@ pub async fn receive_blob(
     let progress = sampler.handle();
     progress.set_metrics(initial_metrics);
     progress.set_phase(TransferPhase::Connecting);
-    let recovered = recover_finalized_receive(
-        &resume_store,
-        &transfer_id,
-        &ticket,
-        &destination,
-        &peer,
-        initial_metrics,
-        &progress,
-    )
-    .await;
+    let recovered = if let Some(record) = resume_store.get(&transfer_id) {
+        recover_finalized_receive(
+            node,
+            &record,
+            &ticket,
+            &destination,
+            &peer,
+            initial_metrics,
+            &progress,
+        )
+        .await
+    } else {
+        None
+    };
     let result = match recovered {
         Some(summary) => Ok(summary),
         None => {
@@ -303,24 +307,34 @@ async fn finish_receive_result(
 }
 
 async fn recover_finalized_receive(
-    store: &ResumableReceiveStore,
-    transfer_id: &str,
+    node: &LightningP2PNode,
+    record: &crate::storage::resumable_receives::ResumableReceive,
     ticket: &ShareTicket,
     destination: &std::path::Path,
     peer: &str,
     metrics: TransferMetrics,
     progress: &ProgressHandle,
 ) -> Option<ReceiveSummary> {
-    let finalization = store.get(transfer_id)?.finalization?;
+    let finalization = record.finalization.as_ref()?;
     if finalization.hash != ticket.primary().hash().to_string() {
         return None;
     }
-    let output_path = export::recover_published_blob(destination, &finalization).await?;
+    let output_path = if ticket.primary().recursive() {
+        export::recover_published_collection(
+            node.blobs_client(),
+            destination,
+            finalization,
+            ticket.primary().hash(),
+        )
+        .await?
+    } else {
+        export::recover_published_blob(destination, finalization).await?
+    };
     progress.set_phase(TransferPhase::Saving);
     Some(ReceiveSummary {
-        transfer_id: Some(transfer_id.to_owned()),
-        hash: finalization.hash,
-        label: finalization.file_name,
+        transfer_id: Some(record.transfer.transfer_id.clone()),
+        hash: finalization.hash.clone(),
+        label: finalization.file_name.clone(),
         size: finalization.size,
         peer: peer.to_owned(),
         metrics,
@@ -438,12 +452,14 @@ async fn receive_core(
         progress.set_phase(TransferPhase::Saving);
     }
     persist_receive_finalization(
+        node.blobs_client(),
         ticket,
         verified_size,
         transfer_id.as_deref(),
         resume_store.as_ref(),
         fallback_file_name.as_deref(),
-    )?;
+    )
+    .await?;
     let export_started_at = Instant::now();
     let primary = ticket.primary();
     let export_summary = export::export_ticket(
@@ -483,7 +499,8 @@ async fn receive_core(
     })
 }
 
-fn persist_receive_finalization(
+async fn persist_receive_finalization(
+    blob_store: &iroh_blobs::api::Store,
     ticket: &ShareTicket,
     size: u64,
     transfer_id: Option<&str>,
@@ -493,16 +510,17 @@ fn persist_receive_finalization(
     let (Some(transfer_id), Some(store)) = (transfer_id, store) else {
         return Ok(());
     };
-    if ticket.primary().recursive() {
-        return Ok(());
-    }
     let Some(mut record) = store.get(transfer_id) else {
         return Ok(());
     };
-    let file_name = fallback_file_name.map_or_else(
-        || ticket.primary().hash().to_string(),
-        export::safe_suggested_file_name,
-    );
+    let file_name = if ticket.primary().recursive() {
+        export::resolve_label(blob_store, ticket.primary()).await?
+    } else {
+        fallback_file_name.map_or_else(
+            || ticket.primary().hash().to_string(),
+            export::safe_suggested_file_name,
+        )
+    };
     record.finalization = Some(ReceiveFinalization {
         hash: ticket.primary().hash().to_string(),
         size,

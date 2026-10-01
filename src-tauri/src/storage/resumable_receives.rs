@@ -23,7 +23,7 @@ pub struct ResumableReceive {
     pub limits: ReceiveLimits,
     /// Sender-provided fallback filename for a single-file offer.
     pub fallback_file_name: Option<String>,
-    /// Verified single-file output expected to be published when interrupted.
+    /// Verified output expected to be published when interrupted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub finalization: Option<ReceiveFinalization>,
 }

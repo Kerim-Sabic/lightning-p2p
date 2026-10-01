@@ -10,6 +10,7 @@ use iroh_blobs::api::Store;
 use iroh_blobs::format::collection::Collection;
 use iroh_blobs::ticket::BlobTicket;
 use iroh_blobs::Hash;
+use std::collections::BTreeSet;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use tokio::io::AsyncReadExt;
@@ -325,6 +326,185 @@ pub(crate) async fn recover_published_blob(
         }
     }
     None
+}
+
+/// Finds a previously published collection whose files still match the local
+/// verified manifest. Candidate paths are confined to safe suffixes in the
+/// selected destination and reject symlinks/reparse points.
+pub(crate) async fn recover_published_collection(
+    store: &Store,
+    destination: &Path,
+    finalization: &crate::storage::resumable_receives::ReceiveFinalization,
+    root: Hash,
+) -> Option<PathBuf> {
+    let collection = Collection::load(root, store).await.ok()?;
+    let base = collection_output_base(destination, &collection, &finalization.file_name)?;
+    let entries = collection.iter().collect::<Vec<_>>();
+    let single_file = entries
+        .as_slice()
+        .first()
+        .filter(|(name, _)| entries.len() == 1 && !name.contains(['/', '\\']))
+        .map(|(_, hash)| *hash);
+    let strip_root = if single_file.is_none() {
+        collection_only_root(&collection)
+    } else {
+        None
+    };
+    for index in 0..1000 {
+        let candidate = if index == 0 {
+            base.clone()
+        } else {
+            suffixed_path(&base, index)
+        };
+        let matches = if let Some(hash) = single_file {
+            verified_file_size(&candidate, hash).await == Some(finalization.size)
+        } else {
+            verify_published_collection(
+                &candidate,
+                &collection,
+                finalization.size,
+                strip_root.as_deref(),
+            )
+            .await
+        };
+        if matches {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
+fn collection_output_base(
+    destination: &Path,
+    collection: &Collection,
+    label: &str,
+) -> Option<PathBuf> {
+    let roots = collection
+        .iter()
+        .map(|(name, _)| safe_collection_entry_path(name).ok())
+        .collect::<Option<Vec<_>>>()?
+        .into_iter()
+        .filter_map(|path| {
+            path.components()
+                .next()
+                .map(|part| part.as_os_str().to_owned())
+        })
+        .collect::<BTreeSet<_>>();
+    let name = if roots.len() == 1 {
+        roots.into_iter().next()?
+    } else {
+        safe_collection_label(label).into()
+    };
+    Some(destination.join(name))
+}
+
+fn collection_only_root(collection: &Collection) -> Option<OsString> {
+    let roots = collection
+        .iter()
+        .map(|(name, _)| safe_collection_entry_path(name).ok())
+        .collect::<Option<Vec<_>>>()?
+        .into_iter()
+        .filter_map(|path| {
+            path.components()
+                .next()
+                .map(|part| part.as_os_str().to_owned())
+        })
+        .collect::<BTreeSet<_>>();
+    (roots.len() == 1)
+        .then(|| roots.into_iter().next())
+        .flatten()
+}
+
+async fn verify_published_collection(
+    candidate: &Path,
+    collection: &Collection,
+    expected_size: u64,
+    strip_root: Option<&std::ffi::OsStr>,
+) -> bool {
+    let Ok(metadata) = tokio::fs::symlink_metadata(candidate).await else {
+        return false;
+    };
+    if !is_plain_directory(&metadata) {
+        return false;
+    }
+    let mut total_size = 0_u64;
+    for (name, hash) in collection.iter() {
+        let Some(path) = safe_collection_output_file(candidate, name, strip_root).await else {
+            return false;
+        };
+        let Some(size) = verified_file_size(&path, *hash).await else {
+            return false;
+        };
+        let Some(next_size) = total_size.checked_add(size) else {
+            return false;
+        };
+        total_size = next_size;
+    }
+    total_size == expected_size
+}
+
+async fn safe_collection_output_file(
+    root: &Path,
+    name: &str,
+    strip_root: Option<&std::ffi::OsStr>,
+) -> Option<PathBuf> {
+    let mut relative = safe_collection_entry_path(name).ok()?;
+    if let Some(strip_root) = strip_root {
+        relative = relative
+            .strip_prefix(Path::new(strip_root))
+            .ok()?
+            .to_path_buf();
+    }
+    let mut current = root.to_path_buf();
+    let components = relative.components().collect::<Vec<_>>();
+    for (index, component) in components.iter().enumerate() {
+        let std::path::Component::Normal(component) = component else {
+            return None;
+        };
+        current.push(component);
+        let metadata = tokio::fs::symlink_metadata(&current).await.ok()?;
+        let is_file = index + 1 == components.len();
+        if (is_file && !is_plain_file(&metadata)) || (!is_file && !is_plain_directory(&metadata)) {
+            return None;
+        }
+    }
+    Some(current)
+}
+
+async fn verified_file_size(path: &Path, expected: Hash) -> Option<u64> {
+    let metadata = tokio::fs::symlink_metadata(path).await.ok()?;
+    if !is_plain_file(&metadata) {
+        return None;
+    }
+    let mut file = tokio::fs::File::open(path).await.ok()?;
+    let mut hasher = blake3::Hasher::new();
+    let mut buffer = vec![0_u8; 64 * 1024].into_boxed_slice();
+    let mut size = 0_u64;
+    loop {
+        let count = file.read(&mut buffer).await.ok()?;
+        if count == 0 {
+            break;
+        }
+        size = size.checked_add(count as u64)?;
+        hasher.update(&buffer[..count]);
+    }
+    (hasher.finalize().to_hex().as_str() == expected.to_string()).then_some(size)
+}
+
+fn is_plain_file(metadata: &std::fs::Metadata) -> bool {
+    if !metadata.file_type().is_file() || metadata.file_type().is_symlink() {
+        return false;
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0400;
+        metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT == 0
+    }
+    #[cfg(not(windows))]
+    {
+        true
+    }
 }
 
 /// Creates a fresh private directory for a single-file export. A predictable
@@ -711,6 +891,73 @@ mod tests {
         assert_eq!(
             recover_published_blob(dir.path(), &finalization).await,
             None
+        );
+    }
+
+    #[tokio::test]
+    async fn recovery_finds_only_a_collection_matching_its_verified_manifest() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store = iroh_blobs::store::mem::MemStore::new();
+        let first = store.add_bytes(b"first file".to_vec()).await.unwrap();
+        let second = store.add_bytes(b"second file".to_vec()).await.unwrap();
+        let root = Collection::from_iter([
+            ("folder/first.txt".to_string(), first.hash),
+            ("folder/nested/second.txt".to_string(), second.hash),
+        ])
+        .store(store.as_ref())
+        .await
+        .unwrap()
+        .hash();
+        let wrong = dir.path().join("folder");
+        let expected = dir.path().join("folder (1)");
+        tokio::fs::create_dir_all(wrong.join("nested"))
+            .await
+            .unwrap();
+        tokio::fs::write(wrong.join("first.txt"), b"wrong")
+            .await
+            .unwrap();
+        tokio::fs::create_dir_all(expected.join("nested"))
+            .await
+            .unwrap();
+        tokio::fs::write(expected.join("first.txt"), b"first file")
+            .await
+            .unwrap();
+        tokio::fs::write(expected.join("nested/second.txt"), b"second file")
+            .await
+            .unwrap();
+        let finalization = crate::storage::resumable_receives::ReceiveFinalization {
+            hash: root.to_string(),
+            size: 21,
+            file_name: "folder".into(),
+        };
+
+        assert_eq!(
+            recover_published_collection(store.as_ref(), dir.path(), &finalization, root).await,
+            Some(expected)
+        );
+    }
+
+    #[tokio::test]
+    async fn recovery_handles_a_collection_exported_as_one_file() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store = iroh_blobs::store::mem::MemStore::new();
+        let file = store.add_bytes(b"collection file".to_vec()).await.unwrap();
+        let root = Collection::from_iter([("report.txt".to_string(), file.hash)])
+            .store(store.as_ref())
+            .await
+            .unwrap()
+            .hash();
+        let output = dir.path().join("report.txt");
+        tokio::fs::write(&output, b"collection file").await.unwrap();
+        let finalization = crate::storage::resumable_receives::ReceiveFinalization {
+            hash: root.to_string(),
+            size: b"collection file".len() as u64,
+            file_name: "report.txt".into(),
+        };
+
+        assert_eq!(
+            recover_published_collection(store.as_ref(), dir.path(), &finalization, root).await,
+            Some(output)
         );
     }
 
