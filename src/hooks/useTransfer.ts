@@ -178,9 +178,24 @@ export function useTransfer(): void {
         return;
       }
 
-      await useTransferStore.getState().refreshNodeStatus();
-      const onlineState = useTransferStore.getState().nodeStatus.online_state;
-      schedulePoll(nextNodeStatusPollMs(onlineState));
+      const store = useTransferStore.getState();
+      try {
+        await store.refreshNodeStatus();
+        const latest = useTransferStore.getState();
+        if (
+          latest.nodeSupervisorStatus.phase === "starting" ||
+          latest.nodeSupervisorStatus.phase === "restarting" ||
+          latest.nodeSupervisorStatus.phase === "blocked_active_transfers"
+        ) {
+          await latest.refreshNodeSupervisorStatus();
+        }
+      } finally {
+        schedulePoll(
+          nextNodeStatusPollMs(
+            useTransferStore.getState().nodeStatus.online_state,
+          ),
+        );
+      }
     };
 
     const handleVisibilityChange = (): void => {
