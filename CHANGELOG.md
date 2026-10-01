@@ -4,6 +4,8 @@ All notable changes to Lightning P2P are documented here. The project follows se
 
 ## [Unreleased]
 
+- Recover a single-file receive after restart when the verified output was published but completion history had not yet been flushed.
+
 ### Fixed
 
 - Key completed receive history by transfer ID and block stale resume requests

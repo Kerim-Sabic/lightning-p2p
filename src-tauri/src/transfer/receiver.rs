@@ -4,6 +4,7 @@ use crate::error::{AppErrorPayload, LightningP2PError, Result};
 use crate::node::LightningP2PNode;
 use crate::storage::history::{self, TransferRecord, TransferRecordStatus};
 use crate::storage::peers::{self, PeerRecord};
+use crate::storage::resumable_receives::{ReceiveFinalization, ResumableReceiveStore};
 use crate::transfer::export;
 use crate::transfer::metrics::{RouteKind, TransferMetrics, TransferStrategy};
 use crate::transfer::mode::TransferProfile;
@@ -66,6 +67,7 @@ struct ReceiveOptions {
     swarm_enabled: bool,
     limits: ReceiveLimits,
     fallback_file_name: Option<String>,
+    resume_store: Option<ResumableReceiveStore>,
 }
 
 #[derive(Debug, Clone)]
@@ -146,6 +148,8 @@ pub struct ReceiveContext {
     pub limits: ReceiveLimits,
     /// Sender-provided filename for non-collection offer tickets.
     pub fallback_file_name: Option<String>,
+    /// Durable metadata used to recover a file published just before a crash.
+    pub resume_store: ResumableReceiveStore,
 }
 
 /// Downloads the content addressed by a ticket using the supplied profile and
@@ -171,6 +175,7 @@ pub async fn receive_blob(
         swarm_enabled,
         limits,
         fallback_file_name,
+        resume_store,
     } = ctx;
     let peer = ticket.primary().addr().id.to_string();
     let initial_metrics = metrics_for_ticket(&ticket);
@@ -193,22 +198,59 @@ pub async fn receive_blob(
     let progress = sampler.handle();
     progress.set_metrics(initial_metrics);
     progress.set_phase(TransferPhase::Connecting);
-    let result = receive_core(
-        node,
+    let recovered = recover_finalized_receive(
+        &resume_store,
+        &transfer_id,
         &ticket,
-        destination,
-        &mut cancel_rx,
-        Some(&progress),
-        ReceiveOptions {
-            transfer_id: Some(transfer_id.clone()),
-            profile,
-            swarm_enabled,
-            limits,
-            fallback_file_name,
-        },
+        &destination,
+        &peer,
+        initial_metrics,
+        &progress,
     )
     .await;
+    let result = match recovered {
+        Some(summary) => Ok(summary),
+        None => {
+            receive_core(
+                node,
+                &ticket,
+                destination,
+                &mut cancel_rx,
+                Some(&progress),
+                ReceiveOptions {
+                    transfer_id: Some(transfer_id.clone()),
+                    profile,
+                    swarm_enabled,
+                    limits,
+                    fallback_file_name,
+                    resume_store: Some(resume_store),
+                },
+            )
+            .await
+        }
+    };
 
+    finish_receive_result(
+        result,
+        node,
+        queue,
+        transfer_id,
+        progress,
+        sampler,
+        reporter,
+    )
+    .await
+}
+
+async fn finish_receive_result(
+    result: Result<ReceiveSummary>,
+    node: &LightningP2PNode,
+    queue: TransferQueue,
+    transfer_id: String,
+    progress: ProgressHandle,
+    sampler: ProgressSampler,
+    reporter: EventReporter,
+) -> Result<()> {
     match result {
         Ok(summary) => {
             if let Err(_error) = save_peer_no_flush(node, &summary.peer) {
@@ -260,6 +302,32 @@ pub async fn receive_blob(
     }
 }
 
+async fn recover_finalized_receive(
+    store: &ResumableReceiveStore,
+    transfer_id: &str,
+    ticket: &ShareTicket,
+    destination: &std::path::Path,
+    peer: &str,
+    metrics: TransferMetrics,
+    progress: &ProgressHandle,
+) -> Option<ReceiveSummary> {
+    let finalization = store.get(transfer_id)?.finalization?;
+    if finalization.hash != ticket.primary().hash().to_string() {
+        return None;
+    }
+    let output_path = export::recover_published_blob(destination, &finalization).await?;
+    progress.set_phase(TransferPhase::Saving);
+    Some(ReceiveSummary {
+        transfer_id: Some(transfer_id.to_owned()),
+        hash: finalization.hash,
+        label: finalization.file_name,
+        size: finalization.size,
+        peer: peer.to_owned(),
+        metrics,
+        output_path,
+    })
+}
+
 /// Downloads the content addressed by a ticket without any UI side effects.
 ///
 /// Uses the platform-default [`TransferProfile`]. Production code paths should
@@ -287,6 +355,7 @@ pub async fn receive_ticket(
             swarm_enabled: false,
             limits: ReceiveLimits::default(),
             fallback_file_name: None,
+            resume_store: None,
         },
     )
     .await?;
@@ -318,6 +387,7 @@ async fn receive_core(
         swarm_enabled,
         limits,
         fallback_file_name,
+        resume_store,
     } = options;
     // Fail before network activity if the selected save location is invalid.
     // Export repeats this check immediately before publishing to cover changes
@@ -367,6 +437,13 @@ async fn receive_core(
         progress.set(verified_size, verified_size);
         progress.set_phase(TransferPhase::Saving);
     }
+    persist_receive_finalization(
+        ticket,
+        verified_size,
+        transfer_id.as_deref(),
+        resume_store.as_ref(),
+        fallback_file_name.as_deref(),
+    )?;
     let export_started_at = Instant::now();
     let primary = ticket.primary();
     let export_summary = export::export_ticket(
@@ -404,6 +481,34 @@ async fn receive_core(
         metrics,
         output_path: export_summary.output_path,
     })
+}
+
+fn persist_receive_finalization(
+    ticket: &ShareTicket,
+    size: u64,
+    transfer_id: Option<&str>,
+    store: Option<&ResumableReceiveStore>,
+    fallback_file_name: Option<&str>,
+) -> Result<()> {
+    let (Some(transfer_id), Some(store)) = (transfer_id, store) else {
+        return Ok(());
+    };
+    if ticket.primary().recursive() {
+        return Ok(());
+    }
+    let Some(mut record) = store.get(transfer_id) else {
+        return Ok(());
+    };
+    let file_name = fallback_file_name.map_or_else(
+        || ticket.primary().hash().to_string(),
+        export::safe_suggested_file_name,
+    );
+    record.finalization = Some(ReceiveFinalization {
+        hash: ticket.primary().hash().to_string(),
+        size,
+        file_name,
+    });
+    store.save(record)
 }
 
 /// Wraps the download with bounded retries + exponential backoff for

@@ -12,6 +12,7 @@ use iroh_blobs::ticket::BlobTicket;
 use iroh_blobs::Hash;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
+use tokio::io::AsyncReadExt;
 use tokio::sync::watch;
 
 #[cfg(target_os = "android")]
@@ -274,9 +275,56 @@ async fn export_blob(
     published
 }
 
-fn safe_suggested_file_name(label: &str) -> String {
+pub(crate) fn safe_suggested_file_name(label: &str) -> String {
     let name = label.rsplit(['/', '\\']).next().unwrap_or_default();
     safe_collection_label(name)
+}
+
+/// Finds a previously published single-file output matching a durable receive
+/// finalization intent. Only safe suffix candidates under the selected
+/// destination are inspected; symlinks and non-files are ignored.
+pub(crate) async fn recover_published_blob(
+    destination: &Path,
+    finalization: &crate::storage::resumable_receives::ReceiveFinalization,
+) -> Option<PathBuf> {
+    let expected_hash = finalization.hash.as_str();
+    let base = destination.join(safe_suggested_file_name(&finalization.file_name));
+    for index in 0..1000 {
+        let candidate = if index == 0 {
+            base.clone()
+        } else {
+            suffixed_path(&base, index)
+        };
+        match tokio::fs::symlink_metadata(&candidate).await {
+            Ok(metadata)
+                if metadata.file_type().is_file() && metadata.len() == finalization.size => {}
+            _ => continue,
+        }
+        let Ok(mut file) = tokio::fs::File::open(&candidate).await else {
+            continue;
+        };
+        let mut hasher = blake3::Hasher::new();
+        let mut buffer = vec![0_u8; 64 * 1024].into_boxed_slice();
+        let mut read_size = 0_u64;
+        loop {
+            let Ok(count) = file.read(&mut buffer).await else {
+                read_size = u64::MAX;
+                break;
+            };
+            if count == 0 {
+                break;
+            }
+            read_size = read_size.saturating_add(count as u64);
+            if read_size > finalization.size {
+                break;
+            }
+            hasher.update(&buffer[..count]);
+        }
+        if read_size == finalization.size && hasher.finalize().to_hex().as_str() == expected_hash {
+            return Some(candidate);
+        }
+    }
+    None
 }
 
 /// Creates a fresh private directory for a single-file export. A predictable
@@ -623,6 +671,48 @@ fn blob_error(err: &impl ToString) -> LightningP2PError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn recovery_finds_only_the_matching_published_file() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let original = b"verified payload";
+        let hash = blake3::hash(original).to_hex().to_string();
+        tokio::fs::write(dir.path().join("report.txt"), b"different content")
+            .await
+            .expect("unrelated existing file");
+        let expected_path = dir.path().join("report (1).txt");
+        tokio::fs::write(&expected_path, original)
+            .await
+            .expect("published output");
+        let finalization = crate::storage::resumable_receives::ReceiveFinalization {
+            hash,
+            size: original.len() as u64,
+            file_name: "report.txt".into(),
+        };
+
+        assert_eq!(
+            recover_published_blob(dir.path(), &finalization).await,
+            Some(expected_path)
+        );
+    }
+
+    #[tokio::test]
+    async fn recovery_ignores_files_with_the_wrong_size_or_digest() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        tokio::fs::write(dir.path().join("report.txt"), b"wrong")
+            .await
+            .expect("unrelated file");
+        let finalization = crate::storage::resumable_receives::ReceiveFinalization {
+            hash: blake3::hash(b"expected").to_hex().to_string(),
+            size: b"expected".len() as u64,
+            file_name: "report.txt".into(),
+        };
+
+        assert_eq!(
+            recover_published_blob(dir.path(), &finalization).await,
+            None
+        );
+    }
 
     #[tokio::test]
     async fn failed_public_export_cleanup_removes_only_its_staging_output() {

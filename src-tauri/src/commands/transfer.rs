@@ -449,6 +449,7 @@ async fn start_receive_ticket(
                 transfer: info.clone(),
                 limits,
                 fallback_file_name: fallback_file_name.clone(),
+                finalization: None,
             };
             if state.resumable_receives.save(record).is_err() {
                 info.can_resume = false;
@@ -555,6 +556,7 @@ fn spawn_receive_task(launch: ReceiveLaunch) {
         swarm_enabled,
         limits,
         fallback_file_name,
+        resume_store: resume_store.clone(),
     };
     tauri::async_runtime::spawn(async move {
         let _activity = activity;

@@ -23,6 +23,20 @@ pub struct ResumableReceive {
     pub limits: ReceiveLimits,
     /// Sender-provided fallback filename for a single-file offer.
     pub fallback_file_name: Option<String>,
+    /// Verified single-file output expected to be published when interrupted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub finalization: Option<ReceiveFinalization>,
+}
+
+/// Minimal journal entry for recovering a file published before history flush.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ReceiveFinalization {
+    /// Expected BLAKE3 digest of the verified file.
+    pub hash: String,
+    /// Expected byte length.
+    pub size: u64,
+    /// Sanitized basename used for the published file.
+    pub file_name: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -90,6 +104,16 @@ impl ResumableReceiveStore {
     pub fn list(&self) -> Vec<ResumableReceive> {
         let records = self.records.lock().unwrap_or_else(PoisonError::into_inner);
         records.values().cloned().collect()
+    }
+
+    /// Returns one recoverable receive record by its stable transfer ID.
+    #[must_use]
+    pub fn get(&self, transfer_id: &str) -> Option<ResumableReceive> {
+        self.records
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(transfer_id)
+            .cloned()
     }
 
     /// Persists one receive record without any ticket or other capability.
@@ -241,6 +265,7 @@ mod tests {
             },
             limits: ReceiveLimits::default(),
             fallback_file_name: None,
+            finalization: None,
         }
     }
 
