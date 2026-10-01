@@ -140,13 +140,18 @@ fn append_bytes(path: &Path, bytes: &[u8]) -> io::Result<()> {
 fn install_panic_hook(log_path: Option<PathBuf>) {
     let previous_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |panic_info| {
-        let message = format!("Rust panic: {}\n", panic_summary(panic_info));
+        let backtrace = std::backtrace::Backtrace::force_capture();
+        let message = panic_report(&panic_summary(panic_info), &backtrace.to_string());
         if let Some(path) = &log_path {
             let _ = append_bytes(path, message.as_bytes());
         }
         let _ = io::stderr().write_all(message.as_bytes());
         previous_hook(panic_info);
     }));
+}
+
+fn panic_report(summary: &str, backtrace: &str) -> String {
+    format!("Rust panic: {summary}\nStack backtrace:\n{backtrace}\n")
 }
 
 fn panic_summary(panic_info: &std::panic::PanicHookInfo<'_>) -> String {
@@ -178,7 +183,7 @@ fn default_filter() -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use super::resolve_data_dir;
+    use super::{panic_report, resolve_data_dir};
     use std::ffi::OsString;
     use std::path::PathBuf;
 
@@ -193,6 +198,18 @@ mod tests {
         );
 
         assert_eq!(resolved, Some(PathBuf::from("custom-data")));
+    }
+
+    #[test]
+    fn panic_report_keeps_the_call_trace_with_the_panic_location() {
+        let report = panic_report(
+            "async fn resumed after completion at src/node/endpoint.rs:102",
+            "0: lightning_p2p_lib::node::start",
+        );
+
+        assert!(report.contains("src/node/endpoint.rs:102"));
+        assert!(report.contains("Stack backtrace:"));
+        assert!(report.contains("lightning_p2p_lib::node::start"));
     }
 
     #[test]
