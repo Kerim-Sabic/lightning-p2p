@@ -14,7 +14,7 @@ Built on **Rust**, **Tauri 2**, **iroh QUIC**, **iroh-blobs**, and **BLAKE3**.
 [![Stars](https://img.shields.io/github/stars/Kerim-Sabic/lightning-p2p?style=flat-square&color=f0c76b&logo=github)](https://github.com/Kerim-Sabic/lightning-p2p/stargazers)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-7ddf9c?style=flat-square)](LICENSE)
 [![Platforms](https://img.shields.io/badge/platforms-Windows_·_macOS_·_Linux_·_Android_·_CLI-7ddf9c?style=flat-square)](#-install)
-[![Experimental](https://img.shields.io/badge/latest-v0.9.27_Reliable_Handoffs-f0c76b?style=flat-square)](https://github.com/Kerim-Sabic/lightning-p2p/releases/tag/v0.9.27)
+[![Experimental](https://img.shields.io/badge/latest-v0.9.28_Reliable_Handoffs-f0c76b?style=flat-square)](https://github.com/Kerim-Sabic/lightning-p2p/releases/tag/v0.9.28)
 [![Rust](https://img.shields.io/badge/Rust-1.88+-f0c76b?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![Tauri 2](https://img.shields.io/badge/Tauri-2-7ddf9c?style=flat-square&logo=tauri&logoColor=white)](https://tauri.app/)
 [![iroh QUIC](https://img.shields.io/badge/iroh-QUIC_+_relay-7ddf9c?style=flat-square)](https://iroh.computer/)
@@ -129,20 +129,20 @@ drop files → share the /receive link  →     open link → "Receive in this b
 
 ## ◆ Install
 
-Stable channel: **v0.4.6**. Latest beta release: **v0.9.27** (community desktop builds and CLI; verified save confirmations retry safely if an acknowledgement is lost; responsive bounded nearby discovery; offers to up to eight nearby devices with separate consent; actionable recovery when node startup stalls; and directional Flick arrival cues). The latest signed Android APK remains v0.9.26. Swipe toward the person on screen and their display shows the file arriving from that approximate side; the sender sees acceptance separately from verified save completion. No location data is shared. Tapping **Send** remains a normal directionless send.
+Stable channel: **v0.4.6**. Latest beta release: **v0.9.28** (community desktop builds and CLI; durable verified-save confirmations and receive history; responsive bounded nearby discovery; offers to up to eight nearby devices with separate consent; actionable recovery when node startup stalls; and directional Flick arrival cues). The latest signed Android APK remains v0.9.26. Swipe toward the person on screen and their display shows the file arriving from that approximate side; the sender sees acceptance separately from verified save completion. No location data is shared. Tapping **Send** remains a normal directionless send.
 
 | Platform | Asset | Channel | Best for |
 | --- | --- | --- | --- |
 | **Windows** | [`LightningP2P-win-Setup.exe`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P-win-Setup.exe) | Stable | Most users · one-click Velopack |
 | **Windows** | [`LightningP2PSetup.exe`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2PSetup.exe) | Stable | Classic NSIS |
 | **Windows** | [`LightningP2P.msi`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P.msi) | Stable | Policy-managed deployments |
-| **macOS** | [`LightningP2P-macos-universal.dmg`](https://github.com/Kerim-Sabic/lightning-p2p/releases/download/v0.9.27/LightningP2P-macos-universal.dmg) | Beta v0.9.27 | 10.15+ · Intel + Apple Silicon · unsigned: right-click → Open |
-| **Linux** | [`LightningP2P-linux-x86_64.AppImage`](https://github.com/Kerim-Sabic/lightning-p2p/releases/download/v0.9.27/LightningP2P-linux-x86_64.AppImage) | Beta v0.9.27 | Portable AppImage · `.deb` / `.rpm` also published |
+| **macOS** | [`LightningP2P-macos-universal.dmg`](https://github.com/Kerim-Sabic/lightning-p2p/releases/download/v0.9.28/LightningP2P-macos-universal.dmg) | Beta v0.9.28 | 10.15+ · Intel + Apple Silicon · unsigned: right-click → Open |
+| **Linux** | [`LightningP2P-linux-x86_64.AppImage`](https://github.com/Kerim-Sabic/lightning-p2p/releases/download/v0.9.28/LightningP2P-linux-x86_64.AppImage) | Beta v0.9.28 | Portable AppImage · `.deb` / `.rpm` also published |
 | **Android** | [`LightningP2P-android-latest.apk`](https://github.com/Kerim-Sabic/lightning-p2p/releases/download/v0.9.26/LightningP2P-android-latest.apk) | Beta v0.9.26 | Android 10+ sideload · signed APK/AAB · Lightning Chat + Bluetooth mesh included |
-| **CLI** | [`lightning-p2p-cli`](https://github.com/Kerim-Sabic/lightning-p2p/releases/tag/v0.9.27) | Beta v0.9.27 | `send <file>` prints a ticket to stdout · Win/mac/Linux tarballs |
+| **CLI** | [`lightning-p2p-cli`](https://github.com/Kerim-Sabic/lightning-p2p/releases/tag/v0.9.28) | Beta v0.9.28 | `send <file>` prints a ticket to stdout · Win/mac/Linux tarballs |
 | **Browser** | [lightning-p2p.netlify.app/receive](https://lightning-p2p.netlify.app/receive) | Public beta | Receiving only — nothing to install, the sender's link is enough |
-| **Lightning Chat** | [Open web chat](https://lightning-p2p.netlify.app/chat) | Beta v0.9.27 | Signed web rooms · encrypted DMs · native nearby chat |
-| **Latest release** | [Release v0.9.27](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest) | Community builds | Retry-safe verified save receipts · responsive discovery · multi-device offers · startup recovery · same-side Flick arrival |
+| **Lightning Chat** | [Open web chat](https://lightning-p2p.netlify.app/chat) | Beta v0.9.28 | Signed web rooms · encrypted DMs · native nearby chat |
+| **Latest release** | [Release v0.9.28](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest) | Community builds | Retry-safe verified save receipts · responsive discovery · multi-device offers · startup recovery · same-side Flick arrival |
 
 ```bash
 # The CLI in one breath: share a file, pipe the ticket anywhere.
@@ -318,13 +318,13 @@ Read [`SECURITY.md`](SECURITY.md) · [`docs/security-model.md`](docs/security-mo
 | | Capability | Status |
 |:-:|---|---|
 | 🟢 | Windows send + receive (Tauri 2 desktop) | **Stable** |
-| 🟢 | **macOS** send + receive (universal DMG, Intel + Apple Silicon) | **Beta** v0.9.27 |
-| 🟢 | **Linux** send + receive (AppImage / deb / rpm) | **Beta** v0.9.27 |
+| 🟢 | **macOS** send + receive (universal DMG, Intel + Apple Silicon) | **Beta** v0.9.28 |
+| 🟢 | **Linux** send + receive (AppImage / deb / rpm) | **Beta** v0.9.28 |
 | 🟢 | Android send + receive (sideload APK) | **Stable** |
-| 🟢 | **CLI** (`lightning-p2p-cli send`/`receive`, pipe-friendly) | **Beta** v0.9.27 |
-| 🟢 | Lightning Chat Web lounge + encrypted direct messages | **Beta** v0.9.27 |
-| 🟢 | Lightning Chat in Windows and Android native apps | **Windows beta** v0.9.27; Android v0.9.26 |
-| 🟡 | Encrypted nearby Bluetooth multi-hop chat | **Windows beta** v0.9.27; Android v0.9.26 |
+| 🟢 | **CLI** (`lightning-p2p-cli send`/`receive`, pipe-friendly) | **Beta** v0.9.28 |
+| 🟢 | Lightning Chat Web lounge + encrypted direct messages | **Beta** v0.9.28 |
+| 🟢 | Lightning Chat in Windows and Android native apps | **Windows beta** v0.9.28; Android v0.9.26 |
+| 🟡 | Encrypted nearby Bluetooth multi-hop chat | **Windows beta** v0.9.28; Android v0.9.26 |
 | 🟢 | Android system share-target + MediaStore routing | **Stable** v0.4.6 |
 | 🟢 | QR + handoff link + raw ticket | **Stable** |
 | 🟢 | Nearby Wi-Fi / LAN discovery (mDNS) | **Stable** |

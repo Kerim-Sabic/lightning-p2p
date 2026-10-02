@@ -64,6 +64,14 @@ All notable changes to Lightning P2P are documented here. The project follows se
 
 ## [Unreleased]
 
+## [0.9.28] - 2026-10-02 ("Durable Receive Confirmation")
+
+- Retain nearby save receipts independently from optional keyring resume
+  tickets so accepted offers can recover their verified-save acknowledgement.
+- Report a receive as complete only after its transfer history record is
+  durably flushed; keep finalization recovery available if persistence fails.
+- Preserve directional Flick arrival cues and startup recovery behavior.
+
 ## [0.9.27] - 2026-10-02 ("Reliable Verified Handoffs")
 
 - Retry verified-save receipts when an acknowledgement is lost, while treating
