@@ -17,7 +17,6 @@ const navItems: Array<{
   { id: "devices", label: "Devices", icon: Radar },
   { id: "chat", label: "Chat", icon: MessageCircle },
   { id: "history", label: "Activity", icon: Clock3 },
-  { id: "settings", label: "Settings", icon: Settings2 },
 ];
 
 export function Sidebar({ currentView, onNavigate }: SidebarProps) {
@@ -77,6 +76,22 @@ export function Sidebar({ currentView, onNavigate }: SidebarProps) {
           );
         })}
       </nav>
+
+      <div className="mt-auto border-t border-white/[0.07] pt-3">
+        <button
+          type="button"
+          onClick={() => onNavigate("settings")}
+          className={`nav-button ${currentView === "settings" ? "nav-button-active" : ""}`}
+          aria-current={currentView === "settings" ? "page" : undefined}
+        >
+          <div
+            className={`nav-icon ${currentView === "settings" ? "nav-icon-active" : ""}`}
+          >
+            <Settings2 className="h-[17px] w-[17px]" />
+          </div>
+          <span className="text-sm font-medium text-white">Settings</span>
+        </button>
+      </div>
     </aside>
   );
 }
