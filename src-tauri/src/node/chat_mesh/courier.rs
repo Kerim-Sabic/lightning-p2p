@@ -1,6 +1,7 @@
 #![allow(clippy::missing_errors_doc)]
 
 use hmac::{Hmac, Mac};
+use super::bounded_json;
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 use std::collections::HashSet;
@@ -12,6 +13,7 @@ const MAX_LIFETIME_MS: u64 = 24 * 60 * 60 * 1_000;
 const CLOCK_SKEW_MS: u64 = 60 * 60 * 1_000;
 const MAX_COPIES: u8 = 8;
 const MAX_ENVELOPES: usize = 40;
+const MAX_COURIER_STORE_BYTES: usize = 2 * 1024 * 1024;
 const MAX_VERIFIED_ENVELOPES: usize = 20;
 const MAX_FAVORITE_PER_DEPOSITOR: usize = 5;
 const MAX_VERIFIED_PER_DEPOSITOR: usize = 2;
@@ -300,9 +302,7 @@ impl CourierStore {
         if !path.exists() {
             return Ok(Self::default());
         }
-        let bytes = std::fs::read(path).map_err(|error| error.to_string())?;
-        let envelopes = serde_json::from_slice::<Vec<StoredEnvelope>>(&bytes)
-            .map_err(|error| error.to_string())?;
+        let envelopes = bounded_json::read::<Vec<StoredEnvelope>>(path, MAX_COURIER_STORE_BYTES)?;
         let mut store = Self { envelopes };
         store.prune(now_ms);
         store.envelopes.truncate(MAX_ENVELOPES);
@@ -315,13 +315,7 @@ impl CourierStore {
     ///
     /// Returns an error when the directory or archive cannot be written.
     pub fn save(&self, path: &Path) -> Result<(), String> {
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
-        }
-        let tmp = path.with_extension("json.tmp");
-        let bytes = serde_json::to_vec(&self.envelopes).map_err(|error| error.to_string())?;
-        std::fs::write(&tmp, bytes).map_err(|error| error.to_string())?;
-        std::fs::rename(tmp, path).map_err(|error| error.to_string())
+        bounded_json::write(path, &self.envelopes, MAX_COURIER_STORE_BYTES)
     }
 
     pub fn wipe(path: &Path) -> Result<(), String> {

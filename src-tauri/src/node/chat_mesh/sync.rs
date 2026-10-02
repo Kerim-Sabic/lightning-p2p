@@ -9,11 +9,13 @@ use std::collections::VecDeque;
 use std::path::Path;
 
 use super::MeshPacket;
+use super::bounded_json;
 
 const MAX_FILTER_P: u8 = 32;
 const DEFAULT_FILTER_BYTES: usize = 384;
 const DEFAULT_FALSE_POSITIVE_RATE: f64 = 0.001;
 const MAX_ARCHIVE_PACKETS: usize = 2_048;
+const MAX_ARCHIVE_BYTES: usize = 32 * 1024 * 1024;
 const ARCHIVE_RETENTION_MS: u64 = 24 * 60 * 60 * 1_000;
 const TLV_P: u8 = 0x01;
 const TLV_MODULUS: u8 = 0x02;
@@ -230,9 +232,7 @@ impl GossipStore {
         if !path.exists() {
             return Ok(Self::default());
         }
-        let bytes = std::fs::read(path).map_err(|error| error.to_string())?;
-        let packets = serde_json::from_slice::<VecDeque<ArchivedPacket>>(&bytes)
-            .map_err(|error| error.to_string())?;
+        let packets = bounded_json::read::<VecDeque<ArchivedPacket>>(path, MAX_ARCHIVE_BYTES)?;
         let mut store = Self { packets };
         store.prune(now_ms);
         store.packets.truncate(MAX_ARCHIVE_PACKETS);
@@ -246,13 +246,7 @@ impl GossipStore {
     /// Returns an error when the parent directory or archive cannot be
     /// written.
     pub fn save(&self, path: &Path) -> Result<(), String> {
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
-        }
-        let tmp = path.with_extension("json.tmp");
-        let bytes = serde_json::to_vec(&self.packets).map_err(|error| error.to_string())?;
-        std::fs::write(&tmp, bytes).map_err(|error| error.to_string())?;
-        std::fs::rename(tmp, path).map_err(|error| error.to_string())
+        bounded_json::write(path, &self.packets, MAX_ARCHIVE_BYTES)
     }
 
     pub fn wipe(path: &Path) -> Result<(), String> {

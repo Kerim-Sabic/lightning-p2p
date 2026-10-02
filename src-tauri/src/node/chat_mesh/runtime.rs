@@ -9,6 +9,7 @@
 )]
 
 use super::sync::mesh_packet_id;
+use super::bounded_json;
 use super::{
     CourierDepositTier, CourierEnvelope, CourierStore, FragmentAssembler, FragmentResult,
     Fragmenter, GossipFilter, GossipStore, GroupEnvelope, GroupMember, MediaPacket, MeshIdentity,
@@ -28,6 +29,8 @@ const MAX_TEXT_BYTES: usize = 8_000;
 const BLE_FRAME_BYTES: usize = 180;
 const BLE_FRAGMENT_BYTES: usize = 128;
 const MAX_PENDING_PER_PEER: usize = 16;
+const MAX_GROUP_STORE_BYTES: usize = 4 * 1024 * 1024;
+const MAX_TRUSTED_PEERS_STORE_BYTES: usize = 2 * 1024 * 1024;
 const MAX_EVENT_MEDIA_BYTES: usize = 20 * 1024 * 1024;
 const CAPABILITIES: [u8; 2] = [0x29, 0x03];
 
@@ -443,7 +446,11 @@ impl ChatMeshRuntime {
                 last_seen_ms: peer.last_seen_ms,
             },
         );
-        save_json_atomic(&self.trusted_path, &self.peers)?;
+        save_json_atomic(
+            &self.trusted_path,
+            &self.peers,
+            MAX_TRUSTED_PEERS_STORE_BYTES,
+        )?;
         Ok(peer)
     }
 
@@ -971,7 +978,7 @@ impl ChatMeshRuntime {
 
     fn persist_groups(&self) -> Result<(), String> {
         let states = self.group_states.values().cloned().collect::<Vec<_>>();
-        save_json_atomic(&self.groups_path, &states)
+        save_json_atomic(&self.groups_path, &states, MAX_GROUP_STORE_BYTES)
     }
 }
 
@@ -1168,10 +1175,7 @@ fn load_groups(path: &Path) -> Result<(GroupMap, GroupStateMap), String> {
     if !path.exists() {
         return Ok((HashMap::new(), HashMap::new()));
     }
-    let states = serde_json::from_slice::<Vec<Vec<u8>>>(
-        &std::fs::read(path).map_err(|error| error.to_string())?,
-    )
-    .map_err(|error| error.to_string())?;
+    let states = bounded_json::read::<Vec<Vec<u8>>>(path, MAX_GROUP_STORE_BYTES)?;
     let mut groups = HashMap::new();
     let mut signed_states = HashMap::new();
     for state in states {
@@ -1182,17 +1186,8 @@ fn load_groups(path: &Path) -> Result<(GroupMap, GroupStateMap), String> {
     Ok((groups, signed_states))
 }
 
-fn save_json_atomic<T: Serialize>(path: &Path, value: &T) -> Result<(), String> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
-    }
-    let temporary = path.with_extension("json.tmp");
-    std::fs::write(
-        &temporary,
-        serde_json::to_vec(value).map_err(|error| error.to_string())?,
-    )
-    .map_err(|error| error.to_string())?;
-    std::fs::rename(temporary, path).map_err(|error| error.to_string())
+fn save_json_atomic<T: Serialize>(path: &Path, value: &T, max_bytes: usize) -> Result<(), String> {
+    bounded_json::write(path, value, max_bytes)
 }
 
 fn load_json_or_default<T>(path: &Path) -> Result<T, String>
@@ -1202,8 +1197,7 @@ where
     if !path.exists() {
         return Ok(T::default());
     }
-    serde_json::from_slice(&std::fs::read(path).map_err(|error| error.to_string())?)
-        .map_err(|error| error.to_string())
+    bounded_json::read(path, MAX_TRUSTED_PEERS_STORE_BYTES)
 }
 
 fn remove_file(path: &Path) -> Result<(), String> {
