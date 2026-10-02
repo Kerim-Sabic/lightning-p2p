@@ -13,7 +13,7 @@ linked release evidence.
 - Android v0.5.1 as a signed sideload APK with share-target sends and public
   MediaStore destinations.
 
-### v0.9.20 beta channel
+### v0.9.21 beta channel
 
 - Windows, universal macOS DMG, Linux AppImage/deb/rpm, and CLI artifacts.
 - Lightning Chat in the Windows and Android apps plus the `/chat` Web lounge.
@@ -24,6 +24,9 @@ linked release evidence.
   tray with phase, speed, pause state, and a shortcut to Activity.
 - Incoming Flick offers are namespaced by authenticated sender identity to
   prevent offer identifier collisions across peers.
+- Incoming blob protocol requests are limited globally and per peer, and
+  incomplete request headers expire to prevent abandoned streams from holding
+  capacity indefinitely.
 - Legacy transfer stores are preserved and the node starts with a compatible
   store rather than stalling during initialization. Slow storage initialization
   is allowed to finish safely instead of being aborted while the database is

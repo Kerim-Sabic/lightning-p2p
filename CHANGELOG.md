@@ -2,6 +2,13 @@
 
 All notable changes to Lightning P2P are documented here. The project follows semantic versioning where practical.
 
+## [0.9.21] - 2026-10-02 ("Bounded Blob Requests")
+
+- Limit active blob protocol handlers globally and per peer, rejecting excess
+  streams before spawning tasks.
+- Expire incomplete blob request headers after 15 seconds to release capacity
+  held by abandoned streams.
+
 ## [0.9.17] - 2026-10-01 ("Flick & Startup Reliability")
 
 - Keep slow node startup alive until the transfer store resolves, so a late
