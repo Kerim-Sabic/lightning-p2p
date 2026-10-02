@@ -64,6 +64,16 @@ All notable changes to Lightning P2P are documented here. The project follows se
 
 ## [Unreleased]
 
+## [0.9.27] - 2026-10-02 ("Reliable Verified Handoffs")
+
+- Retry verified-save receipts when an acknowledgement is lost, while treating
+  exact retries as idempotent so senders can recover without duplicate saved
+  events.
+- Keep receipt reservations safe under concurrent duplicates and release them
+  when publishing the completion event fails.
+- Document the nearby receipt retry protocol and preserve same-side Flick
+  arrival cues without sharing location data.
+
 ## [0.9.26] - 2026-10-02 ("Verified Nearby Handoffs")
 
 - Keep offer acceptance separate from verified save completion. Receivers send
