@@ -2,6 +2,13 @@
 
 All notable changes to Lightning P2P are documented here. The project follows semantic versioning where practical.
 
+## [0.9.30] - 2026-10-02 ("Reliable Receive Links")
+
+- Read receive links at cold start and route links opened later to the running
+  desktop app instance.
+- Keep the single-instance dependency scoped to desktop targets so Android
+  release builds retain their full native dependency set.
+
 ## [0.9.29] - 2026-10-02 ("Reliable Receive Links")
 
 - Open receive links when Lightning starts from a closed state, and route links

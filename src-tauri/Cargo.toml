@@ -1,6 +1,6 @@
 [package]
 name = "lightning-p2p"
-version = "0.9.29"
+version = "0.9.30"
 edition = "2021"
 rust-version = "1.88"
 default-run = "lightning-p2p"
@@ -22,9 +22,6 @@ tauri-plugin-deep-link = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-shell = "2"
 tauri-plugin-updater = "2"
-
-[target.'cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))'.dependencies]
-tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 
 # iroh P2P networking (1.0 line — wire-stable, and the only line with browser
 # WASM support, which the in-browser receiver needs).
@@ -140,3 +137,6 @@ codegen-units = 1
 lto = "fat"
 panic = "abort"
 strip = true
+
+[target.'cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))'.dependencies]
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
