@@ -2,6 +2,11 @@
 
 All notable changes to Lightning P2P are documented here. The project follows semantic versioning where practical.
 
+## [0.9.29] - 2026-10-02 ("Reliable Receive Links")
+
+- Open receive links when Lightning starts from a closed state, and route links
+  opened later to the existing desktop window.
+
 ## [0.9.21] - 2026-10-02 ("Bounded Blob Requests")
 
 - Limit active blob protocol handlers globally and per peer, rejecting excess

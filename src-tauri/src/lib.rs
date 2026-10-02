@@ -212,7 +212,18 @@ fn sweep_mobile_staging_cache() {
 }
 
 fn app_builder() -> tauri::Builder<tauri::Wry> {
-    let builder = tauri::Builder::default()
+    let builder = tauri::Builder::default();
+
+    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(
+        |app, _args, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.set_focus();
+            }
+        },
+    ));
+
+    let builder = builder
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_deep_link::init())

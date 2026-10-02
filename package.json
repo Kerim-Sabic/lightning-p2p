@@ -1,7 +1,7 @@
 {
   "name": "lightning-p2p",
   "private": true,
-  "version": "0.9.28",
+  "version": "0.9.29",
   "description": "Open-source peer-to-peer file transfer for Windows and Android with iroh, QUIC, and BLAKE3 verification.",
   "license": "Apache-2.0",
   "packageManager": "pnpm@10.33.0",
@@ -48,6 +48,7 @@
     "@tauri-apps/api": "^2.11.1",
     "@tauri-apps/plugin-barcode-scanner": "^2.4.5",
     "@tauri-apps/plugin-clipboard-manager": "^2.3.2",
+    "@tauri-apps/plugin-deep-link": "2.4.10",
     "@tauri-apps/plugin-dialog": "^2.7.1",
     "@tauri-apps/plugin-os": "^2.3.2",
     "@tauri-apps/plugin-shell": "^2.3.5",
