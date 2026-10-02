@@ -94,6 +94,7 @@ What this means for risk:
 
 - A nearby peer cannot push files onto your device silently; every offer surfaces a UI prompt that requires explicit acceptance.
 - A nearby peer can send offers, but the inbox bounds global and per-peer pending offers, rejects duplicate/replayed IDs, and exposes a persistent block control. The overlay shows one offer at a time and a counter for queued offers.
+- Incoming blob protocol streams are admitted under global and authenticated-peer concurrency limits. Streams beyond either limit are closed before a handler task is spawned, and incomplete request headers expire after 15 seconds.
 - A nearby peer can always read the public mDNS service announcement (NodeId + reachability) regardless of whether sharing is enabled; this is inherent to mDNS, not Lightning P2P specific.
 
 Use manual ticket sharing when even the discovery metadata should not be visible on the LAN.

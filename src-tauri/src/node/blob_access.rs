@@ -4,6 +4,7 @@
 //! temporary access only to the accepting peer. Unknown stored hashes are not
 //! served merely because they are present in the local store.
 
+use super::blob_request_limiter::BlobRequestLimiter;
 use iroh::endpoint::Connection;
 use iroh::{protocol::AcceptError, EndpointId};
 use iroh_blobs::api::Store;
@@ -15,6 +16,7 @@ use std::time::{Duration, Instant};
 
 const PRIVATE_GRANT_TTL: Duration = Duration::from_secs(10 * 60);
 const MAX_AUTHORIZED_HASHES: usize = 100_000;
+const BLOB_REQUEST_HEADER_TIMEOUT: Duration = Duration::from_secs(15);
 
 #[derive(Debug, Default)]
 struct AccessRules {
@@ -140,6 +142,7 @@ impl BlobAccessController {
 pub(crate) struct AuthorizedBlobsProtocol {
     store: Store,
     access: BlobAccessController,
+    requests: BlobRequestLimiter,
 }
 
 impl AuthorizedBlobsProtocol {
@@ -147,6 +150,7 @@ impl AuthorizedBlobsProtocol {
         Self {
             store: store.clone(),
             access,
+            requests: BlobRequestLimiter::default(),
         }
     }
 }
@@ -157,11 +161,18 @@ impl iroh::protocol::ProtocolHandler for AuthorizedBlobsProtocol {
         let peer = connection.remote_id();
         while let Ok((writer, reader)) = connection.accept_bi().await {
             let pair = StreamPair::new(connection_id, reader, writer, EventSender::DEFAULT);
+            let Some(request_permit) = self.requests.try_acquire(peer) else {
+                drop(pair);
+                continue;
+            };
             let store = self.store.clone();
             let access = self.access.clone();
             tokio::spawn(async move {
+                let _request_permit = request_permit;
                 let mut pair = pair;
-                let Ok(request) = pair.read_request().await else {
+                let Ok(Ok(request)) =
+                    tokio::time::timeout(BLOB_REQUEST_HEADER_TIMEOUT, pair.read_request()).await
+                else {
                     return;
                 };
                 match request {

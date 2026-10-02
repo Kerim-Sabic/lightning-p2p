@@ -1,6 +1,7 @@
 //! iroh node management — endpoint setup, blob protocol, and discovery.
 
 mod blob_access;
+mod blob_request_limiter;
 pub mod chat_mesh;
 pub mod chat_protocol;
 mod discovery;
