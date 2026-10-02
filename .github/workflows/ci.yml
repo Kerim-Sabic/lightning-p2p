@@ -299,7 +299,7 @@ jobs:
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
 
   release-windows-community:
-    name: Release Windows (community unsigned draft)
+    name: Release Windows (community unsigned)
     if: needs.release-plan.outputs.windows_release_mode == 'community_unsigned'
     runs-on: windows-latest
     needs: [windows-package, release-plan]
@@ -523,13 +523,16 @@ jobs:
           ) -join [Environment]::NewLine
           $body | Set-Content -Path "RELEASE_NOTES-community.md" -Encoding utf8
 
-      - name: Create draft unsigned GitHub release
+      - name: Create community GitHub prerelease
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           name: Lightning P2P v${{ env.APP_VERSION }} (community unsigned)
           body_path: RELEASE_NOTES-community.md
-          draft: true
+          # Publish a prerelease before the other platform jobs start. GitHub's
+          # release-by-tag API does not return drafts, so downstream asset
+          # upload jobs would otherwise create duplicate releases for this tag.
+          draft: false
           prerelease: true
           fail_on_unmatched_files: true
           files: windows-release-stage/*

@@ -129,7 +129,7 @@ drop files → share the /receive link  →     open link → "Receive in this b
 
 ## ◆ Install
 
-Stable channel: **v0.4.6**. Latest public release: **v0.9.23** (community desktop builds; signed Android APK/AAB; actionable recovery when node startup stalls, bounded incoming blob requests, duplicate-offer protection, paused-transfer state protection, restart-safe receive recovery, and directional Flick arrival cues). Swipe toward the person on screen and their display shows the file arriving from that approximate side; no location data is shared. Tapping **Send** remains a normal directionless send. Android's latest signed beta artifact remains **v0.9.21** until v0.9.23 packaging finishes.
+Stable channel: **v0.4.6**. Latest public release: **v0.9.23** (community desktop builds; signed Android APK/AAB; actionable recovery when node startup stalls, bounded incoming blob requests, duplicate-offer protection, paused-transfer state protection, restart-safe receive recovery, and directional Flick arrival cues). Swipe toward the person on screen and their display shows the file arriving from that approximate side; no location data is shared. Tapping **Send** remains a normal directionless send.
 
 | Platform | Asset | Channel | Best for |
 | --- | --- | --- | --- |
@@ -138,11 +138,11 @@ Stable channel: **v0.4.6**. Latest public release: **v0.9.23** (community deskto
 | **Windows** | [`LightningP2P.msi`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P.msi) | Stable | Policy-managed deployments |
 | **macOS** | [`LightningP2P-macos-universal.dmg`](https://github.com/Kerim-Sabic/lightning-p2p/releases/download/v0.9.23/LightningP2P-macos-universal.dmg) | Beta v0.9.23 | 10.15+ · Intel + Apple Silicon · unsigned: right-click → Open |
 | **Linux** | [`LightningP2P-linux-x86_64.AppImage`](https://github.com/Kerim-Sabic/lightning-p2p/releases/download/v0.9.23/LightningP2P-linux-x86_64.AppImage) | Beta v0.9.23 | Portable AppImage · `.deb` / `.rpm` also published |
-| **Android** | [`LightningP2P-android-latest.apk`](https://github.com/Kerim-Sabic/lightning-p2p/releases/download/v0.9.21/LightningP2P-android-latest.apk) | Beta v0.9.21 | Android 10+ sideload · Lightning Chat + Bluetooth mesh included |
+| **Android** | [`LightningP2P-android-latest.apk`](https://github.com/Kerim-Sabic/lightning-p2p/releases/download/v0.9.23/LightningP2P-android-latest.apk) | Beta v0.9.23 | Android 10+ sideload · Lightning Chat + Bluetooth mesh included |
 | **CLI** | [`lightning-p2p-cli`](https://github.com/Kerim-Sabic/lightning-p2p/releases/tag/v0.9.23) | Beta v0.9.23 | `send <file>` prints a ticket to stdout · Win/mac/Linux tarballs |
 | **Browser** | [lightning-p2p.netlify.app/receive](https://lightning-p2p.netlify.app/receive) | Public beta | Receiving only — nothing to install, the sender's link is enough |
 | **Lightning Chat** | [Open web chat](https://lightning-p2p.netlify.app/chat) | Beta v0.9.23 | Signed web rooms · encrypted DMs · native nearby chat |
-| **Latest release** | [Release v0.9.23](https://github.com/Kerim-Sabic/lightning-p2p/releases/tag/v0.9.23) | Release in progress · community builds | Single-offer handoffs · bounded incoming blob requests · startup stall recovery · same-side directional arrival |
+| **Latest release** | [Release v0.9.23](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest) | Published · community builds | Single-offer handoffs · bounded incoming blob requests · startup stall recovery · same-side directional arrival |
 
 ```bash
 # The CLI in one breath: share a file, pipe the ticket anywhere.

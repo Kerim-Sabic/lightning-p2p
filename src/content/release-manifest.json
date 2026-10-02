@@ -4,7 +4,7 @@
   "currentAppVersion": "0.9.23",
   "stableReleaseTag": "v0.4.6",
   "experimentalReleaseTag": "v0.9.23",
-  "lastAndroidReleaseTag": "v0.9.21",
+  "lastAndroidReleaseTag": "v0.9.23",
   "browserChannel": "beta",
   "browserLimits": {
     "route": "relay_only",
