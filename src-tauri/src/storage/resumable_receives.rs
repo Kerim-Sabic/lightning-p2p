@@ -26,6 +26,20 @@ pub struct ResumableReceive {
     /// Verified output expected to be published when interrupted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub finalization: Option<ReceiveFinalization>,
+    /// Receipt that must be retried after the verified file is present in history.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pending_offer_receipt: Option<PendingOfferReceipt>,
+}
+
+/// Non-secret receipt routing data retained until the sender acknowledges save.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PendingOfferReceipt {
+    /// Offer identifier echoed to the sender.
+    pub offer_id: String,
+    /// Authenticated sender identity in iroh's textual encoding.
+    pub sender_node_id: String,
+    /// Verified root BLAKE3 hash in textual encoding.
+    pub blob_hash: String,
 }
 
 /// Minimal journal entry for recovering a file published before history flush.
@@ -266,6 +280,7 @@ mod tests {
             limits: ReceiveLimits::default(),
             fallback_file_name: None,
             finalization: None,
+            pending_offer_receipt: None,
         }
     }
 
@@ -283,6 +298,25 @@ mod tests {
             std::fs::read_to_string(directory.path().join(STORE_FILE)).expect("read metadata");
         assert!(!contents.contains("ticket"));
         assert!(!contents.contains("capability"));
+    }
+
+    #[test]
+    fn pending_offer_receipt_survives_restart_without_ticket_material() {
+        let directory = tempfile::tempdir().expect("temporary app data directory");
+        let store = ResumableReceiveStore::load(directory.path()).expect("open store");
+        let mut record = sample_record(uuid::Uuid::new_v4().to_string());
+        record.pending_offer_receipt = Some(PendingOfferReceipt {
+            offer_id: "offer-123".into(),
+            sender_node_id: iroh::SecretKey::from_bytes(&[42; 32]).public().to_string(),
+            blob_hash: iroh_blobs::Hash::new(b"verified file").to_string(),
+        });
+        store.save(record.clone()).expect("persist outbox entry");
+
+        let restored = ResumableReceiveStore::load(directory.path()).expect("reload store");
+        assert_eq!(restored.get(&record.transfer.transfer_id), Some(record));
+        let contents =
+            std::fs::read_to_string(directory.path().join(STORE_FILE)).expect("read metadata");
+        assert!(!contents.contains("ticket"));
     }
 
     #[test]

@@ -3,7 +3,7 @@
 use crate::commands::{command_error, CommandResult};
 use crate::error::AppErrorPayload;
 use crate::storage::history::{self, TransferRecord};
-use crate::storage::resumable_receives::ResumableReceive;
+use crate::storage::resumable_receives::{PendingOfferReceipt, ResumableReceive};
 use crate::transfer::export;
 use crate::transfer::metrics::{RouteKind, TransferStrategy};
 use crate::transfer::progress::{TransferDirection, TransferInfo, TransferPhase};
@@ -280,6 +280,7 @@ pub async fn resume_transfer(
             return Err(command_error(AppErrorPayload::invalid_ticket()));
         }
     };
+    let save_receipt = pending_offer_save_context(record.pending_offer_receipt.as_ref());
     start_receive_ticket(
         state,
         window,
@@ -287,7 +288,7 @@ pub async fn resume_transfer(
         record.limits,
         record.fallback_file_name.clone(),
         Some(record),
-        None,
+        save_receipt,
     )
     .await
 }
@@ -295,18 +296,46 @@ pub async fn resume_transfer(
 async fn ensure_receive_not_completed(state: &AppState, transfer_id: &str) -> CommandResult<()> {
     let node = state.get_node().await.map_err(command_error)?;
     let history_transfer_id = transfer_id.to_string();
+    let history_node = node.clone();
     let completed = tokio::task::spawn_blocking(move || {
-        history::receive_by_transfer_id(node.db(), &history_transfer_id)
+        history::receive_by_transfer_id(history_node.db(), &history_transfer_id)
     })
     .await
     .map_err(|error| command_error(error.to_string()))?
     .map_err(command_error)?;
     if completed.is_some() {
-        let _ = crate::crypto::delete_receive_resume_ticket(&state.data_dir, transfer_id);
-        state
+        let pending_receipt = state
             .resumable_receives
-            .remove(transfer_id)
-            .map_err(command_error)?;
+            .get(transfer_id)
+            .and_then(|record| pending_offer_save_context(record.pending_offer_receipt.as_ref()));
+        let receipt_acknowledged = if let Some(receipt) = pending_receipt {
+            let wire_receipt = crate::node::nearby_offer::OfferSavedReceipt {
+                offer_id: receipt.offer_id,
+                blob_hash: receipt.blob_hash.to_string(),
+            };
+            match crate::node::nearby_protocol::send_offer_saved_receipt(
+                node.endpoint(),
+                receipt.sender_addr,
+                wire_receipt,
+            )
+            .await
+            {
+                Ok(()) => true,
+                Err(error) => {
+                    tracing::warn!(%error, "verified receive is saved; nearby receipt remains pending");
+                    false
+                }
+            }
+        } else {
+            true
+        };
+        if receipt_acknowledged {
+            let _ = crate::crypto::delete_receive_resume_ticket(&state.data_dir, transfer_id);
+            state
+                .resumable_receives
+                .remove(transfer_id)
+                .map_err(command_error)?;
+        }
         return Err(command_error(
             "This receive is already saved. Find it in Activity instead of receiving it again.",
         ));
@@ -435,6 +464,11 @@ async fn start_receive_ticket(
     );
     let (cancel_tx, cancel_rx) = watch::channel(false);
     let mut info = receive_transfer_info(&transfer_id, &ticket);
+    let save_receipt = save_receipt.or_else(|| {
+        resume
+            .as_ref()
+            .and_then(|record| pending_offer_save_context(record.pending_offer_receipt.as_ref()))
+    });
     if let Some(mut record) = resume {
         info.can_resume = true;
         record.transfer = info.clone();
@@ -456,6 +490,11 @@ async fn start_receive_ticket(
                 limits,
                 fallback_file_name: fallback_file_name.clone(),
                 finalization: None,
+                pending_offer_receipt: save_receipt.as_ref().map(|receipt| PendingOfferReceipt {
+                    offer_id: receipt.offer_id.clone(),
+                    sender_node_id: receipt.sender_addr.id.to_string(),
+                    blob_hash: receipt.blob_hash.to_string(),
+                }),
             };
             if state.resumable_receives.save(record).is_err() {
                 info.can_resume = false;
@@ -486,6 +525,20 @@ async fn start_receive_ticket(
     });
 
     Ok(transfer_id)
+}
+
+fn pending_offer_save_context(
+    receipt: Option<&PendingOfferReceipt>,
+) -> Option<crate::node::nearby_offer::OfferSaveContext> {
+    use std::str::FromStr;
+    let receipt = receipt?;
+    let sender = iroh::EndpointId::from_str(&receipt.sender_node_id).ok()?;
+    let blob_hash = iroh_blobs::Hash::from_str(&receipt.blob_hash).ok()?;
+    Some(crate::node::nearby_offer::OfferSaveContext {
+        offer_id: receipt.offer_id.clone(),
+        sender_addr: iroh::EndpointAddr::new(sender),
+        blob_hash,
+    })
 }
 
 fn receive_transfer_info(transfer_id: &str, ticket: &ShareTicket) -> TransferInfo {
@@ -579,9 +632,10 @@ fn spawn_receive_task(launch: ReceiveLaunch) {
         .await
         .is_ok()
         {
+            let mut receipt_acknowledged = true;
             if let Some(receipt) = save_receipt {
                 let wire_receipt = crate::node::nearby_offer::OfferSavedReceipt {
-                    offer_id: receipt.offer_id,
+                    offer_id: receipt.offer_id.clone(),
                     blob_hash: receipt.blob_hash.to_string(),
                 };
                 if let Err(error) = crate::node::nearby_protocol::send_offer_saved_receipt(
@@ -591,14 +645,17 @@ fn spawn_receive_task(launch: ReceiveLaunch) {
                 )
                 .await
                 {
+                    receipt_acknowledged = false;
                     tracing::warn!(%error, "could not deliver verified nearby save receipt");
                 }
             }
-            if crate::crypto::delete_receive_resume_ticket(&data_dir, &transfer_id).is_err() {
-                tracing::warn!("could not remove completed receive credential");
-            }
-            if resume_store.remove(&transfer_id).is_err() {
-                tracing::warn!("could not remove completed receive metadata");
+            if receipt_acknowledged {
+                if crate::crypto::delete_receive_resume_ticket(&data_dir, &transfer_id).is_err() {
+                    tracing::warn!("could not remove completed receive credential");
+                }
+                if resume_store.remove(&transfer_id).is_err() {
+                    tracing::warn!("could not remove completed receive metadata");
+                }
             }
         }
     });
