@@ -28,6 +28,7 @@ interface IncomingOfferStore {
 
 const DISMISSED_OFFER_TTL_MS = 60_000;
 const MAX_DISMISSED_OFFER_KEYS = 128;
+const MAX_OUTBOUND_OFFERS = 256;
 
 function incomingOfferKey(offerId: string, senderNodeId: string): string {
   return JSON.stringify([senderNodeId, offerId]);
@@ -49,6 +50,17 @@ function rememberDismissedKeys(
   const next = pruneDismissedKeys(existing, now);
   for (const key of keys) next[key] = now + DISMISSED_OFFER_TTL_MS;
   return pruneDismissedKeys(next, now);
+}
+
+function appendOutboundOffer(
+  existing: Record<string, OutboundOfferStatus>,
+  offer: OutboundOfferStatus,
+): Record<string, OutboundOfferStatus> {
+  const next = { ...existing, [offer.offerId]: offer };
+  const entries = Object.entries(next);
+  if (entries.length <= MAX_OUTBOUND_OFFERS) return next;
+  entries.sort(([, left], [, right]) => left.updatedAt - right.updatedAt);
+  return Object.fromEntries(entries.slice(-MAX_OUTBOUND_OFFERS));
 }
 
 export const useIncomingOfferStore = create<IncomingOfferStore>((set) => ({
@@ -140,23 +152,20 @@ export const useIncomingOfferStore = create<IncomingOfferStore>((set) => ({
 
   recordOutbound: (status) =>
     set((state) => ({
-      outbound: { ...state.outbound, [status.offerId]: status },
+      outbound: appendOutboundOffer(state.outbound, status),
     })),
 
   applyOfferResolved: (resolved) =>
     set((state) => {
       const existing = state.outbound[resolved.offer_id];
       return {
-        outbound: {
-          ...state.outbound,
-          [resolved.offer_id]: {
-            offerId: resolved.offer_id,
-            receiverNodeId: resolved.receiver_node_id,
-            status: resolved.outcome,
-            message: existing?.message ?? null,
-            updatedAt: Date.now(),
-          },
-        },
+        outbound: appendOutboundOffer(state.outbound, {
+          offerId: resolved.offer_id,
+          receiverNodeId: resolved.receiver_node_id,
+          status: resolved.outcome,
+          message: existing?.message ?? null,
+          updatedAt: Date.now(),
+        }),
       };
     }),
 

@@ -50,12 +50,14 @@ import {
   isDesktopRuntime,
   isMobileRuntime,
   offerShareToPeer,
+  offerShareToPeers,
   onWindowDragDropEvent,
   onPairedDevicesUpdated,
   pickShareFiles as pickShareFilesFromDialog,
   listPairedDevices,
   renderTicketQr,
   type NearbyDevice,
+  type NearbyOfferAttempt,
   writeClipboardText,
 } from "../lib/tauri";
 import { useIncomingOfferStore } from "../stores/incomingOfferStore";
@@ -95,7 +97,13 @@ function uniquePaths(paths: string[]): string[] {
 }
 
 const SELECTION_PAGE_SIZE = 24;
+const MAX_BATCH_RECIPIENTS = 8;
 let nearbyOfferInProgress = false;
+
+interface BatchRecipientResult {
+  attempt: NearbyOfferAttempt | null;
+  pending: boolean;
+}
 
 function iconForSelection(name: string, isDir: boolean) {
   if (isDir) {
@@ -214,6 +222,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
   const shareTicket = useTransferStore((state) => state.shareTicket);
   const devices = useNearbyDeviceStore((state) => state.devices);
   const recordOutbound = useIncomingOfferStore((state) => state.recordOutbound);
+  const outboundOffers = useIncomingOfferStore((state) => state.outbound);
   const sendTransfer = useLatestSendTransfer();
   const nativeRuntime = isDesktopRuntime();
   const mobileRuntime = isMobileRuntime();
@@ -222,6 +231,15 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
   const [qrSvg, setQrSvg] = useState<string | null>(null);
   const [showRawTicket, setShowRawTicket] = useState(false);
   const [busyNodeId, setBusyNodeId] = useState<string | null>(null);
+  const [batchBusy, setBatchBusy] = useState(false);
+  const [selectedRecipientIds, setSelectedRecipientIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [batchStartedAt, setBatchStartedAt] = useState<number | null>(null);
+  const [batchResults, setBatchResults] = useState<
+    Record<string, BatchRecipientResult>
+  >({});
+  const batchBaselineOfferIds = useRef<Set<string>>(new Set());
   const [selectionPage, setSelectionPage] = useState(0);
   const [dropTargetNodeId, setDropTargetNodeId] = useState<string | null>(null);
   const [flickDevices, setFlickDevices] = useState<NearbyDevice[] | null>(null);
@@ -330,6 +348,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
         }
 
         setIsDragActive(false);
+        if (nearbyOfferInProgress) return;
         void prepareShareSelection(uniquePaths(event.paths));
       }),
       (reason: unknown) => {
@@ -485,6 +504,168 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
     }
   };
 
+  const toggleBatchRecipient = (nodeId: string): void => {
+    if (batchBusy || busyNodeId !== null || nearbyOfferInProgress) return;
+    const next = new Set(selectedRecipientIds);
+    if (next.has(nodeId)) {
+      next.delete(nodeId);
+    } else if (next.size < MAX_BATCH_RECIPIENTS) {
+      next.add(nodeId);
+    } else {
+      setError(`Choose up to ${MAX_BATCH_RECIPIENTS} devices per send.`);
+      return;
+    }
+    setSelectedRecipientIds(next);
+    setBatchResults({});
+    setBatchStartedAt(null);
+  };
+
+  const handleSendToSelected = async (): Promise<void> => {
+    const recipientIds = Array.from(selectedRecipientIds);
+    if (recipientIds.length < 2 || recipientIds.length > MAX_BATCH_RECIPIENTS) {
+      setError(`Choose between two and ${MAX_BATCH_RECIPIENTS} devices.`);
+      return;
+    }
+    if (
+      recipientIds.some(
+        (nodeId) => !devices.some((device) => device.node_id === nodeId),
+      )
+    ) {
+      setError("A selected device left discovery. Review your recipients and try again.");
+      return;
+    }
+
+    const initial = useTransferStore.getState();
+    if (
+      nearbyOfferInProgress ||
+      batchBusy ||
+      busyNodeId !== null ||
+      initial.isPreparingSelection ||
+      initial.isSharing
+    ) {
+      return;
+    }
+    nearbyOfferInProgress = true;
+    setBatchBusy(true);
+    setError(null);
+    const startedAt = Date.now();
+    batchBaselineOfferIds.current = new Set(Object.keys(outboundOffers));
+    setBatchStartedAt(startedAt);
+    setBatchResults(
+      Object.fromEntries(
+        recipientIds.map((nodeId) => [
+          nodeId,
+          { attempt: null, pending: true },
+        ]),
+      ),
+    );
+
+    try {
+      let paths = initial.shareSelection.map((item) => item.path);
+      if (paths.length === 0) {
+        const pickedPaths = await pickShareFilesFromDialog();
+        if (pickedPaths.length === 0) {
+          setBatchResults({});
+          setBatchStartedAt(null);
+          return;
+        }
+        const current = useTransferStore.getState();
+        if (current.isPreparingSelection || current.isSharing) {
+          throw new Error("Another share is already being prepared. Try again when it is ready.");
+        }
+        if (!(await prepareShareSelection(pickedPaths))) {
+          const preparation = useTransferStore.getState();
+          throw new Error(
+            preparation.error ??
+              "Those files changed while they were being prepared. Choose them again and retry.",
+          );
+        }
+        const prepared = useTransferStore.getState();
+        paths = prepared.shareSelection.map((item) => item.path);
+        const expectedPaths = uniquePaths(pickedPaths);
+        if (
+          paths.length !== expectedPaths.length ||
+          paths.some((path, index) => path !== expectedPaths[index])
+        ) {
+          throw new Error(
+            prepared.error ??
+              "The selected files changed while they were being prepared. Review them and send again.",
+          );
+        }
+      }
+
+      const current = useTransferStore.getState();
+      const currentPaths = current.shareSelection.map((item) => item.path);
+      if (
+        current.isPreparingSelection ||
+        current.isSharing ||
+        currentPaths.length !== paths.length ||
+        currentPaths.some((path, index) => path !== paths[index])
+      ) {
+        throw new Error("Your selection changed. Review it and send again.");
+      }
+
+      const attempts = await offerShareToPeers(recipientIds, paths);
+      setBatchResults(
+        Object.fromEntries(
+          attempts.map((attempt) => [
+            attempt.receiver_node_id,
+            { attempt, pending: false },
+          ]),
+        ),
+      );
+      const accepted = attempts.filter(
+        (attempt) => attempt.outcome === "accepted" && !attempt.error,
+      ).length;
+      if (accepted < recipientIds.length) {
+        setError(
+          `${accepted} of ${recipientIds.length} nearby devices accepted the offer. Check each device for its result.`,
+        );
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Could not send to selected devices";
+      setBatchResults(
+        Object.fromEntries(
+          recipientIds.map((nodeId) => [
+            nodeId,
+            {
+              attempt: {
+                receiver_node_id: nodeId,
+                offer_id: null,
+                outcome: null,
+                error: message,
+              },
+              pending: false,
+            },
+          ]),
+        ),
+      );
+      setError(message);
+    } finally {
+      nearbyOfferInProgress = false;
+      setBatchBusy(false);
+    }
+  };
+
+  const liveBatchStatusFor = (nodeId: string): string | null => {
+    if (!batchBusy || batchStartedAt === null) return null;
+    const latest = Object.values(outboundOffers)
+      .filter(
+        (offer) =>
+          offer.receiverNodeId === nodeId &&
+          offer.updatedAt >= batchStartedAt &&
+          !batchBaselineOfferIds.current.has(offer.offerId),
+      )
+      .sort((left, right) => right.updatedAt - left.updatedAt)[0];
+    if (!latest) return "Queued or waiting for this device";
+    if (latest.status === "accepted") return "Offer accepted";
+    if (latest.status === "rejected") return "Declined";
+    if (latest.status === "expired") return "No response";
+    if (latest.status === "error") return latest.message ?? "Offer failed";
+    return "Waiting for acceptance";
+  };
+
   const cancelFlick = (): void => {
     const active = activeFlickRef.current;
     if (active?.element.hasPointerCapture(active.pointerId)) {
@@ -516,6 +697,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
       shareSelection.length === 0 ||
       isPreparingSelection ||
       isSharing ||
+      batchBusy ||
       busyNodeId !== null
     ) {
       return;
@@ -770,6 +952,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
       isPreparingSelection ||
       isSharing ||
       devices.length === 0 ||
+      batchBusy ||
       busyNodeId !== null
     ) {
       return;
@@ -937,7 +1120,23 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
     };
   }, []);
 
-  const renderDeviceTarget = (device: NearbyDevice) => (
+  const renderDeviceTarget = (device: NearbyDevice) => {
+    const selected = selectedRecipientIds.has(device.node_id);
+    const batchResult = batchResults[device.node_id];
+    const liveStatus = liveBatchStatusFor(device.node_id);
+    const statusText = batchResult?.attempt?.error
+      ? batchResult.attempt.error
+      : batchResult?.attempt?.outcome === "accepted"
+        ? "Offer accepted"
+        : batchResult?.attempt?.outcome === "rejected"
+          ? "Declined"
+          : batchResult?.attempt?.outcome === "expired"
+            ? "No response"
+            : batchResult?.pending
+              ? liveStatus
+              : null;
+
+    return (
     <div
       key={device.node_id}
       data-flick-target-node-id={device.node_id}
@@ -962,13 +1161,14 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
       }}
       onDragLeave={() => setDropTargetNodeId(null)}
       onDrop={handleSelectionDrop}
-      className={`flex min-h-16 items-center gap-3 rounded-2xl border px-4 py-3 transition ${dropTargetNodeId === device.node_id ? "border-[var(--accent-border)] bg-[var(--accent-subtle)]" : "border-[var(--border-subtle)] bg-[var(--surface-1)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-hover)]"}`}
+      className={`flex min-h-16 flex-wrap items-center gap-3 rounded-2xl border px-4 py-3 transition ${dropTargetNodeId === device.node_id ? "border-[var(--accent-border)] bg-[var(--accent-subtle)]" : "border-[var(--border-subtle)] bg-[var(--surface-1)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-hover)]"}`}
     >
       <button
         type="button"
         onClick={() => void handleSendToDevice(device)}
         disabled={
           busyNodeId !== null ||
+          batchBusy ||
           isPreparingSelection ||
           isSharing ||
           !nativeRuntime
@@ -1013,6 +1213,22 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
               : "Choose files"}
         </span>
       </button>
+      {nativeRuntime ? (
+        <label className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-0)] focus-within:ring-2 focus-within:ring-[var(--accent-primary)]">
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={() => toggleBatchRecipient(device.node_id)}
+            disabled={
+              batchBusy ||
+              busyNodeId !== null ||
+              (!selected && selectedRecipientIds.size >= MAX_BATCH_RECIPIENTS)
+            }
+            aria-label={`Select ${safeDisplayText(device.device_name, "nearby device")} for a group send`}
+            className="h-4 w-4 accent-[var(--accent-primary)]"
+          />
+        </label>
+      ) : null}
       {shareSelection.length > 0 && nativeRuntime ? (
         <div className="flex shrink-0 flex-col items-center gap-1">
           <button
@@ -1035,7 +1251,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
               }
             }}
             disabled={
-              busyNodeId !== null || isPreparingSelection || isSharing
+              busyNodeId !== null || isPreparingSelection || isSharing || batchBusy
             }
             style={{ touchAction: "none" }}
             className="grid h-11 min-w-11 place-items-center rounded-xl border border-[var(--accent-border)] bg-[var(--accent-subtle)] px-2 text-xs font-semibold text-[var(--accent-primary)] transition hover:bg-[var(--accent-border)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] disabled:opacity-55"
@@ -1055,8 +1271,18 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
           </span>
         </div>
       ) : null}
+      {selected && statusText ? (
+        <span
+          role="status"
+          aria-live="polite"
+          className="basis-full pl-1 text-xs text-[var(--fg-secondary)]"
+        >
+          {batchResult?.pending && batchBusy ? statusText : `Group send · ${statusText}`}
+        </span>
+      ) : null}
     </div>
-  );
+    );
+  };
 
   return (
     <div className="space-y-5">
@@ -1119,7 +1345,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
               <button
                 type="button"
                 onClick={() => void pickShareFiles()}
-                disabled={!nativeRuntime || isPreparingSelection || isSharing}
+                disabled={!nativeRuntime || isPreparingSelection || isSharing || batchBusy}
                 className={
                   mobileRuntime
                     ? "mobile-hero-cta"
@@ -1135,7 +1361,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
                 <button
                   type="button"
                   onClick={() => void pickShareFolder()}
-                  disabled={!nativeRuntime || isPreparingSelection || isSharing}
+                  disabled={!nativeRuntime || isPreparingSelection || isSharing || batchBusy}
                   className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-[var(--border-strong)] bg-[var(--surface-1)] px-5 py-3 text-sm text-[var(--fg-primary)] transition hover:bg-[var(--surface-hover)]"
                 >
                   <Folder className="h-4 w-4" />
@@ -1212,7 +1438,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
                       }
                     }}
                     style={{ touchAction: "none" }}
-                    className={`mt-3 inline-flex min-h-11 select-none items-center gap-2 rounded-xl border border-[var(--accent-border)] bg-[var(--accent-subtle)] px-4 text-sm font-semibold text-[var(--accent-primary)] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] ${isPreparingSelection || isSharing || busyNodeId !== null ? "cursor-not-allowed opacity-55" : "cursor-grab hover:bg-[var(--surface-hover)] active:cursor-grabbing"}`}
+                    className={`mt-3 inline-flex min-h-11 select-none items-center gap-2 rounded-xl border border-[var(--accent-border)] bg-[var(--accent-subtle)] px-4 text-sm font-semibold text-[var(--accent-primary)] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] ${isPreparingSelection || isSharing || busyNodeId !== null || batchBusy ? "cursor-not-allowed opacity-55" : "cursor-grab hover:bg-[var(--surface-hover)] active:cursor-grabbing"}`}
                   >
                     <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
                     {activeFlickRef.current && !activeFlickRef.current.nodeId
@@ -1245,7 +1471,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
               <button
                 type="button"
                 onClick={clearShareSelection}
-                disabled={isSharing}
+                disabled={isSharing || batchBusy}
                 className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[var(--border-strong)] bg-[var(--surface-1)] px-4 py-2.5 text-sm font-medium text-[var(--fg-primary)] transition hover:bg-[var(--surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] disabled:opacity-55"
               >
                 <Trash2 className="h-4 w-4" />
@@ -1254,7 +1480,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
               <button
                 type="button"
                 onClick={() => void createShare()}
-                disabled={isSharing || !nativeRuntime}
+                disabled={isSharing || batchBusy || !nativeRuntime}
                 className="btn-primary"
               >
                 <span className="relative inline-flex items-center gap-2">
@@ -1358,7 +1584,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
                       aria-label={`Remove ${itemName} from selection`}
                       title={`Remove ${itemName}`}
                       onClick={() => removeShareSelectionItem(item.path)}
-                      disabled={isSharing}
+                      disabled={isSharing || batchBusy}
                       className="grid h-10 w-10 place-items-center rounded-full text-[var(--fg-muted)] transition hover:bg-[var(--surface-hover)] hover:text-[var(--fg-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
                     >
                       <X className="h-4 w-4" aria-hidden="true" />
@@ -1433,6 +1659,37 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
                   {recipientGroups.nearbyDevices.map(renderDeviceTarget)}
                 </div>
               </section>
+            ) : null}
+            {selectedRecipientIds.size > 1 ? (
+              <div className="rounded-2xl border border-[var(--accent-border)] bg-[var(--accent-subtle)] p-4">
+                <p className="text-sm leading-6 text-[var(--fg-secondary)]">
+                  Each device gets its own offer and can accept or decline independently. Choose up to {MAX_BATCH_RECIPIENTS}; offers run two at a time.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void handleSendToSelected()}
+                  disabled={
+                    batchBusy ||
+                    busyNodeId !== null ||
+                    isPreparingSelection ||
+                    isSharing
+                  }
+                  className="mt-3 inline-flex min-h-11 items-center justify-center rounded-xl bg-[var(--accent-primary)] px-4 text-sm font-semibold text-white transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-55"
+                >
+                  {batchBusy
+                    ? "Sending offers…"
+                    : `Send to ${selectedRecipientIds.size} devices`}
+                </button>
+                {batchResults && Object.keys(batchResults).length > 0 ? (
+                  <p className="mt-2 text-xs text-[var(--fg-secondary)]" aria-live="polite">
+                    Offers are handled separately. Acceptance starts a receive on that device; it does not mean the file is saved yet.
+                  </p>
+                ) : null}
+              </div>
+            ) : selectedRecipientIds.size === 1 ? (
+              <p className="text-sm text-[var(--fg-secondary)]">
+                Select another device to send the same files to more than one recipient.
+              </p>
             ) : null}
           </div>
         ) : !discoveryEnabled ? (

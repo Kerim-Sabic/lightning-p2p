@@ -58,6 +58,12 @@
     "direct_address_count": 1,
     "has_active_share": true
   },
+  "nearby_offer_attempt": {
+    "receiver_node_id": "0123456789abcdef",
+    "offer_id": "offer-1",
+    "outcome": "accepted",
+    "error": null
+  },
   "node_supervisor_status": {
     "phase": "starting",
     "last_reason": "app_startup",

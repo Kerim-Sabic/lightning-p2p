@@ -1,4 +1,5 @@
-use lightning_p2p_lib::node::nearby_offer::FlickDirection;
+use lightning_p2p_lib::commands::nearby::NearbyOfferAttempt;
+use lightning_p2p_lib::node::nearby_offer::{FlickDirection, OfferDecision};
 use lightning_p2p_lib::node::nearby_protocol::WireBlobFormat;
 use lightning_p2p_lib::node::{
     IncomingOffer, NearbyDevice, NearbyRouteHint, NearbyTransport, NodeSupervisorPhase,
@@ -111,6 +112,20 @@ fn nearby_payloads_match_the_shared_contract() {
     assert_eq!(
         serde_json::to_value(device).expect("serialize device"),
         expected["nearby_device"]
+    );
+}
+
+#[test]
+fn nearby_offer_attempt_matches_the_shared_contract() {
+    let attempt = NearbyOfferAttempt {
+        receiver_node_id: "0123456789abcdef".into(),
+        offer_id: Some("offer-1".into()),
+        outcome: Some(OfferDecision::Accepted),
+        error: None,
+    };
+    assert_eq!(
+        serde_json::to_value(attempt).expect("serialize offer attempt"),
+        contracts()["nearby_offer_attempt"]
     );
 }
 

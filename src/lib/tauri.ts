@@ -434,6 +434,13 @@ export interface OfferResolved {
   receiver_node_id: string;
 }
 
+export interface NearbyOfferAttempt {
+  receiver_node_id: string;
+  offer_id: string | null;
+  outcome: OfferDecision | null;
+  error: string | null;
+}
+
 export interface OfferClosed {
   offer_id: string;
   sender_node_id: string;
@@ -1081,6 +1088,17 @@ export async function offerShareToPeer(
     nodeId,
     paths,
     flickDirection: flickDirection ?? null,
+  });
+}
+
+export async function offerShareToPeers(
+  nodeIds: string[],
+  paths: string[],
+): Promise<NearbyOfferAttempt[]> {
+  requireNativeRuntime("Sending to nearby devices");
+  return invoke<NearbyOfferAttempt[]>("offer_share_to_peers", {
+    nodeIds,
+    paths,
   });
 }
 

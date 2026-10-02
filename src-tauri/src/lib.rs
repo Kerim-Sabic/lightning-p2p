@@ -301,6 +301,7 @@ pub fn run() {
             commands::nearby::get_pending_incoming_offers,
             commands::nearby::clear_peer_cache,
             commands::nearby::offer_share_to_peer,
+            commands::nearby::offer_share_to_peers,
             commands::nearby::respond_to_offer,
             commands::nearby::set_nearby_peer_blocked,
             commands::nearby::get_blocked_nearby_peers,

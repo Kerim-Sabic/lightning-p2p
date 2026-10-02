@@ -19,6 +19,7 @@ function offer(offerId: string, senderNodeId: string): IncomingOffer {
 describe("incoming offer queue", () => {
   beforeEach(() => {
     useIncomingOfferStore.getState().clearIncoming();
+    useIncomingOfferStore.setState({ outbound: {} });
   });
 
   it("removes every queued offer from a blocked identity", () => {
@@ -85,5 +86,29 @@ describe("incoming offer queue", () => {
       ["peer-a", "live"],
       ["peer-b", "missed"],
     ]);
+  });
+
+  it("bounds outbound offer history while retaining the most recent results", () => {
+    const store = useIncomingOfferStore.getState();
+    for (let index = 0; index < 256; index += 1) {
+      store.recordOutbound({
+        offerId: `offer-${index}`,
+        receiverNodeId: `peer-${index}`,
+        status: "accepted",
+        message: null,
+        updatedAt: index,
+      });
+    }
+
+    store.applyOfferResolved({
+      offer_id: "offer-newest",
+      receiver_node_id: "peer-newest",
+      outcome: "accepted",
+    });
+
+    const outbound = useIncomingOfferStore.getState().outbound;
+    expect(Object.keys(outbound)).toHaveLength(256);
+    expect(outbound["offer-0"]).toBeUndefined();
+    expect(outbound["offer-newest"]?.receiverNodeId).toBe("peer-newest");
   });
 });
