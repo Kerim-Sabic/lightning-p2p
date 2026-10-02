@@ -70,6 +70,9 @@ All notable changes to Lightning P2P are documented here. The project follows se
   immediately and pacing share probes to the regular refresh interval.
 - Offer one prepared share to up to eight nearby devices with an independent
   consent result and private access grant for each recipient.
+- When startup remains blocked opening local storage, stop showing the route as
+  still starting and make retry calls return recovery guidance without waiting
+  behind the active startup lock.
 - Bound retained nearby peers to 128 and each peer's merged route addresses to
   8, evicting the least recently seen entries when capacity is reached.
 - Keep Flick direction cues and single-offer handoffs intact across the release.

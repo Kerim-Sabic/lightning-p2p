@@ -19,7 +19,7 @@ use std::sync::{
 };
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter};
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::{Mutex, MutexGuard, RwLock};
 
 const NODE_SUPERVISOR_STATUS_EVENT: &str = "node-supervisor-status";
 const NODE_START_PREPARATION_TIMEOUT: Duration = Duration::from_secs(5);
@@ -161,7 +161,7 @@ impl NodeSupervisor {
         settings: AppSettings,
         nearby: NearbyServices,
     ) -> Result<()> {
-        let _guard = self.lifecycle_lock.lock().await;
+        let _guard = try_startup_retry_lock(&self.lifecycle_lock)?;
         let phase = self.status.read().await.phase;
         if !startup_retry_allowed(phase, self.node.read().await.is_some()) {
             return Err(LightningP2PError::Other(
@@ -443,6 +443,10 @@ impl NodeSupervisor {
             async {
                 let message = "Node startup has not finished after five minutes. Close and reopen Lightning to reset storage initialization; if it happens again, collect a diagnostic bundle from Settings.";
                 tracing::error!(reason, "node startup remains blocked after five minutes");
+                {
+                    let mut runtime = self.runtime_status.write().await;
+                    *runtime = NodeRuntimeStatus::offline();
+                }
                 self.set_status(
                     app,
                     NodeSupervisorStatus::new(
@@ -525,6 +529,14 @@ fn startup_retry_allowed(phase: NodeSupervisorPhase, node_initialized: bool) -> 
     phase == NodeSupervisorPhase::Failed && !node_initialized
 }
 
+fn try_startup_retry_lock(lock: &Mutex<()>) -> Result<MutexGuard<'_, ()>> {
+    lock.try_lock().map_err(|_| {
+        LightningP2PError::Other(
+            "The previous node startup is still using local transfer storage. Close and reopen Lightning to reset it before retrying.".into(),
+        )
+    })
+}
+
 fn unix_timestamp() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -533,7 +545,10 @@ fn unix_timestamp() -> u64 {
 
 #[cfg(test)]
 mod tests {
-    use super::{await_start_with_warning, startup_retry_allowed, NodeSupervisorPhase};
+    use super::{
+        await_start_with_warning, startup_retry_allowed, try_startup_retry_lock,
+        NodeSupervisorPhase,
+    };
     use std::future::poll_fn;
     use std::sync::{
         atomic::{AtomicUsize, Ordering},
@@ -541,6 +556,7 @@ mod tests {
     };
     use std::task::Poll;
     use std::time::Duration;
+    use tokio::sync::Mutex;
 
     #[test]
     fn startup_retry_requires_a_failed_supervisor_without_a_live_node() {
@@ -548,6 +564,19 @@ mod tests {
         assert!(!startup_retry_allowed(NodeSupervisorPhase::Failed, true));
         assert!(!startup_retry_allowed(NodeSupervisorPhase::Starting, false));
         assert!(!startup_retry_allowed(NodeSupervisorPhase::Idle, false));
+    }
+
+    #[tokio::test]
+    async fn startup_retry_does_not_wait_behind_an_active_lifecycle_operation() {
+        let lock = Mutex::new(());
+        let active_operation = lock.lock().await;
+
+        let error = try_startup_retry_lock(&lock)
+            .expect_err("retry must return instead of waiting for startup");
+        assert!(error.to_string().contains("Close and reopen Lightning"));
+
+        drop(active_operation);
+        assert!(try_startup_retry_lock(&lock).is_ok());
     }
 
     #[tokio::test]
