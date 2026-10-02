@@ -64,6 +64,17 @@ All notable changes to Lightning P2P are documented here. The project follows se
 
 ## [Unreleased]
 
+## [0.9.25] - 2026-10-02 ("Reliable Nearby Handoffs")
+
+- Offer one prepared share to up to eight nearby devices with independent
+  consent outcomes and peer-specific private access grants.
+- Show approximate Flick arrival direction on the receiver without sharing
+  location data; batch offers remain directionless.
+- Mark a startup stalled on local storage as offline and return recovery
+  guidance without blocking on the active lifecycle lock.
+- Keep nearby discovery responsive during mDNS bursts with bounded peer and
+  route-address state.
+
 ## [0.9.24] - 2026-10-02 ("Responsive Nearby Discovery")
 
 - Keep nearby device discovery responsive during mDNS bursts by showing peers
