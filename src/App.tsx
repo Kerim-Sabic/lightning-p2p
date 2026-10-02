@@ -8,7 +8,10 @@ import {
   useState,
 } from "react";
 import { useTransfer } from "./hooks/useTransfer";
-import { attachAsyncUnlisten } from "./hooks/asyncSubscription";
+import {
+  attachAsyncUnlisten,
+  createCoalescedAsyncRunner,
+} from "./hooks/asyncSubscription";
 import { engineStatusPresentation } from "./lib/firstRunStatus";
 import {
   drainPendingSharedFiles,
@@ -244,16 +247,21 @@ function NativeAppShell({ runtimeKind }: NativeAppShellProps) {
     }
 
     let active = true;
+    const runDrain = createCoalescedAsyncRunner();
 
     const drainAndSeed = async (): Promise<void> => {
+      if (!active) return;
       const paths = await drainPendingSharedFiles();
-      if (active && paths.length > 0) {
+      if (!active) return;
+      if (paths.length > 0) {
         startTransition(() => {
           setView("send");
         });
         try {
-          await prepareShareSelection(paths);
-          await createShare();
+          const prepared = await prepareShareSelection(paths);
+          if (active && prepared) {
+            await createShare();
+          }
         } catch {
           // store already surfaces errors via setError
         }
@@ -262,6 +270,7 @@ function NativeAppShell({ runtimeKind }: NativeAppShellProps) {
       // Drain any NFC-pushed receive ticket. When two phones tap, the
       // sender's active ticket lands here; route the user directly to
       // the Receive view with the ticket pre-filled.
+      if (!active) return;
       const ticket = await drainPendingSharedTicket();
       if (active && ticket) {
         setPendingReceiveTicket(ticket);
@@ -271,10 +280,20 @@ function NativeAppShell({ runtimeKind }: NativeAppShellProps) {
       }
     };
 
-    void drainAndSeed();
+    const scheduleDrain = (): void => {
+      void runDrain(drainAndSeed).catch((error: unknown) => {
+        if (active) {
+          const message =
+            error instanceof Error ? error.message : String(error);
+          useTransferStore.getState().setError(message);
+        }
+      });
+    };
+
+    scheduleDrain();
 
     const onFocus = (): void => {
-      void drainAndSeed();
+      scheduleDrain();
     };
     window.addEventListener("focus", onFocus);
     return () => {
@@ -358,7 +377,9 @@ function NativeAppShell({ runtimeKind }: NativeAppShellProps) {
               {nodeSupervisorStatus.phase !== "idle" ? (
                 <section
                   role={engineStatus.tone === "attention" ? "alert" : "status"}
-                  aria-live={engineStatus.tone === "attention" ? "assertive" : "polite"}
+                  aria-live={
+                    engineStatus.tone === "attention" ? "assertive" : "polite"
+                  }
                   className={`flex flex-wrap items-center gap-3 rounded-2xl border px-4 py-3 ${
                     engineStatus.tone === "attention"
                       ? "border-[var(--amber-border)] bg-[var(--amber-bg)]"

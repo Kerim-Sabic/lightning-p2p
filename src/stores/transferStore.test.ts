@@ -455,10 +455,14 @@ describe("share selection editing", () => {
     vi.mocked(tauri.describeSharePaths).mockImplementation(async (paths) =>
       paths.map(sharePath),
     );
-    await useTransferStore.getState().prepareShareSelection(["first.txt"]);
-    await useTransferStore
-      .getState()
-      .prepareShareSelection(["second.txt", "first.txt"], "append");
+    await expect(
+      useTransferStore.getState().prepareShareSelection(["first.txt"]),
+    ).resolves.toBe(true);
+    await expect(
+      useTransferStore
+        .getState()
+        .prepareShareSelection(["second.txt", "first.txt"], "append"),
+    ).resolves.toBe(true);
 
     expect(
       useTransferStore.getState().shareSelection.map((item) => item.path),
@@ -495,11 +499,22 @@ describe("share selection editing", () => {
     const requestId = vi.mocked(tauri.describeSharePaths).mock.calls[0]?.[1];
     useTransferStore.getState().clearShareSelection();
     resolveDescription?.([sharePath("stale.txt")]);
-    await preparation;
+    await expect(preparation).resolves.toBe(false);
 
     expect(useTransferStore.getState().shareSelection).toEqual([]);
     expect(useTransferStore.getState().isPreparingSelection).toBe(false);
     expect(requestId).toBeDefined();
     expect(tauri.cancelSharePathScan).toHaveBeenCalledWith(requestId);
+  });
+
+  it("reports a failed path description so callers cannot share stale selection", async () => {
+    vi.mocked(tauri.describeSharePaths).mockRejectedValue(
+      new Error("path unavailable"),
+    );
+
+    await expect(
+      useTransferStore.getState().prepareShareSelection(["missing.txt"]),
+    ).resolves.toBe(false);
+    expect(useTransferStore.getState().shareSelection).toEqual([]);
   });
 });

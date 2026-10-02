@@ -140,7 +140,7 @@ interface TransferStore {
   prepareShareSelection: (
     paths: string[],
     behavior?: "replace" | "append",
-  ) => Promise<void>;
+  ) => Promise<boolean>;
   pickShareFiles: (append?: boolean) => Promise<void>;
   pickShareFolder: (append?: boolean) => Promise<void>;
   refreshNodeStatus: () => Promise<void>;
@@ -505,7 +505,7 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
   },
 
   prepareShareSelection: async (paths, behavior = "replace") => {
-    if (get().isSharing) return;
+    if (get().isSharing) return false;
     const requestSequence = ++shareSelectionRequestSequence;
     cancelActiveSharePathScan();
     const requestId = `selection-${requestSequence}`;
@@ -531,11 +531,12 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
         uniquePaths(requestedPaths),
         requestId,
       );
-      if (requestSequence !== shareSelectionRequestSequence) return;
+      if (requestSequence !== shareSelectionRequestSequence) return false;
       set({ shareSelection, isPreparingSelection: false });
       cleanupDiscardedSharePaths(previousSelection, shareSelection);
+      return true;
     } catch (error) {
-      if (requestSequence !== shareSelectionRequestSequence) return;
+      if (requestSequence !== shareSelectionRequestSequence) return false;
       const retainedSelection = behavior === "append" ? previousSelection : [];
       set({
         ...errorState(error),
@@ -543,6 +544,7 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
         isPreparingSelection: false,
       });
       cleanupDiscardedSharePaths(previousSelection, retainedSelection);
+      return false;
     } finally {
       if (activeSharePathScanId === requestId) {
         activeSharePathScanId = null;

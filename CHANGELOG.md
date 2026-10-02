@@ -47,6 +47,9 @@ All notable changes to Lightning P2P are documented here. The project follows se
 
 ## [Unreleased]
 
+- Serialize Android share-sheet drains across focus events and avoid creating a
+  share from a selection that was superseded while its paths were resolving.
+
 ## [0.9.16] - 2026-10-01 ("Reliable Startup and Receiving")
 
 ### Fixed

@@ -2,8 +2,48 @@ import { describe, expect, it, vi } from "vitest";
 import {
   attachAsyncUnlisten,
   attachAsyncUnlistenersWithSnapshot,
+  createCoalescedAsyncRunner,
   createSingleFlightRunner,
 } from "./asyncSubscription";
+
+describe("createCoalescedAsyncRunner", () => {
+  it("runs a queued trigger after the active task without overlapping", async () => {
+    const run = createCoalescedAsyncRunner();
+    const steps: string[] = [];
+    let finishFirst: (() => void) | undefined;
+
+    const first = run(async () => {
+      steps.push("first:start");
+      await new Promise<void>((resolve) => {
+        finishFirst = resolve;
+      });
+      steps.push("first:end");
+    });
+    const second = run(async () => {
+      steps.push("second");
+    });
+
+    expect(second).toBe(first);
+    await Promise.resolve();
+    expect(steps).toEqual(["first:start"]);
+
+    finishFirst?.();
+    await first;
+    expect(steps).toEqual(["first:start", "first:end", "second"]);
+  });
+
+  it("runs a queued trigger even when the active task fails", async () => {
+    const run = createCoalescedAsyncRunner();
+    const queued = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
+    const first = run(async () => {
+      throw new Error("first failed");
+    });
+    run(queued);
+
+    await expect(first).rejects.toThrow("first failed");
+    expect(queued).toHaveBeenCalledOnce();
+  });
+});
 
 describe("createSingleFlightRunner", () => {
   it("shares concurrent lifecycle setup and allows a later retry", async () => {

@@ -17,6 +17,52 @@ export function createSingleFlightRunner<T>(): (
   };
 }
 
+/** Serializes repeated lifecycle triggers and reruns once when they arrive mid-flight. */
+export function createCoalescedAsyncRunner(): (
+  operation: () => Promise<void>,
+) => Promise<void> {
+  let inFlight: Promise<void> | null = null;
+  let pendingOperation: (() => Promise<void>) | null = null;
+
+  return (operation) => {
+    if (inFlight) {
+      pendingOperation = operation;
+      return inFlight;
+    }
+
+    const current = Promise.resolve().then(async () => {
+      let firstError: unknown;
+      let hasError = false;
+      const runOperation = async (
+        nextOperation: () => Promise<void>,
+      ): Promise<void> => {
+        try {
+          await nextOperation();
+        } catch (error) {
+          if (!hasError) {
+            firstError = error;
+            hasError = true;
+          }
+        }
+      };
+
+      await runOperation(operation);
+      while (pendingOperation) {
+        const nextOperation = pendingOperation;
+        pendingOperation = null;
+        await runOperation(nextOperation);
+      }
+      if (hasError) throw firstError;
+    });
+    inFlight = current;
+    const clear = (): void => {
+      if (inFlight === current) inFlight = null;
+    };
+    void current.then(clear, clear);
+    return current;
+  };
+}
+
 export function attachAsyncUnlisten(
   subscription: Promise<() => void>,
   reportError: (error: unknown) => void,
