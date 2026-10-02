@@ -214,10 +214,10 @@ Run this from PowerShell with one Android phone connected over USB debugging. It
 ```powershell
 $ErrorActionPreference = "Stop"
 $adb = "$env:LocalAppData\Android\Sdk\platform-tools\adb.exe"
-# v0.9.23 is the current signed release carrying bounded blob requests,
+# v0.9.24 is the current signed release carrying bounded blob requests,
 # startup stall recovery, and same-side Flick arrival cues.
-$apkUrl = "https://github.com/Kerim-Sabic/lightning-p2p/releases/download/v0.9.23/LightningP2P-android-latest.apk"
-$sumUrl = "https://github.com/Kerim-Sabic/lightning-p2p/releases/download/v0.9.23/SHA256SUMS-android.txt"
+$apkUrl = "https://github.com/Kerim-Sabic/lightning-p2p/releases/download/v0.9.24/LightningP2P-android-latest.apk"
+$sumUrl = "https://github.com/Kerim-Sabic/lightning-p2p/releases/download/v0.9.24/SHA256SUMS-android.txt"
 $apk = ".\LightningP2P-android-latest.apk"
 $sums = ".\SHA256SUMS-android.txt"
 $logcat = ".\lightning-p2p-launch-logcat.txt"
