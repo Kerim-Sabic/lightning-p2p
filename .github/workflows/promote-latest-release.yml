@@ -1,0 +1,31 @@
+name: Promote latest release
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions:
+  contents: write
+
+jobs:
+  promote:
+    if: github.event.workflow_run.conclusion == 'success' && startsWith(github.event.workflow_run.head_branch, 'v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Read current app version
+        id: version
+        run: |
+          version="$(node -p 'require("./package.json").version')"
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Mark the current app release as latest
+        if: github.event.workflow_run.head_branch == format('v{0}', steps.version.outputs.value)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.workflow_run.head_branch }}
+        run: gh release edit "$RELEASE_TAG" --prerelease=false --latest --verify-tag
