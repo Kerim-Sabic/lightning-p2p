@@ -8,7 +8,8 @@
 //! dial the sender's blob store to pull bytes.
 
 use crate::error::{LightningP2PError, Result};
-use iroh::EndpointId;
+use iroh::{EndpointAddr, EndpointId};
+use iroh_blobs::Hash;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet},
@@ -24,6 +25,8 @@ pub const NEARBY_OFFER_RECEIVED_EVENT: &str = "nearby-offer-received";
 pub const NEARBY_OFFER_CLOSED_EVENT: &str = "nearby-offer-closed";
 /// Tauri event emitted on the sender side when its outbound offer is resolved.
 pub const NEARBY_OFFER_RESOLVED_EVENT: &str = "nearby-offer-resolved";
+/// Tauri event emitted when a recipient verifies and saves an offered file.
+pub const NEARBY_OFFER_SAVED_EVENT: &str = "nearby-offer-saved";
 
 /// How long the receiver's UI prompt is allowed to remain unanswered before
 /// the offer auto-expires. `AirDrop` uses around 30 s for the visible prompt; we
@@ -33,7 +36,9 @@ const MAX_PENDING_OFFERS: usize = 64;
 const MAX_PENDING_OFFERS_PER_PEER: usize = 4;
 const MAX_SEEN_OFFER_IDS: usize = 4096;
 const MAX_SEEN_OFFER_IDS_PER_PEER: usize = 128;
+const MAX_PENDING_OFFER_RECEIPTS: usize = 512;
 const OFFER_REPLAY_WINDOW: Duration = Duration::from_secs(10 * 60);
+const OFFER_RECEIPT_WINDOW: Duration = Duration::from_secs(60 * 60);
 const MAX_OFFER_ID_BYTES: usize = 128;
 const MAX_DEVICE_NAME_BYTES: usize = 128;
 const MAX_OFFER_LABEL_BYTES: usize = 512;
@@ -146,6 +151,109 @@ pub struct OfferResolvedEvent {
     pub outcome: OfferDecision,
     /// Receiver's iroh node identifier, in hex.
     pub receiver_node_id: String,
+}
+
+/// Authenticated, content-bound receipt sent after a receive is verified and exported.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OfferSavedReceipt {
+    /// Offer identifier.
+    pub offer_id: String,
+    /// Root BLAKE3 hash that the receiver verified.
+    pub blob_hash: String,
+}
+
+/// Receiver-side context retained until an accepted offer has been saved.
+#[derive(Debug, Clone)]
+pub struct OfferSaveContext {
+    /// Original offer identifier.
+    pub offer_id: String,
+    /// Sender endpoint address discovered for its authenticated identity.
+    pub sender_addr: EndpointAddr,
+    /// Expected root content hash from the offer ticket.
+    pub blob_hash: Hash,
+}
+
+/// Frontend payload emitted only after a matching authenticated save receipt.
+#[derive(Debug, Clone, Serialize)]
+pub struct OfferSavedEvent {
+    /// Offer identifier.
+    pub offer_id: String,
+    /// Authenticated recipient identity.
+    pub receiver_node_id: String,
+}
+
+#[derive(Debug, Clone)]
+struct ExpectedOfferReceipt {
+    peer: EndpointId,
+    hash: Hash,
+    expires_at: Instant,
+}
+
+/// Bounded, one-use ledger for receipts matching offers sent by this node.
+#[derive(Debug, Clone, Default)]
+pub struct OfferReceiptLedger {
+    pending: Arc<Mutex<HashMap<String, ExpectedOfferReceipt>>>,
+}
+
+impl OfferReceiptLedger {
+    /// Creates an empty receipt ledger.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Registers the exact authenticated peer and content expected for an offer.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the identifier is invalid/duplicated or the bounded
+    /// receipt ledger is full.
+    pub async fn register(&self, offer_id: String, peer: EndpointId, hash: Hash) -> Result<()> {
+        if offer_id.is_empty() || offer_id.len() > MAX_OFFER_ID_BYTES {
+            return Err(LightningP2PError::Other(
+                "Invalid offer receipt identifier".into(),
+            ));
+        }
+        let mut pending = self.pending.lock().await;
+        pending.retain(|_, receipt| receipt.expires_at > Instant::now());
+        if pending.contains_key(&offer_id) {
+            return Err(LightningP2PError::Other(
+                "Duplicate offer receipt identifier".into(),
+            ));
+        }
+        if pending.len() >= MAX_PENDING_OFFER_RECEIPTS {
+            return Err(LightningP2PError::Other(
+                "Too many offers are awaiting save receipts".into(),
+            ));
+        }
+        pending.insert(
+            offer_id,
+            ExpectedOfferReceipt {
+                peer,
+                hash,
+                expires_at: Instant::now() + OFFER_RECEIPT_WINDOW,
+            },
+        );
+        Ok(())
+    }
+
+    /// Removes an offer that was rejected or could not be delivered.
+    pub async fn remove(&self, offer_id: &str) {
+        self.pending.lock().await.remove(offer_id);
+    }
+
+    /// Validates and consumes a one-use receipt against the authenticated peer.
+    pub async fn consume(&self, offer_id: &str, peer: EndpointId, hash: Hash) -> bool {
+        let mut pending = self.pending.lock().await;
+        pending.retain(|_, receipt| receipt.expires_at > Instant::now());
+        let matches = pending
+            .get(offer_id)
+            .is_some_and(|expected| expected.peer == peer && expected.hash == hash);
+        if matches {
+            pending.remove(offer_id);
+        }
+        matches
+    }
 }
 
 /// Frontend payload used to remove an offer whose request handler is inactive.
@@ -960,5 +1068,27 @@ mod tests {
         assert!(!inbox.is_ready_to_catch(&second).await);
         assert!(inbox.claim_ready_to_catch(&first).await);
         assert!(!inbox.claim_ready_to_catch(&second).await);
+    }
+
+    #[tokio::test]
+    async fn save_receipts_are_peer_and_content_bound_and_single_use() {
+        let ledger = OfferReceiptLedger::new();
+        let sender = iroh::SecretKey::from_bytes(&[21; 32]).public();
+        let wrong_peer = iroh::SecretKey::from_bytes(&[22; 32]).public();
+        let expected_hash = Hash::new(b"verified content");
+        let wrong_hash = Hash::new(b"different content");
+        ledger
+            .register("offer-save-1".into(), sender, expected_hash)
+            .await
+            .expect("register expected receipt");
+
+        assert!(
+            !ledger
+                .consume("offer-save-1", wrong_peer, expected_hash)
+                .await
+        );
+        assert!(!ledger.consume("offer-save-1", sender, wrong_hash).await);
+        assert!(ledger.consume("offer-save-1", sender, expected_hash).await);
+        assert!(!ledger.consume("offer-save-1", sender, expected_hash).await);
     }
 }

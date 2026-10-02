@@ -13,7 +13,7 @@ linked release evidence.
 - Android v0.5.1 as a signed sideload APK with share-target sends and public
   MediaStore destinations.
 
-### v0.9.25 beta channel
+### v0.9.26 beta channel
 
 - Windows, universal macOS DMG, Linux AppImage/deb/rpm, and CLI artifacts.
 - Lightning Chat in the Windows and Android apps plus the `/chat` Web lounge.
@@ -32,6 +32,9 @@ linked release evidence.
 - One prepared share can be offered to up to eight nearby devices. Each
   recipient independently accepts or declines and receives a peer-specific
   private access grant.
+- Nearby offers report acceptance immediately, then emit a separate saved
+  confirmation only after the receiver verifies and exports the content. The
+  one-use confirmation is matched to the authenticated peer and expected hash.
 - Legacy transfer stores are preserved and the node starts with a compatible
   store rather than stalling during initialization. Slow storage initialization
   is allowed to finish safely instead of being aborted while the database is

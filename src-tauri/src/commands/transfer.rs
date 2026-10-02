@@ -52,6 +52,7 @@ pub async fn start_receive(
         crate::transfer::receiver::ReceiveLimits::default(),
         None,
         None,
+        None,
     )
     .await
 }
@@ -155,6 +156,7 @@ pub async fn start_receive_discovered_share(
         window,
         ShareTicket::from_blob_ticket(ticket),
         crate::transfer::receiver::ReceiveLimits::default(),
+        None,
         None,
         None,
     )
@@ -285,6 +287,7 @@ pub async fn resume_transfer(
         record.limits,
         record.fallback_file_name.clone(),
         Some(record),
+        None,
     )
     .await
 }
@@ -391,6 +394,7 @@ pub(crate) async fn start_receive_from_offer(
     ticket: BlobTicket,
     auto_catch: bool,
     offer_label: String,
+    save_receipt: crate::node::nearby_offer::OfferSaveContext,
 ) -> CommandResult<String> {
     let limits = if auto_catch {
         crate::transfer::receiver::ReceiveLimits::ready_to_catch()
@@ -404,6 +408,7 @@ pub(crate) async fn start_receive_from_offer(
         limits,
         Some(offer_label),
         None,
+        Some(save_receipt),
     )
     .await
 }
@@ -415,6 +420,7 @@ async fn start_receive_ticket(
     limits: crate::transfer::receiver::ReceiveLimits,
     fallback_file_name: Option<String>,
     resume: Option<ResumableReceive>,
+    save_receipt: Option<crate::node::nearby_offer::OfferSaveContext>,
 ) -> CommandResult<String> {
     let activity = state.node_supervisor.begin_transfer_activity().await;
     let node = state.get_node().await.map_err(command_error)?;
@@ -476,6 +482,7 @@ async fn start_receive_ticket(
         fallback_file_name,
         data_dir: state.data_dir.clone(),
         resume_store: state.resumable_receives.clone(),
+        save_receipt,
     });
 
     Ok(transfer_id)
@@ -529,6 +536,7 @@ struct ReceiveLaunch {
     fallback_file_name: Option<String>,
     data_dir: std::path::PathBuf,
     resume_store: crate::storage::resumable_receives::ResumableReceiveStore,
+    save_receipt: Option<crate::node::nearby_offer::OfferSaveContext>,
 }
 
 fn spawn_receive_task(launch: ReceiveLaunch) {
@@ -547,6 +555,7 @@ fn spawn_receive_task(launch: ReceiveLaunch) {
         fallback_file_name,
         data_dir,
         resume_store,
+        save_receipt,
     } = launch;
     let context = crate::transfer::receiver::ReceiveContext {
         queue,
@@ -570,6 +579,21 @@ fn spawn_receive_task(launch: ReceiveLaunch) {
         .await
         .is_ok()
         {
+            if let Some(receipt) = save_receipt {
+                let wire_receipt = crate::node::nearby_offer::OfferSavedReceipt {
+                    offer_id: receipt.offer_id,
+                    blob_hash: receipt.blob_hash.to_string(),
+                };
+                if let Err(error) = crate::node::nearby_protocol::send_offer_saved_receipt(
+                    node.endpoint(),
+                    receipt.sender_addr,
+                    wire_receipt,
+                )
+                .await
+                {
+                    tracing::warn!(%error, "could not deliver verified nearby save receipt");
+                }
+            }
             if crate::crypto::delete_receive_resume_ticket(&data_dir, &transfer_id).is_err() {
                 tracing::warn!("could not remove completed receive credential");
             }

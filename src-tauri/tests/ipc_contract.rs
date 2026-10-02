@@ -1,5 +1,5 @@
 use lightning_p2p_lib::commands::nearby::NearbyOfferAttempt;
-use lightning_p2p_lib::node::nearby_offer::{FlickDirection, OfferDecision};
+use lightning_p2p_lib::node::nearby_offer::{FlickDirection, OfferDecision, OfferSavedEvent};
 use lightning_p2p_lib::node::nearby_protocol::WireBlobFormat;
 use lightning_p2p_lib::node::{
     IncomingOffer, NearbyDevice, NearbyRouteHint, NearbyTransport, NodeSupervisorPhase,
@@ -126,6 +126,18 @@ fn nearby_offer_attempt_matches_the_shared_contract() {
     assert_eq!(
         serde_json::to_value(attempt).expect("serialize offer attempt"),
         contracts()["nearby_offer_attempt"]
+    );
+}
+
+#[test]
+fn nearby_offer_saved_event_matches_the_shared_contract() {
+    let event = OfferSavedEvent {
+        offer_id: "offer-1".into(),
+        receiver_node_id: "0123456789abcdef".into(),
+    };
+    assert_eq!(
+        serde_json::to_value(event).expect("serialize saved event"),
+        contracts()["nearby_offer_saved"]
     );
 }
 

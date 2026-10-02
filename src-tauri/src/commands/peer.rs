@@ -85,6 +85,7 @@ pub async fn retry_node_startup(
             NearbyServices::new(
                 state.nearby_shares.clone(),
                 state.offer_inbox.clone(),
+                state.offer_receipts.clone(),
                 state.blocked_peers.clone(),
                 state.paired_devices.clone(),
             ),

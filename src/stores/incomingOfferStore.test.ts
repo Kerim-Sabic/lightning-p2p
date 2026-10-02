@@ -111,4 +111,28 @@ describe("incoming offer queue", () => {
     expect(outbound["offer-0"]).toBeUndefined();
     expect(outbound["offer-newest"]?.receiverNodeId).toBe("peer-newest");
   });
+
+  it("keeps verified-save completion when acceptance events arrive late", () => {
+    const store = useIncomingOfferStore.getState();
+    store.applyOfferSaved({
+      offer_id: "fast-offer",
+      receiver_node_id: "peer-a",
+    });
+    store.recordOutbound({
+      offerId: "fast-offer",
+      receiverNodeId: "peer-a",
+      status: "accepted",
+      message: "Accepted by Nearby device",
+      updatedAt: Date.now(),
+    });
+    store.applyOfferResolved({
+      offer_id: "fast-offer",
+      receiver_node_id: "peer-a",
+      outcome: "accepted",
+    });
+
+    expect(useIncomingOfferStore.getState().outbound["fast-offer"]?.status).toBe(
+      "saved",
+    );
+  });
 });

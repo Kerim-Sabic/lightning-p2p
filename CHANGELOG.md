@@ -64,6 +64,16 @@ All notable changes to Lightning P2P are documented here. The project follows se
 
 ## [Unreleased]
 
+## [0.9.26] - 2026-10-02 ("Verified Nearby Handoffs")
+
+- Keep offer acceptance separate from verified save completion. Receivers send
+  a peer-authenticated, one-use receipt only after the BLAKE3-verified content
+  has been exported successfully.
+- Bind receipts to the original offer, authenticated recipient, and exact blob
+  hash; keep the pending receipt ledger bounded and expiring.
+- Show senders a distinct verified-and-saved state while retaining approximate
+  screen-relative Flick arrival cues.
+
 ## [0.9.25] - 2026-10-02 ("Reliable Nearby Handoffs")
 
 - Offer one prepared share to up to eight nearby devices with independent

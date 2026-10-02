@@ -649,8 +649,14 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
   };
 
   const liveBatchStatusFor = (nodeId: string): string | null => {
-    if (!batchBusy || batchStartedAt === null) return null;
     const latest = Object.values(outboundOffers)
+      .filter((offer) => offer.receiverNodeId === nodeId)
+      .sort((left, right) => right.updatedAt - left.updatedAt)[0];
+    if (latest?.status === "saved") return "Verified and saved on receiver";
+    if (!batchBusy || batchStartedAt === null) {
+      return latest?.status === "accepted" ? "Offer accepted · receiving" : null;
+    }
+    const currentBatchOffer = Object.values(outboundOffers)
       .filter(
         (offer) =>
           offer.receiverNodeId === nodeId &&
@@ -658,11 +664,11 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
           !batchBaselineOfferIds.current.has(offer.offerId),
       )
       .sort((left, right) => right.updatedAt - left.updatedAt)[0];
-    if (!latest) return "Queued or waiting for this device";
-    if (latest.status === "accepted") return "Offer accepted";
-    if (latest.status === "rejected") return "Declined";
-    if (latest.status === "expired") return "No response";
-    if (latest.status === "error") return latest.message ?? "Offer failed";
+    if (!currentBatchOffer) return "Queued or waiting for this device";
+    if (currentBatchOffer.status === "accepted") return "Offer accepted";
+    if (currentBatchOffer.status === "rejected") return "Declined";
+    if (currentBatchOffer.status === "expired") return "No response";
+    if (currentBatchOffer.status === "error") return currentBatchOffer.message ?? "Offer failed";
     return "Waiting for acceptance";
   };
 
@@ -1127,14 +1133,12 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
     const statusText = batchResult?.attempt?.error
       ? batchResult.attempt.error
       : batchResult?.attempt?.outcome === "accepted"
-        ? "Offer accepted"
+        ? (liveStatus ?? "Offer accepted")
         : batchResult?.attempt?.outcome === "rejected"
           ? "Declined"
           : batchResult?.attempt?.outcome === "expired"
             ? "No response"
-            : batchResult?.pending
-              ? liveStatus
-              : null;
+            : liveStatus;
 
     return (
     <div
@@ -1271,13 +1275,15 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
           </span>
         </div>
       ) : null}
-      {selected && statusText ? (
+      {statusText ? (
         <span
           role="status"
           aria-live="polite"
           className="basis-full pl-1 text-xs text-[var(--fg-secondary)]"
         >
-          {batchResult?.pending && batchBusy ? statusText : `Group send · ${statusText}`}
+          {!selected || (batchResult?.pending && batchBusy)
+            ? statusText
+            : `Group send · ${statusText}`}
         </span>
       ) : null}
     </div>

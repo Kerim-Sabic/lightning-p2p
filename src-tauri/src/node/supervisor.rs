@@ -5,7 +5,7 @@ use super::{
     NearbyShareProtocol, NodeRuntimeStatus,
 };
 use crate::error::{LightningP2PError, Result};
-use crate::node::{NearbyShareRegistry, OfferInbox};
+use crate::node::{nearby_offer::OfferReceiptLedger, NearbyShareRegistry, OfferInbox};
 use crate::storage::blocked_peers::BlockedPeers;
 use crate::storage::paired_devices::PairedDevices;
 use crate::storage::settings::AppSettings;
@@ -35,6 +35,7 @@ const NODE_START_RECOVERY_AFTER: Duration = Duration::from_secs(5 * 60);
 pub(crate) struct NearbyServices {
     registry: NearbyShareRegistry,
     offers: OfferInbox,
+    receipts: OfferReceiptLedger,
     blocked_peers: BlockedPeers,
     paired_devices: PairedDevices,
 }
@@ -43,12 +44,14 @@ impl NearbyServices {
     pub(crate) fn new(
         registry: NearbyShareRegistry,
         offers: OfferInbox,
+        receipts: OfferReceiptLedger,
         blocked_peers: BlockedPeers,
         paired_devices: PairedDevices,
     ) -> Self {
         Self {
             registry,
             offers,
+            receipts,
             blocked_peers,
             paired_devices,
         }
@@ -410,6 +413,7 @@ impl NodeSupervisor {
         let nearby_protocol = Arc::new(NearbyShareProtocol::new(
             nearby.registry,
             nearby.offers,
+            nearby.receipts,
             nearby.blocked_peers,
             nearby.paired_devices,
             app.clone(),

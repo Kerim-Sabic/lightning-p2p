@@ -11,6 +11,7 @@ import {
   onNearbyDiagnosticState,
   onNodeSupervisorStatus,
   onOfferResolved,
+  onOfferSaved,
   onTransferProgress,
   recordFrontendDiagnostic,
   startBleDiscovery,
@@ -330,6 +331,19 @@ export function useTransfer(): void {
     return attachAsyncUnlisten(
       onOfferResolved((resolved) => {
         useIncomingOfferStore.getState().applyOfferResolved(resolved);
+      }),
+      handleSubscriptionError,
+    );
+  }, [handleSubscriptionError, inTauriRuntime]);
+
+  useEffect(() => {
+    if (!inTauriRuntime) {
+      return;
+    }
+
+    return attachAsyncUnlisten(
+      onOfferSaved((saved) => {
+        useIncomingOfferStore.getState().applyOfferSaved(saved);
       }),
       handleSubscriptionError,
     );

@@ -19,8 +19,8 @@ pub mod transfer;
 
 use error::{LightningP2PError, Result};
 use node::{
-    chat_mesh::ChatMeshRuntime, LightningP2PNode, NearbyServices, NearbyShareRegistry,
-    NodeRuntimeStatus, NodeSupervisor, OfferInbox,
+    chat_mesh::ChatMeshRuntime, nearby_offer::OfferReceiptLedger, LightningP2PNode, NearbyServices,
+    NearbyShareRegistry, NodeRuntimeStatus, NodeSupervisor, OfferInbox,
 };
 use std::sync::{atomic::AtomicBool, Arc};
 use storage::{
@@ -57,6 +57,8 @@ pub struct AppState {
     pub nearby_shares: NearbyShareRegistry,
     /// Inbox of inbound push-share offers awaiting a user decision.
     pub offer_inbox: OfferInbox,
+    /// Bounded ledger for sender-side verified-save receipts.
+    pub offer_receipts: OfferReceiptLedger,
     /// Guards the BLE discovery drain loop so only one poller runs.
     pub ble_polling_active: Arc<AtomicBool>,
     /// Isolated native encrypted chat-mesh state.
@@ -129,6 +131,7 @@ impl AppState {
             resumable_receives,
             nearby_shares: NearbyShareRegistry::new(true),
             offer_inbox: OfferInbox::new(),
+            offer_receipts: OfferReceiptLedger::new(),
             ble_polling_active: Arc::new(AtomicBool::new(false)),
             chat_mesh: Arc::new(Mutex::new(chat_mesh)),
             chat_mesh_polling_active: Arc::new(AtomicBool::new(false)),
@@ -230,6 +233,7 @@ fn spawn_node_startup(handle: tauri::AppHandle) {
                 NearbyServices::new(
                     state.nearby_shares.clone(),
                     state.offer_inbox.clone(),
+                    state.offer_receipts.clone(),
                     state.blocked_peers.clone(),
                     state.paired_devices.clone(),
                 ),

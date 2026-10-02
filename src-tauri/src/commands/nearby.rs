@@ -2,7 +2,7 @@
 
 use crate::commands::{command_error, CommandResult};
 use crate::node::nearby_offer::{
-    emit_offer_resolved, FlickDirection, OfferDecision, OfferShareMessage,
+    emit_offer_resolved, FlickDirection, OfferDecision, OfferReceiptLedger, OfferShareMessage,
 };
 use crate::node::nearby_protocol::{local_device_name, send_offer, WireBlobFormat};
 use crate::node::{IncomingOffer, NearbyDevice};
@@ -152,14 +152,24 @@ pub async fn offer_share_to_peer(
     node.authorize_private_peer(target_node_id, outcome.hash)
         .await
         .map_err(String::from)?;
+    if let Err(error) = state
+        .offer_receipts
+        .register(offer_id.clone(), target_node_id, outcome.hash)
+        .await
+    {
+        node.revoke_private_peer(target_node_id, outcome.hash).await;
+        return Err(String::from(error));
+    }
     let decision = match send_offer(node.endpoint(), target_addr, message).await {
         Ok(decision) => decision,
         Err(error) => {
+            state.offer_receipts.remove(&offer_id).await;
             node.revoke_private_peer(target_node_id, outcome.hash).await;
             return Err(String::from(error));
         }
     };
     if decision != OfferDecision::Accepted {
+        state.offer_receipts.remove(&offer_id).await;
         node.revoke_private_peer(target_node_id, outcome.hash).await;
     }
 
@@ -212,6 +222,7 @@ pub async fn offer_share_to_peers(
         app_handle,
         node,
         state.nearby_shares.clone(),
+        state.offer_receipts.clone(),
         recipients,
         share,
     )
@@ -222,6 +233,7 @@ async fn send_prepared_share_to_recipients(
     app_handle: tauri::AppHandle,
     node: std::sync::Arc<crate::node::LightningP2PNode>,
     nearby_shares: crate::node::NearbyShareRegistry,
+    receipts: OfferReceiptLedger,
     recipients: Vec<EndpointId>,
     share: crate::transfer::sender::ShareOutcome,
 ) -> Vec<NearbyOfferAttempt> {
@@ -229,10 +241,18 @@ async fn send_prepared_share_to_recipients(
         let app_handle = app_handle.clone();
         let node = node.clone();
         let nearby_shares = nearby_shares.clone();
+        let receipts = receipts.clone();
         let share = share.clone();
         async move {
-            send_prepared_share_to_recipient(app_handle, node, nearby_shares, recipient, share)
-                .await
+            send_prepared_share_to_recipient(
+                app_handle,
+                node,
+                nearby_shares,
+                receipts,
+                recipient,
+                share,
+            )
+            .await
         }
     }))
     .buffer_unordered(BATCH_OFFER_CONCURRENCY)
@@ -244,6 +264,7 @@ async fn send_prepared_share_to_recipient(
     app_handle: tauri::AppHandle,
     node: std::sync::Arc<crate::node::LightningP2PNode>,
     nearby_shares: crate::node::NearbyShareRegistry,
+    receipts: OfferReceiptLedger,
     recipient: EndpointId,
     share: crate::transfer::sender::ShareOutcome,
 ) -> NearbyOfferAttempt {
@@ -268,9 +289,17 @@ async fn send_prepared_share_to_recipient(
         node.authorize_private_peer(recipient, share.hash)
             .await
             .map_err(String::from)?;
+        if let Err(error) = receipts
+            .register(offer_id.clone(), recipient, share.hash)
+            .await
+        {
+            node.revoke_private_peer(recipient, share.hash).await;
+            return Err(String::from(error));
+        }
         match send_offer(node.endpoint(), target_addr, message).await {
             Ok(decision) => Ok(decision),
             Err(error) => {
+                receipts.remove(&offer_id).await;
                 node.revoke_private_peer(recipient, share.hash).await;
                 Err(String::from(error))
             }
@@ -281,6 +310,7 @@ async fn send_prepared_share_to_recipient(
     match attempt {
         Ok(outcome) => {
             if outcome != OfferDecision::Accepted {
+                receipts.remove(&offer_id).await;
                 node.revoke_private_peer(recipient, share.hash).await;
             }
             if let Err(error) =
@@ -295,12 +325,15 @@ async fn send_prepared_share_to_recipient(
                 error: None,
             }
         }
-        Err(error) => NearbyOfferAttempt {
-            receiver_node_id: recipient.to_string(),
-            offer_id: Some(offer_id),
-            outcome: None,
-            error: Some(error),
-        },
+        Err(error) => {
+            receipts.remove(&offer_id).await;
+            NearbyOfferAttempt {
+                receiver_node_id: recipient.to_string(),
+                offer_id: Some(offer_id),
+                outcome: None,
+                error: Some(error),
+            }
+        }
     }
 }
 
@@ -471,13 +504,18 @@ pub async fn respond_to_offer(
             .await
             .unwrap_or_else(|| EndpointAddr::new(sender_node_id));
 
-        let ticket = iroh_blobs::ticket::BlobTicket::new(node_addr, hash, blob_format);
+        let ticket = iroh_blobs::ticket::BlobTicket::new(node_addr.clone(), hash, blob_format);
         crate::commands::transfer::start_receive_from_offer(
             state,
             window,
             ticket,
             auto_catch,
             offer.label.clone(),
+            crate::node::nearby_offer::OfferSaveContext {
+                offer_id: offer.offer_id.clone(),
+                sender_addr: node_addr,
+                blob_hash: hash,
+            },
         )
         .await
     }

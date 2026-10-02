@@ -64,6 +64,10 @@
     "outcome": "accepted",
     "error": null
   },
+  "nearby_offer_saved": {
+    "offer_id": "offer-1",
+    "receiver_node_id": "0123456789abcdef"
+  },
   "node_supervisor_status": {
     "phase": "starting",
     "last_reason": "app_startup",

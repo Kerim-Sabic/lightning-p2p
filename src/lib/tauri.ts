@@ -434,6 +434,11 @@ export interface OfferResolved {
   receiver_node_id: string;
 }
 
+export interface OfferSaved {
+  offer_id: string;
+  receiver_node_id: string;
+}
+
 export interface NearbyOfferAttempt {
   receiver_node_id: string;
   offer_id: string | null;
@@ -1636,6 +1641,18 @@ export function onOfferResolved(
   }
 
   return listen<OfferResolved>("nearby-offer-resolved", ({ payload }) => {
+    callback(payload);
+  });
+}
+
+export function onOfferSaved(
+  callback: (saved: OfferSaved) => void,
+): Promise<UnlistenFn> {
+  if (!isDesktopRuntime()) {
+    return Promise.resolve(() => {});
+  }
+
+  return listen<OfferSaved>("nearby-offer-saved", ({ payload }) => {
     callback(payload);
   });
 }

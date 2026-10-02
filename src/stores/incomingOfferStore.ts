@@ -1,10 +1,14 @@
 import { create } from "zustand";
-import { type IncomingOffer, type OfferResolved } from "../lib/tauri";
+import {
+  type IncomingOffer,
+  type OfferResolved,
+  type OfferSaved,
+} from "../lib/tauri";
 
 interface OutboundOfferStatus {
   offerId: string;
   receiverNodeId: string | null;
-  status: "pending" | "accepted" | "rejected" | "expired" | "error";
+  status: "pending" | "accepted" | "saved" | "rejected" | "expired" | "error";
   message: string | null;
   updatedAt: number;
 }
@@ -23,6 +27,7 @@ interface IncomingOfferStore {
   clearIncoming: () => void;
   recordOutbound: (status: OutboundOfferStatus) => void;
   applyOfferResolved: (resolved: OfferResolved) => void;
+  applyOfferSaved: (saved: OfferSaved) => void;
   clearOutbound: (offerId: string) => void;
 }
 
@@ -151,9 +156,17 @@ export const useIncomingOfferStore = create<IncomingOfferStore>((set) => ({
   clearIncoming: () => set({ queue: [], dismissedOfferKeys: {} }),
 
   recordOutbound: (status) =>
-    set((state) => ({
-      outbound: appendOutboundOffer(state.outbound, status),
-    })),
+    set((state) => {
+      const existing = state.outbound[status.offerId];
+      return {
+        outbound: appendOutboundOffer(state.outbound, {
+          ...status,
+          ...(existing?.status === "saved"
+            ? { status: "saved" as const, message: existing.message }
+            : {}),
+        }),
+      };
+    }),
 
   applyOfferResolved: (resolved) =>
     set((state) => {
@@ -162,8 +175,22 @@ export const useIncomingOfferStore = create<IncomingOfferStore>((set) => ({
         outbound: appendOutboundOffer(state.outbound, {
           offerId: resolved.offer_id,
           receiverNodeId: resolved.receiver_node_id,
-          status: resolved.outcome,
+          status: existing?.status === "saved" ? "saved" : resolved.outcome,
           message: existing?.message ?? null,
+          updatedAt: Date.now(),
+        }),
+      };
+    }),
+
+  applyOfferSaved: (saved) =>
+    set((state) => {
+      const existing = state.outbound[saved.offer_id];
+      return {
+        outbound: appendOutboundOffer(state.outbound, {
+          offerId: saved.offer_id,
+          receiverNodeId: saved.receiver_node_id,
+          status: "saved",
+          message: existing?.message ?? "Verified and saved on receiver",
           updatedAt: Date.now(),
         }),
       };
