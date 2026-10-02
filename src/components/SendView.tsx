@@ -95,6 +95,7 @@ function uniquePaths(paths: string[]): string[] {
 }
 
 const SELECTION_PAGE_SIZE = 24;
+let nearbyOfferInProgress = false;
 
 function iconForSelection(name: string, isDir: boolean) {
   if (isDir) {
@@ -406,12 +407,14 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
   ): Promise<void> => {
     const initial = useTransferStore.getState();
     if (
+      nearbyOfferInProgress ||
       busyNodeId !== null ||
       initial.isPreparingSelection ||
       initial.isSharing
     ) {
       return;
     }
+    nearbyOfferInProgress = true;
     setBusyNodeId(device.node_id);
     setError(null);
     try {
@@ -422,10 +425,29 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
 
         const current = useTransferStore.getState();
         if (current.isPreparingSelection || current.isSharing) return;
-        await prepareShareSelection(pickedPaths);
+        const selectionCommitted = await prepareShareSelection(pickedPaths);
+        if (!selectionCommitted) {
+          const preparation = useTransferStore.getState();
+          setError(
+            preparation.error ??
+              "Those files changed while they were being prepared. Choose them again and retry.",
+          );
+          return;
+        }
 
         const prepared = useTransferStore.getState();
         paths = prepared.shareSelection.map((item) => item.path);
+        const expectedPaths = uniquePaths(pickedPaths);
+        if (
+          paths.length !== expectedPaths.length ||
+          paths.some((path, index) => path !== expectedPaths[index])
+        ) {
+          setError(
+            prepared.error ??
+              "The selected files changed while they were being prepared. Review them and send again.",
+          );
+          return;
+        }
         if (paths.length === 0) {
           setError(prepared.error ?? "Lightning could not prepare those files.");
           return;
@@ -458,6 +480,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
     } catch (error) {
       setError(error instanceof Error ? error.message : "Could not send offer");
     } finally {
+      nearbyOfferInProgress = false;
       setBusyNodeId(null);
     }
   };

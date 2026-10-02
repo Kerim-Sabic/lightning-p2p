@@ -45,6 +45,13 @@ All notable changes to Lightning P2P are documented here. The project follows se
 - Key completed receive history by transfer ID and block stale resume requests
   after the saved transfer's completion event was lost.
 
+## [0.9.23] - 2026-10-02 ("Single-Offer Handoffs")
+
+- Prevent rapid Flick, click, and drop events from creating overlapping offers.
+- Confirm a file-picker selection is still the one prepared before offering it
+  to the chosen device.
+- Keep version 0.9.22's clearer, accessible navigation and startup recovery.
+
 ## [0.9.22] - 2026-10-02 ("Reliable Handoff and Clearer Workspace")
 
 - Keep navigation focused on Lightning and active transfers; move route
