@@ -20,7 +20,7 @@ const tabItems: Array<{
 
 export function MobileTabBar({ currentView, onNavigate }: MobileTabBarProps) {
   return (
-    <nav className="mobile-tab-bar" aria-label="Primary">
+    <nav className="mobile-tab-bar" aria-label="Primary navigation">
       {tabItems.map((item) => {
         const Icon = item.icon;
         const active = currentView === item.id;
@@ -35,7 +35,7 @@ export function MobileTabBar({ currentView, onNavigate }: MobileTabBarProps) {
             <span className="relative">
               <Icon className="h-[19px] w-[19px]" />
             </span>
-            <span className="text-[11px] font-medium">{item.label}</span>
+            <span className="text-xs font-medium">{item.label}</span>
           </button>
         );
       })}

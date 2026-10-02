@@ -29,6 +29,7 @@
   --fg-muted: #858d9a;
   --accent-primary: #315eff;
   --accent-primary-hover: #456eff;
+  --accent-foreground: #a9b9ff;
   --accent-subtle: rgba(49, 94, 255, 0.14);
   --accent-border: rgba(112, 143, 255, 0.34);
   --state-success: #6ee7b7;
@@ -78,6 +79,7 @@
   --fg-muted: #687180;
   --accent-primary: #315eff;
   --accent-primary-hover: #244fe8;
+  --accent-foreground: #244fe8;
   --accent-subtle: rgba(49, 94, 255, 0.09);
   --accent-border: rgba(49, 94, 255, 0.28);
   --state-success: #15803d;
@@ -126,6 +128,7 @@
     --fg-muted: #687180;
     --accent-primary: #315eff;
     --accent-primary-hover: #244fe8;
+    --accent-foreground: #244fe8;
     --accent-subtle: rgba(49, 94, 255, 0.09);
     --accent-border: rgba(49, 94, 255, 0.28);
     --state-success: #15803d;
@@ -1137,14 +1140,20 @@ body.app-hydrated .static-seo-fallback {
     background: transparent;
   }
 
+  .nav-button:focus-visible,
+  .mobile-tab-button:focus-visible {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 2px;
+  }
+
   .nav-button:hover {
     border-color: rgba(255, 255, 255, 0.07);
     background: rgba(255, 255, 255, 0.03);
   }
 
   .nav-button-active {
-    border-color: rgba(255, 255, 255, 0.08);
-    background: rgba(255, 255, 255, 0.05);
+    border-color: var(--accent-border);
+    background: var(--accent-subtle);
   }
 
   .nav-icon {
@@ -1156,7 +1165,7 @@ body.app-hydrated .static-seo-fallback {
   .nav-icon-active {
     border-color: var(--accent-border);
     background: var(--accent-subtle);
-    color: #aabaff;
+    color: var(--accent-foreground);
   }
 
   .mobile-tab-bar {
@@ -1280,9 +1289,9 @@ body.app-hydrated .static-seo-fallback {
   }
 
   .mobile-tab-button-active {
-    border-color: rgba(125, 211, 252, 0.14);
-    background: rgba(56, 189, 248, 0.1);
-    color: oklch(96% 0.016 230);
+    border-color: var(--accent-border);
+    background: var(--accent-subtle);
+    color: var(--accent-foreground);
   }
 
   .page-eyebrow {

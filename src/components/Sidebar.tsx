@@ -20,24 +20,8 @@ const navItems: Array<{
   { id: "settings", label: "Settings", icon: Settings2 },
 ];
 
-function routeLabel(onlineState: string): string {
-  switch (onlineState) {
-    case "direct_ready":
-      return "Direct ready";
-    case "relay_ready":
-      return "Relay ready";
-    case "degraded":
-      return "Warming";
-    case "offline":
-      return "Offline";
-    case "starting":
-    default:
-      return "Starting";
-  }
-}
-
 export function Sidebar({ currentView, onNavigate }: SidebarProps) {
-  const { activeTransferCount, nodeStatus } = useNavigationSnapshot();
+  const { activeTransferCount } = useNavigationSnapshot();
 
   return (
     <aside className="flex w-[228px] shrink-0 flex-col border-r border-white/[0.05] px-3 pb-3 pt-4">
@@ -52,23 +36,20 @@ export function Sidebar({ currentView, onNavigate }: SidebarProps) {
           </div>
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold tracking-[-0.02em] text-white">
-              Lightning P2P
+              Lightning
             </p>
-            <p className="truncate text-[11px] text-slate-500">
-              Direct-first transfer
+            <p className="truncate text-xs text-slate-500">
+              Private file transfer
             </p>
           </div>
         </div>
 
-        <div className="mt-3 flex items-center gap-2 text-[11px] text-slate-400">
-          <span className="chrome-pill px-2.5 py-1">
-            <Radar className="h-3 w-3 text-sky-200/80" />
-            {routeLabel(nodeStatus.online_state)}
-          </span>
-          {activeTransferCount > 0 ? (
-            <span className="text-slate-500">{activeTransferCount} live</span>
-          ) : null}
-        </div>
+        {activeTransferCount > 0 ? (
+          <p className="mt-3 text-xs text-[var(--fg-secondary)]" role="status">
+            {activeTransferCount} active transfer
+            {activeTransferCount === 1 ? "" : "s"}
+          </p>
+        ) : null}
       </div>
 
       <nav className="mt-4 flex flex-col gap-1.5">

@@ -45,10 +45,17 @@ All notable changes to Lightning P2P are documented here. The project follows se
 - Key completed receive history by transfer ID and block stale resume requests
   after the saved transfer's completion event was lost.
 
-## [Unreleased]
+## [0.9.22] - 2026-10-02 ("Reliable Handoff and Clearer Workspace")
 
-- Serialize Android share-sheet drains across focus events and avoid creating a
-  share from a selection that was superseded while its paths were resolving.
+- Keep navigation focused on Lightning and active transfers; move route
+  diagnostics out of the sidebar and window title bar.
+- Use accessible cobalt active states and readable mobile navigation labels.
+- Serialize Android share-sheet drains across focus events and skip share
+  creation when the selected files were superseded during preparation.
+- Preserve same-side Flick arrival cues, bounded blob requests, and actionable
+  recovery when local transfer storage takes too long to open.
+
+## [Unreleased]
 
 ## [0.9.16] - 2026-10-01 ("Reliable Startup and Receiving")
 

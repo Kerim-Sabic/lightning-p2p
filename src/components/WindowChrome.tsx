@@ -1,4 +1,4 @@
-import { Copy, Minus, Radar, Square, X } from "lucide-react";
+import { Copy, Minus, Square, X } from "lucide-react";
 import { useEffect, useEffectEvent, useState } from "react";
 import type { View } from "../App";
 import lightningMark from "../assets/lightning-p2p-mark.png";
@@ -15,22 +15,6 @@ import { useTransferStore } from "../stores/transferStore";
 
 interface WindowChromeProps {
   currentView: View;
-}
-
-function routeLabel(onlineState: string): string {
-  switch (onlineState) {
-    case "direct_ready":
-      return "Direct ready";
-    case "relay_ready":
-      return "Relay ready";
-    case "degraded":
-      return "Warming";
-    case "offline":
-      return "Offline";
-    case "starting":
-    default:
-      return "Starting";
-  }
 }
 
 function viewLabel(view: View): string {
@@ -55,14 +39,6 @@ export function WindowChrome({ currentView }: WindowChromeProps) {
   // macOS renders native traffic lights over the top-left of the overlay
   // title bar, so inset the brand block and skip the custom controls.
   const isMac = platformProfile.platform_kind === "macos";
-  const nodeStatus = useTransferStore((state) => state.nodeStatus);
-  const activeTransferCount = useTransferStore(
-    (state) =>
-      Object.values(state.transfers).filter(
-        (transfer) =>
-          transfer.status === "starting" || transfer.status === "running",
-      ).length,
-  );
   const setError = useTransferStore((state) => state.setError);
   const [windowState, setWindowState] = useState({
     focused: true,
@@ -132,7 +108,7 @@ export function WindowChrome({ currentView }: WindowChromeProps) {
 
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold tracking-[-0.02em] text-white">
-            Lightning P2P
+            Lightning
           </p>
           <p className="truncate text-[11px] text-slate-500">
             {viewLabel(currentView)}
@@ -151,16 +127,8 @@ export function WindowChrome({ currentView }: WindowChromeProps) {
             }),
           )
         }
-        className="mx-4 flex min-w-0 flex-1 items-center justify-center"
-      >
-        <div className="chrome-pill">
-          <Radar className="h-3.5 w-3.5 text-sky-200/80" />
-          <span>{routeLabel(nodeStatus.online_state)}</span>
-          {activeTransferCount > 0 ? (
-            <span className="text-slate-500">{activeTransferCount} live</span>
-          ) : null}
-        </div>
-      </div>
+        className="mx-4 min-w-0 flex-1"
+      />
 
       {desktopRuntime && !isMac ? (
         <div className="ml-4 flex items-center gap-1">
