@@ -13,7 +13,7 @@ linked release evidence.
 - Android v0.5.1 as a signed sideload APK with share-target sends and public
   MediaStore destinations.
 
-### v0.9.30 beta channel
+### v0.9.31 beta channel
 
 - Windows, universal macOS DMG, Linux AppImage/deb/rpm, and CLI artifacts.
 - Lightning Chat in the Windows and Android apps plus the `/chat` Web lounge.
@@ -37,6 +37,9 @@ linked release evidence.
   one-use confirmation is matched to the authenticated peer and expected hash.
 - Native receive links are read on cold start, and subsequent desktop links are
   forwarded to the existing app instance.
+- Startup-critical JSON state is bounded before parsing across settings,
+  trusted devices, nearby blocks, receive recovery, and chat-mesh persistence.
+- Settings now sits below Transfer, Devices, Chat, and Activity in the sidebar.
 - Nearby save receipts survive without optional resume credentials, and receive
   completion is reported only after its history record is durably flushed.
 - Legacy transfer stores are preserved and the node starts with a compatible

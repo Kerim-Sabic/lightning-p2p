@@ -2,6 +2,15 @@
 
 All notable changes to Lightning P2P are documented here. The project follows semantic versioning where practical.
 
+## [0.9.31] - 2026-10-02 ("Startup-Safe Recovery")
+
+- Bound startup reads and writes for chat-mesh archives, courier envelopes,
+  private groups, trusted peers, settings, paired devices, nearby blocks, and
+  receive-recovery metadata. Oversized state is rejected before full parsing;
+  preserved user data is not overwritten during recovery.
+- Move Settings below the everyday Transfer, Devices, Chat, and Activity
+  navigation.
+
 ## [0.9.30] - 2026-10-02 ("Reliable Receive Links")
 
 - Read receive links at cold start and route links opened later to the running
