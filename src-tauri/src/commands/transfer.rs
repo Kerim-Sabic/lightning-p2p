@@ -476,15 +476,17 @@ async fn start_receive_ticket(
             .resumable_receives
             .save(record)
             .map_err(command_error)?;
-    } else if let Ok(encoded_ticket) = ticket.encode_for_resume() {
-        if crate::crypto::store_receive_resume_ticket(
-            &state.data_dir,
-            &transfer_id,
-            &encoded_ticket,
-        )
-        .is_ok()
-        {
-            info.can_resume = true;
+    } else {
+        let can_resume = ticket.encode_for_resume().is_ok_and(|encoded_ticket| {
+            crate::crypto::store_receive_resume_ticket(
+                &state.data_dir,
+                &transfer_id,
+                &encoded_ticket,
+            )
+            .is_ok()
+        });
+        if can_resume || save_receipt.is_some() {
+            info.can_resume = can_resume;
             let record = ResumableReceive {
                 transfer: info.clone(),
                 limits,
@@ -498,7 +500,10 @@ async fn start_receive_ticket(
             };
             if state.resumable_receives.save(record).is_err() {
                 info.can_resume = false;
-                let _ = crate::crypto::delete_receive_resume_ticket(&state.data_dir, &transfer_id);
+                if can_resume {
+                    let _ =
+                        crate::crypto::delete_receive_resume_ticket(&state.data_dir, &transfer_id);
+                }
             }
         }
     }

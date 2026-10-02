@@ -260,11 +260,28 @@ async fn finish_receive_result(
             if let Err(_error) = save_peer_no_flush(node, &summary.peer) {
                 tracing::warn!("could not update received peer history");
             }
-            if let Err(_error) = save_receive_record_no_flush(node, &summary) {
-                tracing::warn!("could not save receive history record");
-            }
-            if let Err(_error) = node.db().flush() {
-                tracing::warn!("could not flush receive history");
+            if let Err(error) =
+                save_receive_record_no_flush(node, &summary).and_then(|()| node.db().flush())
+            {
+                tracing::error!(%error, "could not durably save receive history");
+                queue.remove(&transfer_id).await;
+                let phase = progress.phase_snapshot();
+                let error_payload = receive_error_payload(&error, phase);
+                let failure_category = failure_category_from_payload(&error_payload, phase, &error);
+                progress.set_phase(match failure_category {
+                    FailureCategory::Cancelled => TransferPhase::Cancelled,
+                    _ => TransferPhase::Failed,
+                });
+                let route_kind = progress.metrics_snapshot().route_kind;
+                let _ = sampler.finish().await;
+                let error_message = error_payload.message.clone();
+                let _ = reporter.emit_failed_with_payload(
+                    &error_message,
+                    route_kind,
+                    Some(failure_category),
+                    Some(error_payload),
+                );
+                return Err(error);
             }
             queue.remove(&transfer_id).await;
             progress.set(summary.size, summary.size);
