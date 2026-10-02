@@ -88,7 +88,7 @@ Nearby discovery publishes device presence and a human-readable name over iroh's
 - See the device's NodeId, human-readable device name, and route hint. A verified peer can also see the active share label, size, content hash, and timestamp.
 - Send a push-style **offer** to this device via the nearby ALPN (`lightning-p2p/nearby/2`). The receiver always sees an Accept/Decline prompt before any file bytes flow; declining sends an `OfferDecision::Rejected` back over the same QUIC stream and nothing is transferred.
 
-The nearby ALPN is a tagged-enum protocol with three message types: `Hello` (device-name probe), `ListShares` (the legacy pull flow), and `OfferShare` (push). All three travel inside iroh's QUIC connection, which is already authenticated by NodeId and encrypted with TLS 1.3.
+The nearby ALPN is a tagged-enum protocol with four message types: `Hello` (device-name probe), `ListShares` (the legacy pull flow), `OfferShare` (push), and `OfferSaved` (verified-save acknowledgement). All four travel inside iroh's QUIC connection, which is already authenticated by NodeId and encrypted with TLS 1.3. Save receipts are bound to the authenticated peer and exact content hash; the sender accepts matching retries for up to one hour but emits the completion event only for the first confirmed receipt. The receiver retries transient exchange failures three times with bounded backoff.
 
 What this means for risk:
 

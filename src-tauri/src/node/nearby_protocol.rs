@@ -10,7 +10,8 @@
 use super::nearby::{ActiveShare, NearbyShareRegistry};
 use super::nearby_offer::{
     handle_offer_request, OfferDecision, OfferInbox, OfferReceiptLedger, OfferResponseMessage,
-    OfferSavedEvent, OfferSavedReceipt, OfferShareMessage, NEARBY_OFFER_SAVED_EVENT,
+    OfferSavedEvent, OfferSavedReceipt, OfferShareMessage, ReceiptConfirmation,
+    NEARBY_OFFER_SAVED_EVENT,
 };
 use crate::error::{LightningP2PError, Result};
 use crate::storage::{blocked_peers::BlockedPeers, paired_devices::PairedDevices};
@@ -30,6 +31,10 @@ pub const NEARBY_PROTOCOL_ALPN: &[u8] = b"lightning-p2p/nearby/2";
 
 const MAX_MESSAGE_BYTES: usize = 64 * 1024;
 const PROTOCOL_VERSION: u8 = 2;
+const SAVE_RECEIPT_RETRY_DELAYS: [std::time::Duration; 2] = [
+    std::time::Duration::from_millis(250),
+    std::time::Duration::from_millis(750),
+];
 
 /// Tagged request envelope sent over the nearby ALPN.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -209,20 +214,44 @@ impl NearbyShareProtocol {
             NearbyRequest::OfferSaved { receipt, .. } => {
                 let peer = connection.remote_id();
                 let hash = iroh_blobs::Hash::from_str(&receipt.blob_hash).ok();
-                let accepted = if let Some(hash) = hash {
-                    self.receipts.consume(&receipt.offer_id, peer, hash).await
-                } else {
-                    false
+                let confirmation = match hash {
+                    Some(hash) => self.receipts.confirm(&receipt.offer_id, peer, hash).await,
+                    None => ReceiptConfirmation::Rejected,
                 };
-                if accepted {
-                    let event = OfferSavedEvent {
-                        offer_id: receipt.offer_id,
-                        receiver_node_id: peer.to_string(),
-                    };
-                    if let Err(error) = self.app_handle.emit(NEARBY_OFFER_SAVED_EVENT, event) {
-                        tracing::warn!(%error, "could not publish verified nearby save receipt");
+                let accepted = match confirmation {
+                    ReceiptConfirmation::Rejected | ReceiptConfirmation::InProgress => false,
+                    ReceiptConfirmation::Retry => true,
+                    ReceiptConfirmation::First => {
+                        let event = OfferSavedEvent {
+                            offer_id: receipt.offer_id.clone(),
+                            receiver_node_id: peer.to_string(),
+                        };
+                        let event_emitted = match self
+                            .app_handle
+                            .emit(NEARBY_OFFER_SAVED_EVENT, event)
+                        {
+                            Ok(()) => true,
+                            Err(error) => {
+                                tracing::warn!(%error, "could not publish verified nearby save receipt");
+                                false
+                            }
+                        };
+                        match hash {
+                            Some(hash) => {
+                                self.receipts
+                                    .finish_confirmation(
+                                        &receipt.offer_id,
+                                        peer,
+                                        hash,
+                                        event_emitted,
+                                    )
+                                    .await
+                                    && event_emitted
+                            }
+                            None => false,
+                        }
                     }
-                }
+                };
                 NearbyResponse::OfferSavedAck {
                     protocol_version: PROTOCOL_VERSION,
                     accepted,
@@ -388,8 +417,9 @@ pub async fn send_offer(
 
 /// Sends a verified-save receipt to the original offer sender.
 ///
-/// Delivery is best-effort because the receive itself has completed before
-/// this request is made.
+/// Retries transient exchange failures. The sender acknowledges an exact
+/// matching receipt idempotently, so a lost response cannot create a duplicate
+/// completion event.
 ///
 /// # Errors
 ///
@@ -399,28 +429,49 @@ pub async fn send_offer_saved_receipt(
     endpoint: &Endpoint,
     node_addr: EndpointAddr,
     receipt: OfferSavedReceipt,
-) -> Result<bool> {
-    let response = exchange(
-        endpoint,
-        node_addr,
-        NearbyRequest::OfferSaved {
-            protocol_version: PROTOCOL_VERSION,
-            receipt,
-        },
-    )
-    .await?;
-    match response {
-        NearbyResponse::OfferSavedAck {
-            protocol_version,
-            accepted,
-        } if protocol_version <= PROTOCOL_VERSION => Ok(accepted),
-        NearbyResponse::OfferSavedAck { .. } => Err(LightningP2PError::Other(
-            "Nearby peer uses an unsupported save receipt protocol version.".into(),
-        )),
-        other => Err(LightningP2PError::Other(format!(
-            "unexpected nearby save receipt response: {other:?}"
-        ))),
+) -> Result<()> {
+    let mut last_error = None;
+    for attempt in 0..=SAVE_RECEIPT_RETRY_DELAYS.len() {
+        let response = exchange(
+            endpoint,
+            node_addr.clone(),
+            NearbyRequest::OfferSaved {
+                protocol_version: PROTOCOL_VERSION,
+                receipt: receipt.clone(),
+            },
+        )
+        .await;
+        match response {
+            Ok(NearbyResponse::OfferSavedAck {
+                protocol_version,
+                accepted,
+            }) if protocol_version <= PROTOCOL_VERSION && accepted => return Ok(()),
+            Ok(NearbyResponse::OfferSavedAck {
+                protocol_version,
+                accepted: false,
+            }) if protocol_version <= PROTOCOL_VERSION => {
+                last_error = Some(LightningP2PError::Other(
+                    "Nearby peer did not confirm the verified save receipt.".into(),
+                ));
+            }
+            Ok(NearbyResponse::OfferSavedAck { .. }) => {
+                return Err(LightningP2PError::Other(
+                    "Nearby peer uses an unsupported save receipt protocol version.".into(),
+                ));
+            }
+            Ok(other) => {
+                return Err(LightningP2PError::Other(format!(
+                    "unexpected nearby save receipt response: {other:?}"
+                )));
+            }
+            Err(error) => last_error = Some(error),
+        }
+        if let Some(delay) = SAVE_RECEIPT_RETRY_DELAYS.get(attempt) {
+            tokio::time::sleep(*delay).await;
+        }
     }
+    Err(last_error
+        .unwrap_or_else(|| LightningP2PError::Other("Nearby save receipt delivery failed.".into())))
 }
 
 fn validate_offer_response(
@@ -610,8 +661,7 @@ mod tests {
             },
         };
         let bytes = serde_json::to_vec(&saved).expect("encode saved receipt");
-        let parsed: NearbyRequest =
-            serde_json::from_slice(&bytes).expect("decode saved receipt");
+        let parsed: NearbyRequest = serde_json::from_slice(&bytes).expect("decode saved receipt");
         assert!(matches!(parsed, NearbyRequest::OfferSaved { .. }));
     }
 

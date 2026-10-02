@@ -187,9 +187,25 @@ struct ExpectedOfferReceipt {
     peer: EndpointId,
     hash: Hash,
     expires_at: Instant,
+    confirmed: bool,
+    confirming: bool,
 }
 
-/// Bounded, one-use ledger for receipts matching offers sent by this node.
+/// Result of checking an authenticated verified-save receipt.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReceiptConfirmation {
+    /// The peer or content hash did not match a pending offer.
+    Rejected,
+    /// This is the first matching receipt for the offer.
+    First,
+    /// The matching receipt was already accepted; acknowledge it again without
+    /// emitting a duplicate completion event.
+    Retry,
+    /// Another stream is currently emitting the first completion event.
+    InProgress,
+}
+
+/// Bounded ledger for receipts matching offers sent by this node.
 #[derive(Debug, Clone, Default)]
 pub struct OfferReceiptLedger {
     pending: Arc<Mutex<HashMap<String, ExpectedOfferReceipt>>>,
@@ -232,6 +248,8 @@ impl OfferReceiptLedger {
                 peer,
                 hash,
                 expires_at: Instant::now() + OFFER_RECEIPT_WINDOW,
+                confirmed: false,
+                confirming: false,
             },
         );
         Ok(())
@@ -242,17 +260,55 @@ impl OfferReceiptLedger {
         self.pending.lock().await.remove(offer_id);
     }
 
-    /// Validates and consumes a one-use receipt against the authenticated peer.
-    pub async fn consume(&self, offer_id: &str, peer: EndpointId, hash: Hash) -> bool {
+    /// Confirms a receipt against the authenticated peer and exact content.
+    /// Matching retries remain acknowledgeable for the receipt window, while
+    /// the caller can emit the completion event only for [`ReceiptConfirmation::First`].
+    pub async fn confirm(
+        &self,
+        offer_id: &str,
+        peer: EndpointId,
+        hash: Hash,
+    ) -> ReceiptConfirmation {
         let mut pending = self.pending.lock().await;
         pending.retain(|_, receipt| receipt.expires_at > Instant::now());
-        let matches = pending
-            .get(offer_id)
-            .is_some_and(|expected| expected.peer == peer && expected.hash == hash);
-        if matches {
-            pending.remove(offer_id);
+        let Some(expected) = pending.get_mut(offer_id) else {
+            return ReceiptConfirmation::Rejected;
+        };
+        if expected.peer != peer || expected.hash != hash {
+            return ReceiptConfirmation::Rejected;
         }
-        matches
+        if expected.confirmed {
+            return ReceiptConfirmation::Retry;
+        }
+        if expected.confirming {
+            return ReceiptConfirmation::InProgress;
+        }
+        expected.confirming = true;
+        ReceiptConfirmation::First
+    }
+
+    /// Completes the first receipt event attempt, allowing retry after failure.
+    pub async fn finish_confirmation(
+        &self,
+        offer_id: &str,
+        peer: EndpointId,
+        hash: Hash,
+        event_emitted: bool,
+    ) -> bool {
+        let mut pending = self.pending.lock().await;
+        let Some(expected) = pending.get_mut(offer_id) else {
+            return false;
+        };
+        if expected.peer != peer
+            || expected.hash != hash
+            || expected.expires_at <= Instant::now()
+            || !expected.confirming
+        {
+            return false;
+        }
+        expected.confirming = false;
+        expected.confirmed = event_emitted;
+        true
     }
 }
 
@@ -1071,7 +1127,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn save_receipts_are_peer_and_content_bound_and_single_use() {
+    async fn save_receipts_are_peer_and_content_bound_and_acknowledge_retries_once() {
         let ledger = OfferReceiptLedger::new();
         let sender = iroh::SecretKey::from_bytes(&[21; 32]).public();
         let wrong_peer = iroh::SecretKey::from_bytes(&[22; 32]).public();
@@ -1082,13 +1138,49 @@ mod tests {
             .await
             .expect("register expected receipt");
 
+        assert_eq!(
+            ledger
+                .confirm("offer-save-1", wrong_peer, expected_hash)
+                .await,
+            ReceiptConfirmation::Rejected
+        );
+        assert_eq!(
+            ledger.confirm("offer-save-1", sender, wrong_hash).await,
+            ReceiptConfirmation::Rejected
+        );
+        assert_eq!(
+            ledger.confirm("offer-save-1", sender, expected_hash).await,
+            ReceiptConfirmation::First
+        );
+        assert_eq!(
+            ledger.confirm("offer-save-1", sender, expected_hash).await,
+            ReceiptConfirmation::InProgress
+        );
         assert!(
-            !ledger
-                .consume("offer-save-1", wrong_peer, expected_hash)
+            ledger
+                .finish_confirmation("offer-save-1", sender, expected_hash, false)
                 .await
         );
-        assert!(!ledger.consume("offer-save-1", sender, wrong_hash).await);
-        assert!(ledger.consume("offer-save-1", sender, expected_hash).await);
-        assert!(!ledger.consume("offer-save-1", sender, expected_hash).await);
+        // A transient local event failure releases the reservation so the
+        // receiver's network retry can try to publish the event again.
+        assert_eq!(
+            ledger.confirm("offer-save-1", sender, expected_hash).await,
+            ReceiptConfirmation::First
+        );
+        assert!(
+            ledger
+                .finish_confirmation("offer-save-1", sender, expected_hash, true)
+                .await
+        );
+        assert_eq!(
+            ledger.confirm("offer-save-1", sender, expected_hash).await,
+            ReceiptConfirmation::Retry
+        );
+        assert_eq!(
+            ledger
+                .confirm("offer-save-1", wrong_peer, expected_hash)
+                .await,
+            ReceiptConfirmation::Rejected
+        );
     }
 }
