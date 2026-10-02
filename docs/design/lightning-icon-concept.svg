@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">Lightning app icon concept</title>
+  <rect width="512" height="512" fill="#F7F8FA" />
+  <g fill="#315EFF">
+    <path d="M128 112h224l-48 54h-86v64H94v-56z" />
+    <path d="M384 400H160l48-54h86v-64h124v56z" />
+  </g>
+</svg>
