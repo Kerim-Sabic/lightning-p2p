@@ -155,6 +155,24 @@ impl NearbyShareProtocol {
         self.offers.clone()
     }
 
+    fn emit_saved_receipt(&self, offer_id: &str, peer: iroh::EndpointId) -> bool {
+        self.app_handle
+            .emit(
+                NEARBY_OFFER_SAVED_EVENT,
+                OfferSavedEvent {
+                    offer_id: offer_id.to_owned(),
+                    receiver_node_id: peer.to_string(),
+                },
+            )
+            .map_or_else(
+                |error| {
+                    tracing::warn!(%error, "could not publish verified nearby save receipt");
+                    false
+                },
+                |()| true,
+            )
+    }
+
     async fn response_bytes(
         &self,
         request_bytes: Vec<u8>,
@@ -220,22 +238,13 @@ impl NearbyShareProtocol {
                 };
                 let accepted = match confirmation {
                     ReceiptConfirmation::Rejected | ReceiptConfirmation::InProgress => false,
-                    ReceiptConfirmation::Retry => true,
+                    ReceiptConfirmation::Retry => {
+                        // Reconcile the sender UI after an app restart. The
+                        // frontend applies this event idempotently by offer ID.
+                        self.emit_saved_receipt(&receipt.offer_id, peer)
+                    }
                     ReceiptConfirmation::First => {
-                        let event = OfferSavedEvent {
-                            offer_id: receipt.offer_id.clone(),
-                            receiver_node_id: peer.to_string(),
-                        };
-                        let event_emitted = match self
-                            .app_handle
-                            .emit(NEARBY_OFFER_SAVED_EVENT, event)
-                        {
-                            Ok(()) => true,
-                            Err(error) => {
-                                tracing::warn!(%error, "could not publish verified nearby save receipt");
-                                false
-                            }
-                        };
+                        let event_emitted = self.emit_saved_receipt(&receipt.offer_id, peer);
                         match hash {
                             Some(hash) => {
                                 self.receipts

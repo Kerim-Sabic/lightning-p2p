@@ -119,6 +119,10 @@ impl AppState {
             );
             ResumableReceiveStore::in_memory()
         });
+        let offer_receipts = OfferReceiptLedger::load(&data_dir).unwrap_or_else(|error| {
+            tracing::error!(%error, "could not load nearby receipt recovery data; offer receipt reconciliation is disabled for this session");
+            OfferReceiptLedger::new()
+        });
         Self {
             data_dir,
             node,
@@ -131,7 +135,7 @@ impl AppState {
             resumable_receives,
             nearby_shares: NearbyShareRegistry::new(true),
             offer_inbox: OfferInbox::new(),
-            offer_receipts: OfferReceiptLedger::new(),
+            offer_receipts,
             ble_polling_active: Arc::new(AtomicBool::new(false)),
             chat_mesh: Arc::new(Mutex::new(chat_mesh)),
             chat_mesh_polling_active: Arc::new(AtomicBool::new(false)),

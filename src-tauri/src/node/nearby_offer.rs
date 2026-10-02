@@ -7,12 +7,16 @@
 //! the user to accept or reject. Only after the user accepts does the receiver
 //! dial the sender's blob store to pull bytes.
 
+use crate::crypto::fallback_permissions::restrict_private_file;
 use crate::error::{LightningP2PError, Result};
 use iroh::{EndpointAddr, EndpointId};
 use iroh_blobs::Hash;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet},
+    io::Write,
+    path::{Path, PathBuf},
+    str::FromStr,
     sync::Arc,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
@@ -37,6 +41,8 @@ const MAX_PENDING_OFFERS_PER_PEER: usize = 4;
 const MAX_SEEN_OFFER_IDS: usize = 4096;
 const MAX_SEEN_OFFER_IDS_PER_PEER: usize = 128;
 const MAX_PENDING_OFFER_RECEIPTS: usize = 512;
+const OFFER_RECEIPT_STORE_FILE: &str = "nearby-offer-receipts.json";
+const MAX_OFFER_RECEIPT_STORE_BYTES: u64 = 256 * 1024;
 const OFFER_REPLAY_WINDOW: Duration = Duration::from_secs(10 * 60);
 const OFFER_RECEIPT_WINDOW: Duration = Duration::from_secs(60 * 60);
 const MAX_OFFER_ID_BYTES: usize = 128;
@@ -191,6 +197,21 @@ struct ExpectedOfferReceipt {
     confirming: bool,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+struct PersistedOfferReceiptLedger {
+    schema_version: u8,
+    receipts: Vec<PersistedExpectedOfferReceipt>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct PersistedExpectedOfferReceipt {
+    offer_id: String,
+    peer: String,
+    hash: String,
+    expires_at_unix: u64,
+    confirmed: bool,
+}
+
 /// Result of checking an authenticated verified-save receipt.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ReceiptConfirmation {
@@ -209,6 +230,7 @@ pub enum ReceiptConfirmation {
 #[derive(Debug, Clone, Default)]
 pub struct OfferReceiptLedger {
     pending: Arc<Mutex<HashMap<String, ExpectedOfferReceipt>>>,
+    path: Option<PathBuf>,
 }
 
 impl OfferReceiptLedger {
@@ -216,6 +238,70 @@ impl OfferReceiptLedger {
     #[must_use]
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Loads bounded receipt expectations from an owner-only app-data file.
+    /// Expired entries are discarded before the ledger is exposed.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when persisted receipt state is malformed, oversized,
+    /// or inaccessible.
+    pub fn load(data_dir: &Path) -> Result<Self> {
+        let path = data_dir.join(OFFER_RECEIPT_STORE_FILE);
+        let pending = if path.exists() {
+            restrict_private_file(&path)?;
+            if std::fs::metadata(&path)?.len() > MAX_OFFER_RECEIPT_STORE_BYTES {
+                return Err(LightningP2PError::Other(
+                    "Nearby receipt recovery data exceeds its size limit".into(),
+                ));
+            }
+            let bytes = std::fs::read(&path)?;
+            let persisted: PersistedOfferReceiptLedger = serde_json::from_slice(&bytes)?;
+            if persisted.schema_version != 1
+                || persisted.receipts.len() > MAX_PENDING_OFFER_RECEIPTS
+            {
+                return Err(LightningP2PError::Other(
+                    "Unsupported nearby receipt recovery data".into(),
+                ));
+            }
+            let now_unix = unix_timestamp();
+            let mut pending = HashMap::with_capacity(persisted.receipts.len());
+            for receipt in persisted.receipts {
+                if receipt.offer_id.is_empty()
+                    || receipt.offer_id.len() > MAX_OFFER_ID_BYTES
+                    || receipt.expires_at_unix <= now_unix
+                {
+                    continue;
+                }
+                let peer = EndpointId::from_str(&receipt.peer).map_err(|_| {
+                    LightningP2PError::Other("Invalid peer in nearby receipt recovery data".into())
+                })?;
+                let hash = Hash::from_str(&receipt.hash).map_err(|_| {
+                    LightningP2PError::Other("Invalid hash in nearby receipt recovery data".into())
+                })?;
+                let expected = ExpectedOfferReceipt {
+                    peer,
+                    hash,
+                    expires_at: Instant::now()
+                        + Duration::from_secs(receipt.expires_at_unix - now_unix),
+                    confirmed: receipt.confirmed,
+                    confirming: false,
+                };
+                if pending.insert(receipt.offer_id, expected).is_some() {
+                    return Err(LightningP2PError::Other(
+                        "Duplicate nearby receipt recovery identifier".into(),
+                    ));
+                }
+            }
+            pending
+        } else {
+            HashMap::new()
+        };
+        Ok(Self {
+            pending: Arc::new(Mutex::new(pending)),
+            path: Some(path),
+        })
     }
 
     /// Registers the exact authenticated peer and content expected for an offer.
@@ -231,18 +317,19 @@ impl OfferReceiptLedger {
             ));
         }
         let mut pending = self.pending.lock().await;
-        pending.retain(|_, receipt| receipt.expires_at > Instant::now());
-        if pending.contains_key(&offer_id) {
+        let mut next = pending.clone();
+        next.retain(|_, receipt| receipt.expires_at > Instant::now());
+        if next.contains_key(&offer_id) {
             return Err(LightningP2PError::Other(
                 "Duplicate offer receipt identifier".into(),
             ));
         }
-        if pending.len() >= MAX_PENDING_OFFER_RECEIPTS {
+        if next.len() >= MAX_PENDING_OFFER_RECEIPTS {
             return Err(LightningP2PError::Other(
                 "Too many offers are awaiting save receipts".into(),
             ));
         }
-        pending.insert(
+        next.insert(
             offer_id,
             ExpectedOfferReceipt {
                 peer,
@@ -252,12 +339,20 @@ impl OfferReceiptLedger {
                 confirming: false,
             },
         );
+        self.persist(&next)?;
+        *pending = next;
         Ok(())
     }
 
     /// Removes an offer that was rejected or could not be delivered.
     pub async fn remove(&self, offer_id: &str) {
-        self.pending.lock().await.remove(offer_id);
+        let mut pending = self.pending.lock().await;
+        let mut next = pending.clone();
+        next.remove(offer_id);
+        match self.persist(&next) {
+            Ok(()) => *pending = next,
+            Err(error) => tracing::warn!(%error, "could not persist nearby receipt removal"),
+        }
     }
 
     /// Confirms a receipt against the authenticated peer and exact content.
@@ -296,7 +391,7 @@ impl OfferReceiptLedger {
         event_emitted: bool,
     ) -> bool {
         let mut pending = self.pending.lock().await;
-        let Some(expected) = pending.get_mut(offer_id) else {
+        let Some(expected) = pending.get(offer_id) else {
             return false;
         };
         if expected.peer != peer
@@ -306,9 +401,107 @@ impl OfferReceiptLedger {
         {
             return false;
         }
-        expected.confirming = false;
-        expected.confirmed = event_emitted;
+        let mut next = pending.clone();
+        let Some(updated) = next.get_mut(offer_id) else {
+            return false;
+        };
+        updated.confirming = false;
+        updated.confirmed = event_emitted;
+        if let Err(error) = self.persist(&next) {
+            if let Some(current) = pending.get_mut(offer_id) {
+                current.confirming = false;
+            }
+            tracing::error!(%error, "could not persist nearby receipt confirmation");
+            return false;
+        }
+        *pending = next;
         true
+    }
+
+    fn persist(&self, pending: &HashMap<String, ExpectedOfferReceipt>) -> Result<()> {
+        let Some(path) = &self.path else {
+            return Ok(());
+        };
+        let parent = path
+            .parent()
+            .ok_or_else(|| LightningP2PError::Other("Invalid app data path".into()))?;
+        std::fs::create_dir_all(parent)?;
+        let now = Instant::now();
+        let now_unix = unix_timestamp();
+        let persisted = PersistedOfferReceiptLedger {
+            schema_version: 1,
+            receipts: pending
+                .iter()
+                .map(|(offer_id, receipt)| PersistedExpectedOfferReceipt {
+                    offer_id: offer_id.clone(),
+                    peer: receipt.peer.to_string(),
+                    hash: receipt.hash.to_string(),
+                    expires_at_unix: now_unix.saturating_add(
+                        receipt.expires_at.saturating_duration_since(now).as_secs(),
+                    ),
+                    confirmed: receipt.confirmed,
+                })
+                .collect(),
+        };
+        let bytes = serde_json::to_vec(&persisted)?;
+        if bytes.len() as u64 > MAX_OFFER_RECEIPT_STORE_BYTES {
+            return Err(LightningP2PError::Other(
+                "Nearby receipt recovery data exceeds its size limit".into(),
+            ));
+        }
+        let temp = path.with_extension(format!("tmp-{}", uuid::Uuid::new_v4()));
+        let mut options = std::fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let mut file = options.open(&temp)?;
+        restrict_private_file(&temp)?;
+        file.write_all(&bytes)?;
+        file.sync_all()?;
+        drop(file);
+        if let Err(error) = replace_receipt_file(&temp, path) {
+            let _ = std::fs::remove_file(&temp);
+            return Err(error.into());
+        }
+        restrict_private_file(path)?;
+        Ok(())
+    }
+}
+
+#[cfg(not(windows))]
+fn replace_receipt_file(source: &Path, destination: &Path) -> std::io::Result<()> {
+    std::fs::rename(source, destination)
+}
+
+#[cfg(windows)]
+fn replace_receipt_file(source: &Path, destination: &Path) -> std::io::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Storage::FileSystem::{MoveFileExW, MOVEFILE_REPLACE_EXISTING};
+
+    let source = source
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    let destination = destination
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    let replaced = unsafe {
+        MoveFileExW(
+            source.as_ptr(),
+            destination.as_ptr(),
+            MOVEFILE_REPLACE_EXISTING,
+        )
+    };
+    if replaced == 0 {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(())
     }
 }
 
@@ -1182,5 +1375,59 @@ mod tests {
                 .await,
             ReceiptConfirmation::Rejected
         );
+    }
+
+    #[tokio::test]
+    async fn receipt_expectations_and_confirmations_survive_restart() {
+        let directory = tempfile::tempdir().expect("temporary app data");
+        let sender = iroh::SecretKey::from_bytes(&[31; 32]).public();
+        let other_peer = iroh::SecretKey::from_bytes(&[32; 32]).public();
+        let hash = Hash::new(b"saved before restart");
+        let ledger = OfferReceiptLedger::load(directory.path()).expect("load empty ledger");
+        ledger
+            .register("restart-offer".into(), sender, hash)
+            .await
+            .expect("persist expected receipt");
+
+        let recovered = OfferReceiptLedger::load(directory.path()).expect("reload ledger");
+        assert_eq!(
+            recovered.confirm("restart-offer", other_peer, hash).await,
+            ReceiptConfirmation::Rejected
+        );
+        assert_eq!(
+            recovered.confirm("restart-offer", sender, hash).await,
+            ReceiptConfirmation::First
+        );
+        assert!(
+            recovered
+                .finish_confirmation("restart-offer", sender, hash, true)
+                .await
+        );
+
+        let after_confirmation =
+            OfferReceiptLedger::load(directory.path()).expect("reload confirmation");
+        assert_eq!(
+            after_confirmation
+                .confirm("restart-offer", sender, hash)
+                .await,
+            ReceiptConfirmation::Retry
+        );
+        assert_eq!(
+            after_confirmation
+                .confirm("restart-offer", sender, Hash::new(b"wrong"))
+                .await,
+            ReceiptConfirmation::Rejected
+        );
+    }
+
+    #[test]
+    fn malformed_receipt_recovery_data_fails_closed() {
+        let directory = tempfile::tempdir().expect("temporary app data");
+        std::fs::write(
+            directory.path().join(OFFER_RECEIPT_STORE_FILE),
+            br#"{"schema_version":1,"receipts":[{"offer_id":"bad","peer":"not-an-id","hash":"not-a-hash","expires_at_unix":9999999999,"confirmed":true}]}"#,
+        )
+        .expect("write malformed ledger");
+        assert!(OfferReceiptLedger::load(directory.path()).is_err());
     }
 }
