@@ -108,6 +108,22 @@ for (const route of ["/receive", "/receive/*", "/send", "/send/*"]) {
   );
   requireSources(csp, "connect-src", ["https:", "wss:"], `Netlify ${route} CSP`);
   requireSources(csp, "worker-src", ["blob:"], `Netlify ${route} CSP`);
+  requireSources(csp, "object-src", ["'none'"], `Netlify ${route} CSP`);
+  requireSources(csp, "base-uri", ["'self'"], `Netlify ${route} CSP`);
+  requireSources(csp, "form-action", ["'self'"], `Netlify ${route} CSP`);
+  requireSources(csp, "frame-ancestors", ["'none'"], `Netlify ${route} CSP`);
+}
+
+for (const route of ["/chat", "/chat/*"]) {
+  const block = headers.find((candidate) => candidate.path === route);
+  const csp = parseCsp(
+    block?.values["content-security-policy"],
+    `Netlify ${route} headers`,
+  );
+  requireSources(csp, "default-src", ["'self'"], `Netlify ${route} CSP`);
+  requireSources(csp, "script-src", ["'self'"], `Netlify ${route} CSP`);
+  requireSources(csp, "connect-src", ["https:", "wss:"], `Netlify ${route} CSP`);
+  requireSources(csp, "object-src", ["'none'"], `Netlify ${route} CSP`);
   requireSources(csp, "base-uri", ["'self'"], `Netlify ${route} CSP`);
   requireSources(csp, "form-action", ["'self'"], `Netlify ${route} CSP`);
   requireSources(csp, "frame-ancestors", ["'none'"], `Netlify ${route} CSP`);
