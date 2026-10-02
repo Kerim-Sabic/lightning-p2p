@@ -8,7 +8,7 @@ use iroh_blobs::{ticket::BlobTicket, BlobFormat, Hash};
 use iroh_mdns_address_lookup::{DiscoveryEvent, MdnsAddressLookup};
 use serde::Serialize;
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::BTreeMap,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
@@ -28,6 +28,8 @@ const REFRESH_INTERVAL: Duration = Duration::from_secs(4);
 const NODE_QUERY_TIMEOUT: Duration = Duration::from_millis(900);
 const CANDIDATE_STALE_AFTER: Duration = Duration::from_secs(18);
 const MAX_PARALLEL_QUERIES: usize = 8;
+const MAX_DISCOVERED_PEERS: usize = 128;
+const MAX_CANDIDATE_ADDRESSES: usize = 8;
 /// How long the discovery loop waits with zero peers before declaring the
 /// local network is "likely blocking multicast". Most home/office networks
 /// surface their first peer well under this deadline; hotel/guest networks
@@ -129,6 +131,12 @@ pub struct NearbyDevice {
     pub has_active_share: bool,
 }
 
+#[derive(Debug, Clone)]
+struct NearbyDeviceRecord {
+    public: NearbyDevice,
+    last_seen_at: Instant,
+}
+
 /// Active local share advertised to verified nearby peers while sharing is enabled.
 #[derive(Debug, Clone)]
 pub struct ActiveShare {
@@ -190,7 +198,7 @@ pub struct NearbyShareRegistry {
     bluetooth_discovery_enabled: Arc<RwLock<bool>>,
     active_share: Arc<RwLock<Option<ActiveShare>>>,
     discovered_shares: Arc<RwLock<Vec<NearbyShareRecord>>>,
-    devices: Arc<RwLock<BTreeMap<EndpointId, NearbyDevice>>>,
+    devices: Arc<RwLock<BTreeMap<EndpointId, NearbyDeviceRecord>>>,
 }
 
 impl NearbyShareRegistry {
@@ -333,7 +341,10 @@ impl NearbyShareRegistry {
     /// Returns the current public snapshot of nearby devices, sorted by name.
     pub async fn devices_snapshot(&self) -> Vec<NearbyDevice> {
         let guard = self.devices.read().await;
-        let mut snapshot = guard.values().cloned().collect::<Vec<_>>();
+        let mut snapshot = guard
+            .values()
+            .map(|record| record.public.clone())
+            .collect::<Vec<_>>();
         snapshot.sort_by(|left, right| {
             left.device_name
                 .to_ascii_lowercase()
@@ -357,10 +368,10 @@ impl NearbyShareRegistry {
     pub async fn clear_wifi_discovered_devices(&self) -> Option<Vec<NearbyDevice>> {
         let mut guard = self.devices.write().await;
         let before = snapshot_locked(&guard);
-        guard.retain(|_, device| device.transport != NearbyTransport::WifiMdns);
-        for device in guard.values_mut() {
-            if device.transport == NearbyTransport::Both {
-                device.transport = NearbyTransport::Ble;
+        guard.retain(|_, record| record.public.transport != NearbyTransport::WifiMdns);
+        for record in guard.values_mut() {
+            if record.public.transport == NearbyTransport::Both {
+                record.public.transport = NearbyTransport::Ble;
             }
         }
         let after = snapshot_locked(&guard);
@@ -382,19 +393,28 @@ impl NearbyShareRegistry {
     ) -> Option<Vec<NearbyDevice>> {
         let mut guard = self.devices.write().await;
         let now = unix_timestamp();
+        let seen_at = Instant::now();
         let inserted = !guard.contains_key(&node_id);
-        let entry = guard.entry(node_id).or_insert_with(|| NearbyDevice {
-            node_id: node_id.to_string(),
-            device_name: "Unknown device".into(),
-            last_seen_unix: now,
-            transport: NearbyTransport::WifiMdns,
-            route_hint: candidate.route_hint,
-            direct_address_count: candidate.direct_address_count,
-            has_active_share: false,
+        if inserted && guard.len() >= MAX_DISCOVERED_PEERS {
+            evict_oldest_device(&mut guard);
+        }
+        let record = guard.entry(node_id).or_insert_with(|| NearbyDeviceRecord {
+            public: NearbyDevice {
+                node_id: node_id.to_string(),
+                device_name: "Unknown device".into(),
+                last_seen_unix: now,
+                transport: NearbyTransport::WifiMdns,
+                route_hint: candidate.route_hint,
+                direct_address_count: candidate.direct_address_count,
+                has_active_share: false,
+            },
+            last_seen_at: seen_at,
         });
 
+        let entry = &mut record.public;
         let prior = entry.clone();
         entry.last_seen_unix = now;
+        record.last_seen_at = seen_at;
         entry.route_hint = stronger_route_hint(entry.route_hint, candidate.route_hint);
         entry.direct_address_count = candidate.direct_address_count;
         entry.transport = match entry.transport {
@@ -421,19 +441,28 @@ impl NearbyShareRegistry {
 
         let mut guard = self.devices.write().await;
         let now = unix_timestamp();
+        let seen_at = Instant::now();
         let inserted = !guard.contains_key(&node_id);
-        let entry = guard.entry(node_id).or_insert_with(|| NearbyDevice {
-            node_id: node_id.to_string(),
-            device_name: device_name.clone(),
-            last_seen_unix: now,
-            transport: NearbyTransport::Ble,
-            route_hint: NearbyRouteHint::Unknown,
-            direct_address_count: 0,
-            has_active_share,
+        if inserted && guard.len() >= MAX_DISCOVERED_PEERS {
+            evict_oldest_device(&mut guard);
+        }
+        let record = guard.entry(node_id).or_insert_with(|| NearbyDeviceRecord {
+            public: NearbyDevice {
+                node_id: node_id.to_string(),
+                device_name: device_name.clone(),
+                last_seen_unix: now,
+                transport: NearbyTransport::Ble,
+                route_hint: NearbyRouteHint::Unknown,
+                direct_address_count: 0,
+                has_active_share,
+            },
+            last_seen_at: seen_at,
         });
 
+        let entry = &mut record.public;
         let prior = entry.clone();
         entry.last_seen_unix = now;
+        record.last_seen_at = seen_at;
         if !device_name.is_empty() {
             entry.device_name = device_name;
         }
@@ -453,10 +482,10 @@ impl NearbyShareRegistry {
     pub async fn clear_ble_discovered_devices(&self) -> Option<Vec<NearbyDevice>> {
         let mut guard = self.devices.write().await;
         let before = snapshot_locked(&guard);
-        guard.retain(|_, device| device.transport != NearbyTransport::Ble);
-        for device in guard.values_mut() {
-            if device.transport == NearbyTransport::Both {
-                device.transport = NearbyTransport::WifiMdns;
+        guard.retain(|_, record| record.public.transport != NearbyTransport::Ble);
+        for record in guard.values_mut() {
+            if record.public.transport == NearbyTransport::Both {
+                record.public.transport = NearbyTransport::WifiMdns;
             }
         }
         let after = snapshot_locked(&guard);
@@ -479,7 +508,7 @@ impl NearbyShareRegistry {
             return None;
         }
         let mut guard = self.devices.write().await;
-        let entry = guard.get_mut(&node_id)?;
+        let entry = &mut guard.get_mut(&node_id)?.public;
         if entry.device_name == device_name {
             return None;
         }
@@ -494,7 +523,7 @@ impl NearbyShareRegistry {
         has_active_share: bool,
     ) -> Option<Vec<NearbyDevice>> {
         let mut guard = self.devices.write().await;
-        let entry = guard.get_mut(&node_id)?;
+        let entry = &mut guard.get_mut(&node_id)?.public;
         if entry.has_active_share == has_active_share {
             return None;
         }
@@ -508,7 +537,9 @@ impl NearbyShareRegistry {
         let now = unix_timestamp();
         let stale_threshold = CANDIDATE_STALE_AFTER.as_secs();
         let before = guard.len();
-        guard.retain(|_, entry| now.saturating_sub(entry.last_seen_unix) <= stale_threshold);
+        guard.retain(|_, record| {
+            now.saturating_sub(record.public.last_seen_unix) <= stale_threshold
+        });
         if guard.len() == before {
             return None;
         }
@@ -525,9 +556,12 @@ fn devices_equal(left: &NearbyDevice, right: &NearbyDevice) -> bool {
 }
 
 fn snapshot_locked(
-    guard: &tokio::sync::RwLockWriteGuard<'_, BTreeMap<EndpointId, NearbyDevice>>,
+    guard: &tokio::sync::RwLockWriteGuard<'_, BTreeMap<EndpointId, NearbyDeviceRecord>>,
 ) -> Vec<NearbyDevice> {
-    let mut snapshot = guard.values().cloned().collect::<Vec<_>>();
+    let mut snapshot = guard
+        .values()
+        .map(|record| record.public.clone())
+        .collect::<Vec<_>>();
     snapshot.sort_by(|left, right| {
         left.device_name
             .to_ascii_lowercase()
@@ -555,7 +589,6 @@ pub fn spawn_nearby_discovery_loop(
         let local_node_id = endpoint.id();
         let endpoint_closed = endpoint.closed();
         tokio::pin!(endpoint_closed);
-        let mut stream_seen: HashSet<EndpointId> = HashSet::new();
         let mut interval = tokio::time::interval(REFRESH_INTERVAL);
         interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
 
@@ -595,22 +628,17 @@ pub fn spawn_nearby_discovery_loop(
                         break;
                     }
                     _ = interval.tick() => {
-                        if let Err(_error) = refresh_candidates(&app_handle, &endpoint, &registry, &mut candidates, &stream_seen).await {
+                        if let Err(_error) = refresh_candidates(&app_handle, &endpoint, &registry, &mut candidates).await {
                             tracing::debug!("nearby share refresh failed");
                         }
                     }
                     maybe_item = events.next() => {
                         if let Some(event) = maybe_item {
                             if let Some(candidate) = candidate_from_discovery_event(event, local_node_id) {
-                                stream_seen.insert(candidate.node_id);
                                 // Emit device record instantly, before the per-peer
-                                // share RPC fan-out (which may block on up to
-                                // NODE_QUERY_TIMEOUT per stale peer).
+                                // share probes run on the bounded refresh interval.
                                 emit_device_upsert(&app_handle, &registry, &candidate).await;
                                 upsert_candidate(&mut candidates, candidate);
-                            }
-                            if let Err(_error) = refresh_candidates(&app_handle, &endpoint, &registry, &mut candidates, &stream_seen).await {
-                                tracing::debug!("nearby share refresh failed");
                             }
                         } else {
                             tracing::warn!("LAN discovery subscription ended");
@@ -639,14 +667,8 @@ pub fn spawn_nearby_discovery_loop(
             }
             update_diagnostic_state(&app_handle, &registry, started_at, &mut diagnostic_state)
                 .await;
-            if let Err(_error) = refresh_candidates(
-                &app_handle,
-                &endpoint,
-                &registry,
-                &mut candidates,
-                &stream_seen,
-            )
-            .await
+            if let Err(_error) =
+                refresh_candidates(&app_handle, &endpoint, &registry, &mut candidates).await
             {
                 tracing::debug!("nearby share refresh failed");
             }
@@ -733,9 +755,7 @@ async fn refresh_candidates(
     endpoint: &Endpoint,
     registry: &NearbyShareRegistry,
     candidates: &mut BTreeMap<EndpointId, RemoteCandidate>,
-    stream_seen: &HashSet<EndpointId>,
 ) -> Result<()> {
-    let _ = stream_seen;
     prune_stale_candidates(candidates);
 
     // Candidates now arrive via the mDNS discovery stream; here we only prune
@@ -851,6 +871,9 @@ fn upsert_candidate(
     candidates: &mut BTreeMap<EndpointId, RemoteCandidate>,
     candidate: RemoteCandidate,
 ) {
+    if !candidates.contains_key(&candidate.node_id) && candidates.len() >= MAX_DISCOVERED_PEERS {
+        evict_oldest_candidate(candidates);
+    }
     candidates
         .entry(candidate.node_id)
         .and_modify(|current| {
@@ -863,8 +886,33 @@ fn upsert_candidate(
 }
 
 fn merge_node_addrs(current: &EndpointAddr, next: &EndpointAddr) -> EndpointAddr {
-    let addrs = current.addrs.iter().chain(next.addrs.iter()).cloned();
+    let mut addrs = Vec::with_capacity(MAX_CANDIDATE_ADDRESSES);
+    for addr in next.addrs.iter().chain(current.addrs.iter()) {
+        if !addrs.contains(addr) && addrs.len() < MAX_CANDIDATE_ADDRESSES {
+            addrs.push(addr.clone());
+        }
+    }
     EndpointAddr::from_parts(current.id, addrs)
+}
+
+fn evict_oldest_candidate(candidates: &mut BTreeMap<EndpointId, RemoteCandidate>) {
+    if let Some(oldest) = candidates
+        .iter()
+        .min_by_key(|(_, candidate)| candidate.last_seen_at)
+        .map(|(node_id, _)| *node_id)
+    {
+        candidates.remove(&oldest);
+    }
+}
+
+fn evict_oldest_device(devices: &mut BTreeMap<EndpointId, NearbyDeviceRecord>) {
+    if let Some(oldest) = devices
+        .iter()
+        .min_by_key(|(_, record)| record.last_seen_at)
+        .map(|(node_id, _)| *node_id)
+    {
+        devices.remove(&oldest);
+    }
 }
 
 fn direct_address_count(addr: &EndpointAddr) -> usize {
@@ -1127,6 +1175,92 @@ mod tests {
 
         assert_eq!(changed.len(), 1);
         assert_eq!(changed[0].transport, NearbyTransport::WifiMdns);
+    }
+
+    #[tokio::test]
+    async fn nearby_device_registry_evicts_oldest_at_capacity() {
+        let registry = NearbyShareRegistry::new(true);
+        let mut node_ids = Vec::with_capacity(MAX_DISCOVERED_PEERS + 1);
+        for index in 1..=(MAX_DISCOVERED_PEERS + 1) {
+            let mut bytes = [0_u8; 32];
+            bytes[31] = u8::try_from(index).expect("peer index fits in a byte");
+            let node_id = SecretKey::from_bytes(&bytes).public();
+            node_ids.push(node_id);
+            let candidate = RemoteCandidate {
+                node_id,
+                node_addr: EndpointAddr::new(node_id),
+                route_hint: NearbyRouteHint::Unknown,
+                direct_address_count: 0,
+                last_seen_at: Instant::now(),
+            };
+            registry.upsert_wifi_device(node_id, &candidate).await;
+        }
+
+        let devices = registry.devices_snapshot().await;
+        assert_eq!(devices.len(), MAX_DISCOVERED_PEERS);
+        assert!(!devices
+            .iter()
+            .any(|device| device.node_id == node_ids[0].to_string()));
+        assert!(devices
+            .iter()
+            .any(|device| device.node_id == node_ids[MAX_DISCOVERED_PEERS].to_string()));
+    }
+
+    #[test]
+    fn candidate_registry_evicts_oldest_at_capacity() {
+        let mut candidates = BTreeMap::new();
+        let mut first_bytes = [0_u8; 32];
+        first_bytes[31] = 1;
+        let first_id = SecretKey::from_bytes(&first_bytes).public();
+        let now = Instant::now();
+        for index in 1..=(MAX_DISCOVERED_PEERS + 1) {
+            let mut bytes = [0_u8; 32];
+            bytes[31] = u8::try_from(index).expect("peer index fits in a byte");
+            let node_id = SecretKey::from_bytes(&bytes).public();
+            let candidate = RemoteCandidate {
+                node_id,
+                node_addr: EndpointAddr::new(node_id),
+                route_hint: NearbyRouteHint::Unknown,
+                direct_address_count: 0,
+                last_seen_at: now
+                    + Duration::from_millis(u64::try_from(index).expect("bounded index")),
+            };
+            if index == 1 {
+                assert_eq!(candidate.node_id, first_id);
+            }
+            upsert_candidate(&mut candidates, candidate);
+        }
+
+        assert_eq!(candidates.len(), MAX_DISCOVERED_PEERS);
+        assert!(!candidates.contains_key(&first_id));
+    }
+
+    #[test]
+    fn merged_candidate_addresses_are_deduplicated_and_bounded() {
+        let node_id = SecretKey::from_bytes(&[11_u8; 32]).public();
+        let current = EndpointAddr::from_parts(
+            node_id,
+            (1..=MAX_CANDIDATE_ADDRESSES).map(|port| {
+                let port = u16::try_from(port).expect("address port fits in u16");
+                TransportAddr::Ip(([127, 0, 0, 1], port).into())
+            }),
+        );
+        let next =
+            EndpointAddr::from_parts(node_id, [TransportAddr::Ip(([127, 0, 0, 1], 5000).into())]);
+
+        let merged = merge_node_addrs(&current, &next);
+        let newest_addr = next.addrs.iter().next().expect("newest address");
+
+        assert_eq!(merged.addrs.len(), MAX_CANDIDATE_ADDRESSES);
+        assert!(merged.addrs.contains(newest_addr));
+        assert_eq!(
+            merged
+                .addrs
+                .iter()
+                .filter(|addr| *addr == newest_addr)
+                .count(),
+            1
+        );
     }
 
     #[tokio::test]

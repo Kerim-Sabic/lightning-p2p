@@ -13,7 +13,7 @@ linked release evidence.
 - Android v0.5.1 as a signed sideload APK with share-target sends and public
   MediaStore destinations.
 
-### v0.9.23 beta channel
+### v0.9.24 beta channel
 
 - Windows, universal macOS DMG, Linux AppImage/deb/rpm, and CLI artifacts.
 - Lightning Chat in the Windows and Android apps plus the `/chat` Web lounge.
@@ -27,6 +27,8 @@ linked release evidence.
 - Incoming blob protocol requests are limited globally and per peer, and
   incomplete request headers expire to prevent abandoned streams from holding
   capacity indefinitely.
+- Nearby discovery probes are paced to the refresh interval, and retained
+  peers and route addresses have explicit bounds.
 - Legacy transfer stores are preserved and the node starts with a compatible
   store rather than stalling during initialization. Slow storage initialization
   is allowed to finish safely instead of being aborted while the database is

@@ -64,6 +64,14 @@ All notable changes to Lightning P2P are documented here. The project follows se
 
 ## [Unreleased]
 
+## [0.9.24] - 2026-10-02 ("Responsive Nearby Discovery")
+
+- Keep nearby device discovery responsive during mDNS bursts by showing peers
+  immediately and pacing share probes to the regular refresh interval.
+- Bound retained nearby peers to 128 and each peer's merged route addresses to
+  8, evicting the least recently seen entries when capacity is reached.
+- Keep Flick direction cues and single-offer handoffs intact across the release.
+
 ## [0.9.16] - 2026-10-01 ("Reliable Startup and Receiving")
 
 ### Fixed
