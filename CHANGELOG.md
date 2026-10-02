@@ -64,6 +64,10 @@ All notable changes to Lightning P2P are documented here. The project follows se
 
 ## [Unreleased]
 
+- Apply a restrictive content security policy across the hosted site while
+  preserving the explicit WebAssembly and relay permissions required by
+  browser transfers; validate Netlify and Tauri policies in `pnpm check`.
+
 ## [0.9.28] - 2026-10-02 ("Durable Receive Confirmation")
 
 - Retain nearby save receipts independently from optional keyring resume

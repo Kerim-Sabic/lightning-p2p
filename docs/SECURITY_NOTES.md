@@ -52,7 +52,7 @@ Android imports use user-granted `content://` URIs and stage into the app cache 
 ## Current Security TODOs
 
 - Keep capability tickets, stable peer IDs, content hashes, and filesystem paths out of production logs. Runtime log fields have been audited and reduced to static events and non-sensitive counters; recheck when adding logs.
-- Validate the configured web and Tauri CSP against packaged builds and the deployed receive/send pages.
+- Verify deployed CSP headers after each website deployment. `pnpm check:security-policy` enforces the configured global and browser-transfer policies plus the Tauri CSP; live header verification remains deployment-specific.
 - Validate Android document-picker, share-intent, and MediaStore save flows on supported OS versions after removing broad media read permissions.
 - Document that custom-scheme deep links carry the receive ticket to the operating system and may be retained by OS/app history or logs.
 
