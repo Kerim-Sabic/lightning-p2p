@@ -9,7 +9,7 @@
 )]
 
 use super::sync::mesh_packet_id;
-use super::bounded_json;
+use crate::storage::bounded_json;
 use super::{
     CourierDepositTier, CourierEnvelope, CourierStore, FragmentAssembler, FragmentResult,
     Fragmenter, GossipFilter, GossipStore, GroupEnvelope, GroupMember, MediaPacket, MeshIdentity,

@@ -9,7 +9,7 @@ use std::collections::VecDeque;
 use std::path::Path;
 
 use super::MeshPacket;
-use super::bounded_json;
+use crate::storage::bounded_json;
 
 const MAX_FILTER_P: u8 = 32;
 const DEFAULT_FILTER_BYTES: usize = 384;

@@ -1,7 +1,7 @@
 #![allow(clippy::missing_errors_doc)]
 
 use hmac::{Hmac, Mac};
-use super::bounded_json;
+use crate::storage::bounded_json;
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 use std::collections::HashSet;

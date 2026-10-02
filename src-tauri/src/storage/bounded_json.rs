@@ -1,12 +1,19 @@
+//! Size-bounded JSON persistence helpers for startup-critical local stores.
+
 use serde::{de::DeserializeOwned, Serialize};
 use std::{fs::File, io::Read, path::Path};
 
-pub(crate) fn read<T: DeserializeOwned>(path: &Path, max_bytes: usize) -> Result<T, String> {
+pub(crate) fn read_bytes(path: &Path, max_bytes: usize) -> Result<Vec<u8>, String> {
+    read_bytes_if_exists(path, max_bytes)?.ok_or_else(|| "JSON store does not exist".into())
+}
+
+pub(crate) fn read_bytes_if_exists(
+    path: &Path,
+    max_bytes: usize,
+) -> Result<Option<Vec<u8>>, String> {
     let file = match File::open(path) {
         Ok(file) => file,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            return Err("file does not exist".into());
-        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(error) => return Err(error.to_string()),
     };
     if file
@@ -24,7 +31,11 @@ pub(crate) fn read<T: DeserializeOwned>(path: &Path, max_bytes: usize) -> Result
     if bytes.len() > max_bytes {
         return Err(format!("JSON store exceeds {max_bytes} byte limit"));
     }
-    serde_json::from_slice(&bytes).map_err(|error| error.to_string())
+    Ok(Some(bytes))
+}
+
+pub(crate) fn read<T: DeserializeOwned>(path: &Path, max_bytes: usize) -> Result<T, String> {
+    serde_json::from_slice(&read_bytes(path, max_bytes)?).map_err(|error| error.to_string())
 }
 
 pub(crate) fn write<T: Serialize>(path: &Path, value: &T, max_bytes: usize) -> Result<(), String> {
@@ -52,9 +63,7 @@ mod tests {
         let original = vec![b' '; 1025];
         std::fs::write(&path, &original).expect("write fixture");
 
-        let result = read::<Vec<String>>(&path, 1024);
-
-        assert!(result.is_err());
+        assert!(read::<Vec<String>>(&path, 1024).is_err());
         assert_eq!(std::fs::read(path).expect("read source"), original);
     }
 

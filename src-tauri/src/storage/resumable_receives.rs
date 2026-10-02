@@ -2,6 +2,7 @@
 
 use crate::crypto::fallback_permissions::restrict_private_file;
 use crate::error::{LightningP2PError, Result};
+use crate::storage::bounded_json;
 use crate::transfer::progress::TransferInfo;
 use crate::transfer::receiver::ReceiveLimits;
 use serde::{Deserialize, Serialize};
@@ -12,7 +13,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 
 const STORE_FILE: &str = "resumable-receives.json";
 const MAX_RECOVERABLE_RECEIVES: usize = 32;
-const MAX_METADATA_BYTES: u64 = 256 * 1024;
+const MAX_METADATA_BYTES: usize = 256 * 1024;
 
 /// Non-secret data needed to reconstruct a paused receive.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -76,12 +77,8 @@ impl ResumableReceiveStore {
         let path = data_dir.join(STORE_FILE);
         let records = if path.exists() {
             restrict_private_file(&path)?;
-            if std::fs::metadata(&path)?.len() > MAX_METADATA_BYTES {
-                return Err(LightningP2PError::Other(
-                    "Receive recovery metadata exceeds its size limit".into(),
-                ));
-            }
-            let bytes = std::fs::read(&path)?;
+            let bytes = bounded_json::read_bytes(&path, MAX_METADATA_BYTES)
+                .map_err(LightningP2PError::Other)?;
             let persisted: PersistedStore = serde_json::from_slice(&bytes)?;
             if persisted.schema_version != 1 || persisted.receives.len() > MAX_RECOVERABLE_RECEIVES
             {
@@ -185,7 +182,7 @@ impl ResumableReceiveStore {
             receives: records.values().cloned().collect(),
         };
         let bytes = serde_json::to_vec(&persisted)?;
-        if bytes.len() as u64 > MAX_METADATA_BYTES {
+        if bytes.len() > MAX_METADATA_BYTES {
             return Err(LightningP2PError::Other(
                 "Receive recovery metadata exceeds its size limit".into(),
             ));

@@ -1,6 +1,7 @@
 //! Persisted block list for nearby file-offer senders.
 
 use crate::error::{LightningP2PError, Result};
+use crate::storage::bounded_json;
 use iroh::EndpointId;
 use std::{
     collections::HashSet,
@@ -12,7 +13,7 @@ use tokio::sync::RwLock;
 
 const FILE_NAME: &str = "blocked-nearby-peers.json";
 const MAX_BLOCKED_PEERS: usize = 4096;
-const MAX_BLOCKED_FILE_BYTES: u64 = 512 * 1024;
+const MAX_BLOCKED_FILE_BYTES: usize = 512 * 1024;
 
 /// Locally blocked cryptographic peer identities for nearby transfer offers.
 #[derive(Debug, Clone)]
@@ -30,12 +31,8 @@ impl BlockedPeers {
     pub fn load(data_dir: &Path) -> Result<Self> {
         let path = data_dir.join(FILE_NAME);
         let ids = if path.exists() {
-            if std::fs::metadata(&path)?.len() > MAX_BLOCKED_FILE_BYTES {
-                return Err(LightningP2PError::Other(
-                    "The saved nearby block list exceeds its safety limit.".into(),
-                ));
-            }
-            let bytes = std::fs::read(&path)?;
+            let bytes = bounded_json::read_bytes(&path, MAX_BLOCKED_FILE_BYTES)
+                .map_err(LightningP2PError::Other)?;
             let stored: Vec<String> = serde_json::from_slice(&bytes)?;
             if stored.len() > MAX_BLOCKED_PEERS {
                 return Err(LightningP2PError::Other(

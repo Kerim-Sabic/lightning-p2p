@@ -5,7 +5,6 @@
 //! courier mail, private groups, media packets, and QR trust records.
 
 mod courier;
-mod bounded_json;
 mod fragment;
 mod groups;
 mod media;

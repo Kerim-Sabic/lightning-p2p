@@ -1,6 +1,7 @@
 //! User-confirmed device identities for the My Devices surface.
 
 use crate::error::{LightningP2PError, Result};
+use crate::storage::bounded_json;
 use iroh::EndpointId;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -14,6 +15,7 @@ use tokio::sync::RwLock;
 
 const FILE_NAME: &str = "paired-devices.json";
 const MAX_PAIRED_DEVICES: usize = 256;
+const MAX_PAIRED_DEVICES_FILE_BYTES: usize = 256 * 1024;
 const MAX_DEVICE_NAME_CHARS: usize = 64;
 
 /// A locally saved public peer identity that the user explicitly verified.
@@ -52,10 +54,14 @@ impl PairedDevices {
     pub fn load(data_dir: &std::path::Path) -> Result<Self> {
         let path = data_dir.join(FILE_NAME);
         let devices = if path.exists() {
-            match std::fs::read(&path).and_then(|bytes| {
-                serde_json::from_slice::<Vec<PairedDevice>>(&bytes).map_err(std::io::Error::other)
-            }) {
-                Ok(devices) => devices,
+            match bounded_json::read::<Vec<PairedDevice>>(&path, MAX_PAIRED_DEVICES_FILE_BYTES) {
+                Ok(devices) if devices.len() <= MAX_PAIRED_DEVICES => devices,
+                Ok(_) => {
+                    tracing::warn!("saved device list exceeds its safety limit; preserving the file");
+                    let backup = path.with_extension(format!("json.corrupt-{}", unix_timestamp()));
+                    std::fs::rename(&path, backup)?;
+                    Vec::new()
+                }
                 Err(_error) => {
                     tracing::warn!("could not read saved devices; preserving the damaged file");
                     let backup = path.with_extension(format!("json.corrupt-{}", unix_timestamp()));

@@ -1,6 +1,7 @@
 //! Persistent application settings for packaged and development builds.
 
 use crate::error::{LightningP2PError, Result};
+use crate::storage::bounded_json;
 use crate::transfer::TransferMode;
 use iroh::RelayUrl;
 use serde::{Deserialize, Serialize};
@@ -17,6 +18,7 @@ const DEPRECATED_DATA_DIR_ENV: &str = "FASTDROP_DATA_DIR";
 const PROFILE_ENV: &str = "LIGHTNING_P2P_PROFILE";
 const DEPRECATED_PROFILE_ENV: &str = "FASTDROP_PROFILE";
 const SETTINGS_FILE_NAME: &str = "settings.json";
+const MAX_SETTINGS_FILE_BYTES: usize = 64 * 1024;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 const DOWNLOADS_FOLDER_NAME: &str = "Lightning P2P";
 
@@ -316,18 +318,21 @@ fn load_settings_file(path: &Path, data_dir: &Path) -> Result<AppSettings> {
         return Ok(AppSettings::defaults(data_dir));
     }
 
-    match std::fs::read_to_string(path) {
-        Ok(contents) => serde_json::from_str(&contents)
+    match bounded_json::read_bytes_if_exists(path, MAX_SETTINGS_FILE_BYTES) {
+        Ok(Some(contents)) => serde_json::from_slice(&contents)
             .map_err(LightningP2PError::from)
             .or_else(|_err| {
                 tracing::warn!("settings file invalid, preserving corrupt copy");
                 preserve_corrupt_settings(path)?;
                 Ok(AppSettings::defaults(data_dir))
             }),
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+        Ok(None) => Ok(AppSettings::defaults(data_dir)),
+        Err(error) if error.contains("byte limit") => {
+            tracing::warn!("settings file exceeds its size limit, preserving corrupt copy");
+            preserve_corrupt_settings(path)?;
             Ok(AppSettings::defaults(data_dir))
         }
-        Err(err) => Err(err.into()),
+        Err(error) => Err(LightningP2PError::Other(error)),
     }
 }
 
