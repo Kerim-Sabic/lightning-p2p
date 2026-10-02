@@ -129,7 +129,7 @@ drop files → share the /receive link  →     open link → "Receive in this b
 
 ## ◆ Install
 
-Stable channel: **v0.4.6**. Latest public release: **v0.9.24** (community desktop builds; signed Android APK/AAB; responsive bounded nearby discovery, actionable recovery when node startup stalls, bounded incoming blob requests, duplicate-offer protection, paused-transfer state protection, restart-safe receive recovery, and directional Flick arrival cues). Swipe toward the person on screen and their display shows the file arriving from that approximate side; no location data is shared. Tapping **Send** remains a normal directionless send.
+Stable channel: **v0.4.6**. Latest public release: **v0.9.24** (community desktop builds; signed Android APK/AAB; responsive bounded nearby discovery, offers to up to eight nearby devices with separate consent, actionable recovery when node startup stalls, bounded incoming blob requests, duplicate-offer protection, paused-transfer state protection, restart-safe receive recovery, and directional Flick arrival cues). Swipe toward the person on screen and their display shows the file arriving from that approximate side; no location data is shared. Tapping **Send** remains a normal directionless send.
 
 | Platform | Asset | Channel | Best for |
 | --- | --- | --- | --- |
@@ -142,7 +142,7 @@ Stable channel: **v0.4.6**. Latest public release: **v0.9.24** (community deskto
 | **CLI** | [`lightning-p2p-cli`](https://github.com/Kerim-Sabic/lightning-p2p/releases/tag/v0.9.24) | Beta v0.9.24 | `send <file>` prints a ticket to stdout · Win/mac/Linux tarballs |
 | **Browser** | [lightning-p2p.netlify.app/receive](https://lightning-p2p.netlify.app/receive) | Public beta | Receiving only — nothing to install, the sender's link is enough |
 | **Lightning Chat** | [Open web chat](https://lightning-p2p.netlify.app/chat) | Beta v0.9.24 | Signed web rooms · encrypted DMs · native nearby chat |
-| **Latest release** | [Release v0.9.24](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest) | Published · community builds | Responsive nearby discovery · single-offer handoffs · bounded incoming requests · startup recovery · same-side Flick arrival |
+| **Latest release** | [Release v0.9.24](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest) | Published · community builds | Responsive discovery · multi-device offers · bounded incoming requests · startup recovery · same-side Flick arrival |
 
 ```bash
 # The CLI in one breath: share a file, pipe the ticket anywhere.
