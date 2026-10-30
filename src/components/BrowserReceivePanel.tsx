@@ -5,6 +5,7 @@ import {
   FileDown,
   Globe,
   Loader2,
+  Send,
   ShieldCheck,
 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
@@ -88,6 +89,13 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
   const refused = info != null && info.size > REFUSE_BYTES && !canStreamToDisk;
   const heavy =
     info != null && info.size > WARN_BYTES && !canStreamToDisk && !refused;
+  // The streamed path only reports manifest bytes, so a percentage would be
+  // misleading there; the memory path receives the whole share and can show one.
+  const receivePercent =
+    !streamedReceive && info != null && info.size > 0
+      ? Math.min(100, (receivedBytes / info.size) * 100)
+      : null;
+  const allSaved = files.length > 0 && savedFileKeys.size >= files.length;
 
   const beginInspect = async () => {
     setPhase("inspecting");
@@ -357,32 +365,51 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
             <Frame key="receiving" reduce={reduce}>
               <Busy label={status} />
               <p className="mt-3 text-center text-[13px] leading-6 text-[color:var(--muted-copy)]">
-                {formatBytes(receivedBytes)}{" "}
+                {formatBytes(receivedBytes)}
+                {receivePercent !== null && info
+                  ? ` of ${formatBytes(info.size)} (${Math.floor(receivePercent)}%)`
+                  : ""}{" "}
                 {streamedReceive
                   ? "of the collection manifest verified so far. Files stream as you save them."
                   : "received and verified so far."}{" "}
                 The sender must stay online.
               </p>
-              <div
-                className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/[0.06]"
-                aria-hidden
-              >
-                {!reduce && (
-                  <motion.div
-                    className="h-full w-1/3 rounded-full"
-                    style={{
-                      background:
-                        "linear-gradient(90deg, transparent, oklch(82% 0.16 150 / 0.9), transparent)",
-                    }}
-                    animate={{ x: ["-120%", "340%"] }}
-                    transition={{
-                      duration: 1.5,
-                      repeat: Infinity,
-                      ease: "easeInOut",
-                    }}
+              {receivePercent !== null ? (
+                <div
+                  className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/[0.06]"
+                  role="progressbar"
+                  aria-label="Browser receive progress"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={Math.floor(receivePercent)}
+                >
+                  <div
+                    className="h-full rounded-full bg-[var(--signal-green)] transition-[width] duration-150"
+                    style={{ width: `${receivePercent}%` }}
                   />
-                )}
-              </div>
+                </div>
+              ) : (
+                <div
+                  className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/[0.06]"
+                  aria-hidden
+                >
+                  {!reduce && (
+                    <motion.div
+                      className="h-full w-1/3 rounded-full"
+                      style={{
+                        background:
+                          "linear-gradient(90deg, transparent, oklch(82% 0.16 150 / 0.9), transparent)",
+                      }}
+                      animate={{ x: ["-120%", "340%"] }}
+                      transition={{
+                        duration: 1.5,
+                        repeat: Infinity,
+                        ease: "easeInOut",
+                      }}
+                    />
+                  )}
+                </div>
+              )}
               <button
                 type="button"
                 onClick={() => void cancelReceive()}
@@ -468,10 +495,44 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
                   );
                 })}
               </ul>
+              {error && (
+                <p
+                  role="alert"
+                  className="mt-3 flex items-start gap-2 rounded-xl border border-red-400/25 bg-red-500/10 px-3.5 py-2.5 text-[13px] leading-6 text-red-200"
+                >
+                  <AlertTriangle className="mt-1 h-3.5 w-3.5 shrink-0" />
+                  <span>{error}</span>
+                </p>
+              )}
               {!hasSaveFilePicker() && (
                 <p className="mt-2.5 text-[13px] leading-6 text-[color:var(--muted-copy)]">
                   Saved files land in this browser's Downloads folder.
                 </p>
+              )}
+              {allSaved && (
+                <motion.div
+                  initial={reduce ? false : { opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3 }}
+                  className="mt-4 rounded-xl border border-white/8 bg-black/30 p-4"
+                >
+                  <p className="flex items-center gap-2 text-sm font-semibold text-white">
+                    <Check className="h-4 w-4 text-[var(--signal-green)]" />
+                    {files.length === 1
+                      ? "File saved."
+                      : `All ${files.length} files saved.`}
+                  </p>
+                  <p className="mt-1 text-[13px] leading-6 text-[color:var(--muted-copy)]">
+                    Your turn: send files back the same way. No install, no
+                    account, and no cloud upload.
+                  </p>
+                  <a
+                    href="/send"
+                    className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-[var(--signal-green)] px-5 py-3 text-[13.5px] font-semibold text-[var(--text-ink)] transition hover:brightness-[1.04] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--signal-green)]"
+                  >
+                    <Send className="h-4 w-4" /> Send files from this browser
+                  </a>
+                </motion.div>
               )}
               {streamedReceive && savingFileKey !== null && (
                 <button
