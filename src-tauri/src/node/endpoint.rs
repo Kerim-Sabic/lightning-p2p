@@ -53,6 +53,8 @@ pub struct LightningP2PNode {
     endpoint: Endpoint,
     /// Persistent iroh-blobs store. Derefs to [`iroh_blobs::api::Store`].
     store: FsStore,
+    /// Root of the file store, where verified blobs live as plain files.
+    blob_dir: PathBuf,
     _storage_lock: File,
     router: Router,
     /// Out-of-band address lookup used to teach the endpoint how to reach the
@@ -205,6 +207,7 @@ impl LightningP2PNode {
         Ok(Self {
             endpoint,
             store,
+            blob_dir: blob_dir(&data_dir),
             _storage_lock: storage_lock,
             router,
             lookup,
@@ -373,6 +376,12 @@ impl LightningP2PNode {
     #[must_use]
     pub fn blobs_client(&self) -> &Store {
         &self.store
+    }
+
+    /// Returns the root directory of the file store.
+    #[must_use]
+    pub fn blob_dir(&self) -> &Path {
+        &self.blob_dir
     }
 
     /// Returns the local storage database handle.
@@ -572,8 +581,12 @@ fn mtu_discovery(profile: TransferProfile) -> MtuDiscoveryConfig {
     mtud
 }
 
+fn blob_dir(data_dir: &Path) -> PathBuf {
+    data_dir.join("blobs")
+}
+
 async fn load_blob_store(data_dir: &Path) -> Result<FsStore> {
-    let blob_dir = data_dir.join("blobs");
+    let blob_dir = blob_dir(data_dir);
     let collection_ready = Arc::new(AtomicBool::new(false));
     let store = FsStore::load_with_opts(
         blob_dir.join("blobs.db"),

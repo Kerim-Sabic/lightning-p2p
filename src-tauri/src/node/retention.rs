@@ -13,19 +13,21 @@
 //!   retention was introduced, so no earlier share loses its data.
 //!
 //! A received share is released once it has been saved and its resume record
-//! is gone; the next collection then frees the duplicate the export left in
-//! app data. Collection waits until the legacy migration has finished.
+//! is gone. Collection runs shortly after every release, so the store's copy
+//! of saved content leaves app data within seconds even in short sessions,
+//! and waits until the legacy migration has finished.
 
 use crate::error::{LightningP2PError, Result};
 use crate::storage::resumable_receives::ResumableReceiveStore;
 use futures_util::StreamExt;
-use iroh_blobs::api::proto::BlobStatus;
 use iroh_blobs::api::Store;
+use iroh_blobs::hashseq::HashSeq;
 use iroh_blobs::store::fs::options::Options;
 use iroh_blobs::store::{GcConfig, ProtectCb, ProtectOutcome};
-use iroh_blobs::{Hash, HashAndFormat};
-use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use iroh_blobs::{BlobFormat, Hash, HashAndFormat};
+use std::collections::HashSet;
+use std::path::Path;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -34,32 +36,78 @@ const RECEIVE_TAG_PREFIX: &str = "receive/";
 const LEGACY_TAG_PREFIX: &str = "legacy/";
 /// Written once every pre-existing blob carries a legacy tag.
 const MIGRATION_MARKER: &str = ".retention-v1";
-/// Collection walks every tag and hash sequence, so it runs rarely; freed
-/// space only has to come back eventually.
+/// How often the collector wakes. A wake costs nothing unless content was
+/// released, so saved duplicates are freed within seconds of a receive.
+const GC_TICK: Duration = Duration::from_secs(10);
+/// Collection walks every tag and hash sequence, so without a release it
+/// runs only this often.
 const GC_INTERVAL: Duration = Duration::from_secs(10 * 60);
-/// How often a moved save checks whether its store entry was reclaimed, and
-/// for how many checks (comfortably more than one collection interval).
-const RECLAIM_POLL: Duration = Duration::from_secs(60);
-const RECLAIM_CHECKS: usize = 40;
+
+/// Bumped by every release; each store's collector runs once it settles.
+static RELEASES: AtomicU64 = AtomicU64::new(0);
 
 /// Store options with garbage collection gated on `ready`. Until the gate
 /// opens, every collection run aborts before deleting anything.
 pub(crate) fn store_options(blob_dir: &Path, ready: Arc<AtomicBool>) -> Options {
-    options_with_interval(blob_dir, ready, GC_INTERVAL)
+    options_with_interval(blob_dir, ready, GC_TICK)
 }
 
-fn options_with_interval(blob_dir: &Path, ready: Arc<AtomicBool>, interval: Duration) -> Options {
+/// [`store_options`] with a custom collector wake interval.
+pub(crate) fn options_with_interval(
+    blob_dir: &Path,
+    ready: Arc<AtomicBool>,
+    tick: Duration,
+) -> Options {
     let mut options = Options::new(blob_dir);
     options.gc = Some(GcConfig {
-        interval,
-        add_protected: Some(gate(ready)),
+        interval: tick,
+        add_protected: Some(gate(ready, tick)),
     });
     options
 }
 
-fn gate(ready: Arc<AtomicBool>) -> ProtectCb {
+/// Decides, on every collector wake, whether this wake collects.
+struct Collector {
+    /// Release count when this collector last ran (`u64::MAX`: never ran,
+    /// so the first settled wake collects what earlier sessions released).
+    collected: AtomicU64,
+    /// Release count seen on the previous wake.
+    previous: AtomicU64,
+    idle_wakes: AtomicU64,
+    wakes_per_sweep: u64,
+}
+
+impl Collector {
+    fn new(tick: Duration) -> Self {
+        let wakes = GC_INTERVAL.as_millis() / tick.as_millis().max(1);
+        Self {
+            collected: AtomicU64::new(u64::MAX),
+            previous: AtomicU64::new(u64::MAX),
+            idle_wakes: AtomicU64::new(0),
+            wakes_per_sweep: u64::try_from(wakes).unwrap_or(u64::MAX).max(1),
+        }
+    }
+
+    /// Collects once `releases` has been quiet for one wake, so a burst of
+    /// receives is collected once after it ends rather than mid-transfer.
+    fn should_collect(&self, releases: u64) -> bool {
+        let settled = self.previous.swap(releases, Ordering::SeqCst) == releases;
+        let idle_wakes = self.idle_wakes.fetch_add(1, Ordering::SeqCst) + 1;
+        let uncollected = settled && self.collected.load(Ordering::SeqCst) != releases;
+        if uncollected || idle_wakes >= self.wakes_per_sweep {
+            self.collected.store(releases, Ordering::SeqCst);
+            self.idle_wakes.store(0, Ordering::SeqCst);
+            return true;
+        }
+        false
+    }
+}
+
+fn gate(ready: Arc<AtomicBool>, tick: Duration) -> ProtectCb {
+    let collector = Arc::new(Collector::new(tick));
     Arc::new(move |_live| {
-        let outcome = if ready.load(Ordering::SeqCst) {
+        let open = ready.load(Ordering::SeqCst);
+        let outcome = if open && collector.should_collect(RELEASES.load(Ordering::SeqCst)) {
             ProtectOutcome::Continue
         } else {
             ProtectOutcome::Abort
@@ -136,6 +184,46 @@ pub(crate) async fn release_receive(store: &Store, id: &str) {
     if let Err(error) = store.tags().delete(receive_tag(id)).await {
         tracing::warn!(%error, "could not release received content for reclaim");
     }
+    RELEASES.fetch_add(1, Ordering::SeqCst);
+}
+
+/// Every hash some pin other than `receive/<own_id>` keeps alive: shares,
+/// legacy content, other receives, and each child of a pinned hash sequence.
+/// A save may hard-link only content outside this set, so editing a saved
+/// file in place can never change bytes a share or paused receive serves.
+///
+/// # Errors
+///
+/// Returns `LightningP2PError::Blob` if tags cannot be listed.
+pub(crate) async fn pinned_elsewhere(store: &Store, own_id: &str) -> Result<HashSet<Hash>> {
+    let own = receive_tag(own_id);
+    let mut tags = store
+        .tags()
+        .list()
+        .await
+        .map_err(|error| blob_error(&error))?;
+    let mut pinned = HashSet::new();
+    let mut sequences = Vec::new();
+    while let Some(tag) = tags.next().await {
+        let tag = tag.map_err(|error| blob_error(&error))?;
+        if tag.name.as_ref() == own.as_bytes() {
+            continue;
+        }
+        pinned.insert(tag.hash);
+        if tag.format == BlobFormat::HashSeq {
+            sequences.push(tag.hash);
+        }
+    }
+    for root in sequences {
+        // A pinned sequence that is still downloading pins no children yet.
+        let Ok(bytes) = store.blobs().get_bytes(root).await else {
+            continue;
+        };
+        if let Ok(sequence) = HashSeq::try_from(bytes) {
+            pinned.extend(sequence.iter());
+        }
+    }
+    Ok(pinned)
 }
 
 /// Drops receive pins that have no resume record, left behind by a receive
@@ -171,26 +259,6 @@ pub(crate) async fn release_orphaned_receives(store: &Store, data_dir: &Path) ->
     Ok(())
 }
 
-/// Removes the staging folder of a moved save once collection has dropped
-/// the store entry that still points at it. Gives up after a bounded wait and
-/// leaves the folder to the startup sweep, so the entry is never left
-/// referencing a missing file.
-pub(crate) async fn remove_when_reclaimed(store: Store, hash: Hash, staging_dir: PathBuf) {
-    for _ in 0..RECLAIM_CHECKS {
-        tokio::time::sleep(RECLAIM_POLL).await;
-        match store.blobs().status(hash).await {
-            Ok(BlobStatus::NotFound) => {
-                if let Err(error) = tokio::fs::remove_dir_all(&staging_dir).await {
-                    tracing::debug!(%error, "could not remove reclaimed receive staging folder");
-                }
-                return;
-            }
-            Ok(_) => {}
-            Err(_) => return,
-        }
-    }
-}
-
 fn receive_tag(id: &str) -> String {
     format!("{RECEIVE_TAG_PREFIX}{id}")
 }
@@ -207,7 +275,6 @@ fn blob_error(error: &impl ToString) -> LightningP2PError {
 mod tests {
     use super::*;
     use iroh_blobs::store::fs::FsStore;
-    use std::collections::HashSet;
 
     async fn tag_names(store: &Store) -> HashSet<String> {
         let mut names = HashSet::new();
@@ -323,11 +390,93 @@ mod tests {
     #[tokio::test]
     async fn gate_aborts_collection_until_ready() {
         let ready = Arc::new(AtomicBool::new(false));
-        let gate = gate(ready.clone());
+        let gate = gate(ready.clone(), GC_TICK);
         let mut live = HashSet::new();
-        assert!(matches!(gate(&mut live).await, ProtectOutcome::Abort));
+        for _ in 0..3 {
+            assert!(matches!(gate(&mut live).await, ProtectOutcome::Abort));
+        }
         ready.store(true, Ordering::SeqCst);
-        assert!(matches!(gate(&mut live).await, ProtectOutcome::Continue));
+        let mut outcomes = Vec::new();
+        for _ in 0..3 {
+            outcomes.push(matches!(gate(&mut live).await, ProtectOutcome::Continue));
+        }
+        assert!(outcomes.contains(&true), "an open gate never collected");
+    }
+
+    #[test]
+    fn collector_runs_once_releases_settle() {
+        let collector = Collector::new(GC_TICK);
+        assert!(!collector.should_collect(0), "the first wake only settles");
+        assert!(
+            collector.should_collect(0),
+            "then earlier releases are collected"
+        );
+        assert!(!collector.should_collect(0), "nothing new was released");
+        assert!(
+            !collector.should_collect(1),
+            "a release waits one quiet wake"
+        );
+        assert!(!collector.should_collect(2), "a burst keeps waiting");
+        assert!(
+            collector.should_collect(2),
+            "settled releases are collected"
+        );
+        assert!(!collector.should_collect(2));
+    }
+
+    #[test]
+    fn collector_also_sweeps_without_releases() {
+        let collector = Collector::new(GC_INTERVAL / 3);
+        assert!(!collector.should_collect(5));
+        assert!(collector.should_collect(5));
+        assert!(!collector.should_collect(5));
+        assert!(!collector.should_collect(5));
+        assert!(collector.should_collect(5), "slow sweep after the interval");
+    }
+
+    #[tokio::test]
+    async fn pins_elsewhere_cover_shares_children_and_other_receives_only() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store = FsStore::load(dir.path().join("blobs"))
+            .await
+            .expect("store");
+        let child = store
+            .add_bytes(vec![5_u8; 64 * 1024])
+            .temp_tag()
+            .await
+            .unwrap();
+        let root = iroh_blobs::format::collection::Collection::from_iter([(
+            "child.bin".to_string(),
+            child.hash(),
+        )])
+        .store(&store)
+        .await
+        .unwrap();
+        pin_share(&store, root.hash()).await.unwrap();
+        let paused = store
+            .add_bytes(vec![6_u8; 64 * 1024])
+            .temp_tag()
+            .await
+            .unwrap();
+        pin_receive(&store, "paused", HashAndFormat::raw(paused.hash()))
+            .await
+            .unwrap();
+        let own = store
+            .add_bytes(vec![7_u8; 64 * 1024])
+            .temp_tag()
+            .await
+            .unwrap();
+        pin_receive(&store, "own", HashAndFormat::raw(own.hash()))
+            .await
+            .unwrap();
+
+        let pinned = pinned_elsewhere(&store, "own").await.expect("pins");
+
+        assert!(pinned.contains(&root.hash()));
+        assert!(pinned.contains(&child.hash()));
+        assert!(pinned.contains(&paused.hash()));
+        assert!(!pinned.contains(&own.hash()));
+        store.shutdown().await.expect("shutdown");
     }
 
     #[tokio::test]

@@ -17,7 +17,6 @@ use crate::transfer::queue::TransferQueue;
 use crate::transfer::ticket::ShareTicket;
 use futures_util::{Stream, StreamExt};
 use iroh_blobs::api::downloader::DownloadProgressItem;
-use iroh_blobs::api::proto::BlobStatus;
 use iroh_blobs::api::Store;
 use iroh_blobs::ticket::BlobTicket;
 use serde::{Deserialize, Serialize};
@@ -81,8 +80,6 @@ struct ReceiveSummary {
     peer: String,
     metrics: TransferMetrics,
     output_path: PathBuf,
-    /// Staging folder kept alive until the store forgets a moved save.
-    retained_staging: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -360,7 +357,6 @@ async fn recover_finalized_receive(
         peer: peer.to_owned(),
         metrics,
         output_path,
-        retained_staging: None,
     })
 }
 
@@ -427,7 +423,6 @@ async fn receive_core(
         .unwrap_or_else(|| format!("adhoc-{}", uuid::Uuid::new_v4()));
     let resume_store = options.resume_store.clone();
     let store = node.blobs_client();
-    let save_mode = save_mode_for(store, ticket.primary()).await;
     retention::pin_receive(store, &pin_id, ticket.primary().hash_and_format()).await?;
     let result = receive_pinned(
         node,
@@ -436,7 +431,7 @@ async fn receive_core(
         cancel_rx,
         progress,
         options,
-        save_mode,
+        &pin_id,
     )
     .await;
     let resumable = result.is_err()
@@ -446,29 +441,23 @@ async fn receive_core(
     if !resumable {
         retention::release_receive(store, &pin_id).await;
     }
-    if let Ok(summary) = &result {
-        if let Some(staging) = summary.retained_staging.clone() {
-            tokio::spawn(retention::remove_when_reclaimed(
-                Store::clone(store),
-                ticket.primary().hash(),
-                staging,
-            ));
-        }
-    }
     result
 }
 
-/// Moves a single received file out of the store only when this receive is
-/// about to create the store entry: an entry that already exists may be a
-/// local share that references the user's own file. Mobile keeps copying
-/// because its saves go through a platform media store afterwards.
-async fn save_mode_for(store: &Store, ticket: &BlobTicket) -> export::SaveMode {
-    if cfg!(any(target_os = "android", target_os = "ios")) || ticket.recursive() {
-        return export::SaveMode::Copy;
+/// Lets the save hard-link verified files out of the store instead of
+/// copying them, except content another pin still uses. Mobile keeps copying
+/// because its saves go through a platform media store afterwards; a pin
+/// listing that fails also falls back to copying.
+async fn store_links(node: &LightningP2PNode, pin_id: &str) -> Option<export::StoreLinks> {
+    if cfg!(any(target_os = "android", target_os = "ios")) {
+        return None;
     }
-    match store.blobs().status(ticket.hash()).await {
-        Ok(BlobStatus::NotFound) => export::SaveMode::Move,
-        _ => export::SaveMode::Copy,
+    match retention::pinned_elsewhere(node.blobs_client(), pin_id).await {
+        Ok(pinned) => Some(export::StoreLinks::new(node.blob_dir(), pinned)),
+        Err(error) => {
+            tracing::debug!(%error, "could not list store pins; copying the save");
+            None
+        }
     }
 }
 
@@ -504,7 +493,7 @@ async fn receive_pinned(
     cancel_rx: &mut watch::Receiver<bool>,
     progress: Option<&ProgressHandle>,
     options: ReceiveOptions,
-    save_mode: export::SaveMode,
+    pin_id: &str,
 ) -> Result<ReceiveSummary> {
     let ReceiveOptions {
         transfer_id,
@@ -568,6 +557,7 @@ async fn receive_pinned(
     .await?;
     let export_started_at = Instant::now();
     let primary = ticket.primary();
+    let links = store_links(node, pin_id).await;
     let export_summary = export::export_ticket(
         node.blobs_client(),
         primary,
@@ -575,7 +565,7 @@ async fn receive_pinned(
         export::SaveRequest {
             known_size: Some(verified_size),
             suggested_file_name: fallback_file_name.as_deref(),
-            mode: save_mode,
+            links: links.as_ref(),
             progress,
         },
         cancel_rx,
@@ -609,7 +599,6 @@ async fn receive_pinned(
         peer: primary.addr().id.to_string(),
         metrics,
         output_path: export_summary.output_path,
-        retained_staging: export_summary.retained_staging,
     })
 }
 
@@ -1142,43 +1131,6 @@ mod tests {
         );
         assert!(validate_received_limits(10, 1, &[], Some("payload.EXE"), limits).is_err());
         assert!(validate_received_limits(10, 1, &[], Some("notes.txt"), limits).is_ok());
-    }
-
-    #[tokio::test]
-    async fn only_fresh_single_file_receives_move_out_of_the_store() {
-        let store = iroh_blobs::store::mem::MemStore::new();
-        let addr = iroh::EndpointAddr::new(iroh::SecretKey::from_bytes(&[1; 32]).public());
-        let fresh = BlobTicket::new(
-            addr.clone(),
-            iroh_blobs::Hash::new(b"not yet received"),
-            iroh_blobs::BlobFormat::Raw,
-        );
-        let existing_hash = store
-            .add_bytes(b"already here".to_vec())
-            .await
-            .unwrap()
-            .hash;
-        let existing = BlobTicket::new(addr.clone(), existing_hash, iroh_blobs::BlobFormat::Raw);
-        let folder = BlobTicket::new(
-            addr,
-            iroh_blobs::Hash::new(b"folder root"),
-            iroh_blobs::BlobFormat::HashSeq,
-        );
-
-        let expected_fresh = if cfg!(any(target_os = "android", target_os = "ios")) {
-            export::SaveMode::Copy
-        } else {
-            export::SaveMode::Move
-        };
-        assert_eq!(save_mode_for(store.as_ref(), &fresh).await, expected_fresh);
-        assert_eq!(
-            save_mode_for(store.as_ref(), &existing).await,
-            export::SaveMode::Copy
-        );
-        assert_eq!(
-            save_mode_for(store.as_ref(), &folder).await,
-            export::SaveMode::Copy
-        );
     }
 
     #[test]

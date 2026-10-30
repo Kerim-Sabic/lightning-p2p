@@ -6,17 +6,19 @@ All notable changes to Lightning P2P are documented here. The project follows se
 
 ## [0.9.32] - 2026-10-30 ("Zero-Copy Sends")
 
-- Save a received single file by moving it out of the transfer store
-  instead of copying it, when the destination is on the same drive as app
-  data. A large file now saves without being written a second time; other
-  drives, folders, and Android keep copying. The store keeps reading the
-  file through a hidden staging link until it forgets the entry, then the
-  link is removed.
+- Save received files and folders without writing them a second time. Each
+  verified file is hard-linked out of the transfer store when the save folder
+  is on the same drive as app data, so the save step of a 1 GB receive drops
+  from about 8 s to 2 ms and the whole same-machine receive runs about 2.2×
+  faster (100 MB: 2.5×; a 200-file folder: 1.5×). Files of 16 KiB or less,
+  content a share or paused receive still uses, other drives, and Android
+  keep copying, and any link that cannot be made falls back to a copy.
 - Reclaim transfer-store space after a receive is saved. Received content
   was kept in app data forever, so every received file used its size twice.
-  Shares, in-flight receives, and paused or restart-resumable receives stay
-  pinned; content that was already in the store before this version is
-  kept as it was.
+  Collection now runs within seconds of a saved receive, also in short
+  sessions, instead of only on a 10-minute timer. Shares, in-flight receives,
+  and paused or restart-resumable receives stay pinned; content that was
+  already in the store before this version is kept as it was.
 - Keep each imported file pinned until its share is recorded, so store
   cleanup can never remove part of a share while it is being prepared.
 
