@@ -29,11 +29,13 @@ benchmarks" stay held.
 - [`twitter-thread.md`](twitter-thread.md) — six-tweet thread.
 - [`producthunt.md`](producthunt.md) — Product Hunt title, tagline, description, first comment.
 - [`linkedin.md`](linkedin.md) — single long-form post.
+- [`zero-copy-deep-dive.md`](zero-copy-deep-dive.md) — **v0.9.32 engineering post** (HN link post, r/rust, lobste.rs, dev.to): the store copy we removed on both ends, with linked raw data and caveats.
 
 ## Sequence
 
 1. **Now (v0.8.0 out):** post `reddit-rust-v0.8-rehearsal.md` to r/rust. Rehearsal + early issues.
 2. **After v0.9.0 (browser receiver live):** run `PLAYBOOK.md` — Show HN is the D-0 lever.
+3. **After v0.9.32 is the latest release:** post `zero-copy-deep-dive.md` as a technical link post (not Show HN), at least a week apart from any Show HN.
 
 ## Posting checklist
 

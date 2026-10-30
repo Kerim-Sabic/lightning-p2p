@@ -10,12 +10,18 @@ permissions:
 
 jobs:
   promote:
-    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && startsWith(github.event.workflow_run.head_branch, 'v')
+    # A tag push promotes its own release; a main push promotes only the
+    # release it created for an untagged version bump (see ci.yml).
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      (startsWith(github.event.workflow_run.head_branch, 'v') ||
+      github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Read current app version
         id: version
@@ -23,11 +29,33 @@ jobs:
           version="$(node -p 'require("./package.json").version')"
           echo "value=$version" >> "$GITHUB_OUTPUT"
 
-      - name: Publish current changelog notes and mark release as latest
-        if: github.event.workflow_run.head_branch == format('v{0}', steps.version.outputs.value)
+      - name: Resolve the release this run published
+        id: release
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.event.workflow_run.head_branch }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          APP_VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          set -euo pipefail
+          tag="v${APP_VERSION}"
+          promote=false
+          if [[ "$HEAD_BRANCH" == "$tag" ]]; then
+            promote=true
+          elif [[ "$HEAD_BRANCH" == "main" ]]; then
+            tagged_sha="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${tag}" --jq .sha 2>/dev/null || true)"
+            if [[ "$tagged_sha" == "$HEAD_SHA" ]] && gh release view "$tag" >/dev/null 2>&1; then
+              promote=true
+            fi
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "promote=$promote" >> "$GITHUB_OUTPUT"
+
+      - name: Publish current changelog notes and mark release as latest
+        if: steps.release.outputs.promote == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
           APP_VERSION: ${{ steps.version.outputs.value }}
         run: |
           set -euo pipefail

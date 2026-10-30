@@ -184,18 +184,51 @@ jobs:
             docs/reports/raw/local/*.json
             docs/reports/raw/local/*.csv
 
+  # Releases start from a `v*` tag push, a manual run, or a push to main whose
+  # package version has no tag yet: merging a version bump publishes it, and
+  # the release job creates the tag on the exact commit CI built.
   release-plan:
     name: Resolve release mode
-    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     outputs:
       windows_release_mode: ${{ steps.plan.outputs.windows_release_mode }}
       android_release_mode: ${{ steps.plan.outputs.android_release_mode }}
     steps:
+      - uses: actions/checkout@v4
+        if: github.ref == 'refs/heads/main'
+        with:
+          sparse-checkout: package.json
+          sparse-checkout-cone-mode: false
+
+      - name: Release main only when its version is untagged
+        id: gate
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version="$(node -p 'require("./package.json").version')"
+          code="$(curl -sS -o /dev/null -w '%{http_code}' \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/git/ref/tags/v${version}")"
+          case "$code" in
+            200) release=false ;;
+            404) release=true ;;
+            *)
+              echo "::error::Could not check whether v${version} is tagged (HTTP ${code})"
+              exit 1
+              ;;
+          esac
+          echo "release=${release}" >> "$GITHUB_OUTPUT"
+          echo "- Main push for v${version}; releasing: \`${release}\`" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Choose release mode
         id: plan
         env:
           REQUESTED_RELEASE_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.release_mode || 'auto' }}
+          RELEASE_ALLOWED: ${{ steps.gate.outputs.release != 'false' }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
@@ -243,6 +276,11 @@ jobs:
              [ -n "${ANDROID_KEY_ALIAS}" ] &&
              [ -n "${ANDROID_KEY_PASSWORD}" ]; then
             android_release_mode="signed"
+          fi
+
+          if [ "${RELEASE_ALLOWED}" != "true" ]; then
+            windows_release_mode="skip"
+            android_release_mode="skip"
           fi
 
           {
@@ -534,6 +572,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
+          target_commitish: ${{ github.sha }}
           name: Lightning P2P v${{ env.APP_VERSION }} (community unsigned)
           body_path: RELEASE_NOTES-community.md
           # Publish a prerelease before the other platform jobs start. GitHub's
@@ -627,6 +666,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
+          target_commitish: ${{ github.sha }}
           fail_on_unmatched_files: true
           files: macos-release-stage/*
 
@@ -710,6 +750,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
+          target_commitish: ${{ github.sha }}
           fail_on_unmatched_files: true
           files: linux-release-stage/*
 
@@ -1019,6 +1060,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
+          target_commitish: ${{ github.sha }}
           files: |
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/LightningP2PSetup.exe
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/LightningP2PSetup.exe.sig
@@ -1544,6 +1586,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
+          target_commitish: ${{ github.sha }}
           files: |
             android-release-stage/LightningP2P-${{ env.APP_VERSION }}-android.apk
             android-release-stage/LightningP2P-${{ env.APP_VERSION }}-android.aab

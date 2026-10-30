@@ -28,6 +28,8 @@ Built on **Rust**, **Tauri 2**, **iroh QUIC**, **iroh-blobs**, and **BLAKE3**.
 · [**Changelog**](CHANGELOG.md)
 · [**Security**](#-security-model)
 
+<sub>If Lightning P2P saves you a cloud upload, a ⭐ helps other people find it.</sub>
+
 </div>
 
 ---
@@ -62,6 +64,8 @@ Built on **Rust**, **Tauri 2**, **iroh QUIC**, **iroh-blobs**, and **BLAKE3**.
 | 📦 **No account, no cap** | The ticket is the only credential. No sign-up, no artificial file-size limit, no telemetry. |
 | 🖥️ **Everywhere** | Windows, macOS, Linux, Android — plus a scriptable CLI. One Rust engine behind all of them. |
 | ⚡ **Tuned for throughput** | Six speed modes with BBR congestion control, jumbo-frame probing, and parallel swarm receive. |
+| 🪶 **No second copy** | Desktop sends hash your files in place, and received files are hard-linked out of the verified store instead of being written twice: a 1 GB save takes milliseconds when the save folder is on the app's drive ([measurements](docs/reports/raw/v0.9.32-save-path/)). |
+| 🔄 **Updates itself** | The recommended Windows setup checks GitHub Releases at launch and, with automatic updates on (the default for new installs), applies new versions on the next start. |
 | 📊 **Progress stays visible** | Track phase, progress, speed, and paused transfers while moving between app views. |
 | 💬 **Lightning Chat** | Account-free signed rooms, encrypted direct messages, private groups, media, voice notes, trust QR, and native Bluetooth mesh on Windows and Android. |
 
@@ -129,7 +133,7 @@ drop files → share the /receive link  →     open link → "Receive in this b
 
 ## ◆ Install
 
-Stable channel: **v0.4.6**. Latest beta release: **v0.9.32** (community desktop builds and CLI; desktop shares hash files in place instead of copying them first; the relay wait overlaps hashing and no longer stalls every ticket on relay-blocked networks; live progress while received files save; Smart Auto runs BBR on desktop; faster folder receives; whole-folder browser saves). Flick & Catch shows the file arriving from the approximate side you flick toward; no location data is shared. Tapping **Send** remains a normal directionless send.
+Stable channel: **v0.4.6**. Latest beta release: **v0.9.32** (community desktop builds and CLI; received files and folders are hard-linked out of the verified store instead of copied, and the store frees its copy seconds later; desktop shares hash files in place instead of copying them first; the recommended Windows setup updates itself from this version on; the relay wait overlaps hashing and no longer stalls every ticket on relay-blocked networks; live save progress; Smart Auto runs BBR on desktop; whole-folder browser saves). Flick & Catch shows the file arriving from the approximate side you flick toward; no location data is shared. Tapping **Send** remains a normal directionless send.
 
 | Platform | Asset | Channel | Best for |
 | --- | --- | --- | --- |
@@ -142,7 +146,7 @@ Stable channel: **v0.4.6**. Latest beta release: **v0.9.32** (community desktop 
 | **CLI** | [`lightning-p2p-cli`](https://github.com/Kerim-Sabic/lightning-p2p/releases/tag/v0.9.32) | Beta v0.9.32 | `send <file>` prints a ticket to stdout · Win/mac/Linux tarballs |
 | **Browser** | [lightning-p2p.netlify.app/receive](https://lightning-p2p.netlify.app/receive) | Public beta | Receiving only — nothing to install, the sender's link is enough |
 | **Lightning Chat** | [Open web chat](https://lightning-p2p.netlify.app/chat) | Beta v0.9.32 | Signed web rooms · encrypted DMs · native nearby chat |
-| **Latest release** | [Release v0.9.32](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest) | Community builds | Zero-copy desktop sends · live save progress · BBR in Smart Auto · faster folder receives |
+| **Latest release** | [Release v0.9.32](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest) | Community builds | Zero-copy sends and saves · self-updating Windows setup · BBR in Smart Auto · faster folder receives |
 
 ```bash
 # The CLI in one breath: share a file, pipe the ticket anywhere.
@@ -271,6 +275,16 @@ The bench tool lives at [`src-tauri/src/bin/benchmark_local.rs`](src-tauri/src/b
 <blockquote>
 <b>Caveat:</b> Same-machine loopback only. <b>Not</b> WAN. <b>Not</b> Windows ↔ Android. <b>Not</b> Wi-Fi. <b>Not</b> relay. Don't quote these for "fastest" claims.
 </blockquote>
+
+**v0.9.32 save path** — the receive save step, v0.9.31 (copy) vs v0.9.32 (hard link), same harness on a 4-vCPU Linux VM, medians of 3–4 alternating runs:
+
+| Scenario | Save, copy → link | Total receive, copy → link |
+|---|---:|---:|
+| `same_machine_1gb` | 7,857 ms → **2 ms** | 14,374 ms → **6,688 ms** |
+| `same_machine_100mb` | 950 ms → **4 ms** | 1,596 ms → **646 ms** |
+| `same_machine_many_small` <sub>(200 × 100 KB)</sub> | 135 ms → **14 ms** | 321 ms → **221 ms** |
+
+Links happen only when the save folder shares a volume with the app's data; everything else still copies. Raw reports and method: [`docs/reports/raw/v0.9.32-save-path/`](docs/reports/raw/v0.9.32-save-path/).
 
 <details>
 <summary><b>◆ Reproduce locally</b></summary>
