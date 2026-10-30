@@ -13,7 +13,7 @@ linked release evidence.
 - Android v0.5.1 as a signed sideload APK with share-target sends and public
   MediaStore destinations.
 
-### v0.9.31 beta channel
+### v0.9.32 beta channel
 
 - Windows, universal macOS DMG, Linux AppImage/deb/rpm, and CLI artifacts.
 - Lightning Chat in the Windows and Android apps plus the `/chat` Web lounge.
@@ -56,6 +56,13 @@ linked release evidence.
   peers are relay-only and must remain open during transfer. Sending is
   memory-bound with a 2 GiB cap; receive streams to disk where the File System
   Access API is available and otherwise has a 128 MiB aggregate memory cap.
+- Desktop shares hash files in place instead of copying them into app storage
+  first. The relay handshake overlaps that hashing, and networks that block the
+  relay no longer stall every new ticket for the full wait.
+- Received content reports live progress while it is saved to disk, and
+  received folders export several files at a time.
+- Smart Auto runs BBR congestion control on desktop with Standard window sizes;
+  Android Smart Auto keeps the battery-safe profile.
 - Windows and Android remain the best-tested native paths. macOS and Linux
   artifacts are unsigned community builds until publisher credentials exist.
 

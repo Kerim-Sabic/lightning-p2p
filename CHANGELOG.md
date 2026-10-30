@@ -4,6 +4,8 @@ All notable changes to Lightning P2P are documented here. The project follows se
 
 ## [Unreleased]
 
+## [0.9.32] - 2026-10-30 ("Zero-Copy Sends")
+
 - Save received folders 2–4× faster: collection children now export
   concurrently (up to 16 at a time for small files, 2 for large files) and are
   placed into the final tree in one blocking pass. Conflict, symlink, and
