@@ -465,7 +465,10 @@ async fn receive_core(
         limits,
     )?;
     if let Some(progress) = progress {
-        progress.set(verified_size, verified_size);
+        // Saving copies the verified bytes out of the store, which can take as
+        // long as the download on slow disks. Restart the bar so that copy
+        // shows its own progress instead of a finished bar.
+        progress.set(0, verified_size);
         progress.set_phase(TransferPhase::Saving);
     }
     persist_receive_finalization(
@@ -485,9 +488,13 @@ async fn receive_core(
         &destination,
         Some(verified_size),
         fallback_file_name.as_deref(),
+        progress,
         cancel_rx,
     )
     .await?;
+    if let Some(progress) = progress {
+        progress.set(verified_size, verified_size);
+    }
     let export_ms = elapsed_ms(export_started_at.elapsed());
     let effective_mbps = effective_mbps(export_summary.size, download_ms);
     let metrics = TransferMetrics {

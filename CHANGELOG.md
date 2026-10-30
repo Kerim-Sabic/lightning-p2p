@@ -4,6 +4,8 @@ All notable changes to Lightning P2P are documented here. The project follows se
 
 ## [Unreleased]
 
+## [0.9.32] - 2026-10-30 ("Zero-Copy Sends")
+
 - Save received folders 2–4× faster: collection children now export
   concurrently (up to 16 at a time for small files, 2 for large files) and are
   placed into the final tree in one blocking pass. Conflict, symlink, and
@@ -33,6 +35,29 @@ All notable changes to Lightning P2P are documented here. The project follows se
 - New `Rebuild browser receiver engine` workflow rebuilds `public/webrx` on
   GitHub and pushes it to a review branch; `wasm-opt` failures no longer
   break the build script.
+- Reference desktop share sources in place instead of copying every byte into
+  the local transfer store first. Share preparation skips a full write of the
+  selection, and a large share no longer needs its own size again in free
+  space. Receivers still verify every chunk with BLAKE3, so a file edited after
+  sharing fails verification rather than arriving altered. Android keeps
+  copying staged picker content.
+- Import shares of small files with up to 32 files in flight in Smart Auto.
+  Batches whose average file is 256 KiB or smaller are bound by per-file
+  latency rather than disk bandwidth; on cold-cache 2,000-file shares this
+  prepared 4 KiB files about 1.3x and 64 KiB files about 1.25x faster. Larger
+  files keep the core-scaled fanout and adaptive tuning.
+- Wait for the relay handshake while share sources hash instead of after, and
+  when a relay wait has recently timed out, re-check for 500 ms instead of
+  stalling every new ticket for 6 seconds on networks that block the relay.
+- Report real progress while received content is saved to disk. The bar,
+  speed, and time remaining now track the copy out of the transfer store
+  instead of sitting at 100% for the whole save.
+- Run BBR congestion control in Smart Auto on desktop, with Standard window
+  sizes. Android Smart Auto keeps the battery-safe CUBIC profile.
+- Show a real progress bar and percentage for memory-backed browser receives,
+  surface save failures after a browser receive, and offer "Send files from
+  this browser" once every received file is saved.
+- Show estimated time remaining in the persistent transfer tray.
 
 ## [0.9.31] - 2026-10-02 ("Startup-Safe Recovery")
 

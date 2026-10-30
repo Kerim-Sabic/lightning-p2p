@@ -9,6 +9,7 @@ mod endpoint;
 mod nearby;
 pub mod nearby_offer;
 pub mod nearby_protocol;
+mod relay_wait;
 mod status;
 mod supervisor;
 

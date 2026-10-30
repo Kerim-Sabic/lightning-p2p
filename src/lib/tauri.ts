@@ -244,8 +244,9 @@ export interface TransferModeDescriptor {
   label: string;
   /** One-line description used in tooltips and the Settings copy. */
   description: string;
-  /** Congestion controller the mode bakes into the QUIC endpoint. */
-  engine: "cubic" | "bbr";
+  /** Congestion controller the mode bakes into the QUIC endpoint; `auto`
+   * means the backend picks per platform. */
+  engine: "cubic" | "bbr" | "auto";
   /** True if the mode is only meaningful on Android. */
   androidOnly?: boolean;
 }
@@ -258,8 +259,8 @@ export const TRANSFER_MODE_DESCRIPTORS: Record<
     value: "smart_auto",
     label: "Smart Auto",
     description:
-      "Recommended. Uses battery-safe transport values on Android and the balanced Standard profile on desktop. Future tuning stays benchmark-gated.",
-    engine: "cubic",
+      "Recommended. Runs BBR congestion control with Standard windows on desktop, battery-safe CUBIC on Android, and adapts import concurrency to each batch.",
+    engine: "auto",
   },
   standard: {
     value: "standard",

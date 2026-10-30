@@ -6,6 +6,7 @@
 
 use super::blob_access::{AuthorizedBlobsProtocol, BlobAccessController};
 use super::chat_protocol::ChatProtocol;
+use super::relay_wait::RelayWaitMemory;
 use super::status::NodeRuntimeStatus;
 use super::NearbyShareProtocol;
 use crate::crypto::load_or_create_secret_key;
@@ -36,9 +37,8 @@ use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-const ONLINE_WAIT_TIMEOUT: Duration = Duration::from_secs(6);
 const DB_FILE_NAME: &str = "lightning-p2p.db";
 const DEPRECATED_DB_FILE_NAME: &str = "fastdrop.db";
 const NODE_LOCK_FILE_NAME: &str = ".lightning-p2p-node.lock";
@@ -65,6 +65,7 @@ pub struct LightningP2PNode {
     /// Local sled database.
     db: StorageDb,
     blob_access: BlobAccessController,
+    relay_wait: RelayWaitMemory,
 }
 
 impl LightningP2PNode {
@@ -210,6 +211,7 @@ impl LightningP2PNode {
             lan_discovery_active: Arc::new(AtomicBool::new(false)),
             db,
             blob_access,
+            relay_wait: RelayWaitMemory::default(),
         })
     }
 
@@ -295,7 +297,33 @@ impl LightningP2PNode {
     ///
     /// Returns `LightningP2PError` if no route is ready in time.
     pub async fn ticket_addr(&self) -> Result<EndpointAddr> {
-        let _ = tokio::time::timeout(ONLINE_WAIT_TIMEOUT, self.endpoint.online()).await;
+        self.wait_for_ticket_route().await;
+        self.current_ticket_addr()
+    }
+
+    /// Waits, within a bounded budget, for a relay route that tickets can
+    /// carry. Callers overlap this with other work and read the address
+    /// afterwards with [`Self::current_ticket_addr`].
+    pub async fn wait_for_ticket_route(&self) {
+        let budget = self.relay_wait.budget(Instant::now());
+        let came_online = tokio::time::timeout(budget, self.endpoint.online())
+            .await
+            .is_ok();
+        if !came_online {
+            tracing::info!(
+                budget_ms = budget.as_millis(),
+                "relay not online before ticket creation; using direct routes"
+            );
+        }
+        self.relay_wait.record(came_online, Instant::now());
+    }
+
+    /// Returns the current ticket address without waiting for a relay.
+    ///
+    /// # Errors
+    ///
+    /// Returns `LightningP2PError` if the endpoint has no route yet.
+    pub fn current_ticket_addr(&self) -> Result<EndpointAddr> {
         let addr = self.endpoint.addr();
         if addr.addrs.is_empty() {
             return Err(LightningP2PError::Other(

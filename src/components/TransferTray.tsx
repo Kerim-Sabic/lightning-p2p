@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { useShallow } from "zustand/react/shallow";
-import { formatBytes, formatSpeed } from "../lib/format";
+import { formatBytes, formatEta, formatSpeed } from "../lib/format";
 import { safeDisplayText } from "../lib/safeDisplayText";
 import { selectOngoingTransferIds } from "../stores/transferSelectors";
 import { useTransferStore, type TransferEntry } from "../stores/transferStore";
@@ -64,6 +64,11 @@ function TransferRow({ transferId }: { transferId: string }) {
   const Icon =
     transfer.direction === "receive" ? ArrowDownToLine : ArrowUpFromLine;
   const status = phaseLabel(transfer);
+  const remaining =
+    transfer.status === "running" && transfer.total > 0
+      ? formatEta(transfer.bytes, transfer.total, transfer.speedBps)
+      : "--";
+  const eta = remaining === "--" ? null : remaining;
 
   return (
     <li className="min-w-0 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-1)] px-3 py-2.5">
@@ -104,6 +109,14 @@ function TransferRow({ transferId }: { transferId: string }) {
           {transfer.speedBps > 0 ? (
             <span className="hidden shrink-0 text-xs tabular-nums text-[var(--fg-muted)] sm:inline">
               {formatSpeed(transfer.speedBps)}
+            </span>
+          ) : null}
+          {eta !== null ? (
+            <span
+              className="shrink-0 text-xs tabular-nums text-[var(--fg-muted)]"
+              aria-label={`About ${eta} remaining`}
+            >
+              {eta} left
             </span>
           ) : null}
         </div>

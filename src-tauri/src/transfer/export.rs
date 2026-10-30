@@ -4,9 +4,10 @@ pub(crate) use super::destination::preflight_destination;
 use super::destination::{
     ensure_enough_space, safe_collection_entry_path, safe_collection_label, suffixed_path,
 };
+use super::progress::ProgressHandle;
 use crate::error::{LightningP2PError, Result};
 use futures_util::StreamExt;
-use iroh_blobs::api::proto::BlobStatus;
+use iroh_blobs::api::proto::{BlobStatus, ExportProgressItem};
 use iroh_blobs::api::Store;
 use iroh_blobs::format::collection::Collection;
 use iroh_blobs::ticket::BlobTicket;
@@ -37,7 +38,8 @@ pub struct ExportSummary {
 ///
 /// When `known_size` is provided the expensive per-blob size query is skipped.
 /// Existing files are never overwritten; conflicting outputs receive a safe
-/// numeric suffix.
+/// numeric suffix. When `progress` is provided it tracks bytes copied to disk,
+/// so a long save shows movement instead of a finished bar.
 ///
 /// # Errors
 ///
@@ -48,6 +50,7 @@ pub async fn export_ticket(
     destination: &Path,
     known_size: Option<u64>,
     suggested_file_name: Option<&str>,
+    progress: Option<&ProgressHandle>,
     cancel_rx: &mut watch::Receiver<bool>,
 ) -> Result<ExportSummary> {
     ensure_not_cancelled(cancel_rx)?;
@@ -66,14 +69,16 @@ pub async fn export_ticket(
         _ => ticket_size(store, ticket).await?,
     };
     ensure_enough_space(destination, size)?;
+    let save = SaveProgress::start(progress, size);
     let output_path = if ticket.recursive() {
-        export_collection(store, ticket, destination, &label, cancel_rx).await?
+        export_collection(store, ticket, destination, &label, &save, cancel_rx).await?
     } else {
         export_blob(
             store,
             ticket,
             destination,
             suggested_file_name.as_deref(),
+            &save,
             cancel_rx,
         )
         .await?
@@ -247,6 +252,7 @@ async fn export_blob(
     ticket: &BlobTicket,
     destination: &Path,
     suggested_file_name: Option<&str>,
+    save: &SaveProgress,
     cancel_rx: &mut watch::Receiver<bool>,
 ) -> Result<PathBuf> {
     let base_path = destination
@@ -257,9 +263,7 @@ async fn export_blob(
     let export_result = tokio::select! {
         biased;
         () = wait_for_cancellation(cancel_rx) => Err(cancelled_error()),
-        result = store.blobs().export(ticket.hash(), &temp_path) => {
-            result.map_err(|error| blob_error(&error))
-        }
+        result = export_hash(store, ticket.hash(), &temp_path, save) => result,
     };
 
     if let Err(error) = export_result {
@@ -604,6 +608,7 @@ async fn export_collection(
     ticket: &BlobTicket,
     destination: &Path,
     label: &str,
+    save: &SaveProgress,
     cancel_rx: &mut watch::Receiver<bool>,
 ) -> Result<PathBuf> {
     let staging_dir = create_export_staging_dir(destination, ticket.hash())?;
@@ -618,9 +623,15 @@ async fn export_collection(
     // iroh-blobs 1.0 has no collection-export helper, so load the collection
     // and export each child to `staging/<name>` (creating parent dirs for
     // nested names).
-    let export_result =
-        export_collection_children(store, ticket.hash(), &staging_dir, &scratch_dir, cancel_rx)
-            .await;
+    let export_result = export_collection_children(
+        store,
+        ticket.hash(),
+        &staging_dir,
+        &scratch_dir,
+        save,
+        cancel_rx,
+    )
+    .await;
     let _ = tokio::fs::remove_dir_all(&scratch_dir).await;
 
     if let Err(error) = export_result {
@@ -656,6 +667,7 @@ async fn export_collection_children(
     root: Hash,
     staging_dir: &Path,
     scratch_dir: &Path,
+    save: &SaveProgress,
     cancel_rx: &mut watch::Receiver<bool>,
 ) -> Result<()> {
     let collection = Collection::load(root, store)
@@ -666,7 +678,7 @@ async fn export_collection_children(
         .map(|(name, hash)| Ok((safe_collection_entry_path(name)?, *hash)))
         .collect::<Result<Vec<_>>>()?;
     let parallelism = child_export_parallelism(store, &entries).await;
-    export_children_to_scratch(store, &entries, scratch_dir, parallelism, cancel_rx).await?;
+    export_children_to_scratch(store, &entries, scratch_dir, parallelism, save, cancel_rx).await?;
     let relatives = entries.into_iter().map(|(relative, _)| relative).collect();
     let staging_dir = staging_dir.to_path_buf();
     let scratch_dir = scratch_dir.to_path_buf();
@@ -749,6 +761,7 @@ async fn export_children_to_scratch(
     entries: &[(PathBuf, Hash)],
     scratch_dir: &Path,
     parallelism: usize,
+    save: &SaveProgress,
     cancel_rx: &mut watch::Receiver<bool>,
 ) -> Result<()> {
     let jobs = entries
@@ -756,15 +769,10 @@ async fn export_children_to_scratch(
         .enumerate()
         .map(|(index, (_, hash))| {
             let store = store.clone();
+            let save = save.clone();
             let hash = *hash;
             let target = scratch_dir.join(index.to_string());
-            async move {
-                store
-                    .blobs()
-                    .export(hash, &target)
-                    .await
-                    .map_err(|error| blob_error(&error))
-            }
+            async move { export_hash(&store, hash, &target, &save).await }
         })
         .collect::<Vec<_>>();
     let mut exports = futures_util::stream::iter(jobs).buffer_unordered(parallelism.max(1));
@@ -780,6 +788,61 @@ async fn export_children_to_scratch(
             },
         }
     }
+}
+
+/// Save-phase progress shared by every concurrent child export. Each export
+/// reports only the bytes it newly copied, so the handle's atomic total stays
+/// monotonic no matter how the exports interleave.
+#[derive(Clone, Default)]
+struct SaveProgress {
+    handle: Option<ProgressHandle>,
+    total: u64,
+}
+
+impl SaveProgress {
+    fn start(handle: Option<&ProgressHandle>, total: u64) -> Self {
+        if let Some(handle) = handle {
+            handle.set(0, total);
+        }
+        Self {
+            handle: handle.cloned(),
+            total,
+        }
+    }
+
+    fn advance(&self, copied: u64) {
+        if let Some(handle) = &self.handle {
+            handle.advance(copied, self.total);
+        }
+    }
+}
+
+/// Copies one verified blob to `target`, reporting copied bytes as they land.
+/// Copy-on-write filesystems finish without intermediate offsets.
+async fn export_hash(store: &Store, hash: Hash, target: &Path, save: &SaveProgress) -> Result<u64> {
+    let mut items = std::pin::pin!(store.blobs().export(hash, target).stream().await);
+    let mut reported = 0_u64;
+    let mut size = None;
+    while let Some(item) = items.next().await {
+        match item {
+            ExportProgressItem::Size(bytes) => size = Some(bytes),
+            ExportProgressItem::CopyProgress(offset) => {
+                save.advance(offset.saturating_sub(reported));
+                reported = reported.max(offset);
+            }
+            ExportProgressItem::Done => {
+                let size = size.ok_or_else(|| {
+                    LightningP2PError::Blob("Export finished without a size".into())
+                })?;
+                save.advance(size.saturating_sub(reported));
+                return Ok(size);
+            }
+            ExportProgressItem::Error(error) => return Err(blob_error(&error)),
+        }
+    }
+    Err(LightningP2PError::Blob(
+        "Export stream ended before completion".into(),
+    ))
 }
 
 fn ensure_not_cancelled(cancel_rx: &watch::Receiver<bool>) -> Result<()> {
@@ -1233,11 +1296,16 @@ mod tests {
         );
         let (_cancel_tx, mut cancel_rx) = watch::channel(true);
 
-        assert!(
-            export_blob(store.as_ref(), &ticket, dir.path(), None, &mut cancel_rx)
-                .await
-                .is_err()
-        );
+        assert!(export_blob(
+            store.as_ref(),
+            &ticket,
+            dir.path(),
+            None,
+            &SaveProgress::default(),
+            &mut cancel_rx
+        )
+        .await
+        .is_err());
         assert_eq!(read_dir_entries(dir.path()).await.unwrap().len(), 0);
     }
 
@@ -1258,9 +1326,16 @@ mod tests {
         );
         let (_cancel_tx, mut cancel_rx) = watch::channel(false);
 
-        let published = export_blob(store.as_ref(), &ticket, dir.path(), None, &mut cancel_rx)
-            .await
-            .expect("export safely");
+        let published = export_blob(
+            store.as_ref(),
+            &ticket,
+            dir.path(),
+            None,
+            &SaveProgress::default(),
+            &mut cancel_rx,
+        )
+        .await
+        .expect("export safely");
 
         assert_eq!(
             tokio::fs::read(&planted_part).await.unwrap(),
@@ -1291,9 +1366,16 @@ mod tests {
         );
         let (_cancel_tx, mut cancel_rx) = watch::channel(false);
 
-        let published = export_blob(store.as_ref(), &ticket, dir.path(), None, &mut cancel_rx)
-            .await
-            .expect("export safely");
+        let published = export_blob(
+            store.as_ref(),
+            &ticket,
+            dir.path(),
+            None,
+            &SaveProgress::default(),
+            &mut cancel_rx,
+        )
+        .await
+        .expect("export safely");
 
         assert_eq!(tokio::fs::read(&outside).await.unwrap(), b"keep this file");
         assert_eq!(tokio::fs::read(&published).await.unwrap(), content);
@@ -1403,6 +1485,7 @@ mod tests {
             dir.path(),
             None,
             None,
+            None,
             &mut cancel_rx,
         )
         .await
@@ -1439,6 +1522,7 @@ mod tests {
             dir.path(),
             None,
             None,
+            None,
             &mut cancel_rx
         )
         .await
@@ -1457,12 +1541,108 @@ mod tests {
         .await;
         let (_cancel_tx, mut cancel_rx) = watch::channel(true);
 
-        assert!(
-            export_collection(store.as_ref(), &ticket, dir.path(), "a", &mut cancel_rx)
-                .await
-                .is_err()
-        );
+        assert!(export_collection(
+            store.as_ref(),
+            &ticket,
+            dir.path(),
+            "a",
+            &SaveProgress::default(),
+            &mut cancel_rx
+        )
+        .await
+        .is_err());
         assert_eq!(read_dir_entries(dir.path()).await.unwrap().len(), 0);
+    }
+
+    #[tokio::test]
+    async fn blob_export_reports_saved_bytes_as_progress() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store = iroh_blobs::store::fs::FsStore::load(dir.path().join("store"))
+            .await
+            .expect("store");
+        let payload = vec![7_u8; 3 * 1024 * 1024];
+        let hash = store.add_bytes(payload.clone()).await.unwrap().hash;
+        let ticket = BlobTicket::new(
+            iroh::EndpointAddr::new(iroh::SecretKey::from_bytes(&[1; 32]).public()),
+            hash,
+            iroh_blobs::BlobFormat::Raw,
+        );
+        let destination = dir.path().join("out");
+        tokio::fs::create_dir(&destination).await.expect("out dir");
+        let total = payload.len() as u64;
+        let handle = ProgressHandle::default();
+        handle.set(total, total);
+        let (_cancel_tx, mut cancel_rx) = watch::channel(false);
+
+        let summary = export_ticket(
+            store.as_ref(),
+            &ticket,
+            &destination,
+            Some(total),
+            Some("payload.bin"),
+            Some(&handle),
+            &mut cancel_rx,
+        )
+        .await
+        .expect("export");
+
+        assert_eq!(handle.snapshot(), (total, total));
+        assert_eq!(tokio::fs::read(summary.output_path).await.unwrap(), payload);
+        store.shutdown().await.expect("shutdown");
+    }
+
+    #[tokio::test]
+    async fn concurrent_collection_export_progress_sums_every_child() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store = iroh_blobs::store::mem::MemStore::new();
+        let children = (0..24_u8)
+            .map(|index| {
+                (
+                    format!("folder/file-{index}.bin"),
+                    vec![index; 64 * 1024 + usize::from(index)],
+                )
+            })
+            .collect::<Vec<_>>();
+        let total = children
+            .iter()
+            .map(|(_, body)| body.len() as u64)
+            .sum::<u64>();
+        let named = children
+            .iter()
+            .map(|(name, body)| (name.as_str(), body.clone()))
+            .collect::<Vec<_>>();
+        let ticket = collection_ticket(&store, &named).await;
+        let handle = ProgressHandle::default();
+        let save = SaveProgress::start(Some(&handle), total);
+        let (_cancel_tx, mut cancel_rx) = watch::channel(false);
+
+        let output = export_collection(
+            store.as_ref(),
+            &ticket,
+            dir.path(),
+            "folder",
+            &save,
+            &mut cancel_rx,
+        )
+        .await
+        .expect("export");
+
+        assert_eq!(handle.snapshot(), (total, total));
+        assert_eq!(
+            tokio::fs::read(output.join("file-23.bin")).await.unwrap(),
+            vec![23_u8; 64 * 1024 + 23]
+        );
+    }
+
+    #[test]
+    fn save_progress_start_resets_the_bar_for_the_save_phase() {
+        let handle = ProgressHandle::default();
+        handle.set(900, 900);
+        let save = SaveProgress::start(Some(&handle), 1_000);
+        assert_eq!(handle.snapshot(), (0, 1_000));
+        save.clone().advance(400);
+        save.advance(600);
+        assert_eq!(handle.snapshot(), (1_000, 1_000));
     }
 
     #[tokio::test]

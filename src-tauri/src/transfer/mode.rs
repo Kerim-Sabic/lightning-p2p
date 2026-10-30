@@ -21,9 +21,11 @@
 //! measured CUBIC dramatically underperforming BBR on real network paths
 //! (n0-computer/iroh#4286 reports CUBIC ~30x slower than BBR on the same
 //! LAN path, and single-stream throughput capping well below link capacity).
-//! Fast and above therefore run BBR. Standard keeps CUBIC so the default
-//! matches historical behavior; Battery Safe keeps CUBIC because BBR's
-//! pacing model costs more CPU wakeups than a phone needs to spend.
+//! Fast and above therefore run BBR, and so does Smart Auto on desktop: the
+//! default should not be the tier that upstream measured as slowest. Standard
+//! keeps CUBIC as the explicit historical-behavior choice; Battery Safe (and
+//! Smart Auto on Android) keeps CUBIC because BBR's pacing model costs more
+//! CPU wakeups than a phone needs to spend.
 
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
@@ -43,9 +45,10 @@ const JUMBO_MTU_CEILING: u16 = 8952;
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum TransferMode {
-    /// Platform-aware default. Uses the conservative desktop profile on
-    /// desktop and the battery-safe profile on Android while keeping a stable
-    /// user-facing setting that can gain measured heuristics over time.
+    /// Platform-aware default. Uses Standard windows with BBR congestion
+    /// control on desktop and the battery-safe profile on Android while
+    /// keeping a stable user-facing setting that can gain measured
+    /// heuristics over time.
     #[default]
     SmartAuto,
     /// Safe default. Moderate parallelism and conservative QUIC windows.
@@ -174,7 +177,15 @@ impl TransferMode {
         let mut profile = if cfg!(target_os = "android") {
             Self::battery_safe_profile()
         } else {
-            Self::standard_profile()
+            // Standard's windows and parallelism, with the congestion
+            // controller and initial window from Fast. The window sizes are
+            // unchanged, so memory use matches Standard; only the transport's
+            // response to loss and its slow-start ramp differ.
+            let fast = Self::fast_profile();
+            let mut desktop = Self::standard_profile();
+            desktop.congestion = fast.congestion;
+            desktop.initial_congestion_window = fast.initial_congestion_window;
+            desktop
         };
         profile.mode = Self::SmartAuto;
         profile
@@ -356,7 +367,24 @@ mod tests {
         };
         assert_eq!(auto.quic_send_window_bytes, expected.quic_send_window_bytes);
         assert_eq!(auto.import_parallelism, expected.import_parallelism);
+        assert_eq!(auto.mtu_upper_bound, expected.mtu_upper_bound);
+        assert_eq!(auto.swarm_receive_default, expected.swarm_receive_default);
         assert_eq!(auto.mode, TransferMode::SmartAuto);
+    }
+
+    #[test]
+    fn smart_auto_runs_bbr_on_desktop_and_cubic_on_android() {
+        let auto = TransferMode::SmartAuto.profile();
+        if cfg!(target_os = "android") {
+            assert_eq!(auto.congestion, CongestionAlgorithm::Cubic);
+        } else {
+            let fast = TransferMode::Fast.profile();
+            assert_eq!(auto.congestion, CongestionAlgorithm::Bbr);
+            assert_eq!(
+                auto.initial_congestion_window,
+                fast.initial_congestion_window
+            );
+        }
     }
 
     #[test]
