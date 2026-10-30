@@ -41,6 +41,11 @@ All notable changes to Lightning P2P are documented here. The project follows se
   space. Receivers still verify every chunk with BLAKE3, so a file edited after
   sharing fails verification rather than arriving altered. Android keeps
   copying staged picker content.
+- Import shares of small files with up to 32 files in flight in Smart Auto.
+  Batches whose average file is 256 KiB or smaller are bound by per-file
+  latency rather than disk bandwidth; on cold-cache 2,000-file shares this
+  prepared 4 KiB files about 1.3x and 64 KiB files about 1.25x faster. Larger
+  files keep the core-scaled fanout and adaptive tuning.
 - Wait for the relay handshake while share sources hash instead of after, and
   when a relay wait has recently timed out, re-check for 500 ms instead of
   stalling every new ticket for 6 seconds on networks that block the relay.
