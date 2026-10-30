@@ -1730,8 +1730,8 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
                   </p>
                   <p className="mt-1 text-sm leading-6 text-[var(--fg-secondary)]">
                     Copy the receive link or scan the QR code on the receiving
-                    device. Keep this sender window open until the receiver is
-                    done.
+                    device. Keep this sender window open, and leave the
+                    original files unchanged, until the receiver is done.
                   </p>
                 </div>
                 <button

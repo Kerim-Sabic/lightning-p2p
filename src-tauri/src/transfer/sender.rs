@@ -13,6 +13,7 @@ use crate::transfer::queue::TransferQueue;
 use crate::transfer::smart_auto;
 use futures_util::stream;
 use futures_util::StreamExt;
+use iroh_blobs::api::blobs::{AddPathOptions, ImportMode};
 use iroh_blobs::api::proto::AddProgressItem;
 use iroh_blobs::api::Store;
 use iroh_blobs::format::collection::Collection;
@@ -344,17 +345,24 @@ async fn create_share_with_plan(
     let file_count = u32::try_from(plan.sources.len()).map_err(|_| {
         LightningP2PError::Other("The share contains too many files to describe.".into())
     })?;
-    let imported = import_sources(
-        node.blobs_client(),
-        &plan,
-        progress,
-        profile,
-        concurrent_transfers,
-        cancel_rx,
-    )
-    .await?;
+    // The relay handshake does not depend on the content, so wait for it
+    // while sources hash instead of after. An import failure returns at once.
+    let (imported, ()) = tokio::try_join!(
+        import_sources(
+            node.blobs_client(),
+            &plan,
+            progress,
+            profile,
+            concurrent_transfers,
+            cancel_rx,
+        ),
+        async {
+            node.wait_for_ticket_route().await;
+            Ok(())
+        },
+    )?;
     let hash = persist_collection(node.blobs_client(), imported).await?;
-    let ticket = build_ticket(node, hash).await?;
+    let ticket = build_ticket(node, hash)?;
     tracing::info!("Lightning P2P share content prepared");
     Ok(ShareOutcome {
         hash,
@@ -870,7 +878,15 @@ async fn import_source(
         return Err(unsafe_source_path_error());
     }
     let mut last_offset = 0u64;
-    let mut stream = store.blobs().add_path(&source.path).stream().await;
+    let mut stream = store
+        .blobs()
+        .add_path_with_opts(AddPathOptions {
+            path: source.path.clone(),
+            format: BlobFormat::Raw,
+            mode: source_import_mode(),
+        })
+        .stream()
+        .await;
     let mut hash: Option<Hash> = None;
 
     loop {
@@ -923,6 +939,26 @@ async fn import_source(
     })
 }
 
+/// How source files enter the blob store.
+///
+/// Desktop shares reference the selected files in place: iroh-blobs hashes
+/// each file where it lives instead of first copying every byte into app
+/// data. That removes a full write of the share before its ticket exists and
+/// means a large share no longer needs its own size again in free space.
+/// Receivers verify every chunk against the BLAKE3 root, so bytes that change
+/// after import fail verification instead of arriving silently. Removing a
+/// referenced entry from the store never deletes the user's file.
+///
+/// Mobile keeps copying because picker and share-sheet content is staged in a
+/// cache directory that the platform layer deletes after preparation.
+const fn source_import_mode() -> ImportMode {
+    if cfg!(any(target_os = "android", target_os = "ios")) {
+        ImportMode::Copy
+    } else {
+        ImportMode::TryReference
+    }
+}
+
 fn advance_progress(progress: Option<&ProgressHandle>, bytes_delta: u64, total_size: u64) {
     if let Some(progress) = progress {
         progress.advance(bytes_delta, total_size);
@@ -941,9 +977,9 @@ async fn persist_collection(store: &Store, imported: Vec<ImportedSource>) -> Res
     Ok(temp_tag.hash())
 }
 
-async fn build_ticket(node: &LightningP2PNode, hash: Hash) -> Result<BlobTicket> {
+fn build_ticket(node: &LightningP2PNode, hash: Hash) -> Result<BlobTicket> {
     Ok(BlobTicket::new(
-        node.ticket_addr().await?,
+        node.current_ticket_addr()?,
         hash,
         BlobFormat::HashSeq,
     ))
@@ -1069,6 +1105,75 @@ mod tests {
 
         let error = canonicalize_paths(vec![link], None).expect_err("symlink root is unsafe");
         assert!(error.to_string().contains("symbolic link"));
+    }
+
+    fn stored_bytes(dir: &Path) -> u64 {
+        let Ok(entries) = fs::read_dir(dir) else {
+            return 0;
+        };
+        entries
+            .filter_map(std::result::Result::ok)
+            .map(|entry| {
+                let path = entry.path();
+                if path.is_dir() {
+                    stored_bytes(&path)
+                } else {
+                    entry.metadata().map_or(0, |metadata| metadata.len())
+                }
+            })
+            .sum()
+    }
+
+    #[tokio::test]
+    async fn import_hashes_source_and_skips_store_copy_on_desktop() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let source_path = root.path().join("payload.bin");
+        let payload = (0..4 * 1024 * 1024_u32)
+            .map(|index| u8::try_from(index % 251).expect("byte"))
+            .collect::<Vec<_>>();
+        fs::write(&source_path, &payload).expect("write payload");
+        let store_dir = root.path().join("store");
+        let store = iroh_blobs::store::fs::FsStore::load(&store_dir)
+            .await
+            .expect("store");
+        let source = Source {
+            name: "payload.bin".into(),
+            snapshot: source_snapshot(&source_path).expect("snapshot"),
+            path: source_path,
+        };
+
+        let imported = import_source(&store, source, 0, 0, None, false, None)
+            .await
+            .expect("import");
+
+        assert_eq!(imported.source.hash, Hash::new(&payload));
+        let stored = store
+            .blobs()
+            .get_bytes(imported.source.hash)
+            .await
+            .expect("read back");
+        assert_eq!(stored.as_ref(), payload.as_slice());
+        let owned_bytes =
+            stored_bytes(&store_dir.join("data")) + stored_bytes(&store_dir.join("temp"));
+        if source_import_mode() == ImportMode::TryReference {
+            assert!(
+                owned_bytes < 64 * 1024,
+                "store duplicated {owned_bytes} bytes of a referenced source"
+            );
+        } else {
+            assert!(owned_bytes >= payload.len() as u64);
+        }
+        store.shutdown().await.expect("shutdown");
+    }
+
+    #[test]
+    fn mobile_imports_copy_staged_content() {
+        let expected = if cfg!(any(target_os = "android", target_os = "ios")) {
+            ImportMode::Copy
+        } else {
+            ImportMode::TryReference
+        };
+        assert_eq!(source_import_mode(), expected);
     }
 
     #[test]
