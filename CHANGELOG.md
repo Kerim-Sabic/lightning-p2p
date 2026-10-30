@@ -4,6 +4,16 @@ All notable changes to Lightning P2P are documented here. The project follows se
 
 ## [Unreleased]
 
+- Reclaim disk space in the local transfer store. Received files used to
+  stay in the app data folder a second time after being saved; the store now
+  runs iroh-blobs garbage collection every five minutes and frees the store
+  copy once the saved file is recorded in Activity. Public share links,
+  pending and accepted nearby offers, transfers being served, and paused or
+  interrupted receives that can still resume are kept. Public shares created
+  by earlier versions are tagged at first startup, before collection begins.
+  Collecting a share that references its source file in place never touches
+  that file. Re-sharing a received item from Activity now reports that its
+  content is no longer stored locally.
 - Save received folders 2–4× faster: collection children now export
   concurrently (up to 16 at a time for small files, 2 for large files) and are
   placed into the final tree in one blocking pass. Conflict, symlink, and

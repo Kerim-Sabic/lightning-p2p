@@ -186,6 +186,7 @@ pub async fn cancel_transfer(state: State<'_, AppState>, transfer_id: String) ->
         if state.resumable_receives.remove(&transfer_id).is_err() {
             tracing::warn!("could not remove receive recovery metadata");
         }
+        release_discarded_receive(&state, &transfer_id).await;
     }
     if active && !state.transfers.cancel(&transfer_id).await {
         return Err(command_error("Transfer is no longer active"));
@@ -267,6 +268,7 @@ pub async fn resume_transfer(
             .resumable_receives
             .remove(&transfer_id)
             .map_err(command_error)?;
+        release_discarded_receive(&state, &transfer_id).await;
         return Err(command_error("Secure resume credential is unavailable"));
     };
     let ticket = match ShareTicket::parse(&secret) {
@@ -277,6 +279,7 @@ pub async fn resume_transfer(
                 .resumable_receives
                 .remove(&transfer_id)
                 .map_err(command_error)?;
+            release_discarded_receive(&state, &transfer_id).await;
             return Err(command_error(AppErrorPayload::invalid_ticket()));
         }
     };
@@ -335,12 +338,21 @@ async fn ensure_receive_not_completed(state: &AppState, transfer_id: &str) -> Co
                 .resumable_receives
                 .remove(transfer_id)
                 .map_err(command_error)?;
+            node.release_receive(transfer_id).await;
         }
         return Err(command_error(
             "This receive is already saved. Find it in Activity instead of receiving it again.",
         ));
     }
     Ok(())
+}
+
+/// Lets store GC reclaim the blobs kept for a receive that can no longer
+/// resume. Best effort: without a running node, startup drops the retention.
+async fn release_discarded_receive(state: &AppState, transfer_id: &str) {
+    if let Ok(node) = state.get_node().await {
+        node.release_receive(transfer_id).await;
+    }
 }
 
 /// Returns a snapshot of all active transfers.

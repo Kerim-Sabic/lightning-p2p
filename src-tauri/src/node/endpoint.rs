@@ -5,7 +5,9 @@
 //! content-addressed transfers.
 
 use super::blob_access::{AuthorizedBlobsProtocol, BlobAccessController};
+use super::blob_retention;
 use super::chat_protocol::ChatProtocol;
+use super::gc_gate::{GcGate, GC_INTERVAL};
 use super::status::NodeRuntimeStatus;
 use super::NearbyShareProtocol;
 use crate::crypto::load_or_create_secret_key;
@@ -20,11 +22,11 @@ use iroh::address_lookup::memory::MemoryLookup;
 use iroh::endpoint::{ControllerFactory, MtuDiscoveryConfig, QuicTransportConfig, VarInt};
 use iroh::protocol::Router;
 use iroh::{Endpoint, EndpointAddr, EndpointId, RelayMap, RelayMode, RelayUrl, TransportAddr};
-use iroh_blobs::api::Store;
+use iroh_blobs::api::{Store, TempTag};
 use iroh_blobs::format::collection::Collection;
 use iroh_blobs::hashseq::HashSeq;
 use iroh_blobs::store::fs::FsStore;
-use iroh_blobs::Hash;
+use iroh_blobs::{Hash, HashAndFormat};
 #[cfg(not(target_os = "ios"))]
 use iroh_mdns_address_lookup::MdnsAddressLookup;
 use noq_proto::congestion::{Bbr3Config, CubicConfig};
@@ -65,6 +67,30 @@ pub struct LightningP2PNode {
     /// Local sled database.
     db: StorageDb,
     blob_access: BlobAccessController,
+    /// Admission gate for store GC; holds nearby-offer pins.
+    gc_gate: GcGate,
+}
+
+/// Boot parameters shared by the public start entry points.
+pub(crate) struct NodeStartOptions {
+    pub(crate) data_dir: PathBuf,
+    pub(crate) download_dir: PathBuf,
+    pub(crate) relay_url: Option<RelayUrl>,
+    pub(crate) nearby_protocol: Option<Arc<NearbyShareProtocol>>,
+    pub(crate) chat_protocol: Option<Arc<ChatProtocol>>,
+    pub(crate) profile: TransferProfile,
+    pub(crate) local_discovery_enabled: bool,
+    /// How often the transfer store collects blobs nothing retains.
+    pub(crate) gc_interval: Duration,
+}
+
+/// Local storage opened before any network resource is bound.
+struct NodeStorage {
+    lock: File,
+    store: FsStore,
+    db: StorageDb,
+    blob_access: BlobAccessController,
+    gc_gate: GcGate,
 }
 
 impl LightningP2PNode {
@@ -132,44 +158,37 @@ impl LightningP2PNode {
         profile: TransferProfile,
         local_discovery_enabled: bool,
     ) -> Result<Self> {
-        // Finish local storage initialization before binding network resources.
-        // Besides making startup ordering clearer, this prevents a slow or
-        // incompatible transfer store from leaving a partially started QUIC
-        // endpoint behind while the supervisor is waiting on storage.
-        let startup_data_dir = data_dir.clone();
-        let startup_download_dir = download_dir.clone();
-        tracing::info!("preparing node storage directories");
-        let storage_lock = tokio::task::spawn_blocking(move || {
-            std::fs::create_dir_all(&startup_data_dir)?;
-            std::fs::create_dir_all(&startup_download_dir)?;
-            let storage_lock = acquire_node_storage_lock(&startup_data_dir)?;
-            preserve_incompatible_blob_store(&startup_data_dir).map(|()| storage_lock)
+        Self::start_with_options(NodeStartOptions {
+            data_dir,
+            download_dir,
+            relay_url,
+            nearby_protocol,
+            chat_protocol,
+            profile,
+            local_discovery_enabled,
+            gc_interval: GC_INTERVAL,
         })
         .await
-        .map_err(|error| {
-            LightningP2PError::Other(format!("Node storage preparation task failed: {error}"))
-        })??;
+    }
 
-        tracing::info!("opening local blob store");
-        let store = load_blob_store(&data_dir).await?;
-        tracing::info!("local blob store ready");
-
-        let metadata_dir = data_dir.clone();
-        let (db, public_hashes) = tokio::task::spawn_blocking(move || {
-            let db = open_storage_db(&metadata_dir)?;
-            let public_hashes = share_access::load_public_hashes(&db)?;
-            Ok::<_, LightningP2PError>((db, public_hashes))
-        })
-        .await
-        .map_err(|error| {
-            LightningP2PError::Other(format!("Node metadata initialization task failed: {error}"))
-        })??;
-        tracing::info!("local metadata database ready");
-        tracing::info!(
-            public_hash_count = public_hashes.len(),
-            "loaded share access metadata"
-        );
-        let blob_access = BlobAccessController::with_public_hashes(public_hashes);
+    /// Starts the iroh node from explicit boot options.
+    ///
+    /// # Errors
+    ///
+    /// Returns `LightningP2PError` if endpoint binding, storage creation, or
+    /// protocol startup fails.
+    pub(crate) async fn start_with_options(options: NodeStartOptions) -> Result<Self> {
+        let NodeStartOptions {
+            data_dir,
+            download_dir,
+            relay_url,
+            nearby_protocol,
+            chat_protocol,
+            profile,
+            local_discovery_enabled,
+            gc_interval,
+        } = options;
+        let storage = open_node_storage(data_dir.clone(), download_dir, gc_interval).await?;
 
         if local_discovery_enabled {
             probe_mdns_socket();
@@ -188,7 +207,8 @@ impl LightningP2PNode {
             "iroh endpoint bound (n0-discovery + mDNS)"
         );
 
-        let blobs = AuthorizedBlobsProtocol::new(store.as_ref(), blob_access.clone());
+        let blobs =
+            AuthorizedBlobsProtocol::new(storage.store.as_ref(), storage.blob_access.clone());
         let mut router_builder = Router::builder(endpoint.clone()).accept(iroh_blobs::ALPN, blobs);
         if let Some(protocol) = nearby_protocol {
             router_builder =
@@ -202,14 +222,15 @@ impl LightningP2PNode {
         let router = router_builder.spawn();
         Ok(Self {
             endpoint,
-            store,
-            _storage_lock: storage_lock,
+            store: storage.store,
+            _storage_lock: storage.lock,
             router,
             lookup,
             mdns,
             lan_discovery_active: Arc::new(AtomicBool::new(false)),
-            db,
-            blob_access,
+            db: storage.db,
+            blob_access: storage.blob_access,
+            gc_gate: storage.gc_gate,
         })
     }
 
@@ -222,13 +243,21 @@ impl LightningP2PNode {
     }
 
     /// Grants a bearer ticket to a share the user explicitly published.
+    ///
+    /// Every hash the link serves gets a persistent store tag before the
+    /// grant is recorded, so the link survives store GC and restarts.
     pub(crate) async fn authorize_public_share(&self, root: Hash) -> Result<()> {
+        // Hold the share while its links are read and tagged, so a GC run
+        // cannot collect it between the existence check and the tags.
+        let _pin = self.pin_share(root).await?;
         let hashes = self.share_hashes(root).await?;
         if !self.blob_access.can_publish_public(&hashes) {
             return Err(LightningP2PError::Other(
                 "Too many public shares are active on this device. Clear old app data before sharing more.".into(),
             ));
         }
+        blob_retention::ensure_complete(&self.store, &hashes).await?;
+        blob_retention::retain_public_hashes(&self.store, &hashes).await?;
         share_access::authorize_public_hashes(&self.db, &hashes)?;
         if !self.blob_access.publish_public(&hashes) {
             return Err(LightningP2PError::Other(
@@ -239,13 +268,17 @@ impl LightningP2PNode {
     }
 
     /// Grants a nearby receiver temporary access to an accepted share.
+    ///
+    /// The share stays out of store GC for as long as the grant is alive.
     pub(crate) async fn authorize_private_peer(&self, peer: EndpointId, root: Hash) -> Result<()> {
+        let pin = self.pin_share(root).await?;
         let hashes = self.share_hashes(root).await?;
         if !self.blob_access.authorize_peer(peer, &hashes) {
             return Err(LightningP2PError::Other(
                 "Too many nearby transfers are pending. Try again shortly.".into(),
             ));
         }
+        self.gc_gate.pin_nearby(peer, root, pin);
         Ok(())
     }
 
@@ -253,6 +286,16 @@ impl LightningP2PNode {
         if let Ok(hashes) = self.share_hashes(root).await {
             self.blob_access.revoke_peer(peer, &hashes);
         }
+    }
+
+    /// Protects a collection and everything it lists from store GC while the
+    /// returned temp tag is alive.
+    async fn pin_share(&self, root: Hash) -> Result<TempTag> {
+        self.store
+            .tags()
+            .temp_tag(HashAndFormat::hash_seq(root))
+            .await
+            .map_err(|error| LightningP2PError::Blob(error.to_string()))
     }
 
     async fn share_hashes(&self, root: Hash) -> Result<Vec<Hash>> {
@@ -543,8 +586,66 @@ fn mtu_discovery(profile: TransferProfile) -> MtuDiscoveryConfig {
     mtud
 }
 
-async fn load_blob_store(data_dir: &Path) -> Result<FsStore> {
-    FsStore::load(data_dir.join("blobs"))
+/// Opens the data folder lock, transfer store, and metadata database, then
+/// admits store GC once the live access rules and retention tags are loaded.
+async fn open_node_storage(
+    data_dir: PathBuf,
+    download_dir: PathBuf,
+    gc_interval: Duration,
+) -> Result<NodeStorage> {
+    // Finish local storage initialization before binding network resources.
+    // Besides making startup ordering clearer, this prevents a slow or
+    // incompatible transfer store from leaving a partially started QUIC
+    // endpoint behind while the supervisor is waiting on storage.
+    let startup_data_dir = data_dir.clone();
+    tracing::info!("preparing node storage directories");
+    let lock = tokio::task::spawn_blocking(move || {
+        std::fs::create_dir_all(&startup_data_dir)?;
+        std::fs::create_dir_all(&download_dir)?;
+        let storage_lock = acquire_node_storage_lock(&startup_data_dir)?;
+        preserve_incompatible_blob_store(&startup_data_dir).map(|()| storage_lock)
+    })
+    .await
+    .map_err(|error| {
+        LightningP2PError::Other(format!("Node storage preparation task failed: {error}"))
+    })??;
+
+    tracing::info!("opening local blob store");
+    let gc_gate = GcGate::default();
+    let store = load_blob_store(&data_dir, &gc_gate, gc_interval).await?;
+    tracing::info!("local blob store ready");
+
+    let metadata_dir = data_dir.clone();
+    let (db, public_hashes) = tokio::task::spawn_blocking(move || {
+        let db = open_storage_db(&metadata_dir)?;
+        let public_hashes = share_access::load_public_hashes(&db)?;
+        Ok::<_, LightningP2PError>((db, public_hashes))
+    })
+    .await
+    .map_err(|error| {
+        LightningP2PError::Other(format!("Node metadata initialization task failed: {error}"))
+    })??;
+    tracing::info!("local metadata database ready");
+    tracing::info!(
+        public_hash_count = public_hashes.len(),
+        "loaded share access metadata"
+    );
+    blob_retention::reconcile_at_startup(&store, &db, &data_dir, &public_hashes).await;
+    let blob_access = BlobAccessController::with_public_hashes(public_hashes);
+    gc_gate.arm(blob_access.clone());
+    Ok(NodeStorage {
+        lock,
+        store,
+        db,
+        blob_access,
+        gc_gate,
+    })
+}
+
+async fn load_blob_store(data_dir: &Path, gate: &GcGate, gc_interval: Duration) -> Result<FsStore> {
+    let store_dir = data_dir.join("blobs");
+    let options = gate.store_options(&store_dir, gc_interval);
+    FsStore::load_with_opts(store_dir.join("blobs.db"), options)
         .await
         .map_err(|err| LightningP2PError::Blob(err.to_string()))
 }

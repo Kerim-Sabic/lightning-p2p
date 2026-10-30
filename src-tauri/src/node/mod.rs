@@ -2,10 +2,12 @@
 
 mod blob_access;
 mod blob_request_limiter;
+mod blob_retention;
 pub mod chat_mesh;
 pub mod chat_protocol;
 mod discovery;
 mod endpoint;
+mod gc_gate;
 mod nearby;
 pub mod nearby_offer;
 pub mod nearby_protocol;

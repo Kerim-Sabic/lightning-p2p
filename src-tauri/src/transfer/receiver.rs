@@ -62,7 +62,8 @@ impl ReceiveLimits {
 
 #[derive(Debug, Clone)]
 struct ReceiveOptions {
-    transfer_id: Option<String>,
+    /// Stable id; also names the store retention tag for this receive.
+    transfer_id: String,
     profile: TransferProfile,
     swarm_enabled: bool,
     limits: ReceiveLimits,
@@ -222,28 +223,34 @@ pub async fn receive_blob(
                 &mut cancel_rx,
                 Some(&progress),
                 ReceiveOptions {
-                    transfer_id: Some(transfer_id.clone()),
+                    transfer_id: transfer_id.clone(),
                     profile,
                     swarm_enabled,
                     limits,
                     fallback_file_name,
-                    resume_store: Some(resume_store),
+                    resume_store: Some(resume_store.clone()),
                 },
             )
             .await
         }
     };
 
-    finish_receive_result(
+    let result = finish_receive_result(
         result,
         node,
         queue,
-        transfer_id,
+        transfer_id.clone(),
         progress,
         sampler,
         reporter,
     )
-    .await
+    .await;
+    // Once the export is durable in history the store copy is redundant; a
+    // failed receive keeps it only while its resume record can pick it up.
+    if result.is_ok() || resume_store.get(&transfer_id).is_none() {
+        node.release_receive(&transfer_id).await;
+    }
+    result
 }
 
 async fn finish_receive_result(
@@ -374,14 +381,15 @@ pub async fn receive_ticket(
 ) -> Result<ReceiveOutcome> {
     let (_cancel_tx, mut cancel_rx) = watch::channel(false);
     let profile = crate::transfer::TransferMode::platform_default().profile();
-    let summary = receive_core(
+    let transfer_id = uuid::Uuid::new_v4().to_string();
+    let result = receive_core(
         node,
         &ticket,
         destination,
         &mut cancel_rx,
         None,
         ReceiveOptions {
-            transfer_id: None,
+            transfer_id: transfer_id.clone(),
             profile,
             swarm_enabled: false,
             limits: ReceiveLimits::default(),
@@ -389,7 +397,11 @@ pub async fn receive_ticket(
             resume_store: None,
         },
     )
-    .await?;
+    .await;
+    // Without a resume record nothing can pick up a failed receive, and a
+    // finished one is already exported.
+    node.release_receive(&transfer_id).await;
+    let summary = result?;
     Ok(ReceiveOutcome {
         hash: summary.hash,
         label: summary.label,
@@ -424,6 +436,10 @@ async fn receive_core(
     // Export repeats this check immediately before publishing to cover changes
     // made while the transfer is in flight.
     export::preflight_destination(&destination)?;
+    // Keep partial and verified blobs from store GC from before the first
+    // downloaded byte until the caller releases the receive.
+    node.retain_receive(&transfer_id, ticket.primary().hash_and_format())
+        .await?;
     let download_started_at = Instant::now();
     let download = download_with_retry(
         node,
@@ -472,7 +488,7 @@ async fn receive_core(
         node.blobs_client(),
         ticket,
         verified_size,
-        transfer_id.as_deref(),
+        &transfer_id,
         resume_store.as_ref(),
         fallback_file_name.as_deref(),
     )
@@ -506,7 +522,7 @@ async fn receive_core(
         progress.set_metrics(metrics);
     }
     Ok(ReceiveSummary {
-        transfer_id,
+        transfer_id: Some(transfer_id),
         hash: primary.hash().to_string(),
         label: export_summary.label,
         size: export_summary.size,
@@ -520,11 +536,11 @@ async fn persist_receive_finalization(
     blob_store: &iroh_blobs::api::Store,
     ticket: &ShareTicket,
     size: u64,
-    transfer_id: Option<&str>,
+    transfer_id: &str,
     store: Option<&ResumableReceiveStore>,
     fallback_file_name: Option<&str>,
 ) -> Result<()> {
-    let (Some(transfer_id), Some(store)) = (transfer_id, store) else {
+    let Some(store) = store else {
         return Ok(());
     };
     let Some(mut record) = store.get(transfer_id) else {

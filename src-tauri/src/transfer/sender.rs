@@ -14,7 +14,7 @@ use crate::transfer::smart_auto;
 use futures_util::stream;
 use futures_util::StreamExt;
 use iroh_blobs::api::proto::AddProgressItem;
-use iroh_blobs::api::Store;
+use iroh_blobs::api::{Store, TempTag};
 use iroh_blobs::format::collection::Collection;
 use iroh_blobs::ticket::BlobTicket;
 use iroh_blobs::{BlobFormat, Hash};
@@ -22,7 +22,7 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::Window;
 use tokio::sync::{watch, Semaphore, SemaphorePermit};
@@ -65,7 +65,9 @@ struct SharePlan {
 
 struct ImportedSource {
     name: String,
-    hash: Hash,
+    /// Keeps the imported blob out of store GC until the collection that
+    /// lists it exists.
+    tag: TempTag,
 }
 
 struct IndexedImport {
@@ -86,6 +88,9 @@ pub struct ShareOutcome {
     pub total_size: u64,
     /// Number of source files included in the collection.
     pub file_count: u32,
+    /// Keeps the prepared collection out of store GC until this outcome and
+    /// all its clones are dropped, by which time the share is authorized.
+    pub(crate) _retention: Arc<TempTag>,
 }
 
 /// Adds files or directories to the local blob store and returns a share ticket.
@@ -324,13 +329,24 @@ async fn register_send_preparation(
 /// Returns `LightningP2PError` if the paths are invalid, the add operation fails,
 /// or the ticket cannot be generated.
 pub async fn create_share(node: &LightningP2PNode, paths: Vec<PathBuf>) -> Result<ShareOutcome> {
+    let outcome = prepare_share(node, paths).await?;
+    node.authorize_public_share(outcome.hash).await?;
+    Ok(outcome)
+}
+
+/// Adds files to the local blob store without granting anyone access yet.
+///
+/// The returned outcome keeps the content out of store GC until it is
+/// dropped, which is the window callers use to authorize the share.
+pub(crate) async fn prepare_share(
+    node: &LightningP2PNode,
+    paths: Vec<PathBuf>,
+) -> Result<ShareOutcome> {
     let plan = tokio::task::spawn_blocking(move || build_share_plan(paths))
         .await
         .map_err(|error| LightningP2PError::Other(error.to_string()))??;
     let profile = crate::transfer::TransferMode::platform_default().profile();
-    let outcome = create_share_with_plan(node, plan, None, profile, 1, None).await?;
-    node.authorize_public_share(outcome.hash).await?;
-    Ok(outcome)
+    create_share_with_plan(node, plan, None, profile, 1, None).await
 }
 
 async fn create_share_with_plan(
@@ -353,7 +369,8 @@ async fn create_share_with_plan(
         cancel_rx,
     )
     .await?;
-    let hash = persist_collection(node.blobs_client(), imported).await?;
+    let collection = persist_collection(node.blobs_client(), imported).await?;
+    let hash = collection.hash();
     let ticket = build_ticket(node, hash).await?;
     tracing::info!("Lightning P2P share content prepared");
     Ok(ShareOutcome {
@@ -362,6 +379,7 @@ async fn create_share_with_plan(
         label: plan.label,
         total_size: plan.total_size,
         file_count,
+        _retention: Arc::new(collection),
     })
 }
 
@@ -871,7 +889,7 @@ async fn import_source(
     }
     let mut last_offset = 0u64;
     let mut stream = store.blobs().add_path(&source.path).stream().await;
-    let mut hash: Option<Hash> = None;
+    let mut tag: Option<TempTag> = None;
 
     loop {
         let next_item = if let Some(rx) = cancel_rx.as_mut() {
@@ -895,7 +913,7 @@ async fn import_source(
                 last_offset = offset;
             }
             AddProgressItem::Done(temp_tag) => {
-                hash = Some(temp_tag.hash());
+                tag = Some(temp_tag);
             }
             AddProgressItem::Error(error) => {
                 return Err(LightningP2PError::Blob(error.to_string()))
@@ -904,8 +922,8 @@ async fn import_source(
         }
     }
 
-    let hash = hash
-        .ok_or_else(|| LightningP2PError::Blob("Import stream ended before completion".into()))?;
+    let tag =
+        tag.ok_or_else(|| LightningP2PError::Blob("Import stream ended before completion".into()))?;
     if source_snapshot(&source.path)? != source.snapshot {
         return Err(unsafe_source_path_error());
     }
@@ -918,7 +936,7 @@ async fn import_source(
         index,
         source: ImportedSource {
             name: source.name,
-            hash,
+            tag,
         },
     })
 }
@@ -929,16 +947,19 @@ fn advance_progress(progress: Option<&ProgressHandle>, bytes_delta: u64, total_s
     }
 }
 
-async fn persist_collection(store: &Store, imported: Vec<ImportedSource>) -> Result<Hash> {
-    let collection = imported
+/// Stores the collection and returns the temp tag protecting it (and, through
+/// it, every imported blob) from store GC.
+async fn persist_collection(store: &Store, imported: Vec<ImportedSource>) -> Result<TempTag> {
+    let (entries, _import_tags): (Vec<_>, Vec<_>) = imported
         .into_iter()
-        .map(|item| (item.name, item.hash))
-        .collect::<Collection>();
-    let temp_tag = collection
+        .map(|item| ((item.name, item.tag.hash()), item.tag))
+        .unzip();
+    entries
+        .into_iter()
+        .collect::<Collection>()
         .store(store)
         .await
-        .map_err(|err| blob_error(&err))?;
-    Ok(temp_tag.hash())
+        .map_err(|err| blob_error(&err))
 }
 
 async fn build_ticket(node: &LightningP2PNode, hash: Hash) -> Result<BlobTicket> {

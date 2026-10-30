@@ -5,6 +5,7 @@
 //! served merely because they are present in the local store.
 
 use super::blob_request_limiter::BlobRequestLimiter;
+use super::gc_gate::{pin_many, pin_request};
 use iroh::endpoint::Connection;
 use iroh::{protocol::AcceptError, EndpointId};
 use iroh_blobs::api::Store;
@@ -118,6 +119,30 @@ impl BlobAccessController {
         false
     }
 
+    /// Returns whether `peer` still holds a live grant for `hash`.
+    pub(crate) fn is_granted(&self, peer: EndpointId, hash: Hash) -> bool {
+        let now = Instant::now();
+        self.read()
+            .private_grants
+            .get(&(peer, hash))
+            .is_some_and(|grant| grant.expires_at > now)
+    }
+
+    /// Adds every hash the provider may currently serve — public share hashes
+    /// and live private grants — to a GC run's protected set.
+    pub(crate) fn extend_servable(&self, live: &mut HashSet<Hash>) {
+        let now = Instant::now();
+        let rules = self.read();
+        live.extend(rules.public_hashes.iter().copied());
+        live.extend(
+            rules
+                .private_grants
+                .iter()
+                .filter(|(_key, grant)| grant.expires_at > now)
+                .map(|((_peer, hash), _grant)| *hash),
+        );
+    }
+
     pub(crate) fn with_public_hashes(hashes: impl IntoIterator<Item = Hash>) -> Self {
         let controller = Self::default();
         controller.write().public_hashes.extend(hashes);
@@ -177,6 +202,7 @@ impl iroh::protocol::ProtocolHandler for AuthorizedBlobsProtocol {
                 };
                 match request {
                     Request::Get(request) if access.allows(peer, request.hash) => {
+                        let _pin = pin_request(&store, request.hash, &request.ranges).await;
                         if let Err(_error) = provider::handle_get(pair, store, request).await {
                             tracing::debug!("authorized blob request failed");
                         }
@@ -184,6 +210,7 @@ impl iroh::protocol::ProtocolHandler for AuthorizedBlobsProtocol {
                     Request::GetMany(request)
                         if request.hashes.iter().all(|hash| access.allows(peer, *hash)) =>
                     {
+                        let _pins = pin_many(&store, &request.hashes).await;
                         if let Err(_error) = provider::handle_get_many(pair, store, request).await {
                             tracing::debug!("authorized multi-blob request failed");
                         }
