@@ -8,9 +8,10 @@ All notable changes to Lightning P2P are documented here. The project follows se
 
 - Save received files and folders without writing them a second time. Each
   verified file is hard-linked out of the transfer store when the save folder
-  is on the same drive as app data, so the save step of a 1 GB receive drops
-  from about 8 s to 2 ms and the whole same-machine receive runs about 2.2×
-  faster (100 MB: 2.5×; a 200-file folder: 1.5×). Files of 16 KiB or less,
+  is on the same drive as app data. In the same-machine benchmark on a Linux
+  VM, the save step of a 1 GB receive drops from about 8 s to 2 ms and the
+  whole receive runs about 2.2× faster than v0.9.31 (100 MB: 2.5×; a 200-file
+  folder: 1.5×). Files of 16 KiB or less,
   content a share or paused receive still uses, other drives, and Android
   keep copying, and any link that cannot be made falls back to a copy.
 - Reclaim transfer-store space after a receive is saved. Received content
