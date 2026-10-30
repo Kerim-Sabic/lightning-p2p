@@ -7,6 +7,7 @@
 use super::blob_access::{AuthorizedBlobsProtocol, BlobAccessController};
 use super::chat_protocol::ChatProtocol;
 use super::relay_wait::RelayWaitMemory;
+use super::retention;
 use super::status::NodeRuntimeStatus;
 use super::NearbyShareProtocol;
 use crate::crypto::load_or_create_secret_key;
@@ -572,9 +573,28 @@ fn mtu_discovery(profile: TransferProfile) -> MtuDiscoveryConfig {
 }
 
 async fn load_blob_store(data_dir: &Path) -> Result<FsStore> {
-    FsStore::load(data_dir.join("blobs"))
-        .await
-        .map_err(|err| LightningP2PError::Blob(err.to_string()))
+    let blob_dir = data_dir.join("blobs");
+    let collection_ready = Arc::new(AtomicBool::new(false));
+    let store = FsStore::load_with_opts(
+        blob_dir.join("blobs.db"),
+        retention::store_options(&blob_dir, collection_ready.clone()),
+    )
+    .await
+    .map_err(|err| LightningP2PError::Blob(err.to_string()))?;
+    // Orphaned receive pins must go before any new receive pins itself.
+    if let Err(error) = retention::release_orphaned_receives(&store, data_dir).await {
+        tracing::warn!(%error, "could not release orphaned receive pins");
+    }
+    // Pinning pre-existing content can take a while on a large store, so it
+    // runs in the background; collection stays off until it has finished.
+    let migration_store = Store::clone(&store);
+    tokio::spawn(async move {
+        match retention::migrate_legacy_content(&migration_store, &blob_dir).await {
+            Ok(()) => collection_ready.store(true, Ordering::SeqCst),
+            Err(error) => tracing::warn!(%error, "transfer-store cleanup stays off this session"),
+        }
+    });
+    Ok(store)
 }
 
 /// Keeps an older iroh-blobs database intact when the current redb version

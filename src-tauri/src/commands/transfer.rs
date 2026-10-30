@@ -186,6 +186,7 @@ pub async fn cancel_transfer(state: State<'_, AppState>, transfer_id: String) ->
         if state.resumable_receives.remove(&transfer_id).is_err() {
             tracing::warn!("could not remove receive recovery metadata");
         }
+        release_receive_pin(&state, &transfer_id).await;
     }
     if active && !state.transfers.cancel(&transfer_id).await {
         return Err(command_error("Transfer is no longer active"));
@@ -267,6 +268,7 @@ pub async fn resume_transfer(
             .resumable_receives
             .remove(&transfer_id)
             .map_err(command_error)?;
+        release_receive_pin(&state, &transfer_id).await;
         return Err(command_error("Secure resume credential is unavailable"));
     };
     let ticket = match ShareTicket::parse(&secret) {
@@ -277,6 +279,7 @@ pub async fn resume_transfer(
                 .resumable_receives
                 .remove(&transfer_id)
                 .map_err(command_error)?;
+            release_receive_pin(&state, &transfer_id).await;
             return Err(command_error(AppErrorPayload::invalid_ticket()));
         }
     };
@@ -664,4 +667,11 @@ fn spawn_receive_task(launch: ReceiveLaunch) {
             }
         }
     });
+}
+
+/// Lets store collection reclaim a receive whose resume record was removed.
+async fn release_receive_pin(state: &AppState, transfer_id: &str) {
+    if let Ok(node) = state.get_node().await {
+        crate::node::retention::release_receive(node.blobs_client(), transfer_id).await;
+    }
 }

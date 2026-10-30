@@ -4,6 +4,20 @@ All notable changes to Lightning P2P are documented here. The project follows se
 
 ## [Unreleased]
 
+- Save a received single file by moving it out of the transfer store
+  instead of copying it, when the destination is on the same drive as app
+  data. A large file now saves without being written a second time; other
+  drives, folders, and Android keep copying. The store keeps reading the
+  file through a hidden staging link until it forgets the entry, then the
+  link is removed.
+- Reclaim transfer-store space after a receive is saved. Received content
+  was kept in app data forever, so every received file used its size twice.
+  Shares, in-flight receives, and paused or restart-resumable receives stay
+  pinned; content that was already in the store before this version is
+  kept as it was.
+- Keep each imported file pinned until its share is recorded, so store
+  cleanup can never remove part of a share while it is being prepared.
+
 ## [0.9.32] - 2026-10-30 ("Zero-Copy Sends")
 
 - Keep Windows installs made by the recommended setup

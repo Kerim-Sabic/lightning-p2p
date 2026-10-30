@@ -7,7 +7,8 @@ use super::destination::{
 use super::progress::ProgressHandle;
 use crate::error::{LightningP2PError, Result};
 use futures_util::StreamExt;
-use iroh_blobs::api::proto::{BlobStatus, ExportProgressItem};
+use iroh_blobs::api::blobs::ExportOptions;
+use iroh_blobs::api::proto::{BlobStatus, ExportMode, ExportProgressItem};
 use iroh_blobs::api::Store;
 use iroh_blobs::format::collection::Collection;
 use iroh_blobs::ticket::BlobTicket;
@@ -32,6 +33,34 @@ pub struct ExportSummary {
     pub size: u64,
     /// Final output path written by the export stage.
     pub output_path: PathBuf,
+    /// Staging folder whose link the store still references after a moved
+    /// save; remove it only once the store entry has been reclaimed.
+    pub retained_staging: Option<PathBuf>,
+}
+
+/// What the receiver knows about the content it is saving.
+#[derive(Debug, Clone, Copy)]
+pub struct SaveRequest<'a> {
+    /// Verified total size, when already computed.
+    pub known_size: Option<u64>,
+    /// Sender-provided name for a single-file share.
+    pub suggested_file_name: Option<&'a str>,
+    /// Whether the store's data file may be moved instead of copied.
+    pub mode: SaveMode,
+    /// Progress handle that tracks bytes written to disk.
+    pub progress: Option<&'a ProgressHandle>,
+}
+
+/// How a single received file leaves the transfer store.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SaveMode {
+    /// Copy the verified bytes, leaving the store's copy in place.
+    Copy,
+    /// Move the store's data file into the destination with a rename, so a
+    /// large file saves without being written a second time. Only valid when
+    /// this receive created the store entry: a pre-existing entry may be a
+    /// local share referencing the user's own file.
+    Move,
 }
 
 /// Exports a downloaded ticket to the destination directory.
@@ -48,11 +77,15 @@ pub async fn export_ticket(
     store: &Store,
     ticket: &BlobTicket,
     destination: &Path,
-    known_size: Option<u64>,
-    suggested_file_name: Option<&str>,
-    progress: Option<&ProgressHandle>,
+    request: SaveRequest<'_>,
     cancel_rx: &mut watch::Receiver<bool>,
 ) -> Result<ExportSummary> {
+    let SaveRequest {
+        known_size,
+        suggested_file_name,
+        mode: save_mode,
+        progress,
+    } = request;
     ensure_not_cancelled(cancel_rx)?;
     preflight_destination(destination)?;
     let suggested_file_name = if ticket.recursive() {
@@ -70,8 +103,9 @@ pub async fn export_ticket(
     };
     ensure_enough_space(destination, size)?;
     let save = SaveProgress::start(progress, size);
-    let output_path = if ticket.recursive() {
-        export_collection(store, ticket, destination, &label, &save, cancel_rx).await?
+    let (output_path, retained_staging) = if ticket.recursive() {
+        let path = export_collection(store, ticket, destination, &label, &save, cancel_rx).await?;
+        (path, None)
     } else {
         export_blob(
             store,
@@ -79,6 +113,7 @@ pub async fn export_ticket(
             destination,
             suggested_file_name.as_deref(),
             &save,
+            save_mode,
             cancel_rx,
         )
         .await?
@@ -97,6 +132,7 @@ pub async fn export_ticket(
         label,
         size,
         output_path,
+        retained_staging,
     })
 }
 
@@ -247,14 +283,17 @@ pub async fn resolve_label(store: &Store, ticket: &BlobTicket) -> Result<String>
     ))
 }
 
+/// Exports one file and returns its published path, plus the staging
+/// folder to retain when the store now references the staged link.
 async fn export_blob(
     store: &Store,
     ticket: &BlobTicket,
     destination: &Path,
     suggested_file_name: Option<&str>,
     save: &SaveProgress,
+    save_mode: SaveMode,
     cancel_rx: &mut watch::Receiver<bool>,
-) -> Result<PathBuf> {
+) -> Result<(PathBuf, Option<PathBuf>)> {
     let base_path = destination
         .join(suggested_file_name.map_or_else(|| ticket.hash().to_string(), str::to_string));
     let staging_dir = create_export_staging_dir(destination, ticket.hash())?;
@@ -263,22 +302,86 @@ async fn export_blob(
     let export_result = tokio::select! {
         biased;
         () = wait_for_cancellation(cancel_rx) => Err(cancelled_error()),
-        result = export_hash(store, ticket.hash(), &temp_path, save) => result,
+        result = export_single(store, ticket.hash(), &temp_path, save, save_mode) => result,
+    };
+    let moved = match export_result {
+        Ok(moved) => moved,
+        Err(error) => {
+            let _ = tokio::fs::remove_dir_all(&staging_dir).await;
+            return Err(error);
+        }
     };
 
-    if let Err(error) = export_result {
-        let _ = tokio::fs::remove_dir_all(&staging_dir).await;
-        return Err(error);
-    }
-
+    // After a move the staged link holds the store's only data, so it must
+    // survive a late cancel or a failed publish for resume to find it.
     if let Err(error) = ensure_not_cancelled(cancel_rx) {
-        let _ = tokio::fs::remove_dir_all(&staging_dir).await;
+        if !moved {
+            let _ = tokio::fs::remove_dir_all(&staging_dir).await;
+        }
         return Err(error);
     }
 
-    let published = publish_staged_file(&temp_path, &base_path).await;
+    let published = publish_staged_file(&temp_path, &base_path, moved).await;
+    if moved {
+        hide_staging_dir(&staging_dir);
+        return published.map(|path| (path, Some(staging_dir)));
+    }
     let _ = tokio::fs::remove_dir_all(&staging_dir).await;
-    published
+    published.map(|path| (path, None))
+}
+
+/// Exports one blob, moving it out of the store when allowed. Returns whether
+/// the store now references `target` instead of its own data file. A move
+/// that fails (Windows reports a cross-volume rename with an error iroh-blobs
+/// does not fall back from) is retried as a copy.
+async fn export_single(
+    store: &Store,
+    hash: Hash,
+    target: &Path,
+    save: &SaveProgress,
+    save_mode: SaveMode,
+) -> Result<bool> {
+    if save_mode == SaveMode::Move {
+        match export_hash(store, hash, target, save, ExportMode::TryReference).await {
+            Ok(_) => return Ok(true),
+            Err(error) => {
+                tracing::debug!(%error, "could not move received file out of the store; copying");
+                let _ = tokio::fs::remove_file(target).await;
+            }
+        }
+    }
+    export_hash(store, hash, target, save, ExportMode::Copy)
+        .await
+        .map(|_| false)
+}
+
+/// Keeps retained staging folders out of Explorer listings on Windows; other
+/// platforms already hide the dot-prefixed name.
+fn hide_staging_dir(path: &Path) {
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::OsStrExt;
+        use windows_sys::Win32::Storage::FileSystem::{
+            SetFileAttributesW, FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_HIDDEN,
+        };
+        let wide = path
+            .as_os_str()
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect::<Vec<u16>>();
+        // SAFETY: `wide` is a NUL-terminated UTF-16 path that outlives the call.
+        let hidden = unsafe {
+            SetFileAttributesW(
+                wide.as_ptr(),
+                FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_HIDDEN,
+            )
+        };
+        if hidden == 0 {
+            tracing::debug!("could not hide retained receive staging folder");
+        }
+    }
+    #[cfg(not(windows))]
+    let _ = path;
 }
 
 pub(crate) fn safe_suggested_file_name(label: &str) -> String {
@@ -772,7 +875,7 @@ async fn export_children_to_scratch(
             let save = save.clone();
             let hash = *hash;
             let target = scratch_dir.join(index.to_string());
-            async move { export_hash(&store, hash, &target, &save).await }
+            async move { export_hash(&store, hash, &target, &save, ExportMode::Copy).await }
         })
         .collect::<Vec<_>>();
     let mut exports = futures_util::stream::iter(jobs).buffer_unordered(parallelism.max(1));
@@ -819,8 +922,19 @@ impl SaveProgress {
 
 /// Copies one verified blob to `target`, reporting copied bytes as they land.
 /// Copy-on-write filesystems finish without intermediate offsets.
-async fn export_hash(store: &Store, hash: Hash, target: &Path, save: &SaveProgress) -> Result<u64> {
-    let mut items = std::pin::pin!(store.blobs().export(hash, target).stream().await);
+async fn export_hash(
+    store: &Store,
+    hash: Hash,
+    target: &Path,
+    save: &SaveProgress,
+    mode: ExportMode,
+) -> Result<u64> {
+    let options = ExportOptions {
+        hash,
+        mode,
+        target: target.to_path_buf(),
+    };
+    let mut items = std::pin::pin!(store.blobs().export_with_opts(options).stream().await);
     let mut reported = 0_u64;
     let mut size = None;
     while let Some(item) = items.next().await {
@@ -1009,7 +1123,7 @@ async fn move_staged_collection(
         let target = if tokio::fs::metadata(&source).await?.is_dir() {
             publish_staged_directory(&source, &base).await?
         } else {
-            publish_staged_file(&source, &base).await?
+            publish_staged_file(&source, &base, false).await?
         };
         let _ = tokio::fs::remove_dir(staging_dir).await;
         return Ok(target);
@@ -1021,7 +1135,7 @@ async fn move_staged_collection(
 /// Atomically creates a no-clobber output file on the same filesystem.
 /// Hard-link creation fails when the destination already exists, so a racing
 /// file cannot be overwritten after the suffix was selected.
-async fn publish_staged_file(source: &Path, base: &Path) -> Result<PathBuf> {
+async fn publish_staged_file(source: &Path, base: &Path, keep_source: bool) -> Result<PathBuf> {
     for index in 0..1000 {
         let candidate = if index == 0 {
             base.to_path_buf()
@@ -1030,8 +1144,10 @@ async fn publish_staged_file(source: &Path, base: &Path) -> Result<PathBuf> {
         };
         match tokio::fs::hard_link(source, &candidate).await {
             Ok(()) => {
-                if let Err(error) = tokio::fs::remove_file(source).await {
-                    tracing::warn!(error_kind = ?error.kind(), "could not remove staged file after publishing");
+                if !keep_source {
+                    if let Err(error) = tokio::fs::remove_file(source).await {
+                        tracing::warn!(error_kind = ?error.kind(), "could not remove staged file after publishing");
+                    }
                 }
                 return Ok(candidate);
             }
@@ -1111,6 +1227,15 @@ fn blob_error(err: &impl ToString) -> LightningP2PError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn copy_request(progress: Option<&ProgressHandle>) -> SaveRequest<'_> {
+        SaveRequest {
+            known_size: None,
+            suggested_file_name: None,
+            mode: SaveMode::Copy,
+            progress,
+        }
+    }
 
     #[tokio::test]
     async fn recovery_finds_only_the_matching_published_file() {
@@ -1275,7 +1400,7 @@ mod tests {
             .expect("existing");
         tokio::fs::write(&staged, b"new").await.expect("staged");
 
-        let published = publish_staged_file(&staged, &existing)
+        let published = publish_staged_file(&staged, &existing, false)
             .await
             .expect("publish");
 
@@ -1302,6 +1427,7 @@ mod tests {
             dir.path(),
             None,
             &SaveProgress::default(),
+            SaveMode::Copy,
             &mut cancel_rx
         )
         .await
@@ -1326,12 +1452,13 @@ mod tests {
         );
         let (_cancel_tx, mut cancel_rx) = watch::channel(false);
 
-        let published = export_blob(
+        let (published, _) = export_blob(
             store.as_ref(),
             &ticket,
             dir.path(),
             None,
             &SaveProgress::default(),
+            SaveMode::Copy,
             &mut cancel_rx,
         )
         .await
@@ -1366,12 +1493,13 @@ mod tests {
         );
         let (_cancel_tx, mut cancel_rx) = watch::channel(false);
 
-        let published = export_blob(
+        let (published, _) = export_blob(
             store.as_ref(),
             &ticket,
             dir.path(),
             None,
             &SaveProgress::default(),
+            SaveMode::Copy,
             &mut cancel_rx,
         )
         .await
@@ -1483,9 +1611,7 @@ mod tests {
             store.as_ref(),
             &ticket,
             dir.path(),
-            None,
-            None,
-            None,
+            copy_request(None),
             &mut cancel_rx,
         )
         .await
@@ -1520,9 +1646,7 @@ mod tests {
             store.as_ref(),
             &ticket,
             dir.path(),
-            None,
-            None,
-            None,
+            copy_request(None),
             &mut cancel_rx
         )
         .await
@@ -1578,9 +1702,12 @@ mod tests {
             store.as_ref(),
             &ticket,
             &destination,
-            Some(total),
-            Some("payload.bin"),
-            Some(&handle),
+            SaveRequest {
+                known_size: Some(total),
+                suggested_file_name: Some("payload.bin"),
+                mode: SaveMode::Copy,
+                progress: Some(&handle),
+            },
             &mut cancel_rx,
         )
         .await
@@ -1643,6 +1770,108 @@ mod tests {
         save.clone().advance(400);
         save.advance(600);
         assert_eq!(handle.snapshot(), (1_000, 1_000));
+    }
+
+    #[tokio::test]
+    async fn moved_save_publishes_without_a_second_copy() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store_dir = dir.path().join("store");
+        let store = iroh_blobs::store::fs::FsStore::load(&store_dir)
+            .await
+            .expect("store");
+        let payload = (0..2 * 1024 * 1024_u32)
+            .map(|index| u8::try_from(index % 241).expect("byte"))
+            .collect::<Vec<_>>();
+        let hash = store
+            .add_bytes(payload.clone())
+            .temp_tag()
+            .await
+            .unwrap()
+            .hash();
+        let ticket = BlobTicket::new(
+            iroh::EndpointAddr::new(iroh::SecretKey::from_bytes(&[1; 32]).public()),
+            hash,
+            iroh_blobs::BlobFormat::Raw,
+        );
+        let destination = dir.path().join("out");
+        tokio::fs::create_dir(&destination).await.expect("out dir");
+        let (_cancel_tx, mut cancel_rx) = watch::channel(false);
+
+        let (published, retained) = export_blob(
+            store.as_ref(),
+            &ticket,
+            &destination,
+            Some("movie.bin"),
+            &SaveProgress::default(),
+            SaveMode::Move,
+            &mut cancel_rx,
+        )
+        .await
+        .expect("export");
+
+        assert_eq!(tokio::fs::read(&published).await.unwrap(), payload);
+        let staging = retained.expect("a moved save retains its staging link");
+        let staged_link = staging.join(hash.to_string());
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            let published_meta = std::fs::metadata(&published).unwrap();
+            let staged_meta = std::fs::metadata(&staged_link).unwrap();
+            assert_eq!(
+                published_meta.ino(),
+                staged_meta.ino(),
+                "save copied the data"
+            );
+        }
+        let data_bytes = std::fs::read_dir(store_dir.join("data"))
+            .map(|entries| {
+                entries
+                    .filter_map(std::result::Result::ok)
+                    .filter_map(|entry| entry.metadata().ok())
+                    .map(|metadata| metadata.len())
+                    .sum::<u64>()
+            })
+            .unwrap_or(0);
+        assert!(
+            data_bytes < 64 * 1024,
+            "store kept {data_bytes} bytes after a move"
+        );
+        let read_back = store
+            .blobs()
+            .get_bytes(hash)
+            .await
+            .expect("store reads the link");
+        assert_eq!(read_back.as_ref(), payload.as_slice());
+        store.shutdown().await.expect("shutdown");
+    }
+
+    #[tokio::test]
+    async fn copied_save_retains_no_staging() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store = iroh_blobs::store::mem::MemStore::new();
+        let hash = store.add_bytes(vec![5_u8; 100 * 1024]).await.unwrap().hash;
+        let ticket = BlobTicket::new(
+            iroh::EndpointAddr::new(iroh::SecretKey::from_bytes(&[1; 32]).public()),
+            hash,
+            iroh_blobs::BlobFormat::Raw,
+        );
+        let (_cancel_tx, mut cancel_rx) = watch::channel(false);
+
+        let (published, retained) = export_blob(
+            store.as_ref(),
+            &ticket,
+            dir.path(),
+            Some("copy.bin"),
+            &SaveProgress::default(),
+            SaveMode::Copy,
+            &mut cancel_rx,
+        )
+        .await
+        .expect("export");
+
+        assert!(retained.is_none());
+        assert_eq!(tokio::fs::read(&published).await.unwrap().len(), 100 * 1024);
+        assert_eq!(read_dir_entries(dir.path()).await.unwrap(), vec![published]);
     }
 
     #[tokio::test]
