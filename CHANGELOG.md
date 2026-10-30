@@ -20,6 +20,19 @@ All notable changes to Lightning P2P are documented here. The project follows se
   met in a room stay on that room identity; replayed history from your own
   room key shows as outgoing; delivery receipts are sent once per message.
 - Apply `cargo fmt` so `pnpm check:baseline` passes again.
+- Browser receive: **Save all to a folder** streams every file of a shared
+  folder into one chosen directory with subfolders preserved, whole-share
+  progress, and one stop button — instead of one save dialog per file.
+  Sender-supplied names are sanitised, traversal is refused, existing files
+  are never overwritten, and a file that fails part-way is removed.
+- Lightning Chat: read receipts are now opt-in (identity panel switch), so
+  opening a conversation no longer reveals when you read it. Delivery
+  receipts are unchanged.
+- Remove export staging folders left in the download folder by a crash or
+  forced quit (only private staging folders untouched for a day).
+- New `Rebuild browser receiver engine` workflow rebuilds `public/webrx` on
+  GitHub and pushes it to a review branch; `wasm-opt` failures no longer
+  break the build script.
 
 ## [0.9.31] - 2026-10-02 ("Startup-Safe Recovery")
 

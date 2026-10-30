@@ -218,4 +218,45 @@ describe("Lightning Chat unlinkable room identities", () => {
     expect(replayed?.direction).toBe("outgoing");
     await service.panicWipe();
   });
+  it("sends read receipts only after the user opts in", async () => {
+    const service = new LightningChatService();
+    await service.start();
+    const sender = generateSecretKey();
+    const rootPubkey = getPublicKey(root);
+    privateSubscriptionFor(rootPubkey).onevent(
+      createLightningChatPrivateEnvelope({
+        content: encodeEmbeddedPrivateMessage({
+          content: "are you there?",
+          messageId: "dm-read",
+          senderId: peerIdFromNostrPubkey(getPublicKey(sender)),
+          recipientId: peerIdFromNostrPubkey(rootPubkey),
+        }),
+        recipientPubkey: rootPubkey,
+        senderSecretKey: sender,
+      }),
+    );
+    await settle();
+    const conversation = `private:${getPublicKey(sender)}`;
+    const readAcks = (): string[] =>
+      relay.published
+        .filter((event) => event.kind === 1_059)
+        .flatMap((event) => {
+          try {
+            const opened = decryptLightningChatPrivateEnvelope(event, sender);
+            const payload = decodeEmbeddedLightningChatPayload(opened.content);
+            return payload.kind === "read" ? [payload.messageId] : [];
+          } catch {
+            return [];
+          }
+        });
+
+    expect(service.getSnapshot().read_receipts).toBe(false);
+    await service.markConversationRead(conversation);
+    expect(readAcks()).toEqual([]);
+
+    service.setReadReceipts(true);
+    await service.markConversationRead(conversation);
+    expect(readAcks()).toEqual(["dm-read"]);
+    await service.panicWipe();
+  });
 });

@@ -62,6 +62,7 @@ const NICKNAME_KEY = "lightning-chat.nickname";
 const MAX_MESH_MEDIA_BYTES = 512 * 1024;
 const FAVORITES_KEY = "lightning-chat.favorites";
 const BLOCKED_KEY = "lightning-chat.blocked";
+const READ_RECEIPTS_KEY = "lightning-chat.read-receipts";
 const PRESENCE_INTERVAL_MS = 30_000;
 const RELAY_HEALTH_INTERVAL_MS = 5_000;
 
@@ -101,6 +102,7 @@ export class LightningChatService {
     groups: [],
     mesh_peer_id: null,
     mesh_links: 0,
+    read_receipts: loadReadReceiptsPreference(),
     error: null,
   };
 
@@ -429,7 +431,17 @@ export class LightningChatService {
     this.update({ messages });
   }
 
+  /**
+   * Read receipts reveal when you are actively reading, so they are off by
+   * default; delivery receipts still confirm a message arrived.
+   */
+  setReadReceipts(enabled: boolean): void {
+    localStorage.setItem(READ_RECEIPTS_KEY, enabled ? "on" : "off");
+    this.update({ read_receipts: enabled });
+  }
+
   async markConversationRead(conversationId: string): Promise<void> {
+    if (!this.snapshot.read_receipts) return;
     if (!conversationId.startsWith("private:")) return;
     const recipientPubkey = conversationId.slice("private:".length);
     const unread = this.snapshot.messages.filter(
@@ -463,6 +475,7 @@ export class LightningChatService {
     localStorage.removeItem(NICKNAME_KEY);
     localStorage.removeItem(FAVORITES_KEY);
     localStorage.removeItem(BLOCKED_KEY);
+    localStorage.removeItem(READ_RECEIPTS_KEY);
     await panicWipeLightningChat();
     this.snapshot = {
       ...this.snapshot,
@@ -474,6 +487,7 @@ export class LightningChatService {
       mesh_peer_id: null,
       mesh_links: 0,
       connected_relays: 0,
+      read_receipts: false,
       error: null,
     };
     this.emit();
@@ -991,6 +1005,17 @@ function irohMessage(
     delivery: outgoing ? "sent" : "delivered",
     transport: "iroh",
   };
+}
+
+function loadReadReceiptsPreference(): boolean {
+  try {
+    return (
+      typeof localStorage !== "undefined" &&
+      localStorage.getItem(READ_RECEIPTS_KEY) === "on"
+    );
+  } catch {
+    return false;
+  }
 }
 
 function loadPeerSet(key: string): Set<string> {
