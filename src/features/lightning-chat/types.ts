@@ -67,6 +67,8 @@ export interface LightningChatSnapshot {
   groups: LightningChatGroup[];
   mesh_peer_id: string | null;
   mesh_links: number;
+  /** Whether opening a private conversation tells the sender it was read. */
+  read_receipts: boolean;
   error: string | null;
 }
 

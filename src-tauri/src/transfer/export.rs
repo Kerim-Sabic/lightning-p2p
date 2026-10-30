@@ -508,13 +508,64 @@ fn is_plain_file(metadata: &std::fs::Metadata) -> bool {
     }
 }
 
+/// Name prefix of the private folders exports stage into before publishing.
+const EXPORT_STAGING_PREFIX: &str = ".lightning-p2p-export-";
+/// Staging folders untouched for this long are leftovers from a crash or a
+/// forced quit; no live export keeps one that long without writing to it.
+const STALE_EXPORT_STAGING_AGE: std::time::Duration = std::time::Duration::from_secs(24 * 60 * 60);
+
+/// Removes export staging folders that a crash or forced quit left in the
+/// download folder. Only plain directories carrying the private staging
+/// prefix and untouched for a day are removed; symlinks, files, and anything
+/// else are left alone. Returns how many folders were removed.
+pub(crate) fn sweep_stale_export_staging(destination: &Path) -> usize {
+    sweep_export_staging_older_than(
+        destination,
+        STALE_EXPORT_STAGING_AGE,
+        std::time::SystemTime::now(),
+    )
+}
+
+fn sweep_export_staging_older_than(
+    destination: &Path,
+    max_age: std::time::Duration,
+    now: std::time::SystemTime,
+) -> usize {
+    let Ok(entries) = std::fs::read_dir(destination) else {
+        return 0;
+    };
+    let mut removed = 0;
+    for entry in entries.flatten() {
+        let is_staging = entry
+            .file_name()
+            .to_str()
+            .is_some_and(|name| name.starts_with(EXPORT_STAGING_PREFIX));
+        if !is_staging {
+            continue;
+        }
+        let path = entry.path();
+        let Ok(metadata) = std::fs::symlink_metadata(&path) else {
+            continue;
+        };
+        let stale = metadata
+            .modified()
+            .ok()
+            .and_then(|modified| now.duration_since(modified).ok())
+            .is_some_and(|age| age >= max_age);
+        if is_plain_directory(&metadata) && stale && std::fs::remove_dir_all(&path).is_ok() {
+            removed += 1;
+        }
+    }
+    removed
+}
+
 /// Creates a fresh private directory for a single-file export. A predictable
 /// sibling `.part` file could be planted as a symlink before `iroh-blobs`
 /// opens it, redirecting the write outside the download folder.
 fn create_export_staging_dir(destination: &Path, hash: Hash) -> Result<PathBuf> {
     for _ in 0..64 {
         let candidate = destination.join(format!(
-            ".lightning-p2p-export-{hash}-{}",
+            "{EXPORT_STAGING_PREFIX}{hash}-{}",
             uuid::Uuid::new_v4()
         ));
         match create_private_directory(&candidate) {
@@ -1427,6 +1478,56 @@ mod tests {
         assert_eq!(parallelism_for_average(4 * 1024, 3), 3);
         assert_eq!(parallelism_for_average(1024 * 1024 * 1024, 50), 2);
         assert_eq!(parallelism_for_average(0, 0), 1);
+    }
+
+    #[test]
+    fn startup_sweep_removes_only_stale_private_staging_folders() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let stale = dir.path().join(format!("{EXPORT_STAGING_PREFIX}abc-1"));
+        std::fs::create_dir(&stale).unwrap();
+        std::fs::write(stale.join("partial.bin"), b"partial").unwrap();
+        let user_folder = dir.path().join("holiday photos");
+        std::fs::create_dir(&user_folder).unwrap();
+        let lookalike_file = dir.path().join(format!("{EXPORT_STAGING_PREFIX}note"));
+        std::fs::write(&lookalike_file, b"user file").unwrap();
+        let day_later = std::time::SystemTime::now() + STALE_EXPORT_STAGING_AGE;
+
+        assert_eq!(
+            sweep_export_staging_older_than(dir.path(), STALE_EXPORT_STAGING_AGE, day_later),
+            1
+        );
+        assert!(!stale.exists());
+        assert!(user_folder.exists());
+        assert!(lookalike_file.exists());
+    }
+
+    #[test]
+    fn startup_sweep_leaves_recent_staging_for_live_exports() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let live = dir.path().join(format!("{EXPORT_STAGING_PREFIX}live"));
+        std::fs::create_dir(&live).unwrap();
+
+        assert_eq!(sweep_stale_export_staging(dir.path()), 0);
+        assert!(live.exists());
+        assert_eq!(sweep_stale_export_staging(&dir.path().join("missing")), 0);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn startup_sweep_never_follows_a_staging_named_symlink() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let outside = dir.path().join("outside");
+        std::fs::create_dir(&outside).unwrap();
+        std::fs::write(outside.join("keep.txt"), b"keep").unwrap();
+        let link = dir.path().join(format!("{EXPORT_STAGING_PREFIX}link"));
+        std::os::unix::fs::symlink(&outside, &link).unwrap();
+        let day_later = std::time::SystemTime::now() + STALE_EXPORT_STAGING_AGE;
+
+        assert_eq!(
+            sweep_export_staging_older_than(dir.path(), STALE_EXPORT_STAGING_AGE, day_later),
+            0
+        );
+        assert!(outside.join("keep.txt").exists());
     }
 
     #[tokio::test]

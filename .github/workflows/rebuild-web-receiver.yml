@@ -1,0 +1,82 @@
+name: Rebuild browser receiver engine
+
+# Rebuilds public/webrx — the WebAssembly engine the website serves for
+# "Receive in any browser" — from web-receiver/src, then pushes the result to
+# a new branch for review. Run it from the Actions tab after changing
+# web-receiver/ so nobody needs a local wasm32 toolchain.
+
+on:
+  workflow_dispatch:
+    inputs:
+      base:
+        description: Branch to rebuild from
+        required: true
+        default: main
+
+permissions:
+  contents: write
+
+jobs:
+  rebuild:
+    name: Build and push public/webrx
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.base }}
+
+      - name: Install clang (ring's wasm C) and binaryen (wasm-opt)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang binaryen
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: web-receiver
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen-cli@0.2.126
+
+      - name: Size before
+        run: ls -l public/webrx
+
+      - name: Build engine
+        run: bash scripts/build-web-receiver.sh
+
+      - name: Verify the engine surface the page depends on
+        run: |
+          node -e '
+            const fs = require("fs");
+            const buf = fs.readFileSync("public/webrx/web_receiver_bg.wasm");
+            WebAssembly.compile(buf).then((mod) => {
+              const have = new Set(WebAssembly.Module.exports(mod).map((e) => e.name));
+              const want = ["webreceiver_fetch","webreceiver_list_collection","webreceiver_read_blob","webreceiver_spawn","inspect_ticket","webreceiver_stream_blob_to","webreceiver_prepare_streamed_collection"];
+              const missing = want.filter((w) => !have.has(w));
+              if (missing.length) { console.error("missing wasm exports:", missing.join(", ")); process.exit(1); }
+              console.log("engine exports present;", buf.length, "bytes");
+            }).catch((e) => { console.error("wasm invalid:", e.message); process.exit(1); });
+          '
+
+      - name: Push rebuilt engine to a review branch
+        env:
+          BRANCH: webrx-rebuild/run-${{ github.run_number }}
+        run: |
+          if git diff --quiet -- public/webrx src/lib/webrxVersion.ts; then
+            echo "Engine unchanged; nothing to push." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add public/webrx src/lib/webrxVersion.ts
+          git commit -m "build: rebuild browser receiver engine"
+          git push origin "$BRANCH"
+          {
+            echo "Pushed \`$BRANCH\`. Open a pull request from it to ship the new engine."
+            ls -l public/webrx
+          } >> "$GITHUB_STEP_SUMMARY"

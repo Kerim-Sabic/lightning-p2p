@@ -31,7 +31,14 @@ wasm-bindgen --target web --out-dir "$OUT" --no-typescript \
 
 if command -v wasm-opt >/dev/null 2>&1; then
   echo "==> wasm-opt -Os"
-  wasm-opt -Os "$OUT/web_receiver_bg.wasm" -o "$OUT/web_receiver_bg.wasm"
+  # Optimize into a temp file so an older binaryen that rejects newer wasm
+  # features leaves the working (unoptimized) engine in place.
+  if wasm-opt -Os --all-features "$OUT/web_receiver_bg.wasm" -o "$OUT/web_receiver_bg.opt.wasm"; then
+    mv "$OUT/web_receiver_bg.opt.wasm" "$OUT/web_receiver_bg.wasm"
+  else
+    rm -f "$OUT/web_receiver_bg.opt.wasm"
+    echo "==> wasm-opt failed; keeping the unoptimized engine"
+  fi
 else
   echo "==> wasm-opt not found; skipping size optimization (optional)"
 fi

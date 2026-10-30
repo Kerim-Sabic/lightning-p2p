@@ -3,6 +3,7 @@ import {
   Check,
   Download,
   FileDown,
+  FolderDown,
   Globe,
   Loader2,
   ShieldCheck,
@@ -21,6 +22,18 @@ import {
   type TicketInfo,
 } from "../lib/webReceiver";
 import { browserReceiveFileKey } from "../lib/browserReceiveFiles";
+import {
+  hasDirectoryPicker,
+  pickReceiveFolder,
+  saveFilesToFolder,
+} from "../lib/browserFolderSave";
+
+interface FolderSaveState {
+  savedBytes: number;
+  totalBytes: number;
+  filesDone: number;
+  filesTotal: number;
+}
 
 // The compatibility receive path is memory-backed. Gate advertised size for a
 // useful early warning, then enforce the limit against actual bytes in Rust.
@@ -59,6 +72,7 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
   const [streamedReceive, setStreamedReceive] = useState(false);
   const [savingFileKey, setSavingFileKey] = useState<string | null>(null);
   const [savingBytes, setSavingBytes] = useState(0);
+  const [folderSave, setFolderSave] = useState<FolderSaveState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [receiver, setReceiver] = useState<BrowserReceiver | null>(null);
   const [receivedBytes, setReceivedBytes] = useState(0);
@@ -248,6 +262,82 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
     saveAbortControllerRef.current?.abort();
   };
 
+  const unsavedFiles = files.filter(
+    (file, index) =>
+      !savedFileKeys.has(browserReceiveFileKey(file.hash, index)),
+  );
+  const canSaveAllToFolder =
+    receiver !== null && files.length > 1 && hasDirectoryPicker();
+
+  const saveAll = async (): Promise<void> => {
+    if (!receiver || savingFileKey !== null) return;
+    let folder;
+    try {
+      // Must run first so the picker keeps the click's user activation.
+      folder = await pickReceiveFolder();
+    } catch (err) {
+      if (!(err instanceof DOMException && err.name === "AbortError"))
+        setError(describe(err));
+      return;
+    }
+    const controller = new AbortController();
+    saveAbortControllerRef.current = controller;
+    // Lock the per-file Save buttons until the first file starts writing.
+    setSavingFileKey("folder");
+    const alreadySaved = new Set(savedFileKeys);
+    const filesTotal = files.length - alreadySaved.size;
+    let filesDone = 0;
+    let lastUiUpdate = 0;
+    setError(null);
+    setFolderSave({
+      savedBytes: 0,
+      totalBytes: unsavedFiles.reduce((sum, file) => sum + file.size, 0),
+      filesDone,
+      filesTotal,
+    });
+    try {
+      const bytes = await saveFilesToFolder(receiver, folder, files, {
+        streamed: streamedReceive,
+        signal: controller.signal,
+        skip: (index) =>
+          alreadySaved.has(
+            browserReceiveFileKey(files[index]?.hash ?? "", index),
+          ),
+        onProgress: ({ fileIndex, savedBytes, totalBytes }) => {
+          const file = files[fileIndex];
+          if (file)
+            setSavingFileKey(browserReceiveFileKey(file.hash, fileIndex));
+          const now = performance.now();
+          if (now - lastUiUpdate >= 120 || savedBytes >= totalBytes) {
+            lastUiUpdate = now;
+            setFolderSave({ savedBytes, totalBytes, filesDone, filesTotal });
+          }
+        },
+        onFileSaved: (index) => {
+          filesDone += 1;
+          const file = files[index];
+          if (!file) return;
+          alreadySaved.add(browserReceiveFileKey(file.hash, index));
+          setSavedFileKeys(new Set(alreadySaved));
+        },
+      });
+      if (streamedReceive) setReceivedBytes((current) => current + bytes);
+      if (alreadySaved.size >= files.length) {
+        receiver.stop();
+        setReceiver(null);
+      }
+    } catch (err) {
+      if (!(err instanceof DOMException && err.name === "AbortError"))
+        setError(describe(err));
+    } finally {
+      if (saveAbortControllerRef.current === controller) {
+        saveAbortControllerRef.current = null;
+      }
+      setSavingFileKey(null);
+      setFolderSave(null);
+    }
+  };
+
   return (
     <div className="relative overflow-hidden rounded-2xl border border-[color:var(--signal-green)]/22 bg-[color:var(--signal-green)]/[0.05] p-6">
       <div className="flex items-start gap-3">
@@ -406,6 +496,50 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
                   ? "Share manifest verified — file contents verify as you save them."
                   : "BLAKE3 verified — bytes are proven correct."}
               </motion.div>
+              {canSaveAllToFolder && unsavedFiles.length > 0 && !folderSave && (
+                <button
+                  type="button"
+                  onClick={() => void saveAll()}
+                  disabled={savingFileKey !== null}
+                  className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-[var(--signal-green)] px-5 py-3 text-[13.5px] font-semibold text-[var(--text-ink)] transition hover:brightness-[1.04] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--signal-green)]"
+                >
+                  <FolderDown className="h-4 w-4" />
+                  Save{" "}
+                  {unsavedFiles.length === files.length ? "all" : "the rest"} to
+                  a folder · {unsavedFiles.length} files,{" "}
+                  {formatBytes(
+                    unsavedFiles.reduce((sum, file) => sum + file.size, 0),
+                  )}
+                </button>
+              )}
+              {folderSave && (
+                <div
+                  className="mt-3 rounded-xl border border-white/8 bg-black/30 p-3.5"
+                  role="status"
+                  aria-live="polite"
+                >
+                  <div className="flex items-baseline justify-between gap-3 text-[13px]">
+                    <span className="font-semibold text-white">
+                      Saving file{" "}
+                      {Math.min(
+                        folderSave.filesDone + 1,
+                        folderSave.filesTotal,
+                      )}{" "}
+                      of {folderSave.filesTotal}
+                    </span>
+                    <span className="font-mono text-[color:var(--muted-copy)]">
+                      {formatBytes(folderSave.savedBytes)} /{" "}
+                      {formatBytes(folderSave.totalBytes)}
+                    </span>
+                  </div>
+                  <progress
+                    className="mt-2.5 block h-1.5 w-full appearance-none overflow-hidden rounded-full bg-white/[0.06] [&::-webkit-progress-bar]:bg-white/[0.06] [&::-webkit-progress-value]:rounded-full [&::-webkit-progress-value]:bg-[var(--signal-green)] [&::-moz-progress-bar]:bg-[var(--signal-green)]"
+                    value={folderSave.savedBytes}
+                    max={Math.max(folderSave.totalBytes, 1)}
+                    aria-label="Folder save progress"
+                  />
+                </div>
+              )}
               <ul className="mt-3 space-y-2">
                 {files.map((file, index) => {
                   const fileKey = browserReceiveFileKey(file.hash, index);
@@ -473,13 +607,15 @@ export function BrowserReceivePanel({ ticket }: { ticket: string }) {
                   Saved files land in this browser's Downloads folder.
                 </p>
               )}
-              {streamedReceive && savingFileKey !== null && (
+              {(streamedReceive || folderSave) && savingFileKey !== null && (
                 <button
                   type="button"
                   onClick={cancelSave}
                   className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-full border border-white/12 bg-white/[0.04] px-4 py-2.5 text-[12px] font-semibold text-white transition hover:bg-white/[0.08] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--signal-green)]"
                 >
-                  Stop saving this file
+                  {folderSave
+                    ? "Stop saving to the folder"
+                    : "Stop saving this file"}
                 </button>
               )}
             </Frame>
