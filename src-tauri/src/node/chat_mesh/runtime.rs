@@ -9,13 +9,13 @@
 )]
 
 use super::sync::mesh_packet_id;
-use crate::storage::bounded_json;
 use super::{
     CourierDepositTier, CourierEnvelope, CourierStore, FragmentAssembler, FragmentResult,
     Fragmenter, GossipFilter, GossipStore, GroupEnvelope, GroupMember, MediaPacket, MeshIdentity,
     MeshMessageType, MeshPacket, NoiseHandshake, NoiseRole, NoiseTransport, PrivateGroup,
     TrustRecord,
 };
+use crate::storage::bounded_json;
 use base64::{engine::general_purpose::STANDARD, Engine};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};

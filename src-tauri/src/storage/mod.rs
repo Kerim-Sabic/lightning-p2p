@@ -1,7 +1,7 @@
 //! Local persistent storage using sled.
 
-pub(crate) mod bounded_json;
 pub mod blocked_peers;
+pub(crate) mod bounded_json;
 pub mod db;
 pub mod history;
 pub mod paired_devices;
