@@ -2,10 +2,17 @@ name: Rebuild browser receiver engine
 
 # Rebuilds public/webrx — the WebAssembly engine the website serves for
 # "Receive in any browser" — from web-receiver/src, then pushes the result to
-# a new branch for review. Run it from the Actions tab after changing
-# web-receiver/ so nobody needs a local wasm32 toolchain.
+# a new branch for review. Runs automatically when engine code lands on main
+# (so the committed engine can no longer silently lag the source), and can be
+# run by hand from the Actions tab. Nobody needs a local wasm32 toolchain.
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - "web-receiver/**"
+      - "scripts/build-web-receiver.sh"
+      - ".github/workflows/rebuild-web-receiver.yml"
   workflow_dispatch:
     inputs:
       base:
@@ -23,7 +30,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.base }}
+          ref: ${{ inputs.base || github.ref }}
 
       - name: Install clang (ring's wasm C) and binaryen (wasm-opt)
         run: |
