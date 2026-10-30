@@ -110,6 +110,8 @@ export interface UpdateState {
   totalBytes: number | null;
   error: string | null;
   lastCheckedAt: number | null;
+  /** True when a staged installer update applies with "Restart now". */
+  restartToApply: boolean;
 }
 
 interface TransferStore {
@@ -172,6 +174,7 @@ interface TransferStore {
   completeFirstRun: () => Promise<void>;
   checkForUpdates: (silent?: boolean) => Promise<void>;
   installUpdate: () => Promise<void>;
+  restartToUpdate: () => Promise<void>;
   applyTransferEvent: (event: TransferEvent) => void;
   applyNodeSupervisorStatus: (status: NodeSupervisorStatus) => void;
 }
@@ -213,6 +216,7 @@ const defaultUpdateState: UpdateState = {
   totalBytes: null,
   error: null,
   lastCheckedAt: null,
+  restartToApply: false,
 };
 
 function errorState(error: unknown): { error: string; appError: AppError } {
@@ -320,7 +324,11 @@ function uniquePaths(paths: string[]): string[] {
 
 function updateFromResult(result: UpdateCheckResult): UpdateState {
   return {
-    phase: result.available ? "available" : "upToDate",
+    phase: result.ready_to_restart
+      ? "restartRequired"
+      : result.available
+        ? "available"
+        : "upToDate",
     currentVersion: result.current_version,
     availableVersion: result.version,
     body: result.body,
@@ -329,6 +337,7 @@ function updateFromResult(result: UpdateCheckResult): UpdateState {
     totalBytes: null,
     error: null,
     lastCheckedAt: Date.now(),
+    restartToApply: result.ready_to_restart,
   };
 }
 
@@ -1081,7 +1090,7 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
     }));
 
     try {
-      await tauri.installAppUpdate((progress) => {
+      const restartToApply = await tauri.installAppUpdate((progress) => {
         set((state) => ({
           updateState: updateDownloadProgress(state.updateState, progress),
         }));
@@ -1094,6 +1103,7 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
           downloadedBytes:
             state.updateState.totalBytes ?? state.updateState.downloadedBytes,
           error: null,
+          restartToApply,
         },
       }));
     } catch (error) {
@@ -1102,6 +1112,21 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
         updateState: {
           ...state.updateState,
           phase: "error",
+          error: messageFromAppError(appError),
+        },
+        appError,
+      }));
+    }
+  },
+
+  restartToUpdate: async () => {
+    try {
+      await tauri.restartToApplyUpdate();
+    } catch (error) {
+      const appError = normalizeAppError(error);
+      set((state) => ({
+        updateState: {
+          ...state.updateState,
           error: messageFromAppError(appError),
         },
         appError,

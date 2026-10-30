@@ -101,6 +101,12 @@ The sender must stay online, keep Lightning P2P open, and keep the content avail
 
 Release automation supports:
 
+- Velopack self-updates for installs made by `LightningP2P-win-Setup.exe`. The
+  app reads `releases.win.json` from the latest GitHub release over HTTPS, and
+  Velopack checks each downloaded package against the size and SHA-256 hash in
+  that feed before applying it. The feed and packages come from the same
+  release, so this guards against corrupted downloads, not a compromised
+  release; unsigned community packages carry no publisher signature.
 - Tauri updater metadata signatures
 - SHA256 checksums for both Windows and Android artifacts
 - Authenticode code-signing for Windows when Microsoft Trusted Signing secrets are configured

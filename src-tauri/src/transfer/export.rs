@@ -7,9 +7,11 @@ use super::destination::{
 use super::progress::ProgressHandle;
 use crate::error::{LightningP2PError, Result};
 use futures_util::StreamExt;
-use iroh_blobs::api::proto::{BlobStatus, ExportProgressItem};
+use iroh_blobs::api::blobs::ExportOptions;
+use iroh_blobs::api::proto::{BlobStatus, ExportMode, ExportProgressItem};
 use iroh_blobs::api::Store;
 use iroh_blobs::format::collection::Collection;
+use iroh_blobs::store::fs::options::PathOptions;
 use iroh_blobs::ticket::BlobTicket;
 use iroh_blobs::Hash;
 use std::collections::{BTreeSet, HashSet};
@@ -34,6 +36,55 @@ pub struct ExportSummary {
     pub output_path: PathBuf,
 }
 
+/// What the receiver knows about the content it is saving.
+#[derive(Debug, Clone, Copy)]
+pub struct SaveRequest<'a> {
+    /// Verified total size, when already computed.
+    pub known_size: Option<u64>,
+    /// Sender-provided name for a single-file share.
+    pub suggested_file_name: Option<&'a str>,
+    /// Store files the save may hard-link instead of copying.
+    pub links: Option<&'a StoreLinks>,
+    /// Progress handle that tracks bytes written to disk.
+    pub progress: Option<&'a ProgressHandle>,
+}
+
+/// Blobs above this size live in their own store file; smaller ones are
+/// kept inline in the store database and are always copied.
+const LINKABLE_MIN_BYTES: u64 = 16 * 1024;
+
+/// Verified store files a save may hard-link into place.
+///
+/// The file store keeps every verified blob above the inline limit as one
+/// plain file. Linking it into the save location costs one metadata write
+/// instead of writing the whole file a second time, and leaves the store's
+/// own state untouched: collection later drops only the store's name for
+/// the data. Blobs another pin still uses are copied instead, so editing a
+/// saved file in place can never change bytes a share or paused receive
+/// depends on.
+#[derive(Debug, Clone)]
+pub struct StoreLinks {
+    paths: PathOptions,
+    pinned_elsewhere: HashSet<Hash>,
+}
+
+impl StoreLinks {
+    /// Links from the file store rooted at `blob_dir`, never touching
+    /// `pinned_elsewhere`.
+    #[must_use]
+    pub fn new(blob_dir: &Path, pinned_elsewhere: HashSet<Hash>) -> Self {
+        Self {
+            paths: PathOptions::new(blob_dir),
+            pinned_elsewhere,
+        }
+    }
+
+    fn source(&self, hash: &Hash, size: u64) -> Option<PathBuf> {
+        (size > LINKABLE_MIN_BYTES && !self.pinned_elsewhere.contains(hash))
+            .then(|| self.paths.data_path(hash))
+    }
+}
+
 /// Exports a downloaded ticket to the destination directory.
 ///
 /// When `known_size` is provided the expensive per-blob size query is skipped.
@@ -48,11 +99,15 @@ pub async fn export_ticket(
     store: &Store,
     ticket: &BlobTicket,
     destination: &Path,
-    known_size: Option<u64>,
-    suggested_file_name: Option<&str>,
-    progress: Option<&ProgressHandle>,
+    request: SaveRequest<'_>,
     cancel_rx: &mut watch::Receiver<bool>,
 ) -> Result<ExportSummary> {
+    let SaveRequest {
+        known_size,
+        suggested_file_name,
+        links,
+        progress,
+    } = request;
     ensure_not_cancelled(cancel_rx)?;
     preflight_destination(destination)?;
     let suggested_file_name = if ticket.recursive() {
@@ -71,7 +126,7 @@ pub async fn export_ticket(
     ensure_enough_space(destination, size)?;
     let save = SaveProgress::start(progress, size);
     let output_path = if ticket.recursive() {
-        export_collection(store, ticket, destination, &label, &save, cancel_rx).await?
+        export_collection(store, ticket, destination, &label, &save, links, cancel_rx).await?
     } else {
         export_blob(
             store,
@@ -79,6 +134,7 @@ pub async fn export_ticket(
             destination,
             suggested_file_name.as_deref(),
             &save,
+            links,
             cancel_rx,
         )
         .await?
@@ -247,12 +303,14 @@ pub async fn resolve_label(store: &Store, ticket: &BlobTicket) -> Result<String>
     ))
 }
 
+/// Exports one file and returns its published path.
 async fn export_blob(
     store: &Store,
     ticket: &BlobTicket,
     destination: &Path,
     suggested_file_name: Option<&str>,
     save: &SaveProgress,
+    links: Option<&StoreLinks>,
     cancel_rx: &mut watch::Receiver<bool>,
 ) -> Result<PathBuf> {
     let base_path = destination
@@ -263,14 +321,14 @@ async fn export_blob(
     let export_result = tokio::select! {
         biased;
         () = wait_for_cancellation(cancel_rx) => Err(cancelled_error()),
-        result = export_hash(store, ticket.hash(), &temp_path, save) => result,
+        result = save_hash(store, ticket.hash(), None, &temp_path, save, links) => result,
     };
-
     if let Err(error) = export_result {
         let _ = tokio::fs::remove_dir_all(&staging_dir).await;
         return Err(error);
     }
 
+    // A cancel can arrive after the export resolved; never publish then.
     if let Err(error) = ensure_not_cancelled(cancel_rx) {
         let _ = tokio::fs::remove_dir_all(&staging_dir).await;
         return Err(error);
@@ -279,6 +337,56 @@ async fn export_blob(
     let published = publish_staged_file(&temp_path, &base_path).await;
     let _ = tokio::fs::remove_dir_all(&staging_dir).await;
     published
+}
+
+/// Saves one verified blob to `target`: a hard link to the store's own file
+/// when `links` allows it, otherwise a copy. A link that cannot be made
+/// (another volume, no link support, data kept inline or by reference)
+/// falls back to the copy. `size` skips a store lookup when already known.
+async fn save_hash(
+    store: &Store,
+    hash: Hash,
+    size: Option<u64>,
+    target: &Path,
+    save: &SaveProgress,
+    links: Option<&StoreLinks>,
+) -> Result<()> {
+    if let Some(links) = links {
+        let size = match size {
+            Some(size) => size,
+            None => blob_size(store, hash).await?,
+        };
+        if let Some(source) = links.source(&hash, size) {
+            let link = target.to_path_buf();
+            let linked = tokio::task::spawn_blocking(move || link_store_file(&source, &link, size))
+                .await
+                .unwrap_or(false);
+            if linked {
+                save.advance(size);
+                return Ok(());
+            }
+        }
+    }
+    export_hash(store, hash, target, save, ExportMode::Copy)
+        .await
+        .map(|_| ())
+}
+
+/// Hard-links `source` to `target` when it is a plain file of exactly
+/// `size` bytes. Creates nothing at `target` on failure.
+fn link_store_file(source: &Path, target: &Path, size: u64) -> bool {
+    let complete = std::fs::symlink_metadata(source)
+        .is_ok_and(|metadata| metadata.file_type().is_file() && metadata.len() == size);
+    if !complete {
+        return false;
+    }
+    match std::fs::hard_link(source, target) {
+        Ok(()) => true,
+        Err(error) => {
+            tracing::debug!(error_kind = ?error.kind(), "could not link received file; copying");
+            false
+        }
+    }
 }
 
 pub(crate) fn safe_suggested_file_name(label: &str) -> String {
@@ -609,6 +717,7 @@ async fn export_collection(
     destination: &Path,
     label: &str,
     save: &SaveProgress,
+    links: Option<&StoreLinks>,
     cancel_rx: &mut watch::Receiver<bool>,
 ) -> Result<PathBuf> {
     let staging_dir = create_export_staging_dir(destination, ticket.hash())?;
@@ -626,9 +735,9 @@ async fn export_collection(
     let export_result = export_collection_children(
         store,
         ticket.hash(),
-        &staging_dir,
-        &scratch_dir,
+        (&staging_dir, &scratch_dir),
         save,
+        links,
         cancel_rx,
     )
     .await;
@@ -656,18 +765,19 @@ async fn export_collection(
 /// Exports every collection child, overlapping the per-file store and
 /// filesystem latency that dominates folders full of small files.
 ///
-/// Phase one exports each child concurrently to a unique numbered file in a
-/// private scratch directory, so concurrent writers can never collide even
-/// when two manifest names map to the same file on a case-insensitive
-/// filesystem. Phase two moves the verified files into the staged tree in
-/// manifest order with a cheap same-volume rename, keeping the existing
-/// conflict, symlink, and unsafe-path checks exactly as strict as before.
+/// Phase one saves each child concurrently to a unique numbered file in a
+/// private scratch directory (a hard link to the store file when `links`
+/// allows it), so concurrent writers can never collide even when two
+/// manifest names map to the same file on a case-insensitive filesystem.
+/// Phase two moves the verified files into the staged tree in manifest order
+/// with a cheap same-volume rename, keeping the existing conflict, symlink,
+/// and unsafe-path checks exactly as strict as before.
 async fn export_collection_children(
     store: &Store,
     root: Hash,
-    staging_dir: &Path,
-    scratch_dir: &Path,
+    (staging_dir, scratch_dir): (&Path, &Path),
     save: &SaveProgress,
+    links: Option<&StoreLinks>,
     cancel_rx: &mut watch::Receiver<bool>,
 ) -> Result<()> {
     let collection = Collection::load(root, store)
@@ -677,8 +787,19 @@ async fn export_collection_children(
         .iter()
         .map(|(name, hash)| Ok((safe_collection_entry_path(name)?, *hash)))
         .collect::<Result<Vec<_>>>()?;
-    let parallelism = child_export_parallelism(store, &entries).await;
-    export_children_to_scratch(store, &entries, scratch_dir, parallelism, save, cancel_rx).await?;
+    let sizes = blob_sizes(store, entries.iter().map(|(_, hash)| *hash).collect()).await?;
+    let children = entries
+        .iter()
+        .zip(&sizes)
+        .map(|((_, hash), size)| (*hash, *size))
+        .collect::<Vec<_>>();
+    let parallelism = child_export_parallelism(&sizes);
+    let scratch = ScratchExport {
+        dir: scratch_dir,
+        parallelism,
+        links,
+    };
+    export_children_to_scratch(store, &children, &scratch, save, cancel_rx).await?;
     let relatives = entries.into_iter().map(|(relative, _)| relative).collect();
     let staging_dir = staging_dir.to_path_buf();
     let scratch_dir = scratch_dir.to_path_buf();
@@ -716,16 +837,12 @@ const LARGE_FILE_CHILD_EXPORTS: usize = 2;
 /// Average child size above which a collection counts as large-file work.
 const LARGE_CHILD_EXPORT_BYTES: u64 = 32 * 1024 * 1024;
 
-async fn child_export_parallelism(store: &Store, entries: &[(PathBuf, Hash)]) -> usize {
-    if entries.len() <= 1 {
+fn child_export_parallelism(sizes: &[u64]) -> usize {
+    if sizes.len() <= 1 {
         return 1;
     }
-    let hashes = entries.iter().map(|(_, hash)| *hash).collect::<Vec<_>>();
-    let total = match blob_sizes(store, hashes).await {
-        Ok(sizes) => sizes.into_iter().fold(0_u64, u64::saturating_add),
-        Err(_) => u64::MAX,
-    };
-    parallelism_for_average(total / entries.len() as u64, entries.len())
+    let total = sizes.iter().copied().fold(0_u64, u64::saturating_add);
+    parallelism_for_average(total / sizes.len() as u64, sizes.len())
 }
 
 /// Looks up verified blob sizes with overlapping store round trips, in input
@@ -756,26 +873,32 @@ fn parallelism_for_average(average_size: u64, entry_count: usize) -> usize {
     entry_count.clamp(1, cap)
 }
 
+/// Where and how phase one of a collection save writes its children.
+struct ScratchExport<'a> {
+    dir: &'a Path,
+    parallelism: usize,
+    links: Option<&'a StoreLinks>,
+}
+
 async fn export_children_to_scratch(
     store: &Store,
-    entries: &[(PathBuf, Hash)],
-    scratch_dir: &Path,
-    parallelism: usize,
+    children: &[(Hash, u64)],
+    scratch: &ScratchExport<'_>,
     save: &SaveProgress,
     cancel_rx: &mut watch::Receiver<bool>,
 ) -> Result<()> {
-    let jobs = entries
+    let links = scratch.links;
+    let jobs = children
         .iter()
         .enumerate()
-        .map(|(index, (_, hash))| {
+        .map(|(index, &(hash, size))| {
             let store = store.clone();
             let save = save.clone();
-            let hash = *hash;
-            let target = scratch_dir.join(index.to_string());
-            async move { export_hash(&store, hash, &target, &save).await }
+            let target = scratch.dir.join(index.to_string());
+            async move { save_hash(&store, hash, Some(size), &target, &save, links).await }
         })
         .collect::<Vec<_>>();
-    let mut exports = futures_util::stream::iter(jobs).buffer_unordered(parallelism.max(1));
+    let mut exports = futures_util::stream::iter(jobs).buffer_unordered(scratch.parallelism.max(1));
     loop {
         tokio::select! {
             biased;
@@ -819,8 +942,19 @@ impl SaveProgress {
 
 /// Copies one verified blob to `target`, reporting copied bytes as they land.
 /// Copy-on-write filesystems finish without intermediate offsets.
-async fn export_hash(store: &Store, hash: Hash, target: &Path, save: &SaveProgress) -> Result<u64> {
-    let mut items = std::pin::pin!(store.blobs().export(hash, target).stream().await);
+async fn export_hash(
+    store: &Store,
+    hash: Hash,
+    target: &Path,
+    save: &SaveProgress,
+    mode: ExportMode,
+) -> Result<u64> {
+    let options = ExportOptions {
+        hash,
+        mode,
+        target: target.to_path_buf(),
+    };
+    let mut items = std::pin::pin!(store.blobs().export_with_opts(options).stream().await);
     let mut reported = 0_u64;
     let mut size = None;
     while let Some(item) = items.next().await {
@@ -1112,6 +1246,15 @@ fn blob_error(err: &impl ToString) -> LightningP2PError {
 mod tests {
     use super::*;
 
+    fn copy_request(progress: Option<&ProgressHandle>) -> SaveRequest<'_> {
+        SaveRequest {
+            known_size: None,
+            suggested_file_name: None,
+            links: None,
+            progress,
+        }
+    }
+
     #[tokio::test]
     async fn recovery_finds_only_the_matching_published_file() {
         let dir = tempfile::tempdir().expect("tempdir");
@@ -1302,6 +1445,7 @@ mod tests {
             dir.path(),
             None,
             &SaveProgress::default(),
+            None,
             &mut cancel_rx
         )
         .await
@@ -1332,6 +1476,7 @@ mod tests {
             dir.path(),
             None,
             &SaveProgress::default(),
+            None,
             &mut cancel_rx,
         )
         .await
@@ -1372,6 +1517,7 @@ mod tests {
             dir.path(),
             None,
             &SaveProgress::default(),
+            None,
             &mut cancel_rx,
         )
         .await
@@ -1483,9 +1629,7 @@ mod tests {
             store.as_ref(),
             &ticket,
             dir.path(),
-            None,
-            None,
-            None,
+            copy_request(None),
             &mut cancel_rx,
         )
         .await
@@ -1520,9 +1664,7 @@ mod tests {
             store.as_ref(),
             &ticket,
             dir.path(),
-            None,
-            None,
-            None,
+            copy_request(None),
             &mut cancel_rx
         )
         .await
@@ -1547,6 +1689,7 @@ mod tests {
             dir.path(),
             "a",
             &SaveProgress::default(),
+            None,
             &mut cancel_rx
         )
         .await
@@ -1578,9 +1721,12 @@ mod tests {
             store.as_ref(),
             &ticket,
             &destination,
-            Some(total),
-            Some("payload.bin"),
-            Some(&handle),
+            SaveRequest {
+                known_size: Some(total),
+                suggested_file_name: Some("payload.bin"),
+                links: None,
+                progress: Some(&handle),
+            },
             &mut cancel_rx,
         )
         .await
@@ -1622,6 +1768,7 @@ mod tests {
             dir.path(),
             "folder",
             &save,
+            None,
             &mut cancel_rx,
         )
         .await
@@ -1643,6 +1790,253 @@ mod tests {
         save.clone().advance(400);
         save.advance(600);
         assert_eq!(handle.snapshot(), (1_000, 1_000));
+    }
+
+    async fn linkable_store(dir: &Path) -> (iroh_blobs::store::fs::FsStore, PathBuf) {
+        let store_dir = dir.join("store");
+        let store = iroh_blobs::store::fs::FsStore::load(&store_dir)
+            .await
+            .expect("store");
+        (store, store_dir)
+    }
+
+    fn patterned(len: u32, seed: u32) -> Vec<u8> {
+        (0..len)
+            .map(|index| u8::try_from((index + seed) % 241).expect("byte"))
+            .collect()
+    }
+
+    #[cfg(unix)]
+    fn same_file(left: &Path, right: &Path) -> bool {
+        use std::os::unix::fs::MetadataExt;
+        std::fs::metadata(left).unwrap().ino() == std::fs::metadata(right).unwrap().ino()
+    }
+
+    #[tokio::test]
+    async fn linked_save_publishes_the_store_file_without_a_second_copy() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let (store, store_dir) = linkable_store(dir.path()).await;
+        let payload = patterned(2 * 1024 * 1024, 0);
+        let tag = store.add_bytes(payload.clone()).temp_tag().await.unwrap();
+        let ticket = BlobTicket::new(
+            iroh::EndpointAddr::new(iroh::SecretKey::from_bytes(&[1; 32]).public()),
+            tag.hash(),
+            iroh_blobs::BlobFormat::Raw,
+        );
+        let destination = dir.path().join("out");
+        tokio::fs::create_dir(&destination).await.expect("out dir");
+        let links = StoreLinks::new(&store_dir, HashSet::new());
+        let (_cancel_tx, mut cancel_rx) = watch::channel(false);
+
+        let published = export_blob(
+            store.as_ref(),
+            &ticket,
+            &destination,
+            Some("movie.bin"),
+            &SaveProgress::default(),
+            Some(&links),
+            &mut cancel_rx,
+        )
+        .await
+        .expect("export");
+
+        assert_eq!(tokio::fs::read(&published).await.unwrap(), payload);
+        #[cfg(unix)]
+        assert!(
+            same_file(
+                &published,
+                &PathOptions::new(&store_dir).data_path(&tag.hash())
+            ),
+            "save copied the data instead of linking it"
+        );
+        assert_eq!(
+            read_dir_entries(&destination).await.unwrap(),
+            vec![published]
+        );
+        let read_back = store.blobs().get_bytes(tag.hash()).await.expect("store");
+        assert_eq!(read_back.as_ref(), payload.as_slice());
+        store.shutdown().await.expect("shutdown");
+    }
+
+    #[tokio::test]
+    async fn linked_save_outlives_the_store_reclaiming_its_entry() {
+        use crate::node::retention;
+        use std::sync::atomic::AtomicBool;
+        use std::sync::Arc;
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let blob_dir = dir.path().join("blobs");
+        let store = iroh_blobs::store::fs::FsStore::load_with_opts(
+            blob_dir.join("blobs.db"),
+            retention::options_with_interval(
+                &blob_dir,
+                Arc::new(AtomicBool::new(true)),
+                std::time::Duration::from_millis(20),
+            ),
+        )
+        .await
+        .expect("store");
+        let payload = patterned(1024 * 1024, 5);
+        let tag = store.add_bytes(payload.clone()).temp_tag().await.unwrap();
+        let hash = tag.hash();
+        retention::pin_receive(&store, "linked", iroh_blobs::HashAndFormat::raw(hash))
+            .await
+            .unwrap();
+        drop(tag);
+        let ticket = BlobTicket::new(
+            iroh::EndpointAddr::new(iroh::SecretKey::from_bytes(&[1; 32]).public()),
+            hash,
+            iroh_blobs::BlobFormat::Raw,
+        );
+        let links = StoreLinks::new(&blob_dir, HashSet::new());
+        let (_cancel_tx, mut cancel_rx) = watch::channel(false);
+        let published = export_blob(
+            store.as_ref(),
+            &ticket,
+            dir.path(),
+            Some("kept.bin"),
+            &SaveProgress::default(),
+            Some(&links),
+            &mut cancel_rx,
+        )
+        .await
+        .expect("export");
+
+        retention::release_receive(&store, "linked").await;
+        let mut reclaimed = false;
+        for _ in 0..200 {
+            if blob_size(store.as_ref(), hash).await.is_err() {
+                reclaimed = true;
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+        }
+
+        assert!(reclaimed, "released entry was not reclaimed");
+        assert!(!PathOptions::new(&blob_dir).data_path(&hash).exists());
+        assert_eq!(tokio::fs::read(&published).await.unwrap(), payload);
+        store.shutdown().await.expect("shutdown");
+    }
+
+    #[tokio::test]
+    async fn linked_folder_save_copies_inline_and_pinned_children() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let (store, store_dir) = linkable_store(dir.path()).await;
+        let large = patterned(512 * 1024, 1);
+        let shared = patterned(256 * 1024, 2);
+        let small = patterned(1024, 3);
+        let mut tags = Vec::new();
+        for bytes in [&large, &shared, &small] {
+            tags.push(store.add_bytes(bytes.clone()).temp_tag().await.unwrap());
+        }
+        let root = Collection::from_iter([
+            ("album/large.bin".to_string(), tags[0].hash()),
+            ("album/shared.bin".to_string(), tags[1].hash()),
+            ("album/small.txt".to_string(), tags[2].hash()),
+        ])
+        .store(&store)
+        .await
+        .unwrap();
+        let ticket = BlobTicket::new(
+            iroh::EndpointAddr::new(iroh::SecretKey::from_bytes(&[1; 32]).public()),
+            root.hash(),
+            iroh_blobs::BlobFormat::HashSeq,
+        );
+        let destination = dir.path().join("out");
+        tokio::fs::create_dir(&destination).await.expect("out dir");
+        let links = StoreLinks::new(&store_dir, HashSet::from([tags[1].hash()]));
+        let handle = ProgressHandle::default();
+        let (_cancel_tx, mut cancel_rx) = watch::channel(false);
+
+        let summary = export_ticket(
+            store.as_ref(),
+            &ticket,
+            &destination,
+            SaveRequest {
+                known_size: None,
+                suggested_file_name: None,
+                links: Some(&links),
+                progress: Some(&handle),
+            },
+            &mut cancel_rx,
+        )
+        .await
+        .expect("export");
+
+        let album = summary.output_path;
+        let total = u64::try_from(large.len() + shared.len() + small.len()).unwrap();
+        assert_eq!(handle.snapshot(), (total, total));
+        assert_eq!(
+            tokio::fs::read(album.join("large.bin")).await.unwrap(),
+            large
+        );
+        assert_eq!(
+            tokio::fs::read(album.join("shared.bin")).await.unwrap(),
+            shared
+        );
+        assert_eq!(
+            tokio::fs::read(album.join("small.txt")).await.unwrap(),
+            small
+        );
+        #[cfg(unix)]
+        {
+            let paths = PathOptions::new(&store_dir);
+            assert!(same_file(
+                &album.join("large.bin"),
+                &paths.data_path(&tags[0].hash())
+            ));
+            assert!(!same_file(
+                &album.join("shared.bin"),
+                &paths.data_path(&tags[1].hash())
+            ));
+        }
+        store.shutdown().await.expect("shutdown");
+    }
+
+    #[tokio::test]
+    async fn save_copies_when_the_store_file_is_not_where_links_expect() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let (store, _store_dir) = linkable_store(dir.path()).await;
+        let payload = patterned(300 * 1024, 4);
+        let tag = store.add_bytes(payload.clone()).temp_tag().await.unwrap();
+        let ticket = BlobTicket::new(
+            iroh::EndpointAddr::new(iroh::SecretKey::from_bytes(&[1; 32]).public()),
+            tag.hash(),
+            iroh_blobs::BlobFormat::Raw,
+        );
+        let links = StoreLinks::new(&dir.path().join("elsewhere"), HashSet::new());
+        let destination = dir.path().join("out");
+        tokio::fs::create_dir(&destination).await.expect("out dir");
+        let (_cancel_tx, mut cancel_rx) = watch::channel(false);
+
+        let published = export_blob(
+            store.as_ref(),
+            &ticket,
+            &destination,
+            Some("copy.bin"),
+            &SaveProgress::default(),
+            Some(&links),
+            &mut cancel_rx,
+        )
+        .await
+        .expect("export");
+
+        assert_eq!(tokio::fs::read(&published).await.unwrap(), payload);
+        assert_eq!(
+            read_dir_entries(&destination).await.unwrap(),
+            vec![published]
+        );
+        store.shutdown().await.expect("shutdown");
+    }
+
+    #[test]
+    fn only_blobs_in_their_own_unpinned_store_file_are_linkable() {
+        let pinned = Hash::new(b"pinned");
+        let fresh = Hash::new(b"fresh");
+        let links = StoreLinks::new(Path::new("store"), HashSet::from([pinned]));
+        assert!(links.source(&fresh, LINKABLE_MIN_BYTES + 1).is_some());
+        assert!(links.source(&fresh, LINKABLE_MIN_BYTES).is_none());
+        assert!(links.source(&pinned, 1 << 30).is_none());
     }
 
     #[tokio::test]

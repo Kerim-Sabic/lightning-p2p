@@ -52,6 +52,16 @@ Use manual ticket sharing if local-network device presence and labels should
 remain private. Revoking a paired device clears its cached nearby-share
 metadata; a ticket already shared remains a bearer capability.
 
+## Update Checks
+
+Automatic updates are on by default for new desktop installs and can be turned
+off in Settings. When they are on, the app requests the public release feed
+from GitHub Releases at launch, and, when a newer version exists, downloads it
+from the same place. Installs made by the recommended Windows setup apply the
+download the next time the app starts. These requests carry no account, file,
+transfer, or per-install identifier; GitHub sees the request like any other
+download, including your IP address.
+
 ## Telemetry
 
 Lightning P2P does not send product telemetry by default. Diagnostics are local

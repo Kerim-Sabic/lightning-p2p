@@ -90,6 +90,9 @@ criterion = { version = "0.8", features = ["async_tokio"] }
 tempfile = "3"
 
 [target.'cfg(windows)'.dependencies]
+# Installer-integrated updates for the Velopack setup. Keep this version equal
+# to the `vpk` CLI pinned in .github/workflows/ci.yml.
+velopack = { version = "=1.2.161", features = ["public-utils"] }
 windows = { version = "0.62", features = [
   "Devices_Bluetooth",
   "Devices_Bluetooth_Advertisement",

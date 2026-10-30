@@ -2,30 +2,17 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
+    // Velopack installer hooks run here and exit; for a Velopack install with a
+    // downloaded update, this applies it and relaunches before the UI starts.
+    // Installs made by other installers fall straight through.
     #[cfg(windows)]
-    if handle_velopack_hook() {
-        return;
-    }
+    velopack::VelopackApp::build()
+        .on_after_install_fast_callback(|_| run_powershell_hook("velopack-post-install.ps1"))
+        .on_after_update_fast_callback(|_| run_powershell_hook("velopack-post-install.ps1"))
+        .on_before_uninstall_fast_callback(|_| run_powershell_hook("velopack-post-uninstall.ps1"))
+        .run();
 
     lightning_p2p_lib::run();
-}
-
-#[cfg(windows)]
-fn handle_velopack_hook() -> bool {
-    let mut args = std::env::args().skip(1);
-    let Some(arg) = args.next() else {
-        return false;
-    };
-
-    let script_name = match arg.as_str() {
-        "--veloapp-install" | "--veloapp-updated" => "velopack-post-install.ps1",
-        "--veloapp-uninstall" => "velopack-post-uninstall.ps1",
-        "--veloapp-obsolete" => return true,
-        _ => return false,
-    };
-
-    run_powershell_hook(script_name);
-    true
 }
 
 #[cfg(windows)]

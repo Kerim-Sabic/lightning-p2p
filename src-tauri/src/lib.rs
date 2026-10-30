@@ -11,6 +11,7 @@ pub mod cli;
 pub mod commands;
 pub mod crypto;
 pub mod error;
+pub mod installer_update;
 pub mod node;
 pub mod proximity;
 pub mod storage;
@@ -364,6 +365,9 @@ pub fn run() {
             commands::mobile::open_android_bucket,
             commands::mobile::start_ble_discovery,
             commands::mobile::stop_ble_discovery,
+            commands::update::check_installer_update,
+            commands::update::download_installer_update,
+            commands::update::restart_to_apply_update,
         ])
         .setup(|app| {
             register_deep_links(app);

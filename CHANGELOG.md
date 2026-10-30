@@ -6,6 +6,34 @@ All notable changes to Lightning P2P are documented here. The project follows se
 
 ## [0.9.32] - 2026-10-30 ("Zero-Copy Sends")
 
+- Save received files and folders without writing them a second time. Each
+  verified file is hard-linked out of the transfer store when the save folder
+  is on the same drive as app data, so the save step of a 1 GB receive drops
+  from about 8 s to 2 ms and the whole same-machine receive runs about 2.2×
+  faster (100 MB: 2.5×; a 200-file folder: 1.5×). Files of 16 KiB or less,
+  content a share or paused receive still uses, other drives, and Android
+  keep copying, and any link that cannot be made falls back to a copy.
+- Reclaim transfer-store space after a receive is saved. Received content
+  was kept in app data forever, so every received file used its size twice.
+  Collection now runs within seconds of a saved receive, also in short
+  sessions, instead of only on a 10-minute timer. Shares, in-flight receives,
+  and paused or restart-resumable receives stay pinned; content that was
+  already in the store before this version is kept as it was.
+- Keep each imported file pinned until its share is recorded, so store
+  cleanup can never remove part of a share while it is being prepared.
+
+- Keep Windows installs made by the recommended setup
+  (`LightningP2P-win-Setup.exe`) up to date automatically. The app reads the
+  Velopack feed from the latest GitHub release at launch, downloads a newer
+  version in the background, and applies it the next time it starts, or right
+  away from Settings > Restart now (refused while transfers are running).
+  Feed requests carry no per-install identifier, and packages are checked
+  against the feed's SHA-256 before they apply.
+- Turn automatic updates on by default for new desktop installs; existing
+  installs keep their saved choice.
+- Publish `releases.win.json` with each Windows release and pin the Velopack
+  packer to the same version as the in-app updater.
+
 - Save received folders 2–4× faster: collection children now export
   concurrently (up to 16 at a time for small files, 2 for large files) and are
   placed into the final tree in one blocking pass. Conflict, symlink, and

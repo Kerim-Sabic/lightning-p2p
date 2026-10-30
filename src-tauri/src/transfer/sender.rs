@@ -15,7 +15,7 @@ use futures_util::stream;
 use futures_util::StreamExt;
 use iroh_blobs::api::blobs::{AddPathOptions, ImportMode};
 use iroh_blobs::api::proto::AddProgressItem;
-use iroh_blobs::api::Store;
+use iroh_blobs::api::{Store, TempTag};
 use iroh_blobs::format::collection::Collection;
 use iroh_blobs::ticket::BlobTicket;
 use iroh_blobs::{BlobFormat, Hash};
@@ -78,6 +78,8 @@ struct SharePlan {
 struct ImportedSource {
     name: String,
     hash: Hash,
+    /// Keeps the imported blob alive until the finished share is pinned.
+    _pin: TempTag,
 }
 
 struct IndexedImport {
@@ -899,7 +901,7 @@ async fn import_source(
         })
         .stream()
         .await;
-    let mut hash: Option<Hash> = None;
+    let mut imported: Option<TempTag> = None;
 
     loop {
         let next_item = if let Some(rx) = cancel_rx.as_mut() {
@@ -923,7 +925,7 @@ async fn import_source(
                 last_offset = offset;
             }
             AddProgressItem::Done(temp_tag) => {
-                hash = Some(temp_tag.hash());
+                imported = Some(temp_tag);
             }
             AddProgressItem::Error(error) => {
                 return Err(LightningP2PError::Blob(error.to_string()))
@@ -932,7 +934,7 @@ async fn import_source(
         }
     }
 
-    let hash = hash
+    let pin = imported
         .ok_or_else(|| LightningP2PError::Blob("Import stream ended before completion".into()))?;
     if source_snapshot(&source.path)? != source.snapshot {
         return Err(unsafe_source_path_error());
@@ -946,7 +948,8 @@ async fn import_source(
         index,
         source: ImportedSource {
             name: source.name,
-            hash,
+            hash: pin.hash(),
+            _pin: pin,
         },
     })
 }
@@ -977,16 +980,20 @@ fn advance_progress(progress: Option<&ProgressHandle>, bytes_delta: u64, total_s
     }
 }
 
+/// Stores the collection and pins it for garbage collection. The import
+/// temp tags in `imported` stay alive until the pin exists.
 async fn persist_collection(store: &Store, imported: Vec<ImportedSource>) -> Result<Hash> {
     let collection = imported
-        .into_iter()
-        .map(|item| (item.name, item.hash))
+        .iter()
+        .map(|item| (item.name.clone(), item.hash))
         .collect::<Collection>();
-    let temp_tag = collection
+    let root = collection
         .store(store)
         .await
         .map_err(|err| blob_error(&err))?;
-    Ok(temp_tag.hash())
+    crate::node::retention::pin_share(store, root.hash()).await?;
+    drop(imported);
+    Ok(root.hash())
 }
 
 fn build_ticket(node: &LightningP2PNode, hash: Hash) -> Result<BlobTicket> {

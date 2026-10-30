@@ -1,6 +1,7 @@
 //! Receiver: downloads shared content from peers using blob tickets.
 
 use crate::error::{AppErrorPayload, LightningP2PError, Result};
+use crate::node::retention;
 use crate::node::LightningP2PNode;
 use crate::storage::history::{self, TransferRecord, TransferRecordStatus};
 use crate::storage::peers::{self, PeerRecord};
@@ -16,7 +17,7 @@ use crate::transfer::queue::TransferQueue;
 use crate::transfer::ticket::ShareTicket;
 use futures_util::{Stream, StreamExt};
 use iroh_blobs::api::downloader::DownloadProgressItem;
-#[cfg(test)]
+use iroh_blobs::api::Store;
 use iroh_blobs::ticket::BlobTicket;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -404,6 +405,10 @@ pub async fn receive_ticket(
     })
 }
 
+/// Pins the receive's content for the duration of the receive so store
+/// collection cannot reclaim partial or verified-but-unsaved data. A failed
+/// receive keeps its pin only while a resume record can pick it up; a saved
+/// receive is released, so collection frees the duplicate left in app data.
 async fn receive_core(
     node: &LightningP2PNode,
     ticket: &ShareTicket,
@@ -411,6 +416,84 @@ async fn receive_core(
     cancel_rx: &mut watch::Receiver<bool>,
     progress: Option<&ProgressHandle>,
     options: ReceiveOptions,
+) -> Result<ReceiveSummary> {
+    let pin_id = options
+        .transfer_id
+        .clone()
+        .unwrap_or_else(|| format!("adhoc-{}", uuid::Uuid::new_v4()));
+    let resume_store = options.resume_store.clone();
+    let store = node.blobs_client();
+    retention::pin_receive(store, &pin_id, ticket.primary().hash_and_format()).await?;
+    let result = receive_pinned(
+        node,
+        ticket,
+        destination,
+        cancel_rx,
+        progress,
+        options,
+        &pin_id,
+    )
+    .await;
+    let resumable = result.is_err()
+        && resume_store
+            .as_ref()
+            .is_some_and(|records| records.get(&pin_id).is_some());
+    if !resumable {
+        retention::release_receive(store, &pin_id).await;
+    }
+    result
+}
+
+/// Lets the save hard-link verified files out of the store instead of
+/// copying them, except content another pin still uses. Mobile keeps copying
+/// because its saves go through a platform media store afterwards; a pin
+/// listing that fails also falls back to copying.
+async fn store_links(node: &LightningP2PNode, pin_id: &str) -> Option<export::StoreLinks> {
+    if cfg!(any(target_os = "android", target_os = "ios")) {
+        return None;
+    }
+    match retention::pinned_elsewhere(node.blobs_client(), pin_id).await {
+        Ok(pinned) => Some(export::StoreLinks::new(node.blob_dir(), pinned)),
+        Err(error) => {
+            tracing::debug!(%error, "could not list store pins; copying the save");
+            None
+        }
+    }
+}
+
+/// Recomputes the share size from verified local blobs and enforces the
+/// receive limits against it.
+async fn verified_received_size(
+    store: &Store,
+    ticket: &BlobTicket,
+    fallback_file_name: Option<&str>,
+    limits: ReceiveLimits,
+) -> Result<u64> {
+    let verified_size = export::ticket_size(store, ticket).await?;
+    let verified_file_names = export::ticket_file_names(store, ticket).await?;
+    let verified_file_count = if ticket.recursive() {
+        verified_file_names.len()
+    } else {
+        1
+    };
+    validate_received_limits(
+        verified_size,
+        verified_file_count,
+        &verified_file_names,
+        fallback_file_name,
+        limits,
+    )?;
+    Ok(verified_size)
+}
+
+async fn receive_pinned(
+    node: &LightningP2PNode,
+    ticket: &ShareTicket,
+    destination: PathBuf,
+    cancel_rx: &mut watch::Receiver<bool>,
+    progress: Option<&ProgressHandle>,
+    options: ReceiveOptions,
+    pin_id: &str,
 ) -> Result<ReceiveSummary> {
     let ReceiveOptions {
         transfer_id,
@@ -449,21 +532,13 @@ async fn receive_core(
     if let Some(progress) = progress {
         progress.set_phase(TransferPhase::Verifying);
     }
-    let verified_size = export::ticket_size(node.blobs_client(), ticket.primary()).await?;
-    let verified_file_names =
-        export::ticket_file_names(node.blobs_client(), ticket.primary()).await?;
-    let verified_file_count = if ticket.primary().recursive() {
-        verified_file_names.len()
-    } else {
-        1
-    };
-    validate_received_limits(
-        verified_size,
-        verified_file_count,
-        &verified_file_names,
+    let verified_size = verified_received_size(
+        node.blobs_client(),
+        ticket.primary(),
         fallback_file_name.as_deref(),
         limits,
-    )?;
+    )
+    .await?;
     if let Some(progress) = progress {
         // Saving copies the verified bytes out of the store, which can take as
         // long as the download on slow disks. Restart the bar so that copy
@@ -482,13 +557,17 @@ async fn receive_core(
     .await?;
     let export_started_at = Instant::now();
     let primary = ticket.primary();
+    let links = store_links(node, pin_id).await;
     let export_summary = export::export_ticket(
         node.blobs_client(),
         primary,
         &destination,
-        Some(verified_size),
-        fallback_file_name.as_deref(),
-        progress,
+        export::SaveRequest {
+            known_size: Some(verified_size),
+            suggested_file_name: fallback_file_name.as_deref(),
+            links: links.as_ref(),
+            progress,
+        },
         cancel_rx,
     )
     .await?;

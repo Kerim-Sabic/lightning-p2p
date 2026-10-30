@@ -10,6 +10,7 @@ mod nearby;
 pub mod nearby_offer;
 pub mod nearby_protocol;
 mod relay_wait;
+pub(crate) mod retention;
 mod status;
 mod supervisor;
 
