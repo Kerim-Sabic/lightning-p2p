@@ -4,6 +4,8 @@ All notable changes to Lightning P2P are documented here. The project follows se
 
 ## [Unreleased]
 
+## [0.9.32] - 2026-10-30 ("Zero-Copy Sends")
+
 - Save a received single file by moving it out of the transfer store
   instead of copying it, when the destination is on the same drive as app
   data. A large file now saves without being written a second time; other
@@ -17,8 +19,6 @@ All notable changes to Lightning P2P are documented here. The project follows se
   kept as it was.
 - Keep each imported file pinned until its share is recorded, so store
   cleanup can never remove part of a share while it is being prepared.
-
-## [0.9.32] - 2026-10-30 ("Zero-Copy Sends")
 
 - Keep Windows installs made by the recommended setup
   (`LightningP2P-win-Setup.exe`) up to date automatically. The app reads the
