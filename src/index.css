@@ -597,6 +597,16 @@ body {
   border-color: transparent;
 }
 
+/* The reset above outranks layered border utilities, so the drop target sets
+   its own colors: a visible dashed outline that turns accent while dragging. */
+.simple-drop-zone {
+  border-color: var(--border-strong);
+}
+
+.drop-zone-active .simple-drop-zone {
+  border-color: var(--accent-border);
+}
+
 :focus-visible {
   outline: 2px solid var(--signal-green);
   outline-offset: 3px;
@@ -1050,6 +1060,12 @@ body.app-hydrated .static-seo-fallback {
     background: rgba(20, 24, 31, 0.96);
   }
 
+  /* The mark is drawn for one background; show the variant that contrasts
+     with the chrome it sits on. */
+  .theme-logo-light {
+    display: none;
+  }
+
   .sidebar-card {
     @apply rounded-[22px];
     border: 1px solid rgba(255, 255, 255, 0.06);
@@ -1389,6 +1405,16 @@ body.app-hydrated .static-seo-fallback {
 }
 
 @media (prefers-color-scheme: light) {
+  :root:not([data-theme]) .theme-logo-dark,
+  :root[data-theme="light"] .theme-logo-dark {
+    display: none;
+  }
+
+  :root:not([data-theme]) .theme-logo-light,
+  :root[data-theme="light"] .theme-logo-light {
+    display: block;
+  }
+
   :root:not([data-theme]) .app-shell,
   :root[data-theme="light"] .app-shell {
     border-color: var(--border-subtle);
