@@ -67,7 +67,8 @@ impl AppSettings {
     fn defaults(data_dir: &Path) -> Self {
         Self {
             download_dir: default_download_dir(data_dir),
-            auto_update_enabled: false,
+            // New installs keep themselves current; Settings can turn it off.
+            auto_update_enabled: true,
             first_run_complete: false,
             relay_mode: RelayModeSetting::Public,
             custom_relay_url: None,

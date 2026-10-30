@@ -20,6 +20,9 @@ vi.mock("../lib/tauri", async (importOriginal) => {
     describeSharePaths: vi.fn(),
     deleteStagedSharedFiles: vi.fn().mockResolvedValue(undefined),
     cancelSharePathScan: vi.fn().mockResolvedValue(true),
+    checkForAppUpdate: vi.fn(),
+    installAppUpdate: vi.fn(),
+    restartToApplyUpdate: vi.fn(),
   };
 });
 
@@ -516,5 +519,53 @@ describe("share selection editing", () => {
       useTransferStore.getState().prepareShareSelection(["missing.txt"]),
     ).resolves.toBe(false);
     expect(useTransferStore.getState().shareSelection).toEqual([]);
+  });
+});
+
+describe("installer-managed updates", () => {
+  const readyResult = {
+    current_version: "0.9.32",
+    available: true,
+    version: "0.9.33",
+    body: null,
+    date: null,
+    ready_to_restart: true,
+  };
+
+  it("shows a downloaded installer update as ready to restart", async () => {
+    vi.mocked(tauri.checkForAppUpdate).mockResolvedValue(readyResult);
+
+    await useTransferStore.getState().checkForUpdates(true);
+
+    const update = useTransferStore.getState().updateState;
+    expect(update.phase).toBe("restartRequired");
+    expect(update.restartToApply).toBe(true);
+    expect(update.availableVersion).toBe("0.9.33");
+  });
+
+  it("stages an installer download for restart instead of finishing it", async () => {
+    vi.mocked(tauri.installAppUpdate).mockResolvedValue(true);
+
+    await useTransferStore.getState().installUpdate();
+
+    const update = useTransferStore.getState().updateState;
+    expect(update.phase).toBe("restartRequired");
+    expect(update.restartToApply).toBe(true);
+  });
+
+  it("keeps the staged update when a restart is refused", async () => {
+    vi.mocked(tauri.checkForAppUpdate).mockResolvedValue(readyResult);
+    await useTransferStore.getState().checkForUpdates(true);
+    vi.mocked(tauri.restartToApplyUpdate).mockRejectedValue(
+      new Error(
+        "Finish or cancel active transfers before restarting to update.",
+      ),
+    );
+
+    await useTransferStore.getState().restartToUpdate();
+
+    const update = useTransferStore.getState().updateState;
+    expect(update.phase).toBe("restartRequired");
+    expect(update.error).toContain("active transfers");
   });
 });

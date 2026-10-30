@@ -98,7 +98,7 @@ function relayModeLabel(relayMode: RelayMode): string {
 function updateStatusCopy(updateState: UpdateState): string {
   switch (updateState.phase) {
     case "checking":
-      return "Checking signed update metadata for a newer build.";
+      return "Checking the published release feed for a newer build.";
     case "available":
       return `Version ${updateState.availableVersion ?? "unknown"} is ready to install.`;
     case "upToDate":
@@ -106,7 +106,9 @@ function updateStatusCopy(updateState: UpdateState): string {
     case "downloading":
       return "Downloading and staging the update package.";
     case "restartRequired":
-      return "Update installed. Restart Lightning P2P to switch over.";
+      return updateState.restartToApply
+        ? `Version ${updateState.availableVersion ?? "unknown"} is downloaded. It applies the next time Lightning P2P starts, or restart now.`
+        : "Update installed. Restart Lightning P2P to switch over.";
     case "error":
       return updateState.error ?? "Update check failed.";
     case "idle":
@@ -257,6 +259,7 @@ export function SettingsView() {
   const clearPeerCache = useTransferStore((state) => state.clearPeerCache);
   const checkForUpdates = useTransferStore((state) => state.checkForUpdates);
   const installUpdate = useTransferStore((state) => state.installUpdate);
+  const restartToUpdate = useTransferStore((state) => state.restartToUpdate);
   const nativeRuntime = isDesktopRuntime();
   const mobileRuntime = isMobileRuntime();
   const desktopStorageControlsEnabled = nativeRuntime && !mobileRuntime;
@@ -1418,15 +1421,28 @@ export function SettingsView() {
               Install update
             </span>
           </button>
+          {updateState.phase === "restartRequired" &&
+          updateState.restartToApply ? (
+            <button
+              onClick={() => void restartToUpdate()}
+              disabled={!desktopUpdateControlsEnabled}
+              className="btn-success"
+            >
+              <span className="relative inline-flex items-center gap-2">
+                <RefreshCw className="h-4 w-4" />
+                Restart now
+              </span>
+            </button>
+          ) : null}
         </div>
 
         <div className="mt-4 flex items-center justify-between border-t border-white/8 pt-4">
           <div>
-            <p className="text-sm font-medium text-white">
-              Auto-check on startup
-            </p>
+            <p className="text-sm font-medium text-white">Automatic updates</p>
             <p className="text-[13px] text-slate-300/72">
-              Check GitHub releases when Lightning P2P launches.
+              Check GitHub releases when Lightning P2P launches. Installs from
+              the recommended setup download updates in the background and apply
+              them on the next start.
             </p>
           </div>
           <button

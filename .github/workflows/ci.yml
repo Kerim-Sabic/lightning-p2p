@@ -368,7 +368,9 @@ jobs:
 
       - name: Install Velopack CLI
         shell: pwsh
-        run: dotnet tool install -g vpk
+        # Keep equal to the velopack crate in src-tauri/Cargo.toml so the
+        # in-app updater reads the feed format this packer writes.
+        run: dotnet tool install -g vpk --version 1.2.161
 
       - name: Pack unsigned Velopack installer
         shell: pwsh
@@ -441,6 +443,11 @@ jobs:
           if (Test-Path $releasesFile) {
             Copy-Item -LiteralPath $releasesFile -Destination (Join-Path $stage "RELEASES") -Force
           }
+          # Installed apps read this feed from releases/latest/download to
+          # find and download updates; a release without it cannot update.
+          $feed = Join-Path $velopackRoot "releases.win.json"
+          if (-not (Test-Path $feed)) { throw "Velopack update feed releases.win.json was not produced." }
+          Copy-Item -LiteralPath $feed -Destination (Join-Path $stage "releases.win.json") -Force
 
       - name: Build and stage CLI binary
         shell: pwsh
@@ -883,7 +890,9 @@ jobs:
 
       - name: Install Velopack CLI
         shell: pwsh
-        run: dotnet tool install -g vpk
+        # Keep equal to the velopack crate in src-tauri/Cargo.toml so the
+        # in-app updater reads the feed format this packer writes.
+        run: dotnet tool install -g vpk --version 1.2.161
 
       - name: Pack Velopack installer
         shell: pwsh
@@ -985,6 +994,7 @@ jobs:
                 Where-Object {
                   $_.Extension -in ".exe", ".msi", ".sig", ".zip", ".nupkg" -or
                   $_.Name -like "latest*.json" -or
+                  $_.Name -eq "releases.win.json" -or
                   $_.Name -eq "RELEASES"
                 }
             }
@@ -1017,6 +1027,7 @@ jobs:
             src-tauri/target/x86_64-pc-windows-msvc/release/velopack-releases/*-Setup.exe
             src-tauri/target/x86_64-pc-windows-msvc/release/velopack-releases/*-full.nupkg
             src-tauri/target/x86_64-pc-windows-msvc/release/velopack-releases/RELEASES
+            src-tauri/target/x86_64-pc-windows-msvc/release/velopack-releases/releases.win.json
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/SHA256SUMS.txt
 
       - name: Upload release bundle artifact
@@ -1041,6 +1052,7 @@ jobs:
             src-tauri/target/x86_64-pc-windows-msvc/release/velopack-releases/*-Setup.exe
             src-tauri/target/x86_64-pc-windows-msvc/release/velopack-releases/*-full.nupkg
             src-tauri/target/x86_64-pc-windows-msvc/release/velopack-releases/RELEASES
+            src-tauri/target/x86_64-pc-windows-msvc/release/velopack-releases/releases.win.json
 
   android-package:
     name: Android APK smoke

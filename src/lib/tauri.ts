@@ -472,6 +472,16 @@ export interface UpdateCheckResult {
   version: string | null;
   body: string | null;
   date: string | null;
+  /** True when a downloaded update only needs a restart to apply. */
+  ready_to_restart: boolean;
+}
+
+/** Self-update state for installs made by the Velopack setup. */
+export interface InstallerUpdateStatus {
+  managed: boolean;
+  current_version: string | null;
+  available_version: string | null;
+  ready_to_restart: boolean;
 }
 
 export interface UpdateProgress {
@@ -563,6 +573,7 @@ export type TransferEvent =
     };
 
 let pendingUpdate: Update | null = null;
+let installerManagedUpdates = false;
 const EXTERNAL_URL_PROTOCOLS = new Set(["https:", "http:"]);
 
 const browserNodeStatus: NodeStatus = {
@@ -1514,6 +1525,14 @@ export async function openAndroidBucket(
 export async function checkForAppUpdate(): Promise<UpdateCheckResult> {
   requireNativeRuntime("Checking for updates");
   await disposePendingUpdate();
+  const installer = await invoke<InstallerUpdateStatus>(
+    "check_installer_update",
+  );
+  installerManagedUpdates = installer.managed;
+  if (installer.managed) {
+    return installerUpdateResult(installer, await getAppVersion());
+  }
+
   const currentVersion = await getAppVersion();
   pendingUpdate = await check({ timeout: 30_000 });
 
@@ -1523,13 +1542,47 @@ export async function checkForAppUpdate(): Promise<UpdateCheckResult> {
     version: pendingUpdate?.version ?? null,
     body: pendingUpdate?.body ?? null,
     date: pendingUpdate?.date ?? null,
+    ready_to_restart: false,
   };
 }
 
+function installerUpdateResult(
+  installer: InstallerUpdateStatus,
+  fallbackVersion: string,
+): UpdateCheckResult {
+  return {
+    current_version: installer.current_version ?? fallbackVersion,
+    available: installer.available_version !== null,
+    version: installer.available_version,
+    body: null,
+    date: null,
+    ready_to_restart: installer.ready_to_restart,
+  };
+}
+
+/**
+ * Restarts into a downloaded installer update. Rust refuses while transfers
+ * are running.
+ */
+export async function restartToApplyUpdate(): Promise<void> {
+  requireNativeRuntime("Restarting to update");
+  await invoke("restart_to_apply_update");
+}
+
+/**
+ * Downloads and installs the pending update. Resolves `true` when the update
+ * is staged and waits for an explicit restart (installer-managed installs).
+ */
 export async function installAppUpdate(
   onProgress?: (progress: UpdateProgress) => void,
-): Promise<void> {
+): Promise<boolean> {
   requireNativeRuntime("Installing updates");
+  if (installerManagedUpdates) {
+    const staged = await invoke<InstallerUpdateStatus>(
+      "download_installer_update",
+    );
+    return staged.ready_to_restart;
+  }
   if (!pendingUpdate) {
     throw new Error("No update is available to install.");
   }
@@ -1544,6 +1597,7 @@ export async function installAppUpdate(
     onProgress?.(snapshot);
   });
   await disposePendingUpdate();
+  return false;
 }
 
 export function onTransferProgress(

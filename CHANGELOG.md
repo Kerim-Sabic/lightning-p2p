@@ -6,6 +6,18 @@ All notable changes to Lightning P2P are documented here. The project follows se
 
 ## [0.9.32] - 2026-10-30 ("Zero-Copy Sends")
 
+- Keep Windows installs made by the recommended setup
+  (`LightningP2P-win-Setup.exe`) up to date automatically. The app reads the
+  Velopack feed from the latest GitHub release at launch, downloads a newer
+  version in the background, and applies it the next time it starts, or right
+  away from Settings > Restart now (refused while transfers are running).
+  Feed requests carry no per-install identifier, and packages are checked
+  against the feed's SHA-256 before they apply.
+- Turn automatic updates on by default for new desktop installs; existing
+  installs keep their saved choice.
+- Publish `releases.win.json` with each Windows release and pin the Velopack
+  packer to the same version as the in-app updater.
+
 - Save received folders 2–4× faster: collection children now export
   concurrently (up to 16 at a time for small files, 2 for large files) and are
   placed into the final tree in one blocking pass. Conflict, symlink, and
