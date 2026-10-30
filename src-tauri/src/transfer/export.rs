@@ -1823,15 +1823,13 @@ mod tests {
                 "save copied the data"
             );
         }
-        let data_bytes = std::fs::read_dir(store_dir.join("data"))
-            .map(|entries| {
-                entries
-                    .filter_map(std::result::Result::ok)
-                    .filter_map(|entry| entry.metadata().ok())
-                    .map(|metadata| metadata.len())
-                    .sum::<u64>()
-            })
-            .unwrap_or(0);
+        let data_bytes = std::fs::read_dir(store_dir.join("data")).map_or(0, |entries| {
+            entries
+                .filter_map(std::result::Result::ok)
+                .filter_map(|entry| entry.metadata().ok())
+                .map(|metadata| metadata.len())
+                .sum::<u64>()
+        });
         assert!(
             data_bytes < 64 * 1024,
             "store kept {data_bytes} bytes after a move"
