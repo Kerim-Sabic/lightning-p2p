@@ -13,6 +13,9 @@ All notable changes to Lightning P2P are documented here. The project follows se
 - Wait for the relay handshake while share sources hash instead of after, and
   when a relay wait has recently timed out, re-check for 500 ms instead of
   stalling every new ticket for 6 seconds on networks that block the relay.
+- Report real progress while received content is saved to disk. The bar,
+  speed, and time remaining now track the copy out of the transfer store
+  instead of sitting at 100% for the whole save.
 - Run BBR congestion control in Smart Auto on desktop, with Standard window
   sizes. Android Smart Auto keeps the battery-safe CUBIC profile.
 - Show a real progress bar and percentage for memory-backed browser receives,
