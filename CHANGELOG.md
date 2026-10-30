@@ -15,6 +15,7 @@ All notable changes to Lightning P2P are documented here. The project follows se
   128 MiB in-memory browser limit.
 - Lead the Receive page with the paste-a-link card, unless a nearby share is
   already waiting, under a plain "Receive files" heading.
+- Read "Seen just now" on fresh nearby shares instead of "Seen just seen".
 - Show the app logo on dark window chrome (it was a near-black mark on a dark
   tile) and keep the dark mark for the light theme.
 - Make the send drop zone's dashed outline visible again; it turns accent

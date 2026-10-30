@@ -11,7 +11,7 @@ interface NearbyShareCardProps {
 
 function freshnessLabel(seconds: number): string {
   if (seconds <= 3) {
-    return "just seen";
+    return "just now";
   }
   if (seconds < 60) {
     return `${seconds}s ago`;
