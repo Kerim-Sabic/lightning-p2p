@@ -13,6 +13,13 @@ linked release evidence.
 - Android v0.5.1 as a signed sideload APK with share-target sends and public
   MediaStore destinations.
 
+### v0.9.33 beta channel
+- A new receive link scrolls into view with Copy focused, and the share panel
+  says receivers can open it in a browser with nothing installed.
+- NSIS and MSI installs update through `latest.json`, alongside the
+  self-updating one-click setup.
+- Receive leads with the paste-a-link card unless a nearby share is waiting.
+
 ### v0.9.32 beta channel
 
 - Windows, universal macOS DMG, Linux AppImage/deb/rpm, and CLI artifacts.

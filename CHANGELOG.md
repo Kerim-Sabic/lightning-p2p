@@ -4,6 +4,26 @@ All notable changes to Lightning P2P are documented here. The project follows se
 
 ## [Unreleased]
 
+## [0.9.33] - 2026-10-31 ("Link In View")
+
+- Bring a new receive link into view as soon as it is ready. The link and QR
+  code used to render below the fold of the send page, so generating a link
+  looked like nothing happened; now the panel scrolls up and Copy share link
+  is focused as the primary button.
+- Say on the share panel that the link opens in the receiver's browser with
+  nothing installed, and name Chrome, Edge, or the app for shares above the
+  128 MiB in-memory browser limit.
+- Lead the Receive page with the paste-a-link card, unless a nearby share is
+  already waiting, under a plain "Receive files" heading.
+- Show the app logo on dark window chrome (it was a near-black mark on a dark
+  tile) and keep the dark mark for the light theme.
+- Make the send drop zone's dashed outline visible again; it turns accent
+  while files are dragged over it.
+- Let NSIS and MSI installs update themselves too. Community Windows releases
+  now sign both installers for the Tauri updater and publish `latest.json`,
+  which those installs (including v0.9.31) already check.
+- Link straight to the Windows installer from the top of the README.
+
 ## [0.9.32] - 2026-10-30 ("Zero-Copy Sends")
 
 - Save received files and folders without writing them a second time. Each
