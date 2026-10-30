@@ -2,6 +2,24 @@
 
 All notable changes to Lightning P2P are documented here. The project follows semantic versioning where practical.
 
+## [Unreleased]
+
+- Reference desktop share sources in place instead of copying every byte into
+  the local transfer store first. Share preparation skips a full write of the
+  selection, and a large share no longer needs its own size again in free
+  space. Receivers still verify every chunk with BLAKE3, so a file edited after
+  sharing fails verification rather than arriving altered. Android keeps
+  copying staged picker content.
+- Wait for the relay handshake while share sources hash instead of after, and
+  when a relay wait has recently timed out, re-check for 500 ms instead of
+  stalling every new ticket for 6 seconds on networks that block the relay.
+- Run BBR congestion control in Smart Auto on desktop, with Standard window
+  sizes. Android Smart Auto keeps the battery-safe CUBIC profile.
+- Show a real progress bar and percentage for memory-backed browser receives,
+  surface save failures after a browser receive, and offer "Send files from
+  this browser" once every received file is saved.
+- Show estimated time remaining in the persistent transfer tray.
+
 ## [0.9.31] - 2026-10-02 ("Startup-Safe Recovery")
 
 - Bound startup reads and writes for chat-mesh archives, courier envelopes,
