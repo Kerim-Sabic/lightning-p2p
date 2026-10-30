@@ -1,0 +1,49 @@
+{
+  "schema_version": 2,
+  "generated_at_unix": 1793378356,
+  "app_version": "0.9.31",
+  "commit_hash": "2b0d043068ab",
+  "os": "linux",
+  "arch": "x86_64",
+  "mode": "standard",
+  "hardware_notes": "",
+  "harness": "same-machine-two-profile",
+  "transport": "iroh-loopback",
+  "caveats": [
+    "Same-machine loopback only. Does not measure WAN, relay, NAT, or Wi-Fi.",
+    "Single-process two-profile harness. Not equivalent to two separate devices.",
+    "Throughput is bounded by local IO, CPU, and tokio scheduling, not network.",
+    "Bottleneck estimate is a heuristic from timing ratios, not a flamegraph.",
+    "Do not publish 'fastest' or comparison claims from this report."
+  ],
+  "summary": [
+    {
+      "scenario": "same_machine_1gb",
+      "bytes": 1073741824,
+      "runs": 1,
+      "successes": 1,
+      "failures": 0,
+      "median_total_ms": 14099,
+      "median_download_ms": 6787,
+      "median_export_ms": 7310,
+      "median_effective_mbps": 609.2430051358954
+    }
+  ],
+  "runs": [
+    {
+      "scenario": "same_machine_1gb",
+      "run": 1,
+      "bytes": 1073741824,
+      "time_to_ticket_ms": 6002,
+      "connect_ms": 6,
+      "download_ms": 6787,
+      "export_ms": 7310,
+      "total_ms": 14099,
+      "effective_mbps": 609.2430051358954,
+      "route_kind": "mixed",
+      "bottleneck_estimate": "export",
+      "success": true,
+      "error": null
+    }
+  ]
+}
