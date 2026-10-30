@@ -4,6 +4,35 @@ All notable changes to Lightning P2P are documented here. The project follows se
 
 ## [Unreleased]
 
+- Save received folders 2–4× faster: collection children now export
+  concurrently (up to 16 at a time for small files, 2 for large files) and are
+  placed into the final tree in one blocking pass. Conflict, symlink, and
+  unsafe-path checks are unchanged.
+- Treat partially downloaded blobs as incomplete instead of reporting their
+  size as verified.
+- Browser receive: batch Bao-verified leaves into ~1 MiB writes (flushed at
+  least every 200 ms) instead of one awaited File System Access write per
+  16 KiB leaf. Requires rebuilding `public/webrx` with
+  `scripts/build-web-receiver.sh`.
+- Lightning Chat: location-room posts and presence beacons are signed with a
+  per-room key derived from the local identity, so activity in one room cannot
+  be linked to another room or to the long-lived DM identity. DMs to someone
+  met in a room stay on that room identity; replayed history from your own
+  room key shows as outgoing; delivery receipts are sent once per message.
+- Apply `cargo fmt` so `pnpm check:baseline` passes again.
+- Browser receive: **Save all to a folder** streams every file of a shared
+  folder into one chosen directory with subfolders preserved, whole-share
+  progress, and one stop button — instead of one save dialog per file.
+  Sender-supplied names are sanitised, traversal is refused, existing files
+  are never overwritten, and a file that fails part-way is removed.
+- Lightning Chat: read receipts are now opt-in (identity panel switch), so
+  opening a conversation no longer reveals when you read it. Delivery
+  receipts are unchanged.
+- Remove export staging folders left in the download folder by a crash or
+  forced quit (only private staging folders untouched for a day).
+- New `Rebuild browser receiver engine` workflow rebuilds `public/webrx` on
+  GitHub and pushes it to a review branch; `wasm-opt` failures no longer
+  break the build script.
 - Reference desktop share sources in place instead of copying every byte into
   the local transfer store first. Share preparation skips a full write of the
   selection, and a large share no longer needs its own size again in free

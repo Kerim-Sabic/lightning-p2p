@@ -49,6 +49,7 @@ import {
   createLightningChatPrivateEnvelope,
   decryptLightningChatPrivateEnvelope,
 } from "./protocol/private-envelope";
+import { deriveRoomSecretKey } from "./protocol/room-identity";
 
 const DEFAULT_RELAYS = [
   "wss://relay.damus.io",
@@ -61,6 +62,7 @@ const NICKNAME_KEY = "lightning-chat.nickname";
 const MAX_MESH_MEDIA_BYTES = 512 * 1024;
 const FAVORITES_KEY = "lightning-chat.favorites";
 const BLOCKED_KEY = "lightning-chat.blocked";
+const READ_RECEIPTS_KEY = "lightning-chat.read-receipts";
 const PRESENCE_INTERVAL_MS = 30_000;
 const RELAY_HEALTH_INTERVAL_MS = 5_000;
 
@@ -70,7 +72,15 @@ export class LightningChatService {
   private pool: SimplePool | null = null;
   private secretKey: Uint8Array | null = null;
   private channelSubscription: SubCloser | null = null;
-  private privateSubscription: SubCloser | null = null;
+  /** One open gift-wrap subscription per local identity (root + rooms). */
+  private privateSubscriptions = new Map<string, SubCloser>();
+  /** Local signing keys by public key: the root identity plus room identities. */
+  private localKeys = new Map<string, Uint8Array>();
+  /** Which local identity a private conversation with a peer uses. */
+  private conversationKeys = new Map<string, string>();
+  /** Room each remote author was seen in, so a DM stays on that room's identity. */
+  private roomAuthors = new Map<string, string>();
+  private deliveredAcknowledgedIds = new Set<string>();
   private listeners = new Set<SnapshotListener>();
   private seenMessageIds = new Set<string>();
   private readAcknowledgedIds = new Set<string>();
@@ -92,6 +102,7 @@ export class LightningChatService {
     groups: [],
     mesh_peer_id: null,
     mesh_links: 0,
+    read_receipts: loadReadReceiptsPreference(),
     error: null,
   };
 
@@ -134,6 +145,7 @@ export class LightningChatService {
       });
       this.startRelayHealthMonitor();
       await setChatMeshNickname(identity.nickname).catch(() => undefined);
+      this.localKeys.set(identity.pubkey, secretKey);
       this.subscribeToPrivateMessages(identity.pubkey);
       if (this.snapshot.active_channel.geohash) {
         this.joinChannel(this.snapshot.active_channel);
@@ -184,6 +196,10 @@ export class LightningChatService {
     this.seenMessageIds.clear();
     if (channel.geohash) {
       this.subscribeToChannel(channel);
+      if (this.pool && this.secretKey) {
+        const roomKey = this.roomSecretKey(channel.geohash);
+        this.subscribeToPrivateMessages(getPublicKey(roomKey));
+      }
       void this.startPresence(channel);
     } else {
       this.channelSubscription?.close();
@@ -209,7 +225,7 @@ export class LightningChatService {
         ),
         created_at: Math.floor(Date.now() / 1_000),
       },
-      this.requireSecretKey(),
+      this.roomSecretKey(this.snapshot.active_channel.geohash),
     );
     const optimistic = this.channelEventToMessage(event, true);
     this.appendMessage(optimistic);
@@ -231,11 +247,9 @@ export class LightningChatService {
     content: string,
   ): Promise<string> {
     const pool = this.requirePool();
-    const secretKey = this.requireSecretKey();
     const recipientPubkey = parseRecipientPubkey(recipient);
-    const senderPubkey = this.snapshot.identity?.pubkey;
-    if (!senderPubkey)
-      throw new Error("Lightning Chat identity is unavailable.");
+    const { pubkey: senderPubkey, secretKey } =
+      this.conversationIdentity(recipientPubkey);
     const messageId = crypto.randomUUID();
     const body = encodeEmbeddedPrivateMessage({
       content: normalizedPrivateMessage(content),
@@ -417,7 +431,17 @@ export class LightningChatService {
     this.update({ messages });
   }
 
+  /**
+   * Read receipts reveal when you are actively reading, so they are off by
+   * default; delivery receipts still confirm a message arrived.
+   */
+  setReadReceipts(enabled: boolean): void {
+    localStorage.setItem(READ_RECEIPTS_KEY, enabled ? "on" : "off");
+    this.update({ read_receipts: enabled });
+  }
+
   async markConversationRead(conversationId: string): Promise<void> {
+    if (!this.snapshot.read_receipts) return;
     if (!conversationId.startsWith("private:")) return;
     const recipientPubkey = conversationId.slice("private:".length);
     const unread = this.snapshot.messages.filter(
@@ -444,9 +468,14 @@ export class LightningChatService {
     this.stopMeshMessages = null;
     this.seenMessageIds.clear();
     this.readAcknowledgedIds.clear();
+    this.deliveredAcknowledgedIds.clear();
+    this.localKeys.clear();
+    this.conversationKeys.clear();
+    this.roomAuthors.clear();
     localStorage.removeItem(NICKNAME_KEY);
     localStorage.removeItem(FAVORITES_KEY);
     localStorage.removeItem(BLOCKED_KEY);
+    localStorage.removeItem(READ_RECEIPTS_KEY);
     await panicWipeLightningChat();
     this.snapshot = {
       ...this.snapshot,
@@ -458,6 +487,7 @@ export class LightningChatService {
       mesh_peer_id: null,
       mesh_links: 0,
       connected_relays: 0,
+      read_receipts: false,
       error: null,
     };
     this.emit();
@@ -523,8 +553,10 @@ export class LightningChatService {
   private stopRelayTransport(): void {
     this.channelSubscription?.close();
     this.channelSubscription = null;
-    this.privateSubscription?.close();
-    this.privateSubscription = null;
+    for (const subscription of this.privateSubscriptions.values()) {
+      subscription.close();
+    }
+    this.privateSubscriptions.clear();
     this.pool?.destroy();
     this.pool = null;
     if (this.relayHealthTimer !== null) {
@@ -676,7 +708,7 @@ export class LightningChatService {
           tags: [["g", channel.geohash]],
           created_at: Math.floor(Date.now() / 1_000),
         },
-        this.requireSecretKey(),
+        this.roomSecretKey(channel.geohash),
       );
       await publishToAnyRelay(this.requirePool(), event);
     };
@@ -696,9 +728,9 @@ export class LightningChatService {
   }
 
   private subscribeToPrivateMessages(pubkey: string): void {
+    if (this.privateSubscriptions.has(pubkey)) return;
     const pool = this.requirePool();
-    this.privateSubscription?.close();
-    this.privateSubscription = pool.subscribeMany(
+    const subscription = pool.subscribeMany(
       [...DEFAULT_RELAYS],
       {
         kinds: [1_059],
@@ -711,15 +743,50 @@ export class LightningChatService {
         },
       },
     );
+    this.privateSubscriptions.set(pubkey, subscription);
+  }
+
+  /** Signing key for one location room, derived from the root secret. */
+  private roomSecretKey(geohash: string): Uint8Array {
+    const secretKey = deriveRoomSecretKey(this.requireSecretKey(), geohash);
+    this.localKeys.set(getPublicKey(secretKey), secretKey);
+    return secretKey;
+  }
+
+  /**
+   * Local identity for a private conversation: whichever identity the peer
+   * already wrote to, else the room identity they were met under, else the
+   * long-lived root identity (shared deliberately via npub or trust QR).
+   */
+  private conversationIdentity(remotePubkey: string): {
+    pubkey: string;
+    secretKey: Uint8Array;
+  } {
+    const known = this.conversationKeys.get(remotePubkey);
+    const knownKey = known ? this.localKeys.get(known) : undefined;
+    if (known && knownKey) return { pubkey: known, secretKey: knownKey };
+    const room = this.roomAuthors.get(remotePubkey);
+    const secretKey = room
+      ? this.roomSecretKey(room)
+      : this.requireSecretKey();
+    const pubkey = getPublicKey(secretKey);
+    this.conversationKeys.set(remotePubkey, pubkey);
+    if (this.pool) this.subscribeToPrivateMessages(pubkey);
+    return { pubkey, secretKey };
   }
 
   private async receivePrivateEnvelope(giftWrap: Event): Promise<void> {
     try {
-      const secretKey = this.requireSecretKey();
+      const recipientPubkey = giftWrap.tags.find((tag) => tag[0] === "p")?.[1];
+      const secretKey = recipientPubkey
+        ? this.localKeys.get(recipientPubkey)
+        : undefined;
+      if (!recipientPubkey || !secretKey) return;
       const decrypted = decryptLightningChatPrivateEnvelope(
         giftWrap,
         secretKey,
       );
+      this.conversationKeys.set(decrypted.senderPubkey, recipientPubkey);
       const embedded = decodeEmbeddedLightningChatPayload(decrypted.content);
       if (embedded.kind !== "message") {
         this.replaceDelivery(
@@ -740,6 +807,8 @@ export class LightningChatService {
         transport: "nostr",
       };
       this.appendMessage(message);
+      if (this.deliveredAcknowledgedIds.has(embedded.messageId)) return;
+      this.deliveredAcknowledgedIds.add(embedded.messageId);
       await this.sendAcknowledgement(
         decrypted.senderPubkey,
         embedded.messageId,
@@ -755,8 +824,9 @@ export class LightningChatService {
     messageId: string,
     kind: "delivered" | "read",
   ): Promise<void> {
-    const senderPubkey = this.snapshot.identity?.pubkey;
-    if (!senderPubkey) return;
+    if (!this.secretKey) return;
+    const { pubkey: senderPubkey, secretKey } =
+      this.conversationIdentity(recipientPubkey);
     const content = encodeEmbeddedAcknowledgement({
       kind,
       messageId,
@@ -766,7 +836,7 @@ export class LightningChatService {
     await publishPrivateEnvelope(this.requirePool(), {
       content,
       recipientPubkey,
-      senderSecretKey: this.requireSecretKey(),
+      senderSecretKey: secretKey,
     });
   }
 
@@ -778,6 +848,13 @@ export class LightningChatService {
       event.tags.find((tag) => tag[0] === "n")?.[1] ||
       event.pubkey.slice(0, 12);
     const id = event.id || crypto.randomUUID();
+    // After a reload, relay history replays our own room posts; recognise
+    // them by the room key rather than showing them as someone else's.
+    const own = outgoing || this.localKeys.has(event.pubkey);
+    const geohash = this.snapshot.active_channel.geohash;
+    if (!own && event.pubkey && geohash) {
+      this.roomAuthors.set(event.pubkey, geohash);
+    }
     return {
       id,
       conversation_id: `channel:${this.snapshot.active_channel.id}`,
@@ -785,8 +862,8 @@ export class LightningChatService {
       author_name: nickname,
       content: event.content,
       created_at: event.created_at || Math.floor(Date.now() / 1_000),
-      direction: outgoing ? "outgoing" : "incoming",
-      delivery: outgoing ? "sending" : "delivered",
+      direction: own ? "outgoing" : "incoming",
+      delivery: outgoing ? "sending" : own ? "sent" : "delivered",
       transport: "nostr",
     };
   }
@@ -928,6 +1005,17 @@ function irohMessage(
     delivery: outgoing ? "sent" : "delivered",
     transport: "iroh",
   };
+}
+
+function loadReadReceiptsPreference(): boolean {
+  try {
+    return (
+      typeof localStorage !== "undefined" &&
+      localStorage.getItem(READ_RECEIPTS_KEY) === "on"
+    );
+  } catch {
+    return false;
+  }
 }
 
 function loadPeerSet(key: string): Set<string> {

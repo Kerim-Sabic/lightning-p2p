@@ -215,13 +215,11 @@ fn app_builder() -> tauri::Builder<tauri::Wry> {
     let builder = tauri::Builder::default();
 
     #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
-    let builder = builder.plugin(tauri_plugin_single_instance::init(
-        |app, _args, _cwd| {
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.set_focus();
-            }
-        },
-    ));
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.set_focus();
+        }
+    }));
 
     let builder = builder
         .plugin(tauri_plugin_os::init())
@@ -240,6 +238,13 @@ fn spawn_node_startup(handle: tauri::AppHandle) {
     tauri::async_runtime::spawn(async move {
         let state = handle.state::<AppState>();
         let settings = state.settings.snapshot().await;
+        let download_dir = settings.download_dir.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            let removed = transfer::export::sweep_stale_export_staging(&download_dir);
+            if removed > 0 {
+                tracing::info!(removed, "removed stale receive staging folders");
+            }
+        });
         state
             .node_supervisor
             .start(

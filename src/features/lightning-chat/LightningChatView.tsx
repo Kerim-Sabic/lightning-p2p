@@ -744,6 +744,33 @@ export function LightningChatView() {
               <Copy className="h-4 w-4 text-slate-500" />
             )}
           </button>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={snapshot.read_receipts}
+            onClick={() =>
+              lightningChatService.setReadReceipts(!snapshot.read_receipts)
+            }
+            className="mt-3 flex w-full items-center gap-3 rounded-xl border border-white/[0.06] bg-black/10 px-3 py-2.5 text-left"
+          >
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm text-white">
+                Send read receipts
+              </span>
+              <span className="block text-[11px] leading-4 text-slate-500">
+                Off keeps when you read private. Delivery still confirms
+                arrival.
+              </span>
+            </span>
+            <span
+              aria-hidden
+              className={`relative h-5 w-9 shrink-0 rounded-full transition ${snapshot.read_receipts ? "bg-emerald-300" : "bg-white/15"}`}
+            >
+              <span
+                className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all ${snapshot.read_receipts ? "left-[18px]" : "left-0.5"}`}
+              />
+            </span>
+          </button>
           {nativeRuntime ? (
             <button
               type="button"
