@@ -33,6 +33,9 @@ All notable changes to Lightning P2P are documented here. The project follows se
   installs keep their saved choice.
 - Publish `releases.win.json` with each Windows release and pin the Velopack
   packer to the same version as the in-app updater.
+- Publish a release when a version bump merges to `main`: CI releases any
+  untagged package version and creates its tag on the built commit, so a
+  release no longer waits on a separate tag push.
 
 - Save received folders 2–4× faster: collection children now export
   concurrently (up to 16 at a time for small files, 2 for large files) and are

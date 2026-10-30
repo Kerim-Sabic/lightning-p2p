@@ -139,7 +139,11 @@ Watch logcat during the smoke launch for these strings; treat them as fatal:
 
 2. **Commit and push** the version bump to a branch, open a PR, merge to `main`.
 
-3. **Tag** the merge commit:
+3. **Let `main` publish it.** CI on the merge commit sees that `vX.Y.Z` has no
+   tag yet, builds the release, creates the tag on that exact commit, and marks
+   the release latest once every job passes. Do not also push the tag: two
+   runs would upload to the same release. Pushing the tag by hand still works
+   when it is the only trigger (for example, re-releasing an older commit):
 
    ```powershell
    git checkout main
@@ -148,7 +152,7 @@ Watch logcat during the smoke launch for these strings; treat them as fatal:
    git push origin v0.4.4
    ```
 
-4. **Watch the workflow.** The tag push triggers CI on `refs/tags/v*`. Expected jobs:
+4. **Watch the workflow.** The release runs in CI for the merge commit (or for `refs/tags/v*` after a manual tag). Expected jobs:
    - `rust`, `frontend`, `windows-package`, `android-package` (smoke + debug APK)
    - `release-plan` (resolves Android signing mode)
    - `release-android` (signed APK + AAB build, only if signing mode is `signed`)
