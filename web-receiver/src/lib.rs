@@ -26,7 +26,10 @@ use iroh_blobs::api::proto::BlobStatus;
 use iroh_blobs::format::collection::{Collection, CollectionMeta};
 use iroh_blobs::store::mem::MemStore;
 use iroh_blobs::{hashseq::HashSeq, ticket::BlobTicket, Hash};
-use n0_future::{time::timeout, StreamExt};
+use n0_future::{
+    time::{timeout, Instant},
+    StreamExt,
+};
 use std::time::Duration;
 use std::{future::Future, sync::Mutex};
 use ticket::ParsedTicket;
@@ -38,6 +41,59 @@ const MAX_COLLECTION_ENTRIES: usize = 10_000;
 const MAX_HASH_SEQUENCE_BYTES: u64 = (MAX_COLLECTION_ENTRIES as u64 + 1) * 32;
 const MAX_COLLECTION_METADATA_BYTES: u64 = 8 * 1024 * 1024;
 const ENDPOINT_START_TIMEOUT: Duration = Duration::from_secs(30);
+/// Largest run of verified leaves handed to the save sink in one call. Each
+/// sink call crosses into JS and, for File System Access saves, into the
+/// browser's file process; doing that once per 16 KiB leaf made the save path,
+/// not the network, the bottleneck for large browser receives.
+const STREAM_BATCH_BYTES: usize = 1024 * 1024;
+/// A partial batch is flushed after this long so progress stays live on slow
+/// relay links.
+const STREAM_BATCH_MAX_DELAY: Duration = Duration::from_millis(200);
+
+/// Coalesces Bao-verified leaves into larger sink writes. Only leaves that
+/// iroh-blobs has already verified are ever pushed, so a batch never contains
+/// unverified bytes.
+struct LeafBatcher {
+    batch: Vec<u8>,
+    capacity: usize,
+    batch_started: Option<Instant>,
+}
+
+impl LeafBatcher {
+    fn new(expected_size: u64) -> Self {
+        let capacity = usize::try_from(expected_size)
+            .unwrap_or(usize::MAX)
+            .min(STREAM_BATCH_BYTES);
+        Self {
+            batch: Vec::with_capacity(capacity),
+            capacity,
+            batch_started: None,
+        }
+    }
+
+    /// Bytes verified but not yet handed to the sink.
+    fn pending(&self) -> u64 {
+        self.batch.len() as u64
+    }
+
+    /// Adds a verified leaf; returns a batch when it is full or old enough.
+    fn push(&mut self, leaf: &[u8], now: Instant) -> Option<Vec<u8>> {
+        let started = *self.batch_started.get_or_insert(now);
+        self.batch.extend_from_slice(leaf);
+        let stale = now.saturating_duration_since(started) >= STREAM_BATCH_MAX_DELAY;
+        (self.batch.len() >= STREAM_BATCH_BYTES || stale).then(|| self.take())
+    }
+
+    /// Returns whatever is left once the blob is complete.
+    fn finish(&mut self) -> Option<Vec<u8>> {
+        (!self.batch.is_empty()).then(|| self.take())
+    }
+
+    fn take(&mut self) -> Vec<u8> {
+        self.batch_started = None;
+        std::mem::replace(&mut self.batch, Vec::with_capacity(self.capacity))
+    }
+}
 
 struct StreamAttemptError {
     message: String,
@@ -442,41 +498,36 @@ where
     Fut: Future<Output = Result<bool, String>>,
 {
     let mut stream = iroh_blobs::get::request::get_blob(connection, hash);
+    // Bytes the sink has accepted. Verified-but-buffered bytes are tracked by
+    // the batcher; a provider failure before the first flush stays retryable
+    // because the sink has seen nothing.
     let mut received = 0_u64;
+    let mut batcher = LeafBatcher::new(expected_size);
     while let Some(item) = stream.next().await {
         match item {
             iroh_blobs::get::request::GetBlobItem::Item(BaoContentItem::Leaf(leaf)) => {
-                let next_received =
-                    received
-                        .checked_add(leaf.data.len() as u64)
-                        .ok_or_else(|| StreamAttemptError {
-                            message: "received file size overflow".into(),
-                            retryable: false,
-                        })?;
-                if next_received > expected_size {
+                let verified = received
+                    .checked_add(batcher.pending())
+                    .and_then(|total| total.checked_add(leaf.data.len() as u64))
+                    .ok_or_else(|| StreamAttemptError {
+                        message: "received file size overflow".into(),
+                        retryable: false,
+                    })?;
+                if verified > expected_size {
                     return Err(StreamAttemptError {
                         message: "Received bytes exceed the authenticated file size.".into(),
                         retryable: false,
                     });
                 }
-                match on_chunk(leaf.data.to_vec()).await {
-                    Ok(true) => received = next_received,
-                    Ok(false) => {
-                        return Err(StreamAttemptError {
-                            message: "Browser receive cancelled.".into(),
-                            retryable: false,
-                        });
-                    }
-                    Err(message) => {
-                        return Err(StreamAttemptError {
-                            message,
-                            retryable: false,
-                        });
-                    }
+                if let Some(batch) = batcher.push(&leaf.data, Instant::now()) {
+                    received += deliver_batch(on_chunk, batch).await?;
                 }
             }
             iroh_blobs::get::request::GetBlobItem::Item(_) => {}
             iroh_blobs::get::request::GetBlobItem::Done(_) => {
+                if let Some(batch) = batcher.finish() {
+                    received += deliver_batch(on_chunk, batch).await?;
+                }
                 if received != expected_size {
                     return Err(StreamAttemptError {
                         message: "The verified file length does not match its manifest.".into(),
@@ -496,6 +547,26 @@ where
     ))
 }
 
+/// Hands one verified batch to the sink and returns its length once accepted.
+async fn deliver_batch<F, Fut>(on_chunk: &mut F, batch: Vec<u8>) -> Result<u64, StreamAttemptError>
+where
+    F: FnMut(Vec<u8>) -> Fut,
+    Fut: Future<Output = Result<bool, String>>,
+{
+    let len = batch.len() as u64;
+    match on_chunk(batch).await {
+        Ok(true) => Ok(len),
+        Ok(false) => Err(StreamAttemptError {
+            message: "Browser receive cancelled.".into(),
+            retryable: false,
+        }),
+        Err(message) => Err(StreamAttemptError {
+            message,
+            retryable: false,
+        }),
+    }
+}
+
 /// Provider endpoint ids the downloader may dial for the content.
 fn provider_ids(parsed: &ParsedTicket) -> Vec<iroh::EndpointId> {
     parsed.providers.iter().map(|t| t.addr().id).collect()
@@ -503,11 +574,52 @@ fn provider_ids(parsed: &ParsedTicket) -> Vec<iroh::EndpointId> {
 
 #[cfg(test)]
 mod tests {
-    use super::provider_stream_failure;
+    use super::{provider_stream_failure, LeafBatcher, STREAM_BATCH_BYTES, STREAM_BATCH_MAX_DELAY};
+    use n0_future::time::Instant;
 
     #[test]
     fn only_provider_failures_before_any_output_can_fall_back() {
         assert!(provider_stream_failure("unavailable".into(), 0).retryable);
         assert!(!provider_stream_failure("disconnected".into(), 1).retryable);
+    }
+
+    #[test]
+    fn leaf_batches_preserve_every_byte_in_order() {
+        let leaves = (0..200_u32)
+            .map(|index| vec![u8::try_from(index % 251).unwrap(); 16 * 1024])
+            .collect::<Vec<_>>();
+        let expected = leaves.concat();
+        let mut batcher = LeafBatcher::new(expected.len() as u64);
+        let now = Instant::now();
+        let mut written = Vec::new();
+        let mut sink_calls = 0;
+        for leaf in &leaves {
+            if let Some(batch) = batcher.push(leaf, now) {
+                assert!(batch.len() >= STREAM_BATCH_BYTES);
+                written.extend_from_slice(&batch);
+                sink_calls += 1;
+            }
+        }
+        if let Some(batch) = batcher.finish() {
+            written.extend_from_slice(&batch);
+            sink_calls += 1;
+        }
+        assert_eq!(written, expected);
+        // 200 leaves of 16 KiB become 4 sink calls instead of 200.
+        assert_eq!(sink_calls, 4);
+        assert_eq!(batcher.pending(), 0);
+        assert!(batcher.finish().is_none());
+    }
+
+    #[test]
+    fn slow_links_flush_partial_batches_for_live_progress() {
+        let mut batcher = LeafBatcher::new(10 * 1024 * 1024);
+        let start = Instant::now();
+        assert!(batcher.push(&[1; 1024], start).is_none());
+        let flushed = batcher
+            .push(&[2; 1024], start + STREAM_BATCH_MAX_DELAY)
+            .expect("stale batch flushes");
+        assert_eq!(flushed.len(), 2048);
+        assert_eq!(batcher.pending(), 0);
     }
 }

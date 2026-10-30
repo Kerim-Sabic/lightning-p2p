@@ -16,12 +16,7 @@ pub(crate) fn read_bytes_if_exists(
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(error) => return Err(error.to_string()),
     };
-    if file
-        .metadata()
-        .map_err(|error| error.to_string())?
-        .len()
-        > max_bytes as u64
-    {
+    if file.metadata().map_err(|error| error.to_string())?.len() > max_bytes as u64 {
         return Err(format!("JSON store exceeds {max_bytes} byte limit"));
     }
     let mut bytes = Vec::with_capacity(max_bytes.min(64 * 1024));
@@ -75,6 +70,9 @@ mod tests {
 
         write(&path, &value, 1024).expect("write bounded JSON");
 
-        assert_eq!(read::<Vec<String>>(&path, 1024).expect("read bounded JSON"), value);
+        assert_eq!(
+            read::<Vec<String>>(&path, 1024).expect("read bounded JSON"),
+            value
+        );
     }
 }

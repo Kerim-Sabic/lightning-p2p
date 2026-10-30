@@ -5,12 +5,13 @@ use super::destination::{
     ensure_enough_space, safe_collection_entry_path, safe_collection_label, suffixed_path,
 };
 use crate::error::{LightningP2PError, Result};
+use futures_util::StreamExt;
 use iroh_blobs::api::proto::BlobStatus;
 use iroh_blobs::api::Store;
 use iroh_blobs::format::collection::Collection;
 use iroh_blobs::ticket::BlobTicket;
 use iroh_blobs::Hash;
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashSet};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use tokio::io::AsyncReadExt;
@@ -555,12 +556,21 @@ async fn export_collection(
     cancel_rx: &mut watch::Receiver<bool>,
 ) -> Result<PathBuf> {
     let staging_dir = create_export_staging_dir(destination, ticket.hash())?;
+    let scratch_dir = match create_export_staging_dir(destination, ticket.hash()) {
+        Ok(scratch_dir) => scratch_dir,
+        Err(error) => {
+            let _ = tokio::fs::remove_dir_all(&staging_dir).await;
+            return Err(error);
+        }
+    };
 
     // iroh-blobs 1.0 has no collection-export helper, so load the collection
     // and export each child to `staging/<name>` (creating parent dirs for
     // nested names).
     let export_result =
-        export_collection_children(store, ticket.hash(), &staging_dir, cancel_rx).await;
+        export_collection_children(store, ticket.hash(), &staging_dir, &scratch_dir, cancel_rx)
+            .await;
+    let _ = tokio::fs::remove_dir_all(&scratch_dir).await;
 
     if let Err(error) = export_result {
         let _ = tokio::fs::remove_dir_all(&staging_dir).await;
@@ -581,28 +591,144 @@ async fn export_collection(
     }
 }
 
+/// Exports every collection child, overlapping the per-file store and
+/// filesystem latency that dominates folders full of small files.
+///
+/// Phase one exports each child concurrently to a unique numbered file in a
+/// private scratch directory, so concurrent writers can never collide even
+/// when two manifest names map to the same file on a case-insensitive
+/// filesystem. Phase two moves the verified files into the staged tree in
+/// manifest order with a cheap same-volume rename, keeping the existing
+/// conflict, symlink, and unsafe-path checks exactly as strict as before.
 async fn export_collection_children(
     store: &Store,
     root: Hash,
     staging_dir: &Path,
+    scratch_dir: &Path,
     cancel_rx: &mut watch::Receiver<bool>,
 ) -> Result<()> {
     let collection = Collection::load(root, store)
         .await
         .map_err(|error| blob_error(&error))?;
-    for (name, hash) in collection.iter() {
+    let entries = collection
+        .iter()
+        .map(|(name, hash)| Ok((safe_collection_entry_path(name)?, *hash)))
+        .collect::<Result<Vec<_>>>()?;
+    let parallelism = child_export_parallelism(store, &entries).await;
+    export_children_to_scratch(store, &entries, scratch_dir, parallelism, cancel_rx).await?;
+    let relatives = entries.into_iter().map(|(relative, _)| relative).collect();
+    let staging_dir = staging_dir.to_path_buf();
+    let scratch_dir = scratch_dir.to_path_buf();
+    let cancel = cancel_rx.clone();
+    tokio::task::spawn_blocking(move || {
+        place_exported_children(&staging_dir, &scratch_dir, relatives, &cancel)
+    })
+    .await
+    .map_err(|error| LightningP2PError::Other(error.to_string()))?
+}
+
+/// Moves numbered scratch exports into the staged tree in manifest order.
+/// Runs as one blocking job: per-file async filesystem calls would each pay a
+/// thread hop, which dominated the cost for folders of small files.
+fn place_exported_children(
+    staging_dir: &Path,
+    scratch_dir: &Path,
+    relatives: Vec<PathBuf>,
+    cancel_rx: &watch::Receiver<bool>,
+) -> Result<()> {
+    let mut known_dirs = HashSet::new();
+    for (index, relative) in relatives.into_iter().enumerate() {
         ensure_not_cancelled(cancel_rx)?;
-        let safe_relative_path = safe_collection_entry_path(name)?;
-        let target = prepare_staging_file_target(staging_dir, &safe_relative_path).await?;
+        let target = prepare_staging_file_target(staging_dir, &relative, &mut known_dirs)?;
+        std::fs::rename(scratch_dir.join(index.to_string()), &target)?;
+    }
+    Ok(())
+}
+
+/// Most concurrent child exports for small-file collections.
+const MAX_PARALLEL_CHILD_EXPORTS: usize = 16;
+/// Concurrent child exports when files are large enough that disk bandwidth,
+/// not per-file latency, is the limit (avoids seek thrash on spinning disks).
+const LARGE_FILE_CHILD_EXPORTS: usize = 2;
+/// Average child size above which a collection counts as large-file work.
+const LARGE_CHILD_EXPORT_BYTES: u64 = 32 * 1024 * 1024;
+
+async fn child_export_parallelism(store: &Store, entries: &[(PathBuf, Hash)]) -> usize {
+    if entries.len() <= 1 {
+        return 1;
+    }
+    let hashes = entries.iter().map(|(_, hash)| *hash).collect::<Vec<_>>();
+    let total = match blob_sizes(store, hashes).await {
+        Ok(sizes) => sizes.into_iter().fold(0_u64, u64::saturating_add),
+        Err(_) => u64::MAX,
+    };
+    parallelism_for_average(total / entries.len() as u64, entries.len())
+}
+
+/// Looks up verified blob sizes with overlapping store round trips, in input
+/// order. Futures own their inputs so the combinator stays `Send` inside
+/// spawned receive tasks.
+async fn blob_sizes(store: &Store, hashes: Vec<Hash>) -> Result<Vec<u64>> {
+    let lookups = hashes
+        .into_iter()
+        .map(|hash| {
+            let store = store.clone();
+            async move { blob_size(&store, hash).await }
+        })
+        .collect::<Vec<_>>();
+    futures_util::stream::iter(lookups)
+        .buffered(MAX_PARALLEL_CHILD_EXPORTS)
+        .collect::<Vec<_>>()
+        .await
+        .into_iter()
+        .collect()
+}
+
+fn parallelism_for_average(average_size: u64, entry_count: usize) -> usize {
+    let cap = if average_size >= LARGE_CHILD_EXPORT_BYTES {
+        LARGE_FILE_CHILD_EXPORTS
+    } else {
+        MAX_PARALLEL_CHILD_EXPORTS
+    };
+    entry_count.clamp(1, cap)
+}
+
+async fn export_children_to_scratch(
+    store: &Store,
+    entries: &[(PathBuf, Hash)],
+    scratch_dir: &Path,
+    parallelism: usize,
+    cancel_rx: &mut watch::Receiver<bool>,
+) -> Result<()> {
+    let jobs = entries
+        .iter()
+        .enumerate()
+        .map(|(index, (_, hash))| {
+            let store = store.clone();
+            let hash = *hash;
+            let target = scratch_dir.join(index.to_string());
+            async move {
+                store
+                    .blobs()
+                    .export(hash, &target)
+                    .await
+                    .map_err(|error| blob_error(&error))
+            }
+        })
+        .collect::<Vec<_>>();
+    let mut exports = futures_util::stream::iter(jobs).buffer_unordered(parallelism.max(1));
+    loop {
         tokio::select! {
             biased;
             () = wait_for_cancellation(cancel_rx) => return Err(cancelled_error()),
-            result = store.blobs().export(*hash, &target) => {
-                result.map_err(|error| blob_error(&error))?;
-            }
+            next = exports.next() => match next {
+                Some(result) => {
+                    result?;
+                }
+                None => return Ok(()),
+            },
         }
     }
-    Ok(())
 }
 
 fn ensure_not_cancelled(cancel_rx: &watch::Receiver<bool>) -> Result<()> {
@@ -628,10 +754,21 @@ fn cancelled_error() -> LightningP2PError {
     LightningP2PError::Other("Cancelled".into())
 }
 
-async fn prepare_staging_file_target(staging_dir: &Path, relative: &Path) -> Result<PathBuf> {
-    let root_metadata = tokio::fs::symlink_metadata(staging_dir).await?;
-    if !is_plain_directory(&root_metadata) {
-        return Err(unsafe_collection_destination_error());
+/// Creates the parent folders for one staged collection file and returns its
+/// path. Every folder this export did not create itself is re-checked so a
+/// symlink or file in a parent position is rejected; `known_dirs` remembers
+/// folders already created or verified during this export.
+fn prepare_staging_file_target(
+    staging_dir: &Path,
+    relative: &Path,
+    known_dirs: &mut HashSet<PathBuf>,
+) -> Result<PathBuf> {
+    if known_dirs.is_empty() {
+        let root_metadata = std::fs::symlink_metadata(staging_dir)?;
+        if !is_plain_directory(&root_metadata) {
+            return Err(unsafe_collection_destination_error());
+        }
+        known_dirs.insert(staging_dir.to_path_buf());
     }
 
     let mut current = staging_dir.to_path_buf();
@@ -641,23 +778,27 @@ async fn prepare_staging_file_target(staging_dir: &Path, relative: &Path) -> Res
                 return Err(unsafe_collection_destination_error());
             };
             current.push(name);
-            match tokio::fs::create_dir(&current).await {
+            if known_dirs.contains(&current) {
+                continue;
+            }
+            match std::fs::create_dir(&current) {
                 Ok(()) => {}
                 Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-                    let metadata = tokio::fs::symlink_metadata(&current).await?;
+                    let metadata = std::fs::symlink_metadata(&current)?;
                     if !is_plain_directory(&metadata) {
                         return Err(unsafe_collection_destination_error());
                     }
                 }
                 Err(error) => return Err(error.into()),
             }
+            known_dirs.insert(current.clone());
         }
     }
     let file_name = relative
         .file_name()
         .ok_or_else(unsafe_collection_destination_error)?;
     current.push(file_name);
-    match tokio::fs::symlink_metadata(&current).await {
+    match std::fs::symlink_metadata(&current) {
         Ok(_) => {
             return Err(LightningP2PError::Other(
                 "The shared folder contains conflicting file paths.".into(),
@@ -711,15 +852,16 @@ pub(crate) async fn ticket_size(store: &Store, ticket: &BlobTicket) -> Result<u6
     let collection = Collection::load(ticket.hash(), store)
         .await
         .map_err(|error| blob_error(&error))?;
-    let mut total = 0u64;
-    for (_name, hash) in collection.iter() {
-        total = total
-            .checked_add(blob_size(store, *hash).await?)
-            .ok_or_else(|| {
-                LightningP2PError::Other("The received collection is too large to export.".into())
-            })?;
-    }
-    Ok(total)
+    // One store round trip per child; overlap them so 10k-file folders do
+    // not pay 10k sequential lookups before saving can start.
+    let hashes = collection.iter().map(|(_name, hash)| *hash).collect();
+    blob_sizes(store, hashes)
+        .await?
+        .into_iter()
+        .try_fold(0u64, u64::checked_add)
+        .ok_or_else(|| {
+            LightningP2PError::Other("The received collection is too large to export.".into())
+        })
 }
 
 /// Returns the names of files represented by a verified collection ticket.
@@ -839,7 +981,11 @@ async fn blob_size(store: &Store, hash: Hash) -> Result<u64> {
         .map_err(|error| blob_error(&error))?
     {
         BlobStatus::Complete { size } => Ok(size),
-        BlobStatus::Partial { size } => Ok(size.unwrap_or(0)),
+        // A partial blob is not verified content; reporting its (possibly
+        // unknown) size as final would let an incomplete receive look done.
+        BlobStatus::Partial { .. } => Err(LightningP2PError::Blob(format!(
+            "Blob {hash} is incomplete"
+        ))),
         BlobStatus::NotFound => Err(LightningP2PError::Blob(format!("Missing blob {hash}"))),
     }
 }
@@ -1160,6 +1306,129 @@ mod tests {
         assert!(!staged.exists());
     }
 
+    async fn collection_ticket(
+        store: &iroh_blobs::store::mem::MemStore,
+        files: &[(&str, Vec<u8>)],
+    ) -> BlobTicket {
+        let mut entries = Vec::new();
+        for (name, bytes) in files {
+            let hash = store.add_bytes(bytes.clone()).await.unwrap().hash;
+            entries.push(((*name).to_string(), hash));
+        }
+        let root = Collection::from_iter(entries)
+            .store(store.as_ref())
+            .await
+            .unwrap()
+            .hash();
+        BlobTicket::new(
+            iroh::EndpointAddr::new(iroh::SecretKey::from_bytes(&[1; 32]).public()),
+            root,
+            iroh_blobs::BlobFormat::HashSeq,
+        )
+    }
+
+    #[tokio::test]
+    async fn parallel_collection_export_writes_every_nested_file_once() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store = iroh_blobs::store::mem::MemStore::new();
+        let files = (0..300)
+            .map(|index| {
+                (
+                    format!("album/disc-{}/track-{index:03}.txt", index % 7),
+                    format!("payload {index}").into_bytes(),
+                )
+            })
+            .collect::<Vec<_>>();
+        let borrowed = files
+            .iter()
+            .map(|(name, bytes)| (name.as_str(), bytes.clone()))
+            .collect::<Vec<_>>();
+        let ticket = collection_ticket(&store, &borrowed).await;
+        let (_cancel_tx, mut cancel_rx) = watch::channel(false);
+
+        let summary = export_ticket(
+            store.as_ref(),
+            &ticket,
+            dir.path(),
+            None,
+            None,
+            &mut cancel_rx,
+        )
+        .await
+        .expect("export collection");
+
+        assert_eq!(summary.output_path, dir.path().join("album"));
+        for (name, bytes) in &files {
+            assert_eq!(
+                &tokio::fs::read(dir.path().join(name)).await.unwrap(),
+                bytes
+            );
+        }
+        // Only the published folder remains: no staging or scratch leftovers.
+        assert_eq!(read_dir_entries(dir.path()).await.unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn parallel_collection_export_rejects_a_file_used_as_a_folder() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store = iroh_blobs::store::mem::MemStore::new();
+        let ticket = collection_ticket(
+            &store,
+            &[
+                ("shared/report", b"a file".to_vec()),
+                ("shared/report/inner.txt", b"nested".to_vec()),
+            ],
+        )
+        .await;
+        let (_cancel_tx, mut cancel_rx) = watch::channel(false);
+
+        assert!(export_ticket(
+            store.as_ref(),
+            &ticket,
+            dir.path(),
+            None,
+            None,
+            &mut cancel_rx
+        )
+        .await
+        .is_err());
+        assert_eq!(read_dir_entries(dir.path()).await.unwrap().len(), 0);
+    }
+
+    #[tokio::test]
+    async fn cancelled_collection_export_leaves_no_staging_behind() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store = iroh_blobs::store::mem::MemStore::new();
+        let ticket = collection_ticket(
+            &store,
+            &[("a/one.txt", b"1".to_vec()), ("a/two.txt", b"2".to_vec())],
+        )
+        .await;
+        let (_cancel_tx, mut cancel_rx) = watch::channel(true);
+
+        assert!(
+            export_collection(store.as_ref(), &ticket, dir.path(), "a", &mut cancel_rx)
+                .await
+                .is_err()
+        );
+        assert_eq!(read_dir_entries(dir.path()).await.unwrap().len(), 0);
+    }
+
+    #[tokio::test]
+    async fn missing_blobs_have_no_verified_size() {
+        let store = iroh_blobs::store::mem::MemStore::new();
+        let missing = iroh_blobs::Hash::new(b"never stored");
+        assert!(blob_size(store.as_ref(), missing).await.is_err());
+    }
+
+    #[test]
+    fn small_files_export_in_parallel_and_large_files_stay_gentle() {
+        assert_eq!(parallelism_for_average(4 * 1024, 1_000), 16);
+        assert_eq!(parallelism_for_average(4 * 1024, 3), 3);
+        assert_eq!(parallelism_for_average(1024 * 1024 * 1024, 50), 2);
+        assert_eq!(parallelism_for_average(0, 0), 1);
+    }
+
     #[tokio::test]
     async fn collection_staging_rejects_a_file_in_a_parent_position() {
         let dir = tempfile::tempdir().expect("tempdir");
@@ -1169,11 +1438,12 @@ mod tests {
             .await
             .expect("parent blocker");
 
-        assert!(
-            prepare_staging_file_target(&stage, Path::new("nested/file.txt"))
-                .await
-                .is_err()
-        );
+        assert!(prepare_staging_file_target(
+            &stage,
+            Path::new("nested/file.txt"),
+            &mut HashSet::new()
+        )
+        .is_err());
     }
 
     #[tokio::test]
@@ -1185,9 +1455,10 @@ mod tests {
             .await
             .expect("existing member");
 
-        assert!(prepare_staging_file_target(&stage, Path::new("member.txt"))
-            .await
-            .is_err());
+        assert!(
+            prepare_staging_file_target(&stage, Path::new("member.txt"), &mut HashSet::new())
+                .is_err()
+        );
         assert_eq!(
             tokio::fs::read(stage.join("member.txt")).await.unwrap(),
             b"first member"
@@ -1206,11 +1477,12 @@ mod tests {
         tokio::fs::create_dir(&outside).await.expect("outside");
         symlink(&outside, stage.join("nested")).expect("symlink");
 
-        assert!(
-            prepare_staging_file_target(&stage, Path::new("nested/file.txt"))
-                .await
-                .is_err()
-        );
+        assert!(prepare_staging_file_target(
+            &stage,
+            Path::new("nested/file.txt"),
+            &mut HashSet::new()
+        )
+        .is_err());
         assert!(!outside.join("file.txt").exists());
     }
 }

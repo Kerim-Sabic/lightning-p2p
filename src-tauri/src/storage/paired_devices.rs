@@ -57,7 +57,9 @@ impl PairedDevices {
             match bounded_json::read::<Vec<PairedDevice>>(&path, MAX_PAIRED_DEVICES_FILE_BYTES) {
                 Ok(devices) if devices.len() <= MAX_PAIRED_DEVICES => devices,
                 Ok(_) => {
-                    tracing::warn!("saved device list exceeds its safety limit; preserving the file");
+                    tracing::warn!(
+                        "saved device list exceeds its safety limit; preserving the file"
+                    );
                     let backup = path.with_extension(format!("json.corrupt-{}", unix_timestamp()));
                     std::fs::rename(&path, backup)?;
                     Vec::new()

@@ -2,6 +2,25 @@
 
 All notable changes to Lightning P2P are documented here. The project follows semantic versioning where practical.
 
+## [Unreleased]
+
+- Save received folders 2–4× faster: collection children now export
+  concurrently (up to 16 at a time for small files, 2 for large files) and are
+  placed into the final tree in one blocking pass. Conflict, symlink, and
+  unsafe-path checks are unchanged.
+- Treat partially downloaded blobs as incomplete instead of reporting their
+  size as verified.
+- Browser receive: batch Bao-verified leaves into ~1 MiB writes (flushed at
+  least every 200 ms) instead of one awaited File System Access write per
+  16 KiB leaf. Requires rebuilding `public/webrx` with
+  `scripts/build-web-receiver.sh`.
+- Lightning Chat: location-room posts and presence beacons are signed with a
+  per-room key derived from the local identity, so activity in one room cannot
+  be linked to another room or to the long-lived DM identity. DMs to someone
+  met in a room stay on that room identity; replayed history from your own
+  room key shows as outgoing; delivery receipts are sent once per message.
+- Apply `cargo fmt` so `pnpm check:baseline` passes again.
+
 ## [0.9.31] - 2026-10-02 ("Startup-Safe Recovery")
 
 - Bound startup reads and writes for chat-mesh archives, courier envelopes,
