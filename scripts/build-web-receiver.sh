@@ -13,6 +13,7 @@
 #       export CC_wasm32_unknown_unknown="$ANDROID_NDK/toolchains/llvm/prebuilt/windows-x86_64/bin/clang.exe"
 #       export AR_wasm32_unknown_unknown="$ANDROID_NDK/toolchains/llvm/prebuilt/windows-x86_64/bin/llvm-ar.exe"
 #       export CFLAGS_wasm32_unknown_unknown="--target=wasm32-unknown-unknown"
+#   - node, to check that the built engine starts
 #
 # Optional: wasm-opt (binaryen) to shrink the binary further; skipped if absent.
 set -euo pipefail
@@ -20,6 +21,21 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CRATE="$ROOT/web-receiver"
 OUT="$ROOT/public/webrx"
+
+# Starts the engine the way the page does. wasm-bindgen's init grows the
+# exported externref table, which a miscompiling wasm-opt can break:
+# binaryen 108 points that export at a fixed-size table, and every browser
+# then fails to start the engine.
+engine_starts() {
+  node --input-type=module -e '
+    import { readFileSync } from "node:fs";
+    import { pathToFileURL } from "node:url";
+    const [glue, wasm] = process.argv.slice(1);
+    const engine = await import(pathToFileURL(glue).href);
+    engine.initSync({ module: readFileSync(wasm) });
+    engine.render_qr_svg("lightning-p2p");
+  ' "$1" "$2"
+}
 
 echo "==> building web-receiver -> wasm32-unknown-unknown (release)"
 ( cd "$CRATE" && cargo build --target wasm32-unknown-unknown --release )
@@ -31,17 +47,24 @@ wasm-bindgen --target web --out-dir "$OUT" --no-typescript \
 
 if command -v wasm-opt >/dev/null 2>&1; then
   echo "==> wasm-opt -Os"
-  # Optimize into a temp file so an older binaryen that rejects newer wasm
-  # features leaves the working (unoptimized) engine in place.
-  if wasm-opt -Os --all-features "$OUT/web_receiver_bg.wasm" -o "$OUT/web_receiver_bg.opt.wasm"; then
+  # Optimize into a temp file and keep it only if the engine still starts, so
+  # a binaryen that rejects or miscompiles the module leaves the working
+  # (unoptimized) engine in place. wasm-opt uses the module's own target
+  # features; --all-features lets newer binaryen emit encodings that browsers
+  # do not load yet.
+  if wasm-opt -Os "$OUT/web_receiver_bg.wasm" -o "$OUT/web_receiver_bg.opt.wasm" &&
+    engine_starts "$OUT/web_receiver.js" "$OUT/web_receiver_bg.opt.wasm"; then
     mv "$OUT/web_receiver_bg.opt.wasm" "$OUT/web_receiver_bg.wasm"
   else
     rm -f "$OUT/web_receiver_bg.opt.wasm"
-    echo "==> wasm-opt failed; keeping the unoptimized engine"
+    echo "==> optimized engine failed to build or start; keeping the unoptimized engine"
   fi
 else
   echo "==> wasm-opt not found; skipping size optimization (optional)"
 fi
+
+echo "==> checking that the engine starts"
+engine_starts "$OUT/web_receiver.js" "$OUT/web_receiver_bg.wasm"
 
 echo "==> done:"
 ls -l "$OUT"

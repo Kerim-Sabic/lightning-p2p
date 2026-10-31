@@ -12,6 +12,12 @@ All notable changes to Lightning P2P are documented here. The project follows se
   were: anyone holding a share link could fill the sharing tab's memory with
   data of their choosing, though not change the shared files. Browser shares
   now refuse pushes.
+- Make receiving and sharing in the browser work again. The browser engine
+  rebuilt on 2026-10-30 failed to start in every browser: binaryen 108's
+  `wasm-opt`, which shrank it, pointed a table the engine grows at startup
+  at a fixed-size one. Engine builds now keep an optimized engine only if it
+  starts, so the engine ships unoptimized until a newer binaryen is in
+  place, about 175 KB more to download.
 
 ## [0.9.33] - 2026-10-31 ("Link In View")
 
