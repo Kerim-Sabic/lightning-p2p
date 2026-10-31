@@ -217,6 +217,8 @@ mod tests {
         address_lookup::memory::MemoryLookup, endpoint::presets, protocol::Router, Endpoint,
         SecretKey,
     };
+    use iroh_blobs::api::proto::BlobStatus;
+    use iroh_blobs::protocol::{ChunkRangesSeq, PushRequest};
     use iroh_blobs::store::mem::MemStore;
     use iroh_blobs::{format::collection::Collection, hashseq::HashSeq};
     use std::time::Duration;
@@ -390,6 +392,54 @@ mod tests {
         router.shutdown().await?;
         authorized_peer.close().await;
         denied_peer.close().await;
+        Ok(())
+    }
+
+    /// Pushes never reach the store, independent of iroh-blobs' event mask
+    /// (which ignored the push mode from 0.94.0 through 0.103.0).
+    #[tokio::test]
+    async fn provider_drops_pushes_even_for_hashes_it_would_serve(
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let provider_store = MemStore::new();
+        let access = BlobAccessController::default();
+        let server = Endpoint::builder(presets::Minimal).bind().await?;
+        let router = Router::builder(server)
+            .accept(
+                iroh_blobs::ALPN,
+                AuthorizedBlobsProtocol::new(provider_store.as_ref(), access.clone()),
+            )
+            .spawn();
+        let server_addr = router.endpoint().addr();
+
+        let peer_store = MemStore::new();
+        let pushed = peer_store.add_bytes(b"unsolicited".to_vec()).await?.hash;
+        // Serving this hash is allowed, so only the push operation is refused.
+        assert!(access.publish_public(&[pushed]));
+        let lookup = MemoryLookup::new();
+        lookup.add_endpoint_info(server_addr.clone());
+        let peer = Endpoint::builder(presets::Minimal)
+            .address_lookup(lookup)
+            .bind()
+            .await?;
+        let connection = peer.connect(server_addr, iroh_blobs::ALPN).await?;
+        let request = PushRequest::new(pushed, ChunkRangesSeq::root());
+        // Push over a clone: dropping the last connection handle would close
+        // it before the pushed bytes are delivered, hiding an accepted push.
+        let push = peer_store
+            .remote()
+            .execute_push(connection.clone(), request);
+        // The push client is fire-and-forget (it reports success once the
+        // bytes are sent), so only the provider's store shows the verdict.
+        let _ = tokio::time::timeout(Duration::from_secs(5), push).await;
+        for _ in 0..100 {
+            let status = provider_store.status(pushed).await?;
+            assert_eq!(status, BlobStatus::NotFound, "a remote push was stored");
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+
+        connection.close(0u32.into(), b"done");
+        router.shutdown().await?;
+        peer.close().await;
         Ok(())
     }
 

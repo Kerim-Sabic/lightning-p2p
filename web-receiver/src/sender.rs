@@ -68,19 +68,29 @@ impl Sharer {
             "The transfer engine could not start within 30 seconds. Check your connection, then try again.".to_owned()
         })?
         .map_err(|e| e.to_string())?;
+        Ok(Self::serve(endpoint))
+    }
+
+    /// Answers iroh-blobs requests for a fresh in-memory store on `endpoint`.
+    ///
+    /// Peers can read what is staged but cannot write into the tab: passing no
+    /// event sender keeps iroh-blobs' default mask, which rejects pushes. That
+    /// mask is only enforced from iroh-blobs 0.103.1; 0.94.0 through 0.103.0
+    /// accepted pushes from any peer that could dial the tab.
+    fn serve(endpoint: Endpoint) -> Self {
         let store = MemStore::new();
         let blobs = BlobsProtocol::new(&store, None);
         let router = Router::builder(endpoint.clone())
             .accept(iroh_blobs::ALPN, blobs)
             .spawn();
-        Ok(Self {
+        Self {
             endpoint,
             router,
             store,
             staged: Vec::new(),
             total_bytes: 0,
             active: None,
-        })
+        }
     }
 
     /// Stops serving for real: shuts down the accept loop and closes the
@@ -230,5 +240,51 @@ impl Sharer {
         let addr = self.endpoint.addr();
         let ticket = BlobTicket::new(addr, root, BlobFormat::HashSeq);
         Ok(fd2_encode(&ticket, label, self.total_bytes))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use iroh::address_lookup::memory::MemoryLookup;
+    use iroh_blobs::api::proto::BlobStatus;
+    use iroh_blobs::protocol::{ChunkRangesSeq, PushRequest};
+
+    /// Anyone holding the ticket can dial the tab, but must not be able to
+    /// fill its memory with blobs of their choosing.
+    #[tokio::test]
+    async fn peers_cannot_push_blobs_into_a_browser_share(
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let sharer = Sharer::serve(Endpoint::builder(presets::Minimal).bind().await?);
+        let sharer_addr = sharer.endpoint.addr();
+
+        let peer_store = MemStore::new();
+        let pushed = peer_store.add_bytes(b"unsolicited".to_vec()).await?.hash;
+        let lookup = MemoryLookup::new();
+        lookup.add_endpoint_info(sharer_addr.clone());
+        let peer = Endpoint::builder(presets::Minimal)
+            .address_lookup(lookup)
+            .bind()
+            .await?;
+        let connection = peer.connect(sharer_addr, iroh_blobs::ALPN).await?;
+        let request = PushRequest::new(pushed, ChunkRangesSeq::root());
+        // Push over a clone: dropping the last connection handle would close
+        // it before the pushed bytes are delivered, hiding an accepted push.
+        let push = peer_store
+            .remote()
+            .execute_push(connection.clone(), request);
+        // The push client is fire-and-forget (it reports success once the
+        // bytes are sent), so only the tab's store shows the verdict.
+        let _ = timeout(Duration::from_secs(5), push).await;
+        for _ in 0..100 {
+            let status = sharer.store.status(pushed).await?;
+            assert_eq!(status, BlobStatus::NotFound, "a remote push was stored");
+            n0_future::time::sleep(Duration::from_millis(20)).await;
+        }
+
+        connection.close(0u32.into(), b"done");
+        peer.close().await;
+        sharer.shutdown().await;
+        Ok(())
     }
 }

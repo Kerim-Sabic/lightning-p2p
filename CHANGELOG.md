@@ -4,6 +4,15 @@ All notable changes to Lightning P2P are documented here. The project follows se
 
 ## [Unreleased]
 
+- Update iroh-blobs to 0.103.1 in the app and the browser engine (security
+  fix; 0.103.0 was yanked). iroh-blobs 0.94.0 through 0.103.0 let any peer
+  that could connect push blobs into a provider's store (iroh advisory of
+  2026-10-08). The desktop app, Android app, and CLI were not exposed: their
+  provider answers only authorized reads and drops pushes. Browser shares
+  were: anyone holding a share link could fill the sharing tab's memory with
+  data of their choosing, though not change the shared files. Browser shares
+  now refuse pushes.
+
 ## [0.9.33] - 2026-10-31 ("Link In View")
 
 - Bring a new receive link into view as soon as it is ready. The link and QR
