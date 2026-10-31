@@ -15,6 +15,7 @@ import {
   BrowserReceiver,
   browserStreamingReceiveSupported,
   type CollectionFile,
+  BROWSER_MEMORY_RECEIVE_BYTES,
   hasSaveFilePicker,
   inspectTicket,
   saveReceivedFile,
@@ -39,7 +40,7 @@ interface FolderSaveState {
 // The compatibility receive path is memory-backed. Gate advertised size for a
 // useful early warning, then enforce the limit against actual bytes in Rust.
 const WARN_BYTES = 64 * 1024 * 1024;
-const REFUSE_BYTES = 128 * 1024 * 1024;
+const REFUSE_BYTES = BROWSER_MEMORY_RECEIVE_BYTES;
 
 type Phase =
   | "idle"

@@ -375,7 +375,21 @@ jobs:
           "RELEASE_TAG=v$($config.version)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       - name: Build unsigned Windows bundles
-        run: pnpm build:windows
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          # With the updater key, also sign the NSIS and MSI installers so
+          # those installs can update through latest.json. A key the bundler
+          # rejects must not block the release: rebuild without signatures.
+          if (-not [string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY)) {
+            pnpm build:windows --config src-tauri/tauri.updater.conf.json
+            if ($LASTEXITCODE -eq 0) { exit 0 }
+            Write-Warning "Updater-signed build failed; building without updater artifacts."
+          }
+          pnpm build:windows
+          if ($LASTEXITCODE -ne 0) { throw "Windows build failed." }
 
       - name: Create stable installer aliases
         shell: pwsh
@@ -486,6 +500,41 @@ jobs:
           $feed = Join-Path $velopackRoot "releases.win.json"
           if (-not (Test-Path $feed)) { throw "Velopack update feed releases.win.json was not produced." }
           Copy-Item -LiteralPath $feed -Destination (Join-Path $stage "releases.win.json") -Force
+
+      - name: Write Tauri updater feed for NSIS and MSI installs
+        shell: pwsh
+        run: |
+          # NSIS and MSI installs check releases/latest/download/latest.json.
+          # Publish it only when the build produced updater signatures.
+          $bundleRoot = "src-tauri/target/x86_64-pc-windows-msvc/release/bundle"
+          $nsis = Get-ChildItem -Path (Join-Path $bundleRoot "nsis") -Filter "*_x64-setup.exe" -File |
+            Sort-Object Name |
+            Select-Object -First 1
+          $msi = Get-ChildItem -Path (Join-Path $bundleRoot "msi") -Filter "*_x64_en-US.msi" -File |
+            Sort-Object Name |
+            Select-Object -First 1
+          $nsisSig = "$($nsis.FullName).sig"
+          $msiSig = "$($msi.FullName).sig"
+          if (-not (Test-Path $nsisSig) -or -not (Test-Path $msiSig)) {
+            Write-Warning "No updater signatures were produced; NSIS and MSI installs will not see this release."
+            exit 0
+          }
+          # The stable aliases are byte-identical copies, so the signatures apply.
+          $base = "https://github.com/${{ github.repository }}/releases/download/$env:RELEASE_TAG"
+          $nsisEntry = [ordered]@{ signature = (Get-Content -Raw $nsisSig).Trim(); url = "$base/LightningP2PSetup.exe" }
+          $msiEntry = [ordered]@{ signature = (Get-Content -Raw $msiSig).Trim(); url = "$base/LightningP2P.msi" }
+          $feed = [ordered]@{
+            version = $env:APP_VERSION
+            notes = "https://github.com/${{ github.repository }}/releases/tag/$env:RELEASE_TAG"
+            pub_date = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+            platforms = [ordered]@{
+              "windows-x86_64" = $nsisEntry
+              "windows-x86_64-nsis" = $nsisEntry
+              "windows-x86_64-msi" = $msiEntry
+            }
+          }
+          $feed | ConvertTo-Json -Depth 5 | Set-Content -Path "windows-release-stage/latest.json" -Encoding utf8NoBOM
+          Write-Host "Wrote windows-release-stage/latest.json for v$env:APP_VERSION"
 
       - name: Build and stage CLI binary
         shell: pwsh

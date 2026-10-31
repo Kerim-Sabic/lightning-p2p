@@ -14,14 +14,17 @@ Built on **Rust**, **Tauri 2**, **iroh QUIC**, **iroh-blobs**, and **BLAKE3**.
 [![Stars](https://img.shields.io/github/stars/Kerim-Sabic/lightning-p2p?style=flat-square&color=f0c76b&logo=github)](https://github.com/Kerim-Sabic/lightning-p2p/stargazers)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-7ddf9c?style=flat-square)](LICENSE)
 [![Platforms](https://img.shields.io/badge/platforms-Windows_·_macOS_·_Linux_·_Android_·_CLI-7ddf9c?style=flat-square)](#-install)
-[![Experimental](https://img.shields.io/badge/latest-v0.9.32_Zero--Copy_Sends-f0c76b?style=flat-square)](https://github.com/Kerim-Sabic/lightning-p2p/releases/tag/v0.9.32)
+[![Experimental](https://img.shields.io/badge/latest-v0.9.33_Link_In_View-f0c76b?style=flat-square)](https://github.com/Kerim-Sabic/lightning-p2p/releases/tag/v0.9.33)
 [![Rust](https://img.shields.io/badge/Rust-1.88+-f0c76b?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![Tauri 2](https://img.shields.io/badge/Tauri-2-7ddf9c?style=flat-square&logo=tauri&logoColor=white)](https://tauri.app/)
 [![iroh QUIC](https://img.shields.io/badge/iroh-QUIC_+_relay-7ddf9c?style=flat-square)](https://iroh.computer/)
 [![BLAKE3](https://img.shields.io/badge/integrity-BLAKE3-7ddf9c?style=flat-square)](https://github.com/BLAKE3-team/BLAKE3)
 
-[**Download**](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest)
-· [**Website**](https://lightning-p2p.netlify.app/)
+### [⬇ Download for Windows](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P-win-Setup.exe)
+
+<sub>One-click installer that keeps itself up to date · [macOS, Linux, Android, CLI](#-install) · [all release files](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest)</sub>
+
+[**Website**](https://lightning-p2p.netlify.app/)
 · [**Lightning Chat**](https://lightning-p2p.netlify.app/chat)
 · [**AUDIT.md**](AUDIT.md)
 · [**Roadmap**](docs/ROADMAP.md)
@@ -133,20 +136,20 @@ drop files → share the /receive link  →     open link → "Receive in this b
 
 ## ◆ Install
 
-Stable channel: **v0.4.6**. Latest beta release: **v0.9.32** (community desktop builds and CLI; received files and folders are hard-linked out of the verified store instead of copied, and the store frees its copy seconds later; desktop shares hash files in place instead of copying them first; the recommended Windows setup updates itself from this version on; the relay wait overlaps hashing and no longer stalls every ticket on relay-blocked networks; live save progress; Smart Auto runs BBR on desktop; whole-folder browser saves). Flick & Catch shows the file arriving from the approximate side you flick toward; no location data is shared. Tapping **Send** remains a normal directionless send.
+Stable channel: **v0.4.6**. Latest beta release: **v0.9.33** (community desktop builds and CLI; a new receive link comes into view with Copy ready, and NSIS and MSI installs now update themselves too; received files and folders are hard-linked out of the verified store instead of copied, and the store frees its copy seconds later; desktop shares hash files in place instead of copying them first; the recommended Windows setup updates itself from this version on; the relay wait overlaps hashing and no longer stalls every ticket on relay-blocked networks; live save progress; Smart Auto runs BBR on desktop; whole-folder browser saves). Flick & Catch shows the file arriving from the approximate side you flick toward; no location data is shared. Tapping **Send** remains a normal directionless send.
 
 | Platform | Asset | Channel | Best for |
 | --- | --- | --- | --- |
 | **Windows** | [`LightningP2P-win-Setup.exe`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P-win-Setup.exe) | Stable | Most users · one-click Velopack · updates itself from v0.9.32 |
 | **Windows** | [`LightningP2PSetup.exe`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2PSetup.exe) | Stable | Classic NSIS |
 | **Windows** | [`LightningP2P.msi`](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest/download/LightningP2P.msi) | Stable | Policy-managed deployments |
-| **macOS** | [`LightningP2P-macos-universal.dmg`](https://github.com/Kerim-Sabic/lightning-p2p/releases/download/v0.9.32/LightningP2P-macos-universal.dmg) | Beta v0.9.32 | 10.15+ · Intel + Apple Silicon · unsigned: right-click → Open |
-| **Linux** | [`LightningP2P-linux-x86_64.AppImage`](https://github.com/Kerim-Sabic/lightning-p2p/releases/download/v0.9.32/LightningP2P-linux-x86_64.AppImage) | Beta v0.9.32 | Portable AppImage · `.deb` / `.rpm` also published |
+| **macOS** | [`LightningP2P-macos-universal.dmg`](https://github.com/Kerim-Sabic/lightning-p2p/releases/download/v0.9.33/LightningP2P-macos-universal.dmg) | Beta v0.9.33 | 10.15+ · Intel + Apple Silicon · unsigned: right-click → Open |
+| **Linux** | [`LightningP2P-linux-x86_64.AppImage`](https://github.com/Kerim-Sabic/lightning-p2p/releases/download/v0.9.33/LightningP2P-linux-x86_64.AppImage) | Beta v0.9.33 | Portable AppImage · `.deb` / `.rpm` also published |
 | **Android** | [`LightningP2P-android-latest.apk`](https://github.com/Kerim-Sabic/lightning-p2p/releases/download/v0.9.26/LightningP2P-android-latest.apk) | Beta v0.9.26 | Android 10+ sideload · signed APK/AAB · Lightning Chat + Bluetooth mesh included |
-| **CLI** | [`lightning-p2p-cli`](https://github.com/Kerim-Sabic/lightning-p2p/releases/tag/v0.9.32) | Beta v0.9.32 | `send <file>` prints a ticket to stdout · Win/mac/Linux tarballs |
+| **CLI** | [`lightning-p2p-cli`](https://github.com/Kerim-Sabic/lightning-p2p/releases/tag/v0.9.33) | Beta v0.9.33 | `send <file>` prints a ticket to stdout · Win/mac/Linux tarballs |
 | **Browser** | [lightning-p2p.netlify.app/receive](https://lightning-p2p.netlify.app/receive) | Public beta | Receiving only — nothing to install, the sender's link is enough |
-| **Lightning Chat** | [Open web chat](https://lightning-p2p.netlify.app/chat) | Beta v0.9.32 | Signed web rooms · encrypted DMs · native nearby chat |
-| **Latest release** | [Release v0.9.32](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest) | Community builds | Zero-copy sends and saves · self-updating Windows setup · BBR in Smart Auto · faster folder receives |
+| **Lightning Chat** | [Open web chat](https://lightning-p2p.netlify.app/chat) | Beta v0.9.33 | Signed web rooms · encrypted DMs · native nearby chat |
+| **Latest release** | [Release v0.9.33](https://github.com/Kerim-Sabic/lightning-p2p/releases/latest) | Community builds | Self-updating NSIS and MSI · share link in view · zero-copy sends and saves · self-updating Windows setup · BBR in Smart Auto · faster folder receives |
 
 ```bash
 # The CLI in one breath: share a file, pipe the ticket anywhere.
@@ -332,13 +335,13 @@ Read [`SECURITY.md`](SECURITY.md) · [`docs/security-model.md`](docs/security-mo
 | | Capability | Status |
 |:-:|---|---|
 | 🟢 | Windows send + receive (Tauri 2 desktop) | **Stable** |
-| 🟢 | **macOS** send + receive (universal DMG, Intel + Apple Silicon) | **Beta** v0.9.32 |
-| 🟢 | **Linux** send + receive (AppImage / deb / rpm) | **Beta** v0.9.32 |
+| 🟢 | **macOS** send + receive (universal DMG, Intel + Apple Silicon) | **Beta** v0.9.33 |
+| 🟢 | **Linux** send + receive (AppImage / deb / rpm) | **Beta** v0.9.33 |
 | 🟢 | Android send + receive (sideload APK) | **Stable** |
-| 🟢 | **CLI** (`lightning-p2p-cli send`/`receive`, pipe-friendly) | **Beta** v0.9.32 |
-| 🟢 | Lightning Chat Web lounge + encrypted direct messages | **Beta** v0.9.32 |
-| 🟢 | Lightning Chat in Windows and Android native apps | **Windows beta** v0.9.32; Android v0.9.26 |
-| 🟡 | Encrypted nearby Bluetooth multi-hop chat | **Windows beta** v0.9.32; Android v0.9.26 |
+| 🟢 | **CLI** (`lightning-p2p-cli send`/`receive`, pipe-friendly) | **Beta** v0.9.33 |
+| 🟢 | Lightning Chat Web lounge + encrypted direct messages | **Beta** v0.9.33 |
+| 🟢 | Lightning Chat in Windows and Android native apps | **Windows beta** v0.9.33; Android v0.9.26 |
+| 🟡 | Encrypted nearby Bluetooth multi-hop chat | **Windows beta** v0.9.33; Android v0.9.26 |
 | 🟢 | Android system share-target + MediaStore routing | **Stable** v0.4.6 |
 | 🟢 | QR + handoff link + raw ticket | **Stable** |
 | 🟢 | Nearby Wi-Fi / LAN discovery (mDNS) | **Stable** |

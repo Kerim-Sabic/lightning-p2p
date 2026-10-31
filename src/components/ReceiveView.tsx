@@ -196,6 +196,193 @@ export function ReceiveView({ onNavigateSend }: ReceiveViewProps = {}) {
     }
   };
 
+  const nearbySection = (
+    <section key="nearby" className="rounded-3xl border border-[var(--border-subtle)] bg-[var(--surface-0)] p-5">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div>
+          <p className="text-base font-semibold text-[var(--fg-primary)]">
+            Nearby shares
+          </p>
+          <p className="mt-1 text-sm leading-6 text-[var(--fg-secondary)]">
+            Active share details appear here only for verified devices. New
+            senders can send you an offer or a receive link.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 text-sm text-[var(--fg-secondary)]">
+          <ScanSearch className="h-4 w-4 text-[var(--accent-primary)]" />
+          {localDiscoveryEnabled
+            ? "Scanning the local network"
+            : "Turn on nearby discovery in Settings"}
+        </div>
+      </div>
+
+      <div className="mt-4 space-y-3">
+        {!localDiscoveryEnabled ? (
+          <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-1)] px-5 py-8 text-center">
+            <p className="text-base font-semibold text-[var(--fg-primary)]">
+              Nearby discovery is off
+            </p>
+            <p className="mt-2 text-sm leading-6 text-[var(--fg-secondary)]">
+              Enable local discovery in Settings if you want nearby senders to
+              appear automatically.
+            </p>
+          </div>
+        ) : nearbyShares.length === 0 ? (
+          <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-1)] px-5 py-8 text-center">
+            <p className="text-base font-semibold text-[var(--fg-primary)]">
+              No verified nearby shares yet
+            </p>
+            <p className="mt-2 text-sm leading-6 text-[var(--fg-secondary)]">
+              Pair your device to see its active shares. For a new device,
+              ask the sender for a receive link or an offer.
+            </p>
+          </div>
+        ) : (
+          nearbyShares.map((share) => (
+            <NearbyShareCard
+              key={share.share_id}
+              share={share}
+              disabled={!nativeRuntime}
+              onReceive={(nextShare) => void handleNearbyReceive(nextShare)}
+            />
+          ))
+        )}
+      </div>
+    </section>
+  );
+
+  const pasteSection = (
+    <section key="paste" className="rounded-3xl border border-[var(--border-subtle)] bg-[var(--surface-0)] p-5">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <p className="text-base font-semibold text-[var(--fg-primary)]">
+            Paste a receive link
+          </p>
+          <p className="mt-1 text-sm leading-6 text-[var(--fg-secondary)]">
+            Receive links, QR links, and raw tickets from any Lightning
+            sender work here.
+          </p>
+        </div>
+        <div
+          className={`flex flex-wrap gap-2 ${mobileRuntime ? "w-full" : ""}`}
+        >
+          {mobileRuntime ? (
+            <button
+              type="button"
+              onClick={() => void handleScanQr()}
+              disabled={isScanning}
+              className="mobile-hero-cta flex-1"
+            >
+              <ScanSearch className="h-5 w-5" />
+              {isScanning ? "Scanning..." : "Scan QR"}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => void handlePaste()}
+            className={
+              mobileRuntime
+                ? "inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-[var(--border-strong)] bg-[var(--surface-1)] px-4 text-sm font-medium text-[var(--fg-primary)] hover:bg-[var(--surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
+                : "inline-flex min-h-11 items-center gap-2 rounded-xl border border-[var(--border-strong)] bg-[var(--surface-1)] px-4 py-2.5 text-sm font-medium text-[var(--fg-primary)] hover:bg-[var(--surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
+            }
+          >
+            <ClipboardPaste className="h-4 w-4" />
+            Paste link
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-4 space-y-4">
+        {clipboardSuggestion ? (
+          <button
+            type="button"
+            onClick={() => {
+              setTicketInput(clipboardSuggestion);
+              setClipboardSuggestion(null);
+            }}
+            className="flex min-h-12 w-full items-center gap-3 rounded-xl border border-[var(--accent-border)] bg-[var(--accent-subtle)] px-4 py-2.5 text-left text-sm text-[var(--fg-primary)] transition hover:bg-[var(--surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
+          >
+            <Sparkles className="h-4 w-4 shrink-0 text-[var(--accent-primary)]" />
+            <span className="min-w-0 flex-1 truncate">
+              Receive link found on clipboard - tap to use it
+            </span>
+            <span className="shrink-0 font-mono text-xs text-[var(--fg-muted)]">
+              {clipboardSuggestion.slice(0, 10)}...
+            </span>
+          </button>
+        ) : null}
+        <div className="relative">
+          <textarea
+            value={ticketInput}
+            onChange={(event) => setTicketInput(event.target.value)}
+            rows={4}
+            aria-label="Receive link or raw ticket"
+            aria-invalid={trimmedTicket.length > 0 && !ticketLooksValid}
+            autoComplete="off"
+            spellCheck={false}
+            placeholder="Paste a receive link or raw blob ticket..."
+            className={`w-full resize-none rounded-2xl border border-[var(--border-strong)] bg-[var(--surface-1)] px-4 py-4 pr-12 font-mono text-sm leading-6 text-[var(--fg-primary)] placeholder:text-[var(--fg-muted)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] ${
+              trimmedTicket.length === 0
+                ? ""
+                : ticketLooksValid
+                  ? "border-[var(--state-success)] ring-1 ring-[var(--state-success)]/15"
+                  : "border-[var(--danger-border)] ring-1 ring-[var(--danger-border)]/20"
+            }`}
+          />
+          <div className="absolute right-3.5 top-3.5">
+            {trimmedTicket.length === 0 ? null : ticketLooksValid ? (
+              <CheckCircle2 className="h-5 w-5 text-[var(--state-success)]" />
+            ) : (
+              <XCircle className="h-5 w-5 text-[var(--danger-copy)]" />
+            )}
+          </div>
+        </div>
+        {trimmedTicket.length > 0 ? (
+          <p
+            role="status"
+            aria-live="polite"
+            className={`text-sm ${ticketLooksValid ? "text-[var(--state-success)]" : "text-[var(--danger-copy)]"}`}
+          >
+            {ticketLooksValid
+              ? "Receive link recognized. Review the destination, then start the receive."
+              : "This does not look like a valid receive link or ticket yet."}
+          </p>
+        ) : null}
+
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--fg-muted)]">
+              {smartRouting ? "Where files land" : "Export destination"}
+            </p>
+            {smartRouting ? (
+              <p className="mt-2 text-sm leading-6 text-[var(--fg-secondary)]">
+                Pictures save to Pictures, video to Movies, audio to Music,
+                and other files to Downloads. Each lands in a "Lightning P2P"
+                subfolder.
+              </p>
+            ) : (
+              <p className="mt-2 break-all font-mono text-sm leading-6 text-[var(--fg-primary)]">
+                {downloadDir ?? "Resolving download directory..."}
+              </p>
+            )}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => void handleReceive()}
+            disabled={!ticketLooksValid || !nativeRuntime}
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[var(--accent-primary)] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[var(--accent-primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface-0)] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <span className="relative inline-flex items-center gap-2">
+              <ArrowDownToLine className="h-4 w-4" />
+              Start receive
+            </span>
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+
   return (
     <div className="space-y-4">
       <section className="rounded-3xl border border-[var(--border-subtle)] bg-[var(--surface-0)] p-5">
@@ -206,12 +393,12 @@ export function ReceiveView({ onNavigateSend }: ReceiveViewProps = {}) {
             </div>
             <p className="page-eyebrow mt-5">Receive</p>
             <h1 className="mt-2 text-[clamp(1.65rem,1.5rem+0.7vw,2.1rem)] font-semibold tracking-[-0.035em] text-[var(--fg-primary)]">
-              Receive from nearby senders first
+              Receive files
             </h1>
             <p className="mt-3 max-w-[58ch] text-sm leading-6 text-[var(--fg-secondary)]">
               {mobileRuntime
                 ? "Receive links, QR scans, and nearby shares work in the foreground. Keep this app open until the transfer finishes."
-                : "Nearby shares should appear automatically on the same LAN. Receive links and raw tickets stay available when discovery is unavailable."}
+                : "Paste the link a sender gave you, or pick a share from a nearby device. Every chunk is verified before it is saved."}
             </p>
 
             <div className="mt-4 flex flex-wrap gap-2 text-xs text-[var(--fg-secondary)]">
@@ -265,188 +452,12 @@ export function ReceiveView({ onNavigateSend }: ReceiveViewProps = {}) {
         </section>
       ) : null}
 
-      <section className="rounded-3xl border border-[var(--border-subtle)] bg-[var(--surface-0)] p-5">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div>
-            <p className="text-base font-semibold text-[var(--fg-primary)]">
-              Nearby shares
-            </p>
-            <p className="mt-1 text-sm leading-6 text-[var(--fg-secondary)]">
-              Active share details appear here only for verified devices. New
-              senders can send you an offer or a receive link.
-            </p>
-          </div>
-          <div className="flex items-center gap-2 text-sm text-[var(--fg-secondary)]">
-            <ScanSearch className="h-4 w-4 text-[var(--accent-primary)]" />
-            {localDiscoveryEnabled
-              ? "Scanning the local network"
-              : "Turn on nearby discovery in Settings"}
-          </div>
-        </div>
-
-        <div className="mt-4 space-y-3">
-          {!localDiscoveryEnabled ? (
-            <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-1)] px-5 py-8 text-center">
-              <p className="text-base font-semibold text-[var(--fg-primary)]">
-                Nearby discovery is off
-              </p>
-              <p className="mt-2 text-sm leading-6 text-[var(--fg-secondary)]">
-                Enable local discovery in Settings if you want nearby senders to
-                appear automatically.
-              </p>
-            </div>
-          ) : nearbyShares.length === 0 ? (
-            <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-1)] px-5 py-8 text-center">
-              <p className="text-base font-semibold text-[var(--fg-primary)]">
-                No verified nearby shares yet
-              </p>
-              <p className="mt-2 text-sm leading-6 text-[var(--fg-secondary)]">
-                Pair your device to see its active shares. For a new device,
-                ask the sender to send an offer or use a receive link below.
-              </p>
-            </div>
-          ) : (
-            nearbyShares.map((share) => (
-              <NearbyShareCard
-                key={share.share_id}
-                share={share}
-                disabled={!nativeRuntime}
-                onReceive={(nextShare) => void handleNearbyReceive(nextShare)}
-              />
-            ))
-          )}
-        </div>
-      </section>
-
-      <section className="rounded-3xl border border-[var(--border-subtle)] bg-[var(--surface-0)] p-5">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <p className="text-base font-semibold text-[var(--fg-primary)]">
-              Paste a receive link instead
-            </p>
-            <p className="mt-1 text-sm leading-6 text-[var(--fg-secondary)]">
-              Use this when the sender is not visible on the LAN or when you
-              want the explicit manual path.
-            </p>
-          </div>
-          <div
-            className={`flex flex-wrap gap-2 ${mobileRuntime ? "w-full" : ""}`}
-          >
-            {mobileRuntime ? (
-              <button
-                type="button"
-                onClick={() => void handleScanQr()}
-                disabled={isScanning}
-                className="mobile-hero-cta flex-1"
-              >
-                <ScanSearch className="h-5 w-5" />
-                {isScanning ? "Scanning..." : "Scan QR"}
-              </button>
-            ) : null}
-            <button
-              type="button"
-              onClick={() => void handlePaste()}
-              className={
-                mobileRuntime
-                  ? "inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-[var(--border-strong)] bg-[var(--surface-1)] px-4 text-sm font-medium text-[var(--fg-primary)] hover:bg-[var(--surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
-                  : "inline-flex min-h-11 items-center gap-2 rounded-xl border border-[var(--border-strong)] bg-[var(--surface-1)] px-4 py-2.5 text-sm font-medium text-[var(--fg-primary)] hover:bg-[var(--surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
-              }
-            >
-              <ClipboardPaste className="h-4 w-4" />
-              Paste link
-            </button>
-          </div>
-        </div>
-
-        <div className="mt-4 space-y-4">
-          {clipboardSuggestion ? (
-            <button
-              type="button"
-              onClick={() => {
-                setTicketInput(clipboardSuggestion);
-                setClipboardSuggestion(null);
-              }}
-              className="flex min-h-12 w-full items-center gap-3 rounded-xl border border-[var(--accent-border)] bg-[var(--accent-subtle)] px-4 py-2.5 text-left text-sm text-[var(--fg-primary)] transition hover:bg-[var(--surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
-            >
-              <Sparkles className="h-4 w-4 shrink-0 text-[var(--accent-primary)]" />
-              <span className="min-w-0 flex-1 truncate">
-                Receive link found on clipboard - tap to use it
-              </span>
-              <span className="shrink-0 font-mono text-xs text-[var(--fg-muted)]">
-                {clipboardSuggestion.slice(0, 10)}...
-              </span>
-            </button>
-          ) : null}
-          <div className="relative">
-            <textarea
-              value={ticketInput}
-              onChange={(event) => setTicketInput(event.target.value)}
-              rows={4}
-              aria-label="Receive link or raw ticket"
-              aria-invalid={trimmedTicket.length > 0 && !ticketLooksValid}
-              autoComplete="off"
-              spellCheck={false}
-              placeholder="Paste a receive link or raw blob ticket..."
-              className={`w-full resize-none rounded-2xl border border-[var(--border-strong)] bg-[var(--surface-1)] px-4 py-4 pr-12 font-mono text-sm leading-6 text-[var(--fg-primary)] placeholder:text-[var(--fg-muted)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] ${
-                trimmedTicket.length === 0
-                  ? ""
-                  : ticketLooksValid
-                    ? "border-[var(--state-success)] ring-1 ring-[var(--state-success)]/15"
-                    : "border-[var(--danger-border)] ring-1 ring-[var(--danger-border)]/20"
-              }`}
-            />
-            <div className="absolute right-3.5 top-3.5">
-              {trimmedTicket.length === 0 ? null : ticketLooksValid ? (
-                <CheckCircle2 className="h-5 w-5 text-[var(--state-success)]" />
-              ) : (
-                <XCircle className="h-5 w-5 text-[var(--danger-copy)]" />
-              )}
-            </div>
-          </div>
-          {trimmedTicket.length > 0 ? (
-            <p
-              role="status"
-              aria-live="polite"
-              className={`text-sm ${ticketLooksValid ? "text-[var(--state-success)]" : "text-[var(--danger-copy)]"}`}
-            >
-              {ticketLooksValid
-                ? "Receive link recognized. Review the destination, then start the receive."
-                : "This does not look like a valid receive link or ticket yet."}
-            </p>
-          ) : null}
-
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--fg-muted)]">
-                {smartRouting ? "Where files land" : "Export destination"}
-              </p>
-              {smartRouting ? (
-                <p className="mt-2 text-sm leading-6 text-[var(--fg-secondary)]">
-                  Pictures save to Pictures, video to Movies, audio to Music,
-                  and other files to Downloads. Each lands in a "Lightning P2P"
-                  subfolder.
-                </p>
-              ) : (
-                <p className="mt-2 break-all font-mono text-sm leading-6 text-[var(--fg-primary)]">
-                  {downloadDir ?? "Resolving download directory..."}
-                </p>
-              )}
-            </div>
-
-            <button
-              type="button"
-              onClick={() => void handleReceive()}
-              disabled={!ticketLooksValid || !nativeRuntime}
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[var(--accent-primary)] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[var(--accent-primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface-0)] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <span className="relative inline-flex items-center gap-2">
-                <ArrowDownToLine className="h-4 w-4" />
-                Start receive
-              </span>
-            </button>
-          </div>
-        </div>
-      </section>
+      {/* A waiting nearby share is one click; otherwise the link a sender
+          shared is what most receivers have in hand. Keyed so the cards
+          move rather than remount when the order flips. */}
+      {nearbyShares.length > 0
+        ? [nearbySection, pasteSection]
+        : [pasteSection, nearbySection]}
 
       <section className="space-y-2">
         <div className="flex items-center gap-2 text-sm font-semibold text-[var(--fg-primary)]">

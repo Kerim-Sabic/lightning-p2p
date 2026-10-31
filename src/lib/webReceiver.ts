@@ -9,6 +9,12 @@
 
 import { WEBRX_VERSION } from "./webrxVersion";
 
+/**
+ * Largest share a browser can receive without streaming to disk. Browsers
+ * without the File System Access API hold received bytes in memory.
+ */
+export const BROWSER_MEMORY_RECEIVE_BYTES = 128 * 1024 * 1024;
+
 /** Ticket metadata surfaced before any bytes are fetched, for the size gate. */
 export interface TicketInfo {
   label: string;

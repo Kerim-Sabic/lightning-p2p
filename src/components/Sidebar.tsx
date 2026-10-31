@@ -1,6 +1,7 @@
 import { Clock3, MessageCircle, Radar, Send, Settings2 } from "lucide-react";
 import type { View } from "../App";
-import lightningMark from "../assets/lightning-p2p-mark.png";
+import logoOnDark from "../assets/lightning-p2p-site-logo.png";
+import logoOnLight from "../assets/lightning-p2p-mark.png";
 import { useNavigationSnapshot } from "../stores/transferSelectors";
 
 interface SidebarProps {
@@ -28,9 +29,14 @@ export function Sidebar({ currentView, onNavigate }: SidebarProps) {
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[16px] border border-white/[0.08] bg-white/[0.03]">
             <img
-              src={lightningMark}
+              src={logoOnDark}
               alt=""
-              className="h-5 w-5 object-contain opacity-95"
+              className="theme-logo-dark h-6 w-6 object-contain"
+            />
+            <img
+              src={logoOnLight}
+              alt=""
+              className="theme-logo-light h-6 w-6 object-contain"
             />
           </div>
           <div className="min-w-0">

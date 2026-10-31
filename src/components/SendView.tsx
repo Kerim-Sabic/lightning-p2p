@@ -45,6 +45,7 @@ import {
   snapshotFlickGesture,
 } from "../lib/flickGesture";
 import { createReceiveHandoffLink } from "../lib/shareLinks";
+import { BROWSER_MEMORY_RECEIVE_BYTES } from "../lib/webReceiver";
 import { attachAsyncUnlisten } from "../hooks/asyncSubscription";
 import {
   isDesktopRuntime,
@@ -259,6 +260,9 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
   );
   const activeFlickRef = useRef<ActiveFlick | null>(null);
   const activeSelectionDragRef = useRef<ActiveSelectionDrag | null>(null);
+  const shareReadyRef = useRef<HTMLElement>(null);
+  const copyLinkButtonRef = useRef<HTMLButtonElement>(null);
+  const presentedShareTicket = useRef(shareTicket);
 
   useEffect(() => {
     if (!nativeRuntime) return;
@@ -390,6 +394,25 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
 
   useEffect(() => {
     setShowRawTicket(false);
+  }, [shareTicket]);
+
+  // A new link renders below the selection, out of view on most windows.
+  // Bring it up and put Copy under the keyboard; a share that was already
+  // showing when the view opened stays where it is.
+  useEffect(() => {
+    const previous = presentedShareTicket.current;
+    presentedShareTicket.current = shareTicket;
+    if (!shareTicket || shareTicket === previous) {
+      return;
+    }
+    const reduceMotion =
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    shareReadyRef.current?.scrollIntoView?.({
+      behavior: reduceMotion ? "auto" : "smooth",
+      block: "start",
+    });
+    copyLinkButtonRef.current?.focus({ preventScroll: true });
   }, [shareTicket]);
 
   const handleCopyReceiveLink = async (): Promise<void> => {
@@ -1320,7 +1343,7 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
               <p className="mt-3 max-w-[58ch] text-sm leading-6 text-[var(--fg-secondary)]">
                 {mobileRuntime
                   ? "Pick files from this phone, then send nearby or create a receive link. Keep Lightning open while files move."
-                  : "Choose files or a folder, then send nearby or create a receive link."}
+                  : "Drag files here or choose them, then send to a nearby device or share a link that opens in any browser."}
               </p>
 
               <div className="mt-4 flex flex-wrap gap-2 text-xs text-[var(--fg-secondary)]">
@@ -1487,7 +1510,11 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
                 type="button"
                 onClick={() => void createShare()}
                 disabled={isSharing || batchBusy || !nativeRuntime}
-                className="btn-primary"
+                className={
+                  shareTicket
+                    ? "inline-flex min-h-11 items-center gap-2 rounded-xl border border-[var(--border-strong)] bg-[var(--surface-1)] px-4 py-2.5 text-sm font-medium text-[var(--fg-primary)] transition hover:bg-[var(--surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] disabled:opacity-55"
+                    : "btn-primary"
+                }
               >
                 <span className="relative inline-flex items-center gap-2">
                   {isSharing ? (
@@ -1710,9 +1737,9 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
             {nearbyDiscoveryStatus === "bluetooth_only"
               ? "No Bluetooth peers found yet. Check that Bluetooth is on, permissions are granted, and Lightning is open on a supported device."
               : nearbyDiscoveryStatus === "lan_unavailable"
-                ? "Local network discovery is not active yet. Check Settings or use the receive link above."
+                ? "Local network discovery is not active yet. Check Settings, or send a receive link instead."
                 : "No nearby devices found yet. Open Lightning on another device with a compatible discovery method enabled. Some networks block local discovery."}{" "}
-            You can also create a receive link above.
+            A receive link works anywhere: choose files, then generate one.
           </p>
         )}
       </section>
@@ -1720,7 +1747,10 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
       </div>
 
       {shareTicket ? (
-        <section className="rounded-3xl border border-[var(--border-strong)] bg-[var(--surface-0)] p-5">
+        <section
+          ref={shareReadyRef}
+          className="scroll-mt-4 rounded-3xl border border-[var(--border-strong)] bg-[var(--surface-0)] p-5"
+        >
           <div className="grid gap-5 lg:grid-cols-[1.2fr_0.8fr]">
             <div className="space-y-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1729,19 +1759,24 @@ export function SendView({ onNavigateReceive }: SendViewProps) {
                     Share link ready
                   </p>
                   <p className="mt-1 text-sm leading-6 text-[var(--fg-secondary)]">
-                    Copy the receive link or scan the QR code on the receiving
-                    device. Keep this sender window open, and leave the
-                    original files unchanged, until the receiver is done.
+                    Send the link or show the QR code. It opens in their
+                    browser, so they can receive with nothing installed.
+                    {selectionSize > BROWSER_MEMORY_RECEIVE_BYTES
+                      ? " Files this large need Chrome or Edge, or the Lightning app."
+                      : ""}{" "}
+                    Keep this window open, and leave the original files
+                    unchanged, until they are done.
                   </p>
                 </div>
                 <button
+                  ref={copyLinkButtonRef}
                   type="button"
                   onClick={() => void handleCopyReceiveLink()}
-                  className={`inline-flex min-h-11 items-center gap-2 rounded-xl border px-4 py-2 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] ${
+                  className={
                     copied === "link"
-                      ? "border-[var(--state-success)]/35 bg-[var(--state-success)]/10 text-[var(--state-success)]"
-                      : "border-[var(--border-strong)] bg-[var(--surface-1)] text-[var(--fg-primary)] hover:bg-[var(--surface-hover)]"
-                  }`}
+                      ? "inline-flex min-h-11 items-center gap-2 rounded-2xl border border-[var(--state-success)]/35 bg-[var(--state-success)]/10 px-5 py-3 text-sm font-medium text-[var(--state-success)] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
+                      : "btn-primary min-h-11 gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface-0)]"
+                  }
                 >
                   <Copy className="h-4 w-4" />
                   {copied === "link" ? "Link copied" : "Copy share link"}
